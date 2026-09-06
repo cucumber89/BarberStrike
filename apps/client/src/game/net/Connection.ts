@@ -1,4 +1,5 @@
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
+import { resolveServerUrl } from "./serverUrl";
 import type { ArraySchema, MapSchema } from "@colyseus/schema";
 import { C2S, S2C, MatchPhase, type BombData, type BotLevel, type GameMode, type WelcomeMessage } from "@frankibarber/shared";
 
@@ -253,26 +254,7 @@ export function httpUrl(wsUrl: string): string {
   return wsUrl.replace(/^ws/, "http").replace(/\/$/, "");
 }
 
-/**
- * Resolves the server endpoint from env or the current page location.
- *
- * Three cases, in the order they are decided:
- *
- *  1. `VITE_SERVER_URL` — a hosted deployment where the client and the game live apart. It wins
- *     over everything, because only the person who built it knows where the server went.
- *  2. Dev — Vite serves the page on 5174 and is NOT the game server; the game is on 2567 beside it.
- *  3. A production build on a non-standard port — that is the player-hosted flow (2.0): the game
- *     server is serving this very page, so it is the same origin, whatever port it chose.
- *
- * The final fallback keeps the old behaviour for a static host on 80/443 with the game beside it on
- * 2567, which is how a deployment without `VITE_SERVER_URL` used to work.
- */
+/** The server endpoint for this page — see `serverUrl.ts` for the three cases. */
 export function defaultServerUrl(): string {
-  const env = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim();
-  if (env) return env;
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  const host = location.hostname || "localhost";
-  if (import.meta.env.DEV) return `${proto}://${host}:2567`;
-  if (location.port && location.port !== "80" && location.port !== "443") return `${proto}://${location.host}`;
-  return `${proto}://${host}:2567`;
+  return resolveServerUrl(location, import.meta.env.VITE_SERVER_URL as string | undefined, import.meta.env.DEV);
 }
