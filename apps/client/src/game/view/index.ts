@@ -28,7 +28,11 @@ export const installView: GameModule = (ctx) => {
   const grenades = new Grenades(ctx.scene, ctx.world, ctx.serverNow);
   // Drop 4: flag poles / rings only in Domination.
   const flags = ctx.connection.state.mode === "dom" ? new Flags(ctx.scene, ctx.mapDef, () => ctx.connection.state.flags) : null;
-  const bomb = ctx.connection.state.mode === "bomb" ? new BombSites(ctx.scene) : null;
+  const bomb = ctx.connection.state.mode === "bomb" ? new BombSites(ctx.scene, {
+    onBeep: (x, y, z, urgency) => ctx.events.emit("bombBeep", { x, y, z, urgency }),
+    onPlanted: (x, y, z) => ctx.events.emit("bombPlanted", { x, y, z }),
+    onDefused: (x, y, z) => ctx.events.emit("bombDefused", { x, y, z }),
+  }) : null;
   // Drop 5: team marks as world billboards.
   const marks = new Marks(ctx.scene, ctx.remotes, () => ({ x: ctx.local.body.x, y: ctx.local.body.y, z: ctx.local.body.z }));
   grenades.setHooks({
@@ -39,6 +43,11 @@ export const installView: GameModule = (ctx) => {
         const b = ctx.local.body;
         const d = Math.hypot(b.x - e.x, b.y + 1 - e.y, b.z - e.z);
         ctx.local.addShake(Math.max(0, 0.05 * (1 - d / 16)));
+      } else if (e.kind === "c4") {
+        // The charge: a kick you feel across the whole map, a violent one at the site.
+        const b = ctx.local.body;
+        const d = Math.hypot(b.x - e.x, b.y + 1 - e.y, b.z - e.z);
+        ctx.local.addShake(Math.max(0.02, 0.2 * (1 - d / 60)));
       }
     },
   });

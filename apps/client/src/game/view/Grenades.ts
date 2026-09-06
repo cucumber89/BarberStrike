@@ -26,6 +26,7 @@ const MAX_FIRES = 3;
 const MAX_SMOKES = MAX_SMOKE_CLOUDS;
 const SCORCH_MAX = 12;
 const FIREBALL_POOL = 4;
+const RING_MS = 700;
 /** After the local fuse ran out, give the authoritative Boom this long before detonating visually anyway. */
 const BOOM_GRACE_MS = 600;
 
@@ -69,6 +70,9 @@ export class Grenades {
   private boomLight: PointLight;
   private boomLightLife = 0;
   private boomLightMax = 0;
+  private boomLightPeak = 60;
+  private ring: Mesh;
+  private ringLife = 0;
   private boomLightColor = new Color3(1, 0.6, 0.25);
   private sparks: ParticleSystem;
   private dust: ParticleSystem;
@@ -126,6 +130,12 @@ export class Grenades {
       m.material = this.fireballMat; m.billboardMode = Mesh.BILLBOARDMODE_ALL; m.isPickable = false; m.setEnabled(false);
       this.fireballs.push({ mesh: m, life: 0, ttl: 0, size: 1 });
     }
+    // Shockwave ring for the charge (2.3): a flat torus, emissive, scaled out from the site.
+    const ringMat = new StandardMaterial("gr_ringMat", scene);
+    ringMat.emissiveColor = new Color3(1, 0.75, 0.45); ringMat.diffuseColor = Color3.Black(); ringMat.specularColor = Color3.Black();
+    ringMat.disableLighting = true; ringMat.alpha = 0.85; ringMat.backFaceCulling = false;
+    this.ring = MeshBuilder.CreateTorus("gr_ring", { diameter: 2, thickness: 0.35, tessellation: 48 }, scene);
+    this.ring.material = ringMat; this.ring.isPickable = false; this.ring.setEnabled(false);
     this.boomLight = new PointLight("gr_boomLight", Vector3.Zero(), scene);
     this.boomLight.diffuse = this.boomLightColor; this.boomLight.intensity = 0; this.boomLight.range = 14;
 
@@ -263,14 +273,15 @@ export class Grenades {
 
   private applyBoom(e: BoomEvent, f: Flight | undefined): void {
     if (f) this.endFlight(f);
-    const def = GRENADES[e.kind];
+    const effectMs = e.effectMs || (e.kind === "c4" ? 0 : GRENADES[e.kind].effectMs);
     this.hooks.onBoom?.(e);
     switch (e.kind) {
+      case "c4": this.blast(e.x, e.y, e.z); break;
       case "frag": this.explosion(e.x, e.y, e.z, e.nx, e.ny, e.nz, 1); break;
       case "shell": this.explosion(e.x, e.y, e.z, e.nx, e.ny, e.nz, 0.75); break;
       case "flash": this.flashBurst(e.x, e.y, e.z); break;
-      case "smoke": this.startSmoke(e.x, e.y, e.z, e.effectMs || def.effectMs); break;
-      case "molotov": this.startFire(e.x, e.y, e.z, e.nx, e.ny, e.nz, e.effectMs || def.effectMs); break;
+      case "smoke": this.startSmoke(e.x, e.y, e.z, effectMs); break;
+      case "molotov": this.startFire(e.x, e.y, e.z, e.nx, e.ny, e.nz, effectMs); break;
       case "knife":
         // effectMs > 0: stuck in the world (keep the blade there); 0: hit a player (small puff, gone).
         if (e.effectMs > 0) this.stickKnife(e); break;
@@ -348,8 +359,17 @@ export class Grenades {
     }
     if (this.boomLightLife > 0) {
       this.boomLightLife -= dtMs;
-      this.boomLight.intensity = Math.max(0, this.boomLightLife / this.boomLightMax) * 60 * this.density;
+      this.boomLight.intensity = Math.max(0, this.boomLightLife / this.boomLightMax) * this.boomLightPeak * this.density;
       if (this.boomLightLife <= 0) this.boomLight.intensity = 0;
+    }
+    // ---- the blast's shockwave ring: out to 30 m in 0.7 s, thinning as it goes.
+    if (this.ring.isEnabled()) {
+      this.ringLife += dtMs;
+      const t = Math.min(1, this.ringLife / RING_MS);
+      const r = 1 + 29 * (1 - (1 - t) * (1 - t));
+      this.ring.scaling.set(r, 1, r);
+      this.ring.visibility = (1 - t) * 0.85;
+      if (t >= 1) this.ring.setEnabled(false);
     }
     // ---- fires: flicker, end
     for (let i = this.fires.length - 1; i >= 0; i--) {
@@ -382,6 +402,7 @@ export class Grenades {
     this.fireball(ox, oy, oz, 1.4 * scale, 160, this.flashMat);
     this.boomLight.position.set(ox, oy + 0.3, oz);
     this.boomLight.diffuse.set(1, 0.6, 0.25);
+    this.boomLight.range = 14; this.boomLightPeak = 60;
     this.boomLightMax = 280; this.boomLightLife = 280;
     this.boomLight.intensity = 60 * this.density;
     (this.sparks.emitter as Vector3).set(ox, oy, oz);
@@ -392,10 +413,39 @@ export class Grenades {
     this.scorch(x, y, z, nx, ny, nz, 2.2 * scale);
   }
 
+  /**
+   * The charge going off (2.3): a stack of fireballs that keep growing after a grenade's would be
+   * gone, a white core, a shockwave ring racing out along the floor, a light that reaches across the
+   * site, every spark and dust particle the pools have, and a scorch the size of a car.
+   */
+  private blast(x: number, y: number, z: number): void {
+    if (this.density <= 0) return;
+    this.fireball(x, y + 0.6, z, 5, 520, this.fireballMat);
+    this.fireball(x, y + 1.8, z, 9, 900, this.fireballMat);
+    this.fireball(x, y + 3.2, z, 13, 1300, this.fireballMat);
+    this.fireball(x, y + 0.8, z, 7, 240, this.flashMat);
+    this.boomLight.position.set(x, y + 1.2, z);
+    this.boomLight.diffuse.set(1, 0.7, 0.35);
+    // MEASURED (blast screenshots): 320 at 45 m turned the whole site floor flat yellow; this still
+    // lights the far walls without flattening the paint.
+    this.boomLight.range = 36;
+    this.boomLightPeak = 210; this.boomLightMax = 1100; this.boomLightLife = 1100;
+    this.boomLight.intensity = this.boomLightPeak * this.density;
+    (this.sparks.emitter as Vector3).set(x, y + 0.3, z);
+    this.sparks.manualEmitCount = Math.round(160 * this.density);
+    (this.dust.emitter as Vector3).set(x, y + 0.2, z);
+    this.dust.direction1.set(-1, 0.2, -1); this.dust.direction2.set(1, 1.6, 1);
+    this.dust.manualEmitCount = Math.round(90 * this.density);
+    this.scorch(x, y, z, 0, 1, 0, 7);
+    this.ring.position.set(x, y + 0.08, z);
+    this.ring.setEnabled(true); this.ringLife = 0;
+  }
+
   private flashBurst(x: number, y: number, z: number): void {
     this.fireball(x, y + 0.1, z, 6, 260, this.flashMat);
     this.boomLight.position.set(x, y + 0.4, z);
     this.boomLight.diffuse.set(1, 1, 1);
+    this.boomLight.range = 14; this.boomLightPeak = 80;
     this.boomLightMax = 220; this.boomLightLife = 220;
     this.boomLight.intensity = 80 * this.density;
     (this.sparks.emitter as Vector3).set(x, y + 0.1, z);
@@ -517,6 +567,7 @@ export class Grenades {
   }
 
   dispose(): void {
+    this.ring.dispose(false, true);
     for (const f of this.flights.values()) f.node.dispose(false, false);
     this.flights.clear();
     for (const f of this.fires) this.endFire(f);

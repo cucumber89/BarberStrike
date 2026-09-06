@@ -244,7 +244,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
         {ui.killFeed && h.killFeed.map((k) => (
           <li key={k.key} className={k.victim === h.myId ? "me-victim" : k.killer === h.myId ? "me-killer" : ""}>
             <span className={`kf-name ${teams ? `t${k.killerTeam}` : "ffa"}`}>{k.killer === k.victim ? "" : k.killerName}</span>
-            <span className="kf-weapon">{k.killer === k.victim ? "fell" : killerName(k.weapon).split(" ")[0]}{k.headshot ? " ✦" : ""}</span>
+            <span className="kf-weapon">{k.killer === k.victim && k.weapon !== "c4" ? "fell" : killerName(k.weapon).split(" ")[0]}{k.headshot ? " ✦" : ""}</span>
             <span className={`kf-name ${teams ? `t${k.victimTeam}` : "ffa"}`}>{k.victimName}</span>
           </li>
         ))}
