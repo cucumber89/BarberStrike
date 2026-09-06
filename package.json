@@ -1,0 +1,25 @@
+{
+  "name": "frankibarber-after-hours",
+  "private": true,
+  "version": "2.0.0-beta",
+  "description": "FRANKIBARBER: AFTER HOURS — multiplayer browser FPS (Babylon.js + Colyseus).",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --stream run dev",
+    "build": "pnpm -r run build",
+    "start": "pnpm --filter @frankibarber/server start",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck",
+    "profile": "node apps/client/e2e/tools/profile.mjs",
+    "shots": "node apps/client/e2e/tools/shots.mjs",
+    "anim": "node apps/client/e2e/tools/anim.mjs",
+    "shots:grenades": "cd apps/client && node e2e/tools/grenades.mjs",
+    "shots:loadout": "cd apps/client && node e2e/tools/loadout.mjs",
+    "shots:d6": "node apps/client/e2e/tools/shots-d6.mjs",
+    "test:e2e": "pnpm --filter @frankibarber/client test:e2e",
+    "host": "pnpm --filter @frankibarber/client build && pnpm --filter @frankibarber/server dev"
+  }
+}

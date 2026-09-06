@@ -1,2 +1,133 @@
-# BarberStrike
-barberstrike
+# BARBERSTRIKE (formerly FRANKIBARBER: AFTER HOURS)
+
+A multiplayer browser FPS set in a premium barber shop district after closing time.
+Team Deathmatch, 2–12 players, server-authoritative, playable in Chrome/Chromium.
+
+## What it is
+- Fast arena-style FPS: sprint, jump, crouch, ADS, five distinct weapons (pistol, SMG, rifle, shotgun, DMR).
+- Real multiplayer: Colyseus rooms, 60 Hz authoritative simulation, client prediction + reconciliation,
+  snapshot interpolation for remote players, lag-compensated hitscan.
+- One intentionally designed map, **Night District**: front street → barber shop → back hall → courtyard,
+  with an alley loop, a neighbouring industrial unit and an upper balcony route.
+- Complete match flow: lobby → room → warm-up → countdown → TDM (7 min / 40 kills) → result → rematch.
+
+## Architecture
+See `docs/ARCHITECTURE.md` (locked decisions) and `docs/BUILD_STATE.md` (status, ownership, known issues).
+
+```
+frankibarber/
+  apps/client   Vite + React (menus/HUD) + Babylon.js (WebGPU → WebGL2) game client
+  apps/server   Node + Colyseus 0.18 authoritative game server (+ Express /health, /rooms)
+  packages/shared  contracts, constants, weapons, collision, movement sim, hitscan, map data
+  docs/         architecture + build state
+```
+
+## Requirements
+- Node ≥ 20, pnpm 10: `npm install -g pnpm` (or `corepack enable` — on Windows that needs an
+  administrator prompt, otherwise it fails with `EPERM`).
+- Desktop Chrome/Chromium (WebGL2 required; WebGPU used when available).
+
+## Install & run (development)
+```
+cd frankibarber
+pnpm install
+pnpm dev            # game server on :2567 and client on http://localhost:5174
+```
+Open http://localhost:5174 in two browser windows (or two machines on the LAN: the client connects to
+`ws://<page-host>:2567` by default; override with `VITE_SERVER_URL`).
+
+Troubleshooting:
+- `'pnpm' is not recognized` → `npm install -g pnpm`, then open a new terminal.
+- `pnpm install` warns about ignored build scripts (esbuild, msgpackr-extract) → harmless, nothing to approve.
+- `Failed to load PostCSS config … Cannot find module 'autoprefixer'` → fixed by the inline PostCSS config in
+  `apps/client/vite.config.ts`; `git pull` if you still see it.
+- Keep the `pnpm dev` terminal open while playing; Ctrl+C stops both server and client.
+- Renderer trouble (black screen, `engine.… is not a function`, "WebGPU context lost"): the game retries once on
+  WebGL2 by itself and remembers it; you can also force it in SETTINGS → "Force WebGL2 (disable WebGPU)".
+
+## Multiplayer testing
+- Manual: two windows → PLAY → same room name → QUICK PLAY. The match starts once two players are present.
+- Automated (real two-browser test):
+  ```
+  FB_DEV_TOOLS=1 pnpm --filter @frankibarber/server dev     # enables the dev-only teleport hook
+  pnpm --filter @frankibarber/client dev
+  pnpm --filter @frankibarber/client test:e2e               # PW_CHROMIUM=<chromium path> if needed
+  ```
+- Unit tests: `pnpm test` (shared movement/collision/hitscan + **map validity** (walk grid, spawn LOS, prop
+  placement) + server room/match logic + client animation/reload/dynamic-scale on Babylon's NullEngine).
+- Asset tools: `node apps/client/e2e/tools/gltf-info.mjs <file.glb>` reads a model straight from disk
+  (node names, animation clips, bones, bounding boxes) — no browser, no dev server. With the dev servers
+  running, `node e2e/tools/assets-check.mjs` reports what the RUNNING game imported and what it costs,
+  `node e2e/tools/vm-fit.mjs` prints where each gun sits in camera space, and
+  `node e2e/tools/hand-pose.mjs` prints where a remote player's gun points (bore angle against the
+  direction the body faces, muzzle height and offset) — the check that caught every enemy carrying
+  their rifle backwards.
+- Measurement tools (dev servers running): `pnpm profile` (draw calls / meshes / lights per view),
+  `pnpm shots` (13 map views), `pnpm anim` (per-weapon idle / shot / reload stills).
+- Diagnostic scripts in `apps/client/e2e/tools/` (dev servers running): `reconnect.mjs` (simulated network drop →
+  session resume), `audio-selftest.mjs` (renders every sound offline + live voice cap), `shots.mjs` / `faceoff.mjs` /
+  `shot1.mjs` (screenshots of the map, characters and HUD in headless Chromium).
+- Reconnection: an unexpected socket drop keeps the player on the server for 15 s; the client resumes the same
+  session automatically (HUD shows "RECONNECTING").
+
+## Production build
+```
+pnpm build                                   # typechecks shared, bundles server (dist/), builds client (dist/)
+pnpm --filter @frankibarber/server start      # node dist/index.js  (PORT, CORS_ORIGIN)
+pnpm --filter @frankibarber/client preview    # static preview of the client build
+```
+The client build is static (deploy `apps/client/dist` anywhere); the server needs a persistent
+WebSocket-capable host (VM, container, Fly/Railway/Render — **not** a serverless function runtime).
+A `Dockerfile` for the server lives in `apps/server/` (build from the `frankibarber/` root:
+`docker build -f apps/server/Dockerfile -t frankibarber-server .`). The image was written and reviewed but
+could not be built in the authoring sandbox (no Docker daemon) — verify on your host.
+
+## Controls
+| Key | Action |
+|---|---|
+| W A S D | Move |
+| Mouse | Aim |
+| LMB / RMB | Fire / Aim down sights |
+| Shift | Sprint |
+| Shift ×2 (double tap) | Tactical sprint — faster, gun up, on a 4 s budget |
+| Q / E | Lean left / right (blocked by walls, off while sprinting) |
+| Space | Jump |
+| Ctrl / C | Crouch |
+| R | Reload |
+| 1 / 2 / wheel / X | Primary / pistol / cycle / last weapon |
+| G (hold to cook) | Lethal grenade |
+| V / 3 | Clippers (melee; one-hit from behind) |
+| F | Inspect weapon |
+| Shift while scoped | Hold breath (sniper) |
+| 4 | Tactical grenade |
+| B | Buy menu (15 s after spawn or at a $ BUY station) |
+| Tab | Scoreboard (K / D / A / $ / ping) |
+| Enter / Y | Chat to all / to the team (Enter sends, Esc cancels) |
+| Middle mouse | Mark a spot for the team; aimed at an enemy: "spotted" |
+| Esc | Release mouse / pause |
+
+Bots: pick 0–8 and a level (EASY / NORMAL / HARD) in the lobby before QUICK PLAY / CREATE MATCH.
+
+## Environment variables
+See `.env.example`. Server: `PORT` (2567), `CORS_ORIGIN`, `FB_DEV_TOOLS` (dev only). Client: `VITE_SERVER_URL`.
+
+## Asset licenses
+See `ASSET_LICENSES.md`; the required CC-BY line is also in-game under SETTINGS → CREDITS.
+Three CC0/CC-BY packs are shipped — Quaternius characters (CC0), a low-poly firearms bundle by
+**austincford** (CC-BY 4.0), MiniPoly bottles (CC0). Everything else is still generated at runtime, and
+the game runs unchanged with the packs deleted. To swap or add: drop a CC0/CC-BY glTF into
+`apps/client/public/models/`, name it in `manifest.json` (see the README there) and add a row to
+`ASSET_LICENSES.md`. Only files the manifest names are copied into a production build.
+
+## Known limitations
+- Desktop only; touch controls are not implemented (mobile devices get a notice).
+- Imported models are on from the MEDIUM graphics preset up and off on LOW (SETTINGS → "Imported
+  models"). A skinned character is ~12.5 k vertices against a few hundred for the procedural one, so
+  a weak or software renderer is better off with LOW; draw calls are actually LOWER with the models.
+- Audio is entirely procedural. Art is a mix: imported low-poly characters, guns and bottles (CC0/CC-BY),
+  everything else — map, props, textures, effects — generated at runtime. The shotgun and the clippers
+  have no imported model and stay procedural.
+- One map. Modes: Team Deathmatch, Free For All, Domination (picked in the lobby); bots at three levels. A second map is a stretch goal.
+- Tuning (sensitivity, recoil, bob) was validated logically and via headless screenshots; final feel needs a
+  real-GPU playtest.
+- See the "Known issues" section of `docs/BUILD_STATE.md` for measured decisions and caveats.

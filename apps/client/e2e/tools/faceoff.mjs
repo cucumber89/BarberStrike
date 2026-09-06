@@ -1,0 +1,43 @@
+import { chromium } from "@playwright/test";
+import fs from "node:fs";
+const OUT = process.env.OUT || "/tmp/claude-0/-home-user-sidequest/1d2f80ee-f8c5-5282-b5fc-eb567dff361c/scratchpad/shots";
+fs.mkdirSync(OUT, { recursive: true });
+const MED = JSON.stringify({ graphics: { preset: "medium", renderer: "webgl2", renderScale: 1, shadows: "medium", postProcessing: true, effects: 1, antialiasing: true, importedModels: true } });
+const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader","--ignore-gpu-blocklist"] });
+const room = "shots3-" + Date.now();
+async function mk(name) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await ctx.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), MED);
+  const page = await ctx.newPage();
+  page.on("pageerror", (e) => console.log(`[${name} pageerror]`, e.message));
+  await page.goto("http://localhost:5174/");
+  await page.getByTestId("btn-play").click();
+  await page.getByTestId("input-name").fill(name);
+  await page.getByTestId("input-room").fill(room);
+  await page.getByTestId("btn-quickplay").click();
+  await page.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().loadStage === "ready", null, { timeout: 60000 });
+  await page.evaluate(() => { const c = document.querySelector("canvas"); Object.defineProperty(document, "pointerLockElement", { get: () => c, configurable: true }); document.dispatchEvent(new Event("pointerlockchange")); });
+  return page;
+}
+const a = await mk("ALPHA"); const b = await mk("BRAVO");
+const frames = async (p, n) => { const s = await p.evaluate(() => window.__fb.game.frameCount); await p.waitForFunction((t) => window.__fb.game.frameCount >= t, s + n, { timeout: 120000 }); };
+const tp = async (p, x, y, z) => { await p.evaluate(([x, y, z]) => window.__fb.game.conn.send("dev:teleport", { x, y, z }), [x, y, z]); await p.waitForTimeout(500); return p.evaluate(() => { const b = window.__fb.game.localPlayer.body; return [b.x.toFixed(1), b.z.toFixed(1)].join(","); }); };
+const look = (p, yaw, pitch) => p.evaluate(([yaw, pitch]) => { window.__fb.game.localPlayer.yaw = yaw; window.__fb.game.localPlayer.pitch = pitch; }, [yaw, pitch]);
+// wait for match start (respawn) to be over
+await a.waitForTimeout(5500);
+console.log("A at", await tp(a, 6, 0.05, 20), "B at", await tp(b, 6, 0.05, 24));
+await look(a, 0, 0.02); await look(b, Math.PI, 0);
+await frames(a, 4); await frames(b, 3);
+await a.screenshot({ path: `${OUT}/20-remote-idle-4m.png` });
+await b.mouse.move(640, 360); await b.keyboard.down("KeyD"); await frames(b, 3); await frames(a, 2);
+await a.screenshot({ path: `${OUT}/21-remote-walk.png` });
+await b.keyboard.up("KeyD");
+await b.keyboard.down("ControlLeft"); await frames(b, 3); await frames(a, 2);
+await a.screenshot({ path: `${OUT}/22-remote-crouch.png` });
+await b.keyboard.up("ControlLeft");
+await b.mouse.down(); await frames(b, 1); await frames(a, 1);
+await a.screenshot({ path: `${OUT}/23-remote-fire.png` });
+await b.mouse.up();
+await a.mouse.move(640, 360); await a.mouse.down(); await frames(a, 1); await a.screenshot({ path: `${OUT}/24-fp-fire.png` }); await a.mouse.up();
+console.log("A ammo", await a.evaluate(() => window.__fb.hud.get().ammo), "B health", await b.evaluate(() => window.__fb.hud.get().health));
+await browser.close();

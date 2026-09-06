@@ -1,0 +1,21 @@
+{
+  "_comment": "Drop 6b. Files live under raw/<pack>/. Anything not listed here stays procedural. Heights are MEASURED from the .glb (e2e/tools/gltf-info.mjs), not guessed.",
+  "characters": [
+    { "file": "raw/quaternius-men/Hoodie Character.glb", "tint": "Purple", "height": 1.87, "license": "CC0 — Quaternius, Ultimate Modular Men Pack" },
+    { "file": "raw/quaternius-men/Business Man.glb", "tint": "Suit", "height": 1.86, "license": "CC0 — Quaternius, Ultimate Modular Men Pack" }
+  ],
+  "weapons": {
+    "pistol":   { "file": "raw/firearms/P320.glb", "license": "CC-BY — austincford, Low Poly Firearms Bundle" },
+    "revolver": { "file": "raw/firearms/Revolver.glb", "license": "CC-BY — austincford, Low Poly Firearms Bundle" },
+    "smg":      { "file": "raw/firearms/Mpa.glb", "license": "CC-BY — austincford, Low Poly Firearms Bundle" },
+    "smg2":     { "file": "raw/firearms/MPX.glb", "license": "CC-BY — austincford, Low Poly Firearms Bundle" },
+    "rifle":    { "file": "raw/firearms/MDR.glb", "license": "CC-BY — austincford, Low Poly Firearms Bundle" },
+    "dmr":      { "file": "raw/firearms/MK14.glb", "license": "CC-BY — austincford, Low Poly Firearms Bundle" },
+    "sniper":   { "file": "raw/firearms/SRSA1.glb", "license": "CC-BY — austincford, Low Poly Firearms Bundle" },
+    "launcher": { "file": "raw/firearms/RPG Launcher.glb", "license": "CC-BY — austincford, Low Poly Firearms Bundle" }
+  },
+  "props": {
+    "bottle_row": { "file": "raw/bottles/Bottle.glb", "height": 0.2, "license": "CC0 — MiniPoly, Bottles" }
+  },
+  "models": {}
+}

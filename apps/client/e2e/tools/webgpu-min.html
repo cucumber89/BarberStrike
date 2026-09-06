@@ -1,0 +1,48 @@
+<!doctype html>
+<!--
+  Minimal WebGPU smoke page (dev server only): http://localhost:5174/e2e/tools/webgpu-min.html
+  Creates the engine through the game's own engine.ts, one lit box with a DynamicTexture, renders
+  60 frames and reports to `window.__min`. Used to tell "our scene breaks WebGPU" apart from
+  "this browser/GPU cannot do WebGPU at all" (e.g. headless SwiftShader loses the device).
+-->
+<html><body style="margin:0;background:#111">
+<canvas id="c" width="320" height="180"></canvas>
+<script type="module">
+  import { createEngine } from "/src/game/engine.ts";
+  import { Scene } from "@babylonjs/core/scene";
+  import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+  import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
+  import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
+  import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
+  import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+  import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
+  import { Engine } from "@babylonjs/core/Engines/engine";
+  import { WebGPUEngine } from "@babylonjs/core/Engines/webgpuEngine";
+  const out = (window.__min = { stage: "init", errors: [], frames: 0 });
+  // Static check: engine methods WebGL has that WebGPU lacks after our side-effect imports.
+  const protoNames = (C) => { const s = new Set(); for (let p = C.prototype; p && p !== Object.prototype; p = Object.getPrototypeOf(p)) for (const n of Object.getOwnPropertyNames(p)) s.add(n); return s; };
+  const gl = protoNames(Engine), gpu = protoNames(WebGPUEngine);
+  out.missingOnWebGPU = [...gl].filter((n) => !gpu.has(n) && !n.startsWith("_")).sort();
+  window.addEventListener("error", (e) => out.errors.push(String(e.message)));
+  window.addEventListener("unhandledrejection", (e) => out.errors.push("rejection: " + String(e.reason?.message ?? e.reason)));
+  try {
+    const { engine, kind } = await createEngine(document.getElementById("c"), true);
+    out.kind = kind;
+    const scene = new Scene(engine);
+    const cam = new FreeCamera("cam", new Vector3(0, 1.5, -4), scene);
+    cam.setTarget(Vector3.Zero());
+    new HemisphericLight("h", new Vector3(0, 1, 0), scene);
+    const box = MeshBuilder.CreateBox("b", { size: 1.5 }, scene);
+    const mat = new StandardMaterial("m", scene);
+    const dt = new DynamicTexture("dt", { width: 128, height: 128 }, scene, false);
+    const c = dt.getContext();
+    c.fillStyle = "#c8842a"; c.fillRect(0, 0, 128, 128);
+    c.fillStyle = "#111"; c.font = "bold 40px sans-serif"; c.fillText("FB", 30, 80);
+    dt.update();
+    mat.diffuseTexture = dt;
+    box.material = mat;
+    out.stage = "rendering";
+    engine.runRenderLoop(() => { box.rotation.y += 0.02; scene.render(); out.frames++; if (out.frames === 60) { out.stage = "done"; engine.stopRenderLoop(); } });
+  } catch (e) { out.stage = "failed"; out.errors.push(String(e?.message ?? e)); }
+</script>
+</body></html>
