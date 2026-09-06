@@ -98,6 +98,8 @@ Troubleshooting:
   letter, lit corner posts, stencilled letters and site signs on the walls, cover to plant behind.
 - Materials get relief: every wall / floor look now has a generated normal map and colour variation
   (`world/materials.ts`), so brick, plaster, concrete and metal read as surfaces, not flat paint.
+- The main menu has a live cover, CS 1.6 style: the game's own characters, both sides, lit by a
+  brass and a violet practical, idling behind the menu on a wet floor (`view/MenuCover.ts`).
 - The district is dressed as a place people use (`shared/districtDressing.ts`, `world/props.ts`):
   café tables, coffee machine and menu board, the depot's tool boards, tyre stacks and jack, the
   shop's clock, calendar, coat rack and magazines, string lights, a fire barrel, an A-frame sign,

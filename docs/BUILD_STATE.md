@@ -34,6 +34,18 @@ Compact shared state. Read `ARCHITECTURE.md` first. Keep this file short.
       Gotcha: `Palette.text` needs a string — named poster variants map to texts, never `undefined`.
 - [x] Tests: shared 135, server Bomb 10 (drop / kit / plant-anywhere through the real handlers), e2e
       "bomb plant and defuse" covers drop → camp (still dropped) → step away → pick up → plant → defuse.
+- [x] **Menu cover** (`view/MenuCover.ts`, `ui/MenuCover.tsx`): the game's own characters live behind
+      the main menu, CS 1.6 style — three FADE on the left under a brass practical, three TAPER on the
+      right under a violet one, crouched / standing / tac, one carrying the charge, on a wet floor in
+      fog, breathing and checking their weapons. Its own WebGL2 engine on its own canvas, half
+      resolution, 30 fps cap, paused when hidden, one frame under `prefers-reduced-motion`, lazily
+      imported, disposed on unmount (the match gets a fresh canvas anyway — see `App.freshCanvas`).
+      Camera uses a FIXED HORIZONTAL fov so the cast stays at the edges on 4:3 too (measured at
+      1024×768: with a vertical fov they crowded under the menu). `.menu-cover-shade` darkens the
+      middle so the text stays readable; sub-panels dim it further. Not shown on touch-only devices.
+- [x] **Hosting fixes after the first Render deploy**: `ENV CI=true` in the Dockerfile (pnpm refused to
+      purge node_modules without a TTY) and `net/serverUrl.ts` — a hosted page talks to its own origin
+      instead of `:2567` (the old fallback timed out on Render). Both measured on the live service.
 - Open: bots do not drop or pass the charge (they carry and plant only); no "bomb is here" minimap
   icon; the kit is not drawn on the character.
 
