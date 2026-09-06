@@ -1,4 +1,4 @@
-import { ECONOMY, MATCH, MAX_PLAYERS, MODES, MODE_ORDER } from "@frankibarber/shared";
+import { BOMB, ECONOMY, MATCH, MAX_PLAYERS, MODES, MODE_ORDER, RESPAWN_DELAY_MS } from "@frankibarber/shared";
 import { BINDABLE_ACTIONS, keyLabel, resolveBindings, type Settings } from "../settings";
 
 /**
@@ -13,14 +13,14 @@ export function HowToPlay({ settings, onControls }: { settings: Settings; onCont
     <div className="howto" data-testid="howto">
       <section>
         <h3>THE NIGHT</h3>
-        <p>Night District after closing time. {MATCH.minPlayers}–{MAX_PLAYERS} players, one map, three modes. A match is {MATCH.durationMs / 60000} minutes or the score limit, whichever comes first, then a {MATCH.endedMs / 1000} s result screen and a rematch in the same room.</p>
+        <p>Night District after closing time. {MATCH.minPlayers}–{MAX_PLAYERS} players, one map, four modes. A continuous match (TDM, FFA, Domination) is {MATCH.durationMs / 60000} minutes or the score limit, whichever comes first, then a {MATCH.endedMs / 1000} s result screen and a rematch in the same room. You respawn on your own {(RESPAWN_DELAY_MS / 1000).toFixed(1)} s after a death, sooner with a fresh fade.</p>
         <div className="howto-modes">
           {MODE_ORDER.map((m) => <div key={m} className="howto-mode"><b>{MODES[m].short}</b><span>{MODES[m].name}</span><small>{MODES[m].blurb}</small></div>)}
         </div>
       </section>
       <section>
-        <h3>WAVES</h3>
-        <p>Nobody respawns alone. The match runs in <b>{MATCH.waveMs / 1000} s waves</b>: whoever dies waits for the wave to end, then <b>everyone</b> comes back together during a {MATCH.prepMs / 1000} s preparation freeze — reload, buy, pick a lane. Surviving a whole wave pays XP.</p>
+        <h3>BOMB PLANT</h3>
+        <p>Rounds, one life each, like the classics. Attackers carry a charge to site <b>A</b> or <b>B</b> and hold <b>{key("objective")}</b> standing still to plant; defenders hold the same key to defuse. A {BOMB.buyMs / 1000} s buy phase opens every round on a frozen spawn, the shop is closed afterwards, and money carries between rounds: a round win pays more than a loss, losing streaks pay a growing consolation, and death costs the gear you bought. First to {BOMB.wins} rounds, sides swap after {BOMB.halfRounds}. Dying means waiting for the next round.</p>
       </section>
       <section>
         <h3>MONEY</h3>

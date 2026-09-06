@@ -19,6 +19,7 @@ import type { MapDef, MaterialTag } from "@frankibarber/shared";
 import { createMaterialLibrary, type MaterialLibrary } from "./materials";
 import { buildProps } from "./props";
 import { dressSolid } from "./dressing";
+import { buildArchitecture } from "./architecture";
 import type { ModelLibrary } from "./models";
 
 export interface MapInstance {
@@ -104,6 +105,7 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
     }
   }
 
+  buildArchitecture(scene, map, addToZone);
   const root: Mesh[] = [];
   const casters: AbstractMesh[] = [];
   for (const [key, { tag, meshes }] of byMat) {

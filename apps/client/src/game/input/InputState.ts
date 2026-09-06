@@ -24,6 +24,8 @@ export interface KeyBindings {
   /** Lean left / right (drop 4). */
   leanLeft: string[];
   leanRight: string[];
+  /** Bomb Plant: hold to plant / defuse (2.1: rebindable, T by default). */
+  objective: string[];
 }
 
 export const DEFAULT_BINDINGS: KeyBindings = {
@@ -45,6 +47,7 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   inspect: ["KeyF"],
   leanLeft: ["KeyQ"],
   leanRight: ["KeyE"],
+  objective: ["KeyT"],
 };
 
 /** Two sprint presses within this window latch the tactical sprint (drop 4). */
@@ -175,9 +178,11 @@ export class InputState {
     return false;
   }
 
+  get objectiveHeld(): boolean { return this.enabled && this.pointerLocked && !this.typing && this.isDown(this.bindings.objective); }
+
   /** Packs the current state into the shared button bitmask. */
   buttons(): number {
-    if (!this.enabled) return 0;
+    if (!this.enabled || this.typing) return 0;
     const b = this.bindings;
     let m = 0;
     if (this.isDown(b.forward)) m |= Btn.Forward;
@@ -216,8 +221,15 @@ export class InputState {
     if (this.lethalHeld) this.lethalReleased = true;
     this.lethalHeld = false;
     this.tacticalRequested = false;
+    this.shopToggleRequested = false;
+    this.inspectRequested = false;
+    this.escapeRequested = false;
+    this.chatOpenRequested = null;
+    this.markRequested = false;
     this.scoreboardHeld = false;
     this.tacLatched = false;
+    this.lastSprintDownAt = -Infinity;
+    this.lastWheelAt = -Infinity;
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
@@ -272,7 +284,7 @@ export class InputState {
   private onVisibility = (): void => { if (document.visibilityState === "hidden") this.clearAll(); };
 
   private onMouseDown = (e: PointerEvent): void => {
-    if (!this.enabled || e.pointerType === "touch") return;
+    if (!this.enabled || this.typing || e.pointerType === "touch") return;
     if (!this.pointerLocked) { this.requestPointerLock(); return; }
     this.mouseButtons |= 1 << e.button;
     if (e.button === 2) this.aimSuppressed = false; // a fresh aim press always aims (and cancels sprint in the sim)
@@ -286,7 +298,7 @@ export class InputState {
   };
 
   private onMouseMove = (e: PointerEvent): void => {
-    if (!this.pointerLocked || !this.enabled) return;
+    if (!this.pointerLocked || !this.enabled || this.typing) return;
     // MEASURED (1.0 beta playtest: "can't shoot while aiming"): Pointer Events fire `pointerdown`
     // only when the FIRST button goes down. A chorded press (LMB while RMB is held) arrives as a
     // `pointermove` with a changed `buttons` mask, so the fire bit never set. Sync from `buttons`
@@ -294,6 +306,7 @@ export class InputState {
     const chord = (e.buttons & 1) | ((e.buttons & 2) ? 4 : 0) | ((e.buttons & 4) ? 2 : 0);
     if (chord !== this.mouseButtons) {
       if ((chord & 4) && !(this.mouseButtons & 4)) this.aimSuppressed = false;
+      if ((chord & 2) && !(this.mouseButtons & 2)) this.markRequested = true;
       this.mouseButtons = chord;
     }
     // Clamp absurd deltas (some browsers emit a spike right after locking).
@@ -303,7 +316,7 @@ export class InputState {
   };
 
   private onWheel = (e: WheelEvent): void => {
-    if (!this.pointerLocked || !this.enabled || e.deltaY === 0) return;
+    if (!this.pointerLocked || !this.enabled || this.typing || e.deltaY === 0) return;
     const now = performance.now();
     if (now - this.lastWheelAt < WHEEL_THROTTLE_MS) return;
     this.lastWheelAt = now;

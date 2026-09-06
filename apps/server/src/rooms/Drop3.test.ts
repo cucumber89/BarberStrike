@@ -111,13 +111,8 @@ describe("armour and perks", () => {
     expect(victim.alive).toBe(false);
     expect(victim.armor).toBe(0);
     expect(victim.perks.get("fade")).toBe(0);
-    // Respawn is a WAVE since drop 7, so the perk's other half — coming back sooner — cannot apply
-    // during a match: everyone returns on the same countdown. What survives, and what this pins, is
-    // the longer SHIELD, measured from the moment the wave is released rather than from the respawn
-    // (which happens at the start of a freeze nobody can shoot in and would spend it for nothing).
-    // `wave()` returns on the tick the wave is released, so what is left on the shield here IS its
-    // full length — the freeze it was granted in did not eat any of it.
-    await h.wave();
+    // The perk respawns this player early and grants its extended shield.
+    await h.respawns();
     expect(victim.alive).toBe(true);
     const fadeLeft = victim.protectedUntil - h.now();
     expect(fadeLeft).toBeGreaterThan(PERK_EFFECT.fadeShieldMs - 100);
@@ -127,7 +122,7 @@ describe("armour and perks", () => {
     victim.health = 1;
     await h.advance(PERK_EFFECT.fadeShieldMs + 100);
     await rifleHit(a, b);
-    await h.wave();
+    await h.respawns();
     const plainLeft = victim.protectedUntil - h.now();
     expect(plainLeft).toBeGreaterThan(SPAWN_PROTECTION_MS - 100);
     expect(plainLeft).toBeLessThanOrEqual(SPAWN_PROTECTION_MS + 20);
@@ -168,7 +163,7 @@ describe("sidearms and clippers", () => {
     expect((h.sentOf(a, S2C.Hit).at(-1)?.payload as HitEvent).damage).toBe(MELEE.backstabDamage);
     // Respawn, then a frontal swing. Since drop 7 a respawn during a match is a WAVE, not a
     // per-player timer, so this is how a test gets a live victim back.
-    await h.wave();
+    await h.respawns();
     await h.advance(SPAWN_PROTECTION_MS + 100);
     const v2 = h.session(b.sessionId);
     const gx = Math.sin(v2.lastYaw), gz = Math.cos(v2.lastYaw);

@@ -70,7 +70,24 @@ export class FlagState extends Schema {
   @type("boolean") contested = false;
 }
 
+export class BombState extends Schema {
+  @type("uint8") round = 0;
+  @type("uint8") attackTeam = 0;
+  @type("string") stage = "idle";
+  @type("string") carrier = "";
+  @type("string") site = "";
+  @type("float32") x = 0;
+  @type("float32") y = 0;
+  @type("float32") z = 0;
+  @type("float64") endsAt = 0;
+  @type("float64") roundEndsAt = 0;
+  @type("string") actor = "";
+  @type("float32") progress = 0;
+  @type("string") result = "";
+}
+
 export class MatchState extends Schema {
+  @type(BombState) bomb = new BombState();
   @type("string") phase: MatchPhase = MatchPhase.Waiting;
   /**
    * Server time (ms) when the current PHASE ends (0 = open ended). Since drop 7 that is a wave or a

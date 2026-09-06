@@ -27,6 +27,65 @@ import { BotBrain, type BotSenses } from "./BotBrain";
 const walk: Walk = walkable(NIGHT_DISTRICT);
 const world = buildCollisionWorld(NIGHT_DISTRICT);
 
+describe("fair perception and hazards", () => {
+  it("cannot acquire someone behind it or shoot through smoke / flash", () => {
+    const brain = new BotBrain("normal", walk, () => 0.5);
+    const s = sensesFor(0, createBody(0, 0, 0), [], [{ id: "enemy", team: 1, x: 0, y: 0, z: -10, crouching: false }]);
+    for (let t = 0; t < 2000; t += TICK_MS) { s.now = t; expect(brain.think(s).fire).toBeNull(); }
+    s.enemies[0].z = 10; s.los = () => false;
+    for (let t = 2000; t < 4000; t += TICK_MS) { s.now = t; expect(brain.think(s).fire).toBeNull(); }
+    s.los = () => true; s.blinded = true;
+    for (let t = 4000; t < 6000; t += TICK_MS) { s.now = t; expect(brain.think(s).fire).toBeNull(); }
+  });
+  it("gives the player a gap between bursts and retreats from fire", () => {
+    const brain = new BotBrain("normal", walk, () => 0.5);
+    const s = sensesFor(0, createBody(0, 0, 0), [], [{ id: "enemy", team: 1, x: 0, y: 0, z: 15, crouching: false }]);
+    const shots: number[] = [];
+    for (let t = 0; t < 3000; t += TICK_MS) { s.now = t; if (brain.think(s).fire) shots.push(t); }
+    expect(shots.length).toBeGreaterThan(3); expect(shots[0]).toBeGreaterThanOrEqual(650);
+    expect(shots[3] - shots[2]).toBeGreaterThan(600);
+    s.hazards = [{ x: 0, y: 0, z: 1, radius: 3 }];
+    const d = brain.think(s); expect(d.fire).toBeNull(); expect(d.input.buttons & Btn.Back).toBe(Btn.Back);
+  });
+});
+
+describe("weapon-aware combat", () => {
+  it("closes with a shotgun and holds distance with a rifle", () => {
+    const s = sensesFor(1000, createBody(0, 0, 0), [], [{ id: "enemy", team: 1, x: 0, y: 0, z: 18, crouching: false }]);
+    const shotgun = new BotBrain("normal", walk, () => 0.5);
+    s.me.weapon = "shotgun";
+    expect(shotgun.think(s).input.buttons & Btn.Forward).toBe(Btn.Forward);
+    const rifle = new BotBrain("normal", walk, () => 0.5);
+    s.me.weapon = "rifle";
+    expect(rifle.think(s).input.buttons & Btn.Forward).toBe(0);
+  });
+
+  it("backs away to reload instead of advancing with an empty weapon", () => {
+    const s = sensesFor(1000, createBody(0, 0, 0), [], [{ id: "enemy", team: 1, x: 0, y: 0, z: 30, crouching: false }]);
+    s.me.ammo = 0;
+    const d = new BotBrain("normal", walk, () => 0.5).think(s);
+    expect(d.reload).toBe(true);
+    expect(d.input.buttons & Btn.Back).toBe(Btn.Back);
+    expect(d.input.buttons & Btn.Forward).toBe(0);
+    expect(d.fire).toBeNull();
+  });
+
+  it("keeps reacting to one target when two opponents trade nearest place", () => {
+    const brain = new BotBrain("normal", walk, () => 0.5);
+    const s = sensesFor(0, createBody(0, 0, 0), [], [
+      { id: "a", team: 1, x: 0, y: 0, z: 15, crouching: false },
+      { id: "b", team: 1, x: 0, y: 0, z: 15.1, crouching: false },
+    ]);
+    let shots = 0;
+    for (let tick = 0; tick < 60; tick++) {
+      s.now = tick * TICK_MS;
+      s.enemies[1].z = tick % 2 ? 14.9 : 15.1;
+      if (brain.think(s).fire) shots++;
+    }
+    expect(shots).toBeGreaterThan(0);
+  });
+});
+
 /** A senses object with no enemies: pure navigation towards a single roam point. */
 function sensesFor(now: number, b: BodyState, roam: NavPoint[], enemies: BotSenses["enemies"] = []): BotSenses {
   return {
@@ -107,7 +166,7 @@ describe("bot movement", () => {
     brain.onSpawn(0);
     // 20 s of ticks: a 30 m walk at ~5 m/s has a lot of room, and anything that gets stuck fails.
     const out = run(brain, start, [goal], Math.round(20000 / TICK_MS));
-    expect(Math.hypot(out.body.x - goal.x, out.body.z - goal.z)).toBeLessThan(3);
+    expect(Math.hypot(out.body.x - goal.x, out.body.z - goal.z), JSON.stringify({ start, goal, at: out.body, route: findPath(walk, start, goal) })).toBeLessThan(3);
   });
 
   it("keeps its destination instead of changing its mind every couple of seconds", () => {

@@ -89,7 +89,7 @@ export function SettingsPanel({ settings, onChange, initialTab = "gameplay" }: P
           <Toggle label="Dynamic resolution" hint="Lowers the render scale when frames get slow, so the game stays smooth." value={gr.dynamicResolution} onChange={(v) => set({ graphics: { ...gr, dynamicResolution: v } })} />
           <Toggle label="Post-processing" hint="Bloom, tone mapping and vignette." value={gr.postProcessing} onChange={(v) => set({ graphics: { ...gr, postProcessing: v } })} />
           <Toggle label="Anti-aliasing" value={gr.antialiasing} onChange={(v) => set({ graphics: { ...gr, antialiasing: v } })} />
-          <Toggle label="Imported models" hint="Off = procedural art, lighter on weak GPUs." value={gr.importedModels} onChange={(v) => set({ graphics: { ...gr, importedModels: v } })} />
+          <Toggle label="Extra scenery models" hint="Characters and weapons are always built in-game; this adds the optional CC0 scenery packs. Off is lighter on weak GPUs." value={gr.importedModels} onChange={(v) => set({ graphics: { ...gr, importedModels: v } })} />
           <Toggle label="Force WebGL2 (disable WebGPU)" hint="Try this if the screen stays black or the renderer crashes." value={gr.renderer === "webgl2"} onChange={(v) => set({ graphics: { ...gr, renderer: v ? "webgl2" : "auto" } })} />
           <p className="muted small">Render scale and field of view apply at once; the rest applies on the next match.</p>
         </div>

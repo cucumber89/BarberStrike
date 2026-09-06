@@ -1,5 +1,5 @@
 import {
-  BOT_PRESETS, Btn, PLAYER, TICK_MS, aimDirection, findPath, itemPrice, spreadDirection, wrapAngle,
+  BOT_PRESETS, Btn, PLAYER, TICK_MS, WEAPONS, aimDirection, findPath, itemPrice, spreadDirection, wrapAngle,
   type BotLevel, type BotPreset, type NavPoint, type PlayerInput, type Walk, type WeaponId,
 } from "@frankibarber/shared";
 
@@ -58,6 +58,10 @@ export interface BotSenses {
    * that no frame carries more than one search — see `BotDecision.planned`.
    */
   mayPlan?: boolean;
+  /** Server-applied flash blindness. Hidden enemies must not be acquired or tracked. */
+  blinded?: boolean;
+  objective?: NavPoint;
+  hazards?: { x: number; y: number; z: number; radius: number }[];
 }
 
 export interface BotDecision {
@@ -144,6 +148,8 @@ export class BotBrain {
   private strafe = 1;
   private strafeUntil = 0;
   private jumpUntil = 0;
+  private burstShots = 0;
+  private burstRestUntil = 0;
 
   constructor(level: BotLevel, private walk: Walk, private rand: () => number) {
     this.preset = BOT_PRESETS[level];
@@ -156,22 +162,26 @@ export class BotBrain {
     this.replanAt = 0; this.goalAt = 0; this.sprinting = false; this.sprintHold = 0;
     this.target = null; this.lastKnown = null; this.lastSeenAt = 0;
     this.stuckAt = 0;
+    this.burstShots = 0; this.burstRestUntil = 0;
   }
 
-  /** The primary a bot buys on spawn, best it can afford (null keeps the sidearm). */
+  /** Pick an affordable primary on spawn; null keeps the existing loadout. */
   pickBuy(money: number, owned: readonly string[]): WeaponId | null {
     const order: WeaponId[] = ["rifle", "smg", "shotgun", "dmr", "smg2"];
     if (owned.some((w) => order.includes(w as WeaponId))) return null;
-    // A little variety: sometimes take the second-best choice.
+    // Sample every affordable choice, so the room includes close- and long-range roles.
     const pool = order.filter((w) => itemPrice(w) <= money);
     if (pool.length === 0) return null;
-    return pool[this.rand() < 0.7 ? 0 : Math.min(pool.length - 1, 1)];
+    return pool[Math.min(pool.length - 1, Math.floor(this.rand() * pool.length))];
   }
 
   think(s: BotSenses): BotDecision {
     const me = s.me;
     const now = s.now;
     const p = this.preset;
+    const weapon = WEAPONS[me.weapon];
+    const engageRange = Math.min(p.engageRange, weapon.rangeMax);
+    const preferredRange = Math.min(engageRange * 0.65, weapon.range * 0.8);
     const eyeY = me.y + (me.crouching ? PLAYER.crouchEyeHeight : PLAYER.eyeHeight);
     let buttons = 0;
     let fire: BotDecision["fire"] = null;
@@ -179,16 +189,24 @@ export class BotBrain {
     let planned = false;
 
     // ---- perception: nearest enemy in range with line of sight to the chest
-    let seen: BotView | null = null, seenD = Infinity;
+    let seen: BotView | null = null, seenD = Infinity, bestPriority = Infinity;
     for (const e of s.enemies) {
+      if (s.blinded) break;
       const d = Math.hypot(e.x - me.x, e.z - me.z);
-      if (d > p.sightRange || d >= seenD) continue;
+      // 120-degree field of view. Close footsteps reveal someone only inside 3 metres.
+      if (d > 3 && Math.abs(wrapAngle(Math.atan2(e.x - me.x, e.z - me.z) - this.yaw)) > Math.PI / 3) continue;
+      // Stay on the current opponent unless another is substantially closer. Tiny distance
+      // changes between two enemies must not repeatedly restart the reaction timer.
+      const priority = d * (e.id === this.target ? 0.72 : 1);
+      if (d > p.sightRange || priority >= bestPriority) continue;
       const cy = e.y + (e.crouching ? 0.7 : 1.1);
       if (!s.los(me.x, eyeY, me.z, e.x, cy, e.z)) continue;
-      seen = e; seenD = d;
+      seen = e; seenD = d; bestPriority = priority;
     }
     if (seen) {
-      if (this.target !== seen.id) { this.target = seen.id; this.firstSeenAt = now; }
+      if (this.target !== seen.id || now - this.lastSeenAt > 200) {
+        this.target = seen.id; this.firstSeenAt = now; this.burstShots = 0;
+      }
       this.lastSeenAt = now;
       this.lastKnown = { x: seen.x, y: seen.y, z: seen.z };
     } else if (this.target && now - this.lastSeenAt > CHASE_MS) {
@@ -205,11 +223,15 @@ export class BotBrain {
       const err = Math.abs(wrapAngle(wantYaw - this.yaw)) + Math.abs(wantPitch - this.pitch);
       const ready = now - this.firstSeenAt >= p.reactionMs;
       if (me.ammo === 0 && me.reserve > 0) reload = true;
-      else if (ready && err < 0.06 && seenD <= p.engageRange && me.ammo > 0 && now - this.lastFireAt >= me.fireIntervalMs * p.cadence) {
+      else if (ready && now >= this.burstRestUntil && err < 0.06 && seenD <= engageRange && me.ammo > 0 && now - this.lastFireAt >= me.fireIntervalMs * p.cadence) {
         aimDirection(this.yaw, this.pitch, dirTmp);
         spreadDirection(dirTmp[0], dirTmp[1], dirTmp[2], p.aimError, this.rand, outTmp);
         fire = { o: [me.x, eyeY, me.z], d: [outTmp[0], outTmp[1], outTmp[2]] };
         this.lastFireAt = now;
+        if (++this.burstShots >= (p.id === "hard" ? 5 : 3)) {
+          this.burstShots = 0;
+          this.burstRestUntil = now + (p.id === "hard" ? 350 : 650) + this.rand() * 250;
+        }
       }
       // Footwork: work the range for the weapon in hand, and strafe THROUGHOUT rather than only in
       // the middle band. Standing square on while closing is what made a bot in a fight read as a
@@ -218,8 +240,11 @@ export class BotBrain {
       buttons |= this.strafe < 0 ? Btn.Left : Btn.Right;
       // The bands come from the weapon's own engage range, so a shotgun bot closes and a sniper bot
       // holds — with 16 m and 5 m fixed, both did the same thing.
-      if (seenD > p.engageRange * 0.55) buttons |= Btn.Forward;
-      else if (seenD < Math.min(5, p.engageRange * 0.16)) buttons |= Btn.Back;
+      if (me.ammo === 0 && me.reserve > 0) buttons |= Btn.Back;
+      else if (seenD > preferredRange * 1.2) buttons |= Btn.Forward;
+      else if (seenD < preferredRange * 0.65) buttons |= Btn.Back;
+      // Aiming slows movement and reduces the server's spread, just as it does for humans.
+      if (ready && seenD > 10 && me.ammo > 0) buttons |= Btn.Aim;
       // The route is NOT thrown away here: see the note at the top of the file.
     } else {
       // ---- navigation
@@ -229,7 +254,12 @@ export class BotBrain {
       // finding nobody ENDS the chase; without that the bot arrives, the route completes, the chase
       // hands back the same spot, and it plans a one-waypoint route to its own feet on every tick
       // until the chase timer runs out.
-      if (this.target && this.lastKnown && Math.hypot(this.lastKnown.x - me.x, this.lastKnown.z - me.z) > CHASE_ARRIVE) {
+      if (s.objective) {
+        if (Math.hypot(me.x - s.objective.x, me.z - s.objective.z) < 1.7) {
+          this.goal = null; this.path = null; this.pathGoal = null;
+          this.yaw = wrapAngle(this.yaw + TICK_MS / 1000 * 0.5);
+        } else if (this.path || now >= this.goalAt) this.goal = s.objective;
+      } else if (this.target && this.lastKnown && Math.hypot(this.lastKnown.x - me.x, this.lastKnown.z - me.z) > CHASE_ARRIVE) {
         this.goal = this.lastKnown;
       } else {
         if (this.lastKnown) { this.lastKnown = null; this.target = null; }
@@ -263,7 +293,9 @@ export class BotBrain {
         const left = this.remaining(me.x, me.z);
         if (w && (Math.hypot(w.x - me.x, w.z - me.z) >= WP_REACH || this.wp < this.path.length - 1)) {
           const wantYaw = Math.atan2(w.x - me.x, w.z - me.z);
-          this.turnTowards(wantYaw, 0, p.turnRate * TICK_MS / 1000);
+          // Difficulty limits combat aiming; ordinary cornering must remain responsive enough
+          // to follow narrow routes without clipping their inside edge.
+          this.turnTowards(wantYaw, 0, Math.max(5.5, p.turnRate) * TICK_MS / 1000);
           // Walk NOW, in whatever direction is wanted, while the head comes round separately.
           buttons |= this.strafeTo(wantYaw);
           // Sprint on the long straight legs only. Sprinting needs Forward, so a bot cutting
@@ -286,12 +318,25 @@ export class BotBrain {
       if (buttons & Btn.Forward) {
         if (this.stuckAt === 0) { this.stuckAt = now; this.stuckX = me.x; this.stuckZ = me.z; }
         else if (now - this.stuckAt >= STUCK_CHECK_MS) {
-          if (Math.hypot(me.x - this.stuckX, me.z - this.stuckZ) < STUCK_DIST) { this.jumpUntil = now + 80; this.goal = null; this.goalAt = now + IDLE_MS; this.path = null; this.pathGoal = null; this.replanAt = 0; }
+          if (Math.hypot(me.x - this.stuckX, me.z - this.stuckZ) < STUCK_DIST) {
+            this.jumpUntil = now + 80;
+            // Re-route around the corner, but retain the destination. Dropping it within the
+            // six-metre roaming exclusion radius used to strand a bot just short of its goal.
+            this.goalAt = now + GOAL_MS; this.path = null; this.pathGoal = null; this.replanAt = 0;
+          }
           this.stuckAt = now; this.stuckX = me.x; this.stuckZ = me.z;
         }
       } else this.stuckAt = 0;
     }
     if (now < this.jumpUntil && me.grounded) buttons |= Btn.Jump;
+
+    // Fire is a visible hazard, not a target. Retreat before shooting or committing to a plant.
+    const danger = s.hazards?.find(h => Math.abs(me.y - h.y) < 1.6 && Math.hypot(me.x - h.x, me.z - h.z) < h.radius + 1.3);
+    if (danger) {
+      const away = Math.atan2(me.x - danger.x || 0.1, me.z - danger.z || -0.1);
+      buttons = this.strafeTo(away); fire = null;
+      this.goal = null; this.path = null; this.pathGoal = null;
+    }
 
     return { input: { seq: ++this.seq, dt: TICK_MS, buttons, yaw: this.yaw, pitch: this.pitch }, fire, reload, planned };
   }

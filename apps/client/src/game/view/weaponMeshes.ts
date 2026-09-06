@@ -6,6 +6,7 @@ import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { WeaponId } from "@frankibarber/shared";
+import { beveledBox } from "./geometry";
 
 /**
  * Procedural weapon models. Every weapon is a few dozen boxes/cylinders merged into ONE mesh per
@@ -60,13 +61,13 @@ export function createWeaponMaterials(scene: Scene): WeaponMaterials {
     // Handoff note: there is no environment texture, so high metallic + dark albedo read as black under
     // the night lights. Metals sit at ~0.55–0.7 with lighter albedo and a faint cool fill; polymer and
     // rubber are lifted out of pure black.
-    metal: mk("wpn_metal", "#484d57", 0.55, 0.45, "#0c1016"),  // gunmetal, slightly blue
+    metal: mk("wpn_metal", "#677c89", 0.35, 0.4, "#17242d"),  // satin blue steel
     steel: mk("wpn_steel", "#a6acb5", 0.7, 0.3, "#0a0c10"),    // brushed steel (bolts, barrels' bright parts)
     polymer: mk("wpn_polymer", "#26272c", 0.05, 0.65, "#08090b"), // black polymer
-    tan: mk("wpn_tan", "#7a6a50", 0.05, 0.75),          // FDE furniture
+    tan: mk("wpn_tan", "#b8aa8a", 0.05, 0.65),          // ivory furniture
     wood: mk("wpn_wood", "#6a4529", 0.0, 0.55),         // walnut grips / stocks
     rubber: mk("wpn_rubber", "#27272a", 0.0, 0.95),     // stippled grips, pads
-    brass: mk("wpn_brass", "#b08a3e", 0.9, 0.35),
+    brass: mk("wpn_brass", "#d9a453", 0.5, 0.35, "#191107"),
     lens: mk("wpn_lens", "#0c1a2a", 0.9, 0.08, "#2a5a8a"), // scope glass with a cold glint
   };
   return { ...mats, dispose() { for (const m of Object.values(mats)) m.dispose(); } };
@@ -118,7 +119,8 @@ function rearSight(top: number, z: number, base: number): Part[] {
     B(0.026, 0.006, 0.016, 0, base + 0.003, z),
     B(0.005, h, 0.006, -0.009, base + h / 2, z),
     B(0.005, h, 0.006, 0.009, base + h / 2, z),
-    B(0.022, 0.004, 0.006, 0, top - 0.002, z),
+    // Open U-notch: a bridge across the top hid the front post in ADS.
+    B(0.022, 0.004, 0.006, 0, base + 0.005, z),
   ];
 }
 
@@ -176,11 +178,9 @@ const SPECS: Record<WeaponId, Spec> = {
       C(0.012, 0.03, 0, 0.05, 0.165, "steel"),                         // barrel tip
       ...triggerGuard(-0.005, 0.02, 0.045),
       B(0.014, 0.02, 0.012, 0, 0.04, -0.03, "steel"),                  // hammer
-      // "Straight Razor": a razor spine folded over the rear of the slide and its brass hinge pin —
-      // the silhouette tell for the P9 (handoff), well clear of the aim point and the muzzle.
-      B(0.008, 0.05, 0.02, 0, 0.09, -0.052, "steel"),                  // razor spine, folded up
-      B(0.03, 0.006, 0.026, 0, 0.113, -0.052, "steel"),                // spine tip
-      C(0.016, 0.04, 0, 0.034, -0.052, "brass", "x"),                  // hinge pin
+      // Flush side medallions replace the tall ornament that obstructed the sight picture.
+      C(0.014, 0.032, 0, -0.025, -0.025, "brass", "x"),
+      B(0.033, 0.048, 0.022, 0, -0.044, -0.025, "tan"),
     ],
     muzzle: [0, 0.05, 0.19], eject: [0.02, 0.06, 0.03],
     magazine: [B(0.022, 0.08, 0.03, 0, 0, 0, "polymer"), B(0.024, 0.006, 0.032, 0, -0.042, 0, "rubber")], magazinePos: [0, -0.05, -0.02], length: 0.2,
@@ -190,7 +190,8 @@ const SPECS: Record<WeaponId, Spec> = {
         ejectionPort(0.017, 0.058, 0.03),
         B(0.034, 0.02, 0.03, 0, 0.05, -0.02, "steel"),                 // rear serrations block
         B(0.006, 0.012, 0.01, 0, 0.078, 0.14, "steel"),                // front sight
-        B(0.02, 0.012, 0.012, 0, 0.078, -0.02),                        // rear sight
+        B(0.004, 0.012, 0.012, -0.008, 0.078, -0.02),                 // rear notch L
+        B(0.004, 0.012, 0.012, 0.008, 0.078, -0.02),                  // rear notch R
         B(0.004, 0.006, 0.004, -0.006, 0.083, -0.02, "brass"),         // rear dot L
         B(0.004, 0.006, 0.004, 0.006, 0.083, -0.02, "brass"),          // rear dot R
       ],
@@ -425,7 +426,7 @@ function buildParts(name: string, parts: Part[], mats: WeaponMaterials, scene: S
   for (const p of parts) {
     let m: Mesh;
     if (p.kind === "box") {
-      m = MeshBuilder.CreateBox(name, { width: p.w, height: p.h, depth: p.d }, scene);
+      m = beveledBox(name, p.w, p.h, p.d, scene);
       if (p.rx || p.ry || p.rz) m.rotation.set(p.rx ?? 0, p.ry ?? 0, p.rz ?? 0);
     } else {
       m = MeshBuilder.CreateCylinder(name, { diameter: p.dia, height: p.len, tessellation: 12 }, scene);

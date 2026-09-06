@@ -10,6 +10,7 @@ import { GRENADE_ORDER, WEAPONS, WEAPON_ORDER, makeRayHit, type CollisionWorld, 
 import type { LocalPlayer } from "../player/LocalPlayer";
 import { buildWeaponModel, createWeaponMaterials, forEachMesh, type WeaponMaterials, type WeaponModel } from "./weaponMeshes";
 import type { WeaponModelLibrary } from "./weaponModels";
+import { beveledBox } from "./geometry";
 
 /** Gap between background weapon upgrades: enough frames for the game to stay responsive. */
 const UPGRADE_GAP_MS = 400;
@@ -153,6 +154,7 @@ export class Viewmodel {
   private gunPivot: TransformNode;
   private handL: TransformNode | null = null;
   private handLHome = new Vector3();
+  private magazineHomes = new Map<WeaponId, number>();
   private models = new Map<WeaponId, WeaponModel>();
   private disposed = false;
   /** Drop 6b: imported guns, and which ids have already had their turn. */
@@ -310,6 +312,7 @@ export class Viewmodel {
     forEachMesh(model, (m) => { m.renderingGroupId = VIEWMODEL_GROUP; m.receiveShadows = false; m.isPickable = false; });
     model.root.setEnabled(false);
     this.models.set(id, model);
+    this.magazineHomes.set(id, model.magazine?.position.y ?? 0);
   }
 
   /**
@@ -354,6 +357,7 @@ export class Viewmodel {
     forEachMesh(model, (m) => { m.renderingGroupId = VIEWMODEL_GROUP; m.receiveShadows = false; m.isPickable = false; });
     model.root.setEnabled(false);
     this.models.set(id, model);
+    this.magazineHomes.set(id, model.magazine?.position.y ?? 0);
     old?.root.dispose(false, false);   // shared materials: see above
     // The live weapon has just been replaced under the pose solver: re-seat it.
     if (id === this.current) this.setWeapon(id, false);
@@ -364,13 +368,13 @@ export class Viewmodel {
       const pivot = new TransformNode(`${name}_pivot`, this.scene);
       pivot.parent = this.gunPivot;
       pivot.position.set(x, y, z);
-      const hand = MeshBuilder.CreateBox(name, { width: 0.07, height: 0.045, depth: 0.09 }, this.scene);
+      const hand = beveledBox(name, 0.058, 0.04, 0.075, this.scene);
       hand.rotation.set(rx, ry, rz);
       hand.material = this.handMat;
       hand.renderingGroupId = VIEWMODEL_GROUP;
       hand.isPickable = false;
       hand.parent = pivot;
-      const arm = MeshBuilder.CreateBox(`${name}_arm`, { width: 0.075, height: 0.07, depth: 0.26 }, this.scene);
+      const arm = beveledBox(`${name}_arm`, 0.062, 0.058, 0.24, this.scene);
       arm.position.set(x > 0 ? 0.02 : -0.01, -0.06, -0.15);
       arm.rotation.set(-0.45 + rx * 0.3, ry * 0.5, rz);
       arm.material = this.handMat;
@@ -388,6 +392,11 @@ export class Viewmodel {
   get ejectNode(): TransformNode { return this.models.get(this.current)!.eject; }
 
   setWeapon(id: WeaponId, animate = true): void {
+    // A sidearm is supported at the grip; the old universal 30 cm offset put the left
+    // hand beyond its muzzle. Long weapons keep their support under the fore-end.
+    const length = this.models.get(id)!.length;
+    this.handLHome.set(-0.03, length <= 0.2 ? -0.065 : -0.035,
+      length <= 0.2 ? -0.005 : Math.min(0.36, length * 0.52));
     // Pull this gun's upgrade forward: you are about to look at it.
     if (this.modelLib && !this.upgraded.has(id)) void this.upgradeWeapon(id);
     for (const [wid, m] of this.models) m.root.setEnabled(wid === id);
@@ -395,7 +404,7 @@ export class Viewmodel {
     this.reloadT = -1;
     this.actionCycle = 0; this.actionPos = 0;
     const model = this.models.get(id)!;
-    if (model.magazine) { model.magazine.position.y = 0; model.magazine.setEnabled(true); }
+    if (model.magazine) { model.magazine.position.y = this.magazineHomes.get(id) ?? 0; model.magazine.setEnabled(true); }
     if (model.action) model.action.position.set(0, 0, 0);
     if (animate) { this.equipT = 0; this.equipMs = WEAPONS[id].equipMs; }
     this.inspectT = -1;
@@ -417,7 +426,7 @@ export class Viewmodel {
   onReloadEnd(): void {
     this.reloadT = -1;
     const model = this.models.get(this.current)!;
-    if (model.magazine) model.magazine.position.y = 0;
+    if (model.magazine) model.magazine.position.y = this.magazineHomes.get(this.current) ?? 0;
     if (model.action) model.action.position.set(0, 0, 0);
   }
   onLanded(impactSpeed: number): void { this.landDip = Math.min(0.06, 0.02 + impactSpeed * 0.004); }
@@ -541,7 +550,7 @@ export class Viewmodel {
     if (this.reloadT >= 0) {
       this.reloadT = Math.min(1, this.reloadT + dtMs / this.reloadMs);
       rf = reloadFrame(this.current, this.reloadT, w.magazine);
-      if (model.magazine) model.magazine.position.y = -0.16 * rf.mag;
+      if (model.magazine) model.magazine.position.y = (this.magazineHomes.get(this.current) ?? 0) - 0.16 * rf.mag;
       if (this.reloadT >= 1) this.reloadT = -1;
     }
 

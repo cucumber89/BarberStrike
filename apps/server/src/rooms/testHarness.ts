@@ -33,6 +33,8 @@ interface RoomInternals {
 }
 
 interface SessionLike {
+  brain: { onSpawn(yaw: number): void } | null;
+  respawnAt: number;
   body: { x: number; y: number; z: number; vx: number; vy: number; vz: number; grounded: boolean; crouching: boolean; tac: number };
   inputs: { seq: number; dt: number }[];
   history: { t: number }[];
@@ -42,7 +44,6 @@ interface SessionLike {
   lastPitch: number;
   bank: number;
   otherCount: number;
-  respawnAt: number;
 }
 
 interface RoomPrivates {
@@ -92,7 +93,7 @@ export class RoomHarness {
    */
   static async create(opts: TdmJoinOptions = { room: "test" }): Promise<RoomHarness> {
     await bootMatchmaker();
-    const listing = await matchMaker.createRoom("tdm", { waveMs: 30 * 60 * 1000, ...opts });
+    const listing = await matchMaker.createRoom("tdm", opts);
     const room = matchMaker.getLocalRoomById(listing.roomId) as TdmRoom;
     const h = new RoomHarness(room);
     const orig = room.broadcast.bind(room);
@@ -160,27 +161,13 @@ export class RoomHarness {
     if (this.state.phase !== phase) throw new Error(`never reached ${phase}; still in ${this.state.phase}`);
   }
 
-  /**
-   * Run one respawn wave: end the live window now, let the frozen preparation window bring everyone
-   * back, and return once the room is live again.
-   *
-   * It ends the wave by moving the phase clock rather than by calling anything on the room, so the
-   * real `startPrep` / `startWave` transitions run — a test that needs a respawn should get one the
-   * way the game gives one, not through a back door that could keep passing after the transition
-   * broke.
-   */
-  async wave(): Promise<void> {
-    const phase = this.state.phase as MatchPhase;
-    if (phase !== MatchPhase.Playing && phase !== MatchPhase.Prep) throw new Error(`wave() needs a running match; phase is ${phase}`);
-    if (phase === MatchPhase.Playing) {
-      this.state.phaseEndsAt = this.now();
-      for (let i = 0; i < 200 && this.state.phase !== MatchPhase.Prep; i++) await this.tick();
-      if (this.state.phase !== MatchPhase.Prep) throw new Error("wave() never reached prep");
-    }
-    for (let i = 0; i < 2000 && this.state.phase !== MatchPhase.Playing; i++) await this.tick();
-    if (this.state.phase !== MatchPhase.Playing) throw new Error("wave() never came back to playing");
+  /** Wait for the currently dead, connected players using their actual individual timers. */
+  async respawns(): Promise<void> {
+    const dead = [...this.state.players.values()].filter(p => !p.alive && p.connected);
+    const deadline = this.now() + 10000;
+    while (dead.some(p => !p.alive) && this.now() < deadline) await this.tick();
+    if (dead.some(p => !p.alive)) throw new Error("individual respawn did not complete");
   }
-
   /** Lets spawn protection lapse so damage tests are not silently absorbed. */
   async settle(): Promise<void> { await this.advance(SPAWN_PROTECTION_MS + 100); }
 
@@ -215,6 +202,7 @@ export class RoomHarness {
         // the server checks every shot against it — handoff P1).
         const s = this.session(attackerId);
         s.lastYaw = Math.atan2(dx, dz); s.lastPitch = -Math.asin(dy / dist);
+        s.brain?.onSpawn(s.lastYaw);
         return { o: [a.x, a.y + PLAYER.eyeHeight, a.z], d: [dx / dist, dy / dist, dz / dist], dist };
       }
     }

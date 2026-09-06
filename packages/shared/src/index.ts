@@ -19,3 +19,5 @@ export * from "./progression";
 export * from "./bots";
 export * from "./mastery";
 export * from "./challenges";
+export * from "./smoke";
+export * from "./bomb";

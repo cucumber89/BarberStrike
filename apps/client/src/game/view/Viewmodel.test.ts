@@ -1,6 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { WEAPON_ORDER } from "@frankibarber/shared";
-import { reloadFrame } from "./Viewmodel";
+import { reloadFrame, Viewmodel } from "./Viewmodel";
+import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
+import { Scene } from "@babylonjs/core/scene";
+import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import type { LocalPlayer } from "../player/LocalPlayer";
+
+it("keeps magazines seated in their authored position when equipping", () => {
+  const engine = new NullEngine(), scene = new Scene(engine);
+  const camera = new FreeCamera("camera", Vector3.Zero(), scene);
+  const vm = new Viewmodel(scene, camera, { weapon: "pistol" } as LocalPlayer);
+  const mag = scene.getTransformNodeByName("vm_pistol_mag")!;
+  expect(mag.position.y).toBeCloseTo(-0.05);
+  vm.setWeapon("rifle", false);
+  vm.setWeapon("pistol", false);
+  expect(mag.position.y).toBeCloseTo(-0.05);
+  vm.dispose(); scene.dispose(); engine.dispose();
+});
 
 /** The reload choreography is a pure function of progress: assert its shape per weapon. */
 describe("reloadFrame", () => {

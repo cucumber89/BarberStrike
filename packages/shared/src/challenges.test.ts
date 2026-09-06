@@ -47,11 +47,12 @@ describe("daily challenges", () => {
     const stats = match({ kills: 100, headshots: 50, assists: 20, captures: 10, wavesSurvived: 20, result: 1, mode: "dom" });
     const weapons = Object.fromEntries(["clippers", "shotgun", "sniper", "pistol", "revolver", "frag", "knife", "launcher", "lmg", "smg2", "dmr"].map((w) => [w, 50]));
     const first = advanceDaily(null, day, stats, weapons);
-    // Whatever the day picked, a "matches-N" or "wins-2" goal cannot finish in one match; the rest can.
+    // Whatever the day picked: a goal this match satisfies is done, one it does not (a second match,
+    // a second win, another mode) is not, and progress never exceeds the goal.
     for (const c of cs) {
       const p = dailyProgress(first.state, day, c);
       expect(p.have).toBeLessThanOrEqual(c.goal);
-      if (c.goal === 1 || !/^(matches|wins)-/.test(c.id)) expect(p.done, c.id).toBe(true);
+      expect(p.done, c.id).toBe(c.count(stats, weapons) >= c.goal);
     }
     const second = advanceDaily(first.state, day, stats, weapons);
     for (const c of first.completed) expect(second.completed.map((x) => x.id)).not.toContain(c.id);

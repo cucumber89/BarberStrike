@@ -70,7 +70,7 @@ export const maskInput = (buttons: number, frozen: boolean): number =>
  */
 export const frozenAt = (phase: MatchPhase, phaseEndsAt: number, serverNow: number): boolean => {
   if (phaseEndsAt <= 0) return isFrozen(phase);
-  if (phase === MatchPhase.Playing) return serverNow >= phaseEndsAt; // the wave is over: freeze
+  if (phase === MatchPhase.Playing) return false; // no periodic freezes during a continuous match
   if (phase === MatchPhase.Prep) return serverNow < phaseEndsAt;     // released the moment it ends
   return false;
 };

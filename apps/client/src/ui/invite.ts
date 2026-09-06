@@ -11,7 +11,7 @@ import type { GameMode } from "@frankibarber/shared";
 
 export interface Invite { room: string; mode: GameMode | null; join: string | null }
 
-const MODES = new Set<GameMode>(["tdm", "ffa", "dom"]);
+const MODES = new Set<GameMode>(["tdm", "ffa", "dom", "bomb"]);
 
 /** What the URL asks for. Unknown or empty parts are simply absent; nothing here throws. */
 export function parseInvite(search: string): Invite {

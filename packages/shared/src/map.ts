@@ -1,4 +1,5 @@
 import { type Box, boxFrom, CollisionWorld } from "./collision";
+import { expandDistrict } from "./districtExpansion";
 import type { Team } from "./types";
 
 /**
@@ -12,6 +13,7 @@ import type { Team } from "./types";
  */
 
 export type MaterialTag =
+  | "wall_sand" | "wall_teal"
   | "floor_tile" | "floor_concrete" | "floor_wood" | "floor_asphalt" | "floor_metal"
   | "wall_plaster" | "wall_brick" | "wall_tile" | "wall_concrete" | "wall_panel" | "ceiling"
   | "counter" | "wood" | "metal" | "paint" | "glass" | "mirror" | "leather" | "brass" | "rubber" | "none"
@@ -85,6 +87,7 @@ export interface MapDef {
   props: PropHint[];
   lights: LightHint[];
   spawns: SpawnPoint[];
+  arenaSpawns?: SpawnPoint[];
   stations: Station[];
   flags: Flag[];
   /** Kill plane: falling below this respawns the player. */
@@ -260,9 +263,19 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(-14 - W, 0, 16, W, 1.1, 2, "concrete_block", "alley_wall_n"));
 
   // ---------- Backlot (x -27..-14, z 0..28): garage row, kiosk ----------
-  solids.push(S(X0, 0, 4, 13, 3.5, 6, "wall_brick", "garage_row"));
+  // The centre garage is an open repair bay: a second, sheltered west-lane route.
+  solids.push(S(X0, 0, 4, 5, 3.5, 6, "wall_brick", "garage_west"));
+  solids.push(S(-18, 0, 4, 4, 3.5, 6, "wall_brick", "garage_east"));
+  solids.push(S(-22, 2.8, 4, 4, 0.7, W, "wall_brick", "garage_open_header"));
+  solids.push(S(-22, 0, 9.7, 1.8, 3.5, W, "wall_brick", "garage_rear_cover"));
+  solids.push(S(-20.2, 2.5, 9.7, 2.2, 1, W, "wall_brick", "garage_rear_header"));
+  solids.push(S(-21.7, 0, 6, 0.65, 1, 2, "metal", "garage_toolbench"));
   solids.push(S(X0, 3.5, 3.6, 13, 0.3, 6.8, "corrugated_green", "garage_roof"));
-  for (let i = 0; i < 3; i++) solids.push(S(X0 + 1 + i * 4.2, 0, 3.7, 3.2, 2.6, 0.3, "corrugated_blue", `garage_door_${i}`));
+  for (const i of [0, 2]) solids.push(S(X0 + 1 + i * 4.2, 0, 3.7, 3.2, 2.6, 0.3, "corrugated_blue", `garage_door_${i}`));
+  props.push({ kind: "sign", x: -20, y: 3.1, z: 3.98, yaw: Math.PI, text: "REPAIR / BACKLOT", w: 3.5, h: 0.36 });
+  props.push({ kind: "tube_light", x: -20, y: 3.42, z: 7, w: 1.8 });
+  props.push({ kind: "crate", x: -21.38, y: 1, z: 6.5, variant: "small" });
+  lights.push({ kind: "point", x: -20, y: 2.9, z: 7, color: "#cce7d8", intensity: 1.1, range: 7 });
   // Kiosk: small room, doors offset (south x -23..-21, north x -26..-24).
   solids.push(S(-26, 0, 14, 3, 3.0, W, "wall_plaster", "kiosk_s_a"), S(-21, 0, 14, 1, 3.0, W, "wall_plaster", "kiosk_s_b"), S(-23, 2.3, 14, 2, 0.7, W, "wall_plaster", "kiosk_s_top"));
   solids.push(S(-24, 0, 18, 4, 3.0, W, "wall_plaster", "kiosk_n_a"), S(-26, 2.3, 18, 2, 0.7, W, "wall_plaster", "kiosk_n_top"));
@@ -329,6 +342,20 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(O(-23, 0, -13.5, 1.8, 1.9, 1.0, "paint_green", "cabinet", "phone_box"));
   solids.push(O(32.5, 0, -12, 1.4, 1.6, 1.2, "paint_blue", "cabinet", "kiosk_box"));
 
+  // Night market: two recognisable islands of cover with open sides for flanking.
+  // Counters stop bullets; the canopy is high enough to run beneath it.
+  for (const [x, color, title] of [[-19, "paint_red", "NIGHT BITES"], [23, "paint_blue", "MIDNIGHT RECORDS"]] as const) {
+    solids.push(O(x, 0, -5.8, 3.6, 1.05, 0.8, color, "kiosk_counter", `market_counter_${x}`));
+    solids.push(S(x - 0.15, 2.85, -7.2, 3.9, 0.16, 2.8, color, `market_canopy_${x}`));
+    for (const px of [x, x + 3.4]) solids.push(S(px, 0, -7, 0.12, 2.85, 0.12, "metal", `market_post_${px}`));
+    props.push({ kind: "sign", x: x + 1.8, y: 2.68, z: -7.22, yaw: Math.PI, text: title, w: 3.4, h: 0.35 });
+    props.push({ kind: "tube_light", x: x + 1.8, y: 2.72, z: -5.8, w: 2.8 });
+    lights.push({ kind: "point", x: x + 1.8, y: 2.5, z: -6.2, color: x < 0 ? "#ffc18a" : "#83d9ed", intensity: 9, range: 6, priority: 4 });
+  }
+  // Staggered waist-high roadworks break the exposed diagonal between the two stalls.
+  solids.push(O(-13, 0, -8, 2.8, 1.05, 0.7, "paint_yellow", "crate", "market_barrier_w"));
+  solids.push(O(18, 0, -9, 2.8, 1.05, 0.7, "paint_yellow", "crate", "market_barrier_e"));
+
   // ---------- Loading yard (z 18..36) ----------
   solids.push(S(14, 0, 18, 6, 1.0, 10, "floor_concrete", "loading_dock"));
   solids.push(S(11, 0, 24, 3, 1.0, 4, "floor_concrete", "dock_ramp_base"));
@@ -341,6 +368,16 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(O(4.8, 0, 25.8, 1.2, 1.2, 1.2, "wood", "crate", "climb_b"));
   solids.push(O(4.8, 0, 24.6, 1.2, 1.8, 1.2, "wood", "pallets", "climb_c"));
   solids.push(S(0, 2.5, 22, 4.8, 0.05, 0.4, "metal", "container_lip"));
+
+  // Second way onto the container roof: a stair-fed lookout with a narrow linking bridge.
+  // The stairs work with the same collision/navigation data used by bots and human players.
+  solids.push(S(-5, 2.3, 28, 5, 0.2, 3, "floor_metal", "yard_lookout"));
+  solids.push(S(0, 2.3, 28, 1.2, 0.2, 1, "floor_metal", "yard_roof_link"));
+  for (let i = 0; i < 10; i++) solids.push(S(-9 + i * 0.4, 0, 29, 0.4, (i + 1) * 0.25, 2, "floor_concrete", `lookout_step_${i}`));
+  for (const px of [-4.8, -0.25]) for (const pz of [28.15, 30.7]) solids.push(S(px, 0, pz, 0.15, 2.3, 0.15, "metal", `lookout_support_${px}_${pz}`));
+  solids.push(S(-5, 2.5, 30.9, 5, 0.85, 0.1, "paint_yellow", "lookout_rail_n"));
+  solids.push(S(-5, 2.5, 28, 4, 0.85, 0.1, "paint_yellow", "lookout_rail_s"));
+  props.push({ kind: "sign", x: -2.5, y: 2.06, z: 31.03, text: "ROOFTOP / 02", w: 3.2, h: 0.35 });
   solids.push(O(-9, 0, 20, 1.6, 1.3, 1.2, "paint_blue", "dumpster", "dumpster_yard", Math.PI));
   solids.push(O(-11, 0, 25, 1.2, 1.2, 1.2, "wood", "crate", "crate_yard_a"));
   solids.push(O(-9.8, 0, 25, 1.2, 0.6, 1.2, "wood", "crate", "crate_yard_b"));
@@ -421,7 +458,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   // Backlot / kiosk.
   props.push({ kind: "sign", x: -23, y: 2.65, z: 13.97, yaw: Math.PI, text: "KIOSK 24H", w: 3.0, h: 0.5 });
   props.push({ kind: "neon", x: -19.88, y: 1.9, z: 16, yaw: -Math.PI / 2, text: "OPEN", w: 1.2, h: 0.4 });
-  props.push({ kind: "graffiti", x: -20, y: 2.0, z: 10.01, yaw: 0, variant: "big", text: "NO FADE NO GAIN" });
+  props.push({ kind: "graffiti", x: -16, y: 2.0, z: 10.01, yaw: 0, variant: "big", text: "NO FADE NO GAIN" });
   props.push({ kind: "lamp", x: -22, y: 0, z: 24, variant: "post" });
   props.push({ kind: "tube_light", x: -23, y: 2.9, z: 16, yaw: Math.PI / 2, w: 1.2, variant: "cool" });
   props.push({ kind: "trash", x: -25.5, y: 0, z: 26, variant: "bags" });
@@ -528,17 +565,18 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   // A and C sit one lane in from each team's side; B is the barber shop — the map's namesake and
   // the contested middle (three doors, the window and the back hall all open onto it).
   const flags: Flag[] = [
-    { id: "A", name: "BACKLOT", x: -21, y: 0, z: 21 },
+    { id: "A", name: "DEPOT", x: -35, y: 0, z: 24 },
     { id: "B", name: "THE SHOP", x: 3.4, y: 0, z: 7.2 },
-    { id: "C", name: "CAR WASH", x: 27, y: 0, z: 21.5 },
+    { id: "C", name: "COURTYARD", x: 43, y: 0, z: 24 },
   ];
 
+  const arenaSpawns = expandDistrict(solids, props, lights);
   return {
     id: "night_district",
     name: "Night District",
-    solids, props, lights, spawns, stations, flags,
+    solids, props, lights, spawns, arenaSpawns, stations, flags,
     killY: -10,
-    bounds: boxFrom(X0 - 1, -2, Z0 - 1, X1 - X0 + 2, 12, Z1 - Z0 + 2),
+    bounds: boxFrom(-46, -2, Z0 - 1, 100, 12, Z1 - Z0 + 2),
   };
 })();
 

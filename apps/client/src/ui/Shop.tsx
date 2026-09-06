@@ -106,7 +106,7 @@ export function Shop({ h, api, now }: Props) {
         </div>
 
         <div className="shop-section">PRIMARY <span className="shop-hint">one at a time · replacing refunds {Math.round(ECONOMY.sellRatio * 100)}% · slot 1</span></div>
-        <div className="shop-grid">{PRIMARY_ORDER.map(weaponCard)}</div>
+        <div className="shop-grid">{PRIMARY_ORDER.filter(id => h.mode !== "bomb" || id !== "launcher").map(weaponCard)}</div>
 
         <div className="shop-section">SIDEARM <span className="shop-hint">slot 2 · the clippers are always in slot 3 (V)</span></div>
         <div className="shop-grid">{SECONDARY_ORDER.map(weaponCard)}</div>
@@ -136,9 +136,9 @@ export function Shop({ h, api, now }: Props) {
           })}
         </div>
 
-        <div className="shop-section">BARBER PERKS <span className="shop-hint">consumed on purchase · one of each at a time · the fade lasts until your next death</span></div>
+        <div className="shop-section">{h.mode === "bomb" ? "TACTICAL RULES · NO PERKS / LAUNCHERS" : "BARBER PERKS"} {h.mode !== "bomb" && <span className="shop-hint">consumed on purchase · one of each at a time · the fade lasts until your next death</span>}</div>
         <div className="shop-grid perks">
-          {PERK_ORDER.map((id) => {
+          {(h.mode === "bomb" ? [] : PERK_ORDER).map((id) => {
             const p = PERKS[id];
             const active = perkActive(wallet.perks, id, h.serverNow);
             const leftS = active && p.durationMs > 0 ? Math.ceil((wallet.perks[id] - h.serverNow) / 1000) : null;

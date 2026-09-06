@@ -16,6 +16,30 @@ const input = (over: Partial<CharacterInput> = {}): CharacterInput =>
 const run = (c: Character, inp: CharacterInput, frames: number, dt = 16.7) => { for (let i = 0; i < frames; i++) c.update(inp, dt); };
 
 describe("Character animation", () => {
+  it("keeps another bot's shared materials when a player leaves", () => {
+    const s = scene(), a = new Character(s, 0, "leaving"), b = new Character(s, 0, "remaining");
+    const materials = b.allMeshes.map(m => m.material).filter(Boolean);
+    a.dispose();
+    expect(materials.every(m => s.materials.includes(m!))).toBe(true);
+    b.update(input(), 16);
+    expect(b.allMeshes.some(m => m.isEnabled())).toBe(true);
+    b.dispose(); s.dispose();
+  });
+  it("builds carried weapons on demand and keeps the body visible after respawn", () => {
+    const s = scene(), c = new Character(s, 0, "loadout");
+    const before = s.meshes.length;
+    c.update(input({ weapon: "pistol" }), 16);
+    const after = s.meshes.length;
+    expect(after).toBeGreaterThan(before);
+    c.update(input({ weapon: "rifle" }), 16);
+    c.update(input({ weapon: "pistol" }), 16);
+    expect(s.meshes.length).toBe(after);
+    c.revive();
+    run(c, input({ weapon: "smg" }), 60);
+    expect(c.allMeshes.filter(m => m.isEnabled()).every(m => m.visibility === 1)).toBe(true);
+    expect(c.allMeshes.filter(m => m.isEnabled()).length).toBeGreaterThan(20);
+    c.dispose(); s.dispose();
+  });
   it("idle is nearly still; running swings legs and counter-swings the arms", () => {
     const c = new Character(scene(), 0, "a");
     run(c, input(), 60);

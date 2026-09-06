@@ -87,7 +87,7 @@ export function ProfilePanel({ profile, onChange }: { profile: Profile; onChange
   const stats: [string, string][] = [
     ["MATCHES", `${life.matches}`], ["WINS", `${life.wins} · ${pctOf(life.wins, life.matches)}`], ["KILLS", `${life.kills}`], ["DEATHS", `${life.deaths}`],
     ["K/D", ratio(life.kills, life.deaths)], ["HEAD SHOTS", `${life.headshots} · ${pctOf(life.headshots, life.kills)}`], ["ASSISTS", `${life.assists}`], ["BEST MATCH", `${life.bestKills} kills`],
-    ["CAPTURES", `${life.captures}`], ["CLIPPER KILLS", `${life.clipperKills}`], ["FLAWLESS", `${life.flawless}`], ["WAVES SURVIVED", `${life.wavesSurvived}`],
+    ["CAPTURES", `${life.captures}`], ["CLIPPER KILLS", `${life.clipperKills}`], ["FLAWLESS", `${life.flawless}`], ["ROUNDS SURVIVED", `${life.wavesSurvived}`],
     ["WEAPON KILLS", `${totalWeaponKills(profile.weapons)}`], ["TOTAL XP", `${profile.xp}`], ["NEXT LEVEL", `${xpToNext(levelFor(profile.xp).level) - levelFor(profile.xp).into} XP`], ["BADGES", `${earned.size} / ${BADGES.length}`],
   ];
 

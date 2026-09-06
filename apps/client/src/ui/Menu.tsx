@@ -59,7 +59,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   const [gameMode, setGameMode] = useState<GameMode>(() => {
     if (invite.mode) return invite.mode;
     const m = store.get("fb_mode");
-    return m === "ffa" || m === "dom" ? m : "tdm";
+    return m === "ffa" || m === "dom" || m === "bomb" ? m : "tdm";
   });
   const pickMode = (m: GameMode) => { uiSound("click"); setGameMode(m); store.set("fb_mode", m); };
   const [botCount, setBotCount] = useState(() => Math.max(0, Math.min(MAX_BOTS, Number(store.get("fb_bots") ?? 0) || 0)));

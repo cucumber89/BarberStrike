@@ -59,6 +59,7 @@ export interface Wallet {
 export const freshWallet = (): Wallet => ({ money: ECONOMY.startMoney, owned: [FREE_SIDEARM], lethal: "", lethalCount: 0, tactical: "", tacticalCount: 0, armor: 0, perks: noPerks() });
 
 export interface BuyContext {
+  bombBuying?: boolean;
   now: number;
   spawnedAt: number;
   phase: MatchPhase;
@@ -82,6 +83,7 @@ export interface BuyContext {
  */
 export function buyWindowOpen(ctx: BuyContext): boolean {
   if (!ctx.alive) return false;
+  if (ctx.bombBuying !== undefined && ctx.phase !== MatchPhase.Waiting && ctx.phase !== MatchPhase.Countdown) return ctx.bombBuying;
   if (ctx.phase === MatchPhase.Waiting || ctx.phase === MatchPhase.Countdown || ctx.phase === MatchPhase.Prep) return true;
   return ctx.now - ctx.spawnedAt < ECONOMY.buyWindowMs || ctx.nearStation;
 }
@@ -89,6 +91,7 @@ export function buyWindowOpen(ctx: BuyContext): boolean {
 /** Ms of buy window left after a spawn (0 when closed; Infinity in warm-up / at a station). */
 export function buyWindowLeft(ctx: BuyContext): number {
   if (!ctx.alive) return 0;
+  if (ctx.bombBuying !== undefined && ctx.phase !== MatchPhase.Waiting && ctx.phase !== MatchPhase.Countdown) return ctx.bombBuying ? Math.max(0, (ctx.releaseAt ?? ctx.now) - ctx.now) : 0;
   if (ctx.phase === MatchPhase.Waiting || ctx.phase === MatchPhase.Countdown || ctx.phase === MatchPhase.Prep || ctx.nearStation) return Infinity;
   return Math.max(0, ECONOMY.buyWindowMs - (ctx.now - ctx.spawnedAt));
 }

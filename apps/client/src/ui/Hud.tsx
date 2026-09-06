@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { GAME_VERSION, GRENADES, MATCH, MODES, MatchPhase, PERKS, PERK_ORDER, TEAM_NAMES, WEAPONS, BADGES, killerName, perkActive, respawnInMs, type GameMode, type WeaponId } from "@frankibarber/shared";
+import { GAME_VERSION, GRENADES, MATCH, MODES, MatchPhase, PERKS, PERK_ORDER, TEAM_NAMES, WEAPONS, BADGES, killerName, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import type { MatchReward } from "../game/progression/profile";
 import { CROSSHAIR_COLORS, type Settings } from "../settings";
@@ -109,11 +109,10 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
 
   const w = WEAPONS[h.weapon as WeaponId];
   const timeLeft = h.phaseEndsAt ? h.phaseEndsAt - h.serverNow : 0;
-  // Two clocks since respawn waves (drop 7): `matchEndsAt` is the match, `phaseEndsAt` is the wave
-  // or the preparation window. The big timer must read the match one or it would restart every
-  // twelve seconds.
-  const matchLeft = h.matchEndsAt ? h.matchEndsAt - h.serverNow : 0;
-  const waveRespawn = respawnInMs(h.phase, h.phaseEndsAt, h.serverNow);
+  // The match deadline stays fixed through every individual death and respawn.
+  const matchLeft = h.bomb && h.phase === MatchPhase.Playing
+    ? (h.bomb.stage === "planted" ? h.bomb.endsAt : h.bomb.roundEndsAt) - h.serverNow
+    : h.matchEndsAt ? h.matchEndsAt - h.serverNow : 0;
   const hitAge = performance.now() - h.hitAt;
   const dmgAge = performance.now() - h.damageAt;
   const lowHealth = h.alive && h.health <= 30;
@@ -156,6 +155,17 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
 
   return (
     <div className={`hud ${lowHealth ? "low-health" : ""}`} data-testid="hud" style={{ zoom: ui.hudScale }}>
+      {h.smokeOpacity > 0 && <div className="smoke-screen" data-testid="smoke-screen" style={{ opacity: h.smokeOpacity }} />}
+      {h.bomb && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && <div className={`bomb-hud ${h.bomb.stage === "planted" ? "armed" : ""}`} data-testid="bomb-hud">
+        <b>ROUND {h.bomb.round} / 12 · {h.bomb.attackTeam === h.myTeam ? "ATTACK" : "DEFEND"} · FIRST TO 7</b>
+        <span>{h.bomb.stage === "buy" ? `${h.bomb.round === 7 ? "SIDES SWITCHED · " : ""}B TO BUY · START IN ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
+          : h.phase === MatchPhase.Prep ? `${h.bomb.result} · NEXT ROUND ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
+          : h.bomb.stage === "planted" ? `BOMB ARMED AT ${h.bomb.site} · ${h.bomb.attackTeam === h.myTeam ? "GUARD THE CHARGE" : "HOLD T TO DEFUSE"}`
+          : h.bomb.carrier === h.myId ? "YOU HAVE THE BOMB · HOLD T AT A / B TO PLANT"
+          : h.bomb.attackTeam !== h.myTeam ? "PROTECT SITES A / B"
+          : h.bomb.stage === "dropped" ? "BOMB DROPPED · WALK OVER IT TO PICK UP" : "ESCORT THE BOMB CARRIER"}</span>
+        {h.bomb.actor && <><div className="bomb-progress"><i style={{ width: `${h.bomb.progress * 100}%` }} /></div><small>{h.bomb.actor === h.myId ? "KEEP HOLDING T · STAND STILL" : h.bomb.stage === "planted" ? "DEFUSING" : "PLANTING"}</small></>}
+      </div>}
       {/* Damage vignette / direction */}
       {dmgAge < 600 && <div className="damage-dir" style={{ transform: `rotate(${h.damageAngle}rad)`, opacity: 1 - dmgAge / 600 }} />}
 
@@ -300,13 +310,6 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
       {h.phase === MatchPhase.Countdown && (
         <div className="center-msg countdown" data-testid="countdown">{Math.max(1, Math.ceil(timeLeft / 1000))}</div>
       )}
-      {/* Preparation between waves: the countdown both teams are released on. */}
-      {h.phase === MatchPhase.Prep && (
-        <div className="center-msg prep" data-testid="prep">
-          <div className="prep-count">{Math.max(1, Math.ceil(timeLeft / 1000))}</div>
-          <div className="prep-sub">{h.alive ? "PREPARE · BUY (B) · RELOAD" : "BACK IN THE FIGHT"}</div>
-        </div>
-      )}
       {h.phase === MatchPhase.Waiting && h.alive && (
         <div className="center-sub">WARM-UP · waiting for players ({MATCH.minPlayers} needed)</div>
       )}
@@ -321,12 +324,8 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
         <div className="death" data-testid="death">
           <div className="death-title">{h.killerName ? <>ELIMINATED BY <b>{h.killerName}</b></> : "ELIMINATED"}</div>
           {h.killerWeapon && h.killerName && <div className="death-weapon">{killerName(h.killerWeapon)}</div>}
-          {/* In a match the wave decides, and the server's phase clock is the truth. Warm-up keeps
-              the local estimate, where individual respawn makes it exactly right. */}
           <div className="death-respawn">
-            {waveRespawn > 0
-              ? <>BOTH TEAMS RESPAWN IN {Math.ceil(waveRespawn / 1000)}</>
-              : <>RESPAWN IN {Math.max(0, Math.ceil((h.respawnAt - now) / 1000))}</>}
+            {h.mode === "bomb" && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) ? "BACK NEXT ROUND" : `RESPAWN IN ${Math.max(0, Math.ceil((h.respawnAt - now) / 1000))}`}
           </div>
         </div>
       )}
