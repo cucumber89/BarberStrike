@@ -15,6 +15,9 @@
 FROM node:22-alpine AS deps
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+# No TTY in a build: without this pnpm refuses to purge node_modules for the --prod re-install
+# below (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY — the first Render deploy died on it).
+ENV CI=true
 RUN corepack enable
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
