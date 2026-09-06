@@ -4,7 +4,14 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import type { Scene } from "@babylonjs/core/scene";
-import { BOMB_SITES, type BombData } from "@frankibarber/shared";
+import { BOMB, BOMB_SITES, type BombData } from "@frankibarber/shared";
+
+export interface BombSiteHooks {
+  /** One beep of the planted charge; `urgency` 0..1 over the fuse, ≥ 2 for the final long tone. */
+  onBeep?(x: number, y: number, z: number, urgency: number): void;
+  onPlanted?(x: number, y: number, z: number): void;
+  onDefused?(x: number, y: number, z: number): void;
+}
 
 /**
  * Bomb sites (2.2): the plant zone painted on the floor the way a site is on a real map — a
@@ -21,7 +28,10 @@ export class BombSites {
   private beacon: Mesh;
   private led: StandardMaterial;
   private beaconMat: StandardMaterial;
-  constructor(scene: Scene) {
+  private lastStage = "";
+  private lastBeepAt = 0;
+  private finalTone = false;
+  constructor(scene: Scene, private hooks: BombSiteHooks = {}) {
     const mat = (name: string, hex: string, emissive = 0.3) => {
       const m = new StandardMaterial(name, scene); m.diffuseColor = Color3.FromHexString(hex);
       m.emissiveColor = m.diffuseColor.scale(emissive); m.specularColor = Color3.Black();
@@ -101,6 +111,20 @@ export class BombSites {
     for (const m of this.meshes) m.isPickable = false;
   }
   update(b: BombData, now: number): void {
+    // Stage edges: the plant and the defuse are announced; the fuse beeps in step with the LED.
+    if (b.stage !== this.lastStage) {
+      if (b.stage === "planted") { this.lastBeepAt = 0; this.finalTone = false; this.hooks.onPlanted?.(b.x, b.y, b.z); }
+      if (this.lastStage === "planted" && b.stage === "resolved" && b.result === "BOMB DEFUSED") this.hooks.onDefused?.(b.x, b.y, b.z);
+      this.lastStage = b.stage;
+    }
+    if (b.stage === "planted") {
+      const left = b.endsAt - now;
+      if (left <= 1150 && !this.finalTone) { this.finalTone = true; this.hooks.onBeep?.(b.x, b.y, b.z, 2); }
+      else if (!this.finalTone) {
+        const beat = Math.max(110, left / 45) * 2; // one beep per LED on-phase
+        if (now - this.lastBeepAt >= beat) { this.lastBeepAt = now; this.hooks.onBeep?.(b.x, b.y, b.z, 1 - Math.max(0, left) / BOMB.fuseMs); }
+      }
+    }
     const onFloor = b.stage === "dropped" || b.stage === "planted";
     this.charge.setEnabled(onFloor);
     this.charge.position.set(b.x, b.y + 0.13, b.z);

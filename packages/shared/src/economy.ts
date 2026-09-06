@@ -249,6 +249,7 @@ export function weaponForSlot(w: Wallet, slot: number): WeaponId | null {
 
 /** Player-facing name for anything that can kill (weapons and grenades) — for the kill feed. */
 export function killerName(id: string): string {
+  if (id === "c4") return "C4 CHARGE";
   if (isWeaponId(id)) return WEAPONS[id].name;
   if (isGrenadeId(id)) return GRENADES[id].name;
   return id;

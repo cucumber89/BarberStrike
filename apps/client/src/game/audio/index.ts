@@ -108,6 +108,11 @@ export const installAudio: GameModule = (ctx) => {
   on("boom", (e) => {
     const d = dist(e.x, e.y, e.z);
     switch (e.kind) {
+      case "c4":
+        // The charge: heard everywhere, felt up close. Non-positional like the frag, shaped by distance.
+        play(sfx.c4Blast(d), Priority.gunshot, Math.max(0.45, 1 - d / 140));
+        eng.duck(Math.min(1, Math.max(0.3, 1 - d / 45)), 900);
+        break;
       case "frag":
       case "shell":
         // Non-positional so a close blast is full and centred; the distance shapes the sound instead.
@@ -123,6 +128,11 @@ export const installAudio: GameModule = (ctx) => {
       case "knife": eng.play(sfx.knifeHit(e.effectMs === 0), { priority: Priority.hit, gain: 0.8, position: at(e.x, e.y, e.z), maxDistance: 30 }); break;
     }
   });
+  // Bomb Plant (2.3): the charge beeps from where it lies, faster as the fuse runs down; the plant
+  // and the defuse are announced to everyone, like the classic voice lines.
+  on("bombBeep", (e) => eng.play(sfx.bombBeep(e.urgency), { priority: Priority.hit, gain: 0.85, position: at(e.x, e.y + 0.3, e.z), rolloff: 0.45, maxDistance: 110 }));
+  on("bombPlanted", () => play(sfx.bombPlanted, Priority.hit, 0.8));
+  on("bombDefused", () => play(sfx.bombDefused, Priority.hit, 0.8));
   on("flashed", (e) => { play(sfx.flashBang(e.strength), Priority.gunshot, 1); eng.duck(Math.min(1, 0.4 + e.strength * 0.6), e.ms * 0.5); });
   on("money", (e) => { if (e.reason === "kill" || e.reason === "headshot" || e.reason === "assist") play(sfx.cash("sell"), Priority.ui, 0.5); });
   on("shop", (e) => {

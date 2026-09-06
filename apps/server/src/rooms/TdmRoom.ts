@@ -4,7 +4,7 @@ import {
   MAX_INPUT_QUEUE, MAX_INPUT_RATE, MAX_OTHER_MSG_RATE, MAX_PLAYERS, MatchPhase, NIGHT_DISTRICT, PLAYER,
   RESPAWN_DELAY_MS, SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER,
   isLive, isFrozen, maskInput, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
-  BOMB, BOMB_SITES, KIT_ITEM, bombAttackTeam, dropBomb, resetBomb, stepBomb, type BombPlayer,
+  BOMB, BOMB_SITES, KIT_ITEM, bombAttackTeam, dropBomb, blastDamage, resetBomb, stepBomb, type BombPlayer,
   buildCollisionWorld, createBody, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
   makeRayHit, mulberry32, pickSpawn, sanitizeName, simulateBody, spreadDirection, traceBullet, unpackInput,
   ECONOMY, GRENADES, THROW_INTERVAL_MS, FIRE_DPS, applyBuy, applySell, buyWindowOpen, giveGrenade, takeGrenade, killReward, weaponForSlot,
@@ -903,8 +903,14 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     }
     if (this.state.bomb.result === "BOMB DETONATED") {
       const b = this.state.bomb;
-      this.broadcast(S2C.Boom, { id: this.nextProjectileId++, kind: "frag", x: b.x, y: b.y + 0.15, z: b.z,
+      this.broadcast(S2C.Boom, { id: this.nextProjectileId++, kind: "c4", x: b.x, y: b.y + 0.15, z: b.z,
         nx: 0, ny: 1, nz: 0, effectMs: 0 } satisfies BoomEvent);
+      // 2.3: the blast is real. Anyone near the site dies, either side; the edge of it hurts.
+      for (const p of this.state.players.values()) {
+        if (!p.alive || !p.connected) continue;
+        const dmg = blastDamage(Math.hypot(p.x - b.x, p.y - b.y, p.z - b.z));
+        if (dmg > 0) this.blastHit(p, dmg, b.x, b.z);
+      }
     }
     if (winner === 0) this.state.scoreA++; else this.state.scoreB++;
     const loser = 1 - winner;
@@ -1377,6 +1383,29 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         if (qs.burnAcc >= 5) { const d = Math.floor(qs.burnAcc); qs.burnAcc -= d; this.applyDamage(owner, id, d, false, undefined, "molotov"); }
       }
     }
+  }
+
+  /** The charge's blast (2.3): straight through plates, a hit vignette towards the site, a "C4" death. */
+  private blastHit(p: PlayerState, amount: number, bx: number, bz: number): void {
+    const s = this.sessions.get(p.id);
+    if (!s) return;
+    p.health = Math.max(0, p.health - amount);
+    s.lastDamageAt = this.now();
+    const client = this.clientOf(p.id);
+    if (client) {
+      let dx = bx - p.x, dz = bz - p.z; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+      client.send(S2C.Damaged, { from: "", amount, dx, dz, health: p.health, armor: p.armor, broke: false } satisfies DamagedEvent);
+    }
+    if (p.health > 0) return;
+    p.alive = false; p.reloading = false; p.armor = 0;
+    if (this.mode === "bomb") { this.writeWallet(p, { ...freshWallet(), money: p.money }); p.kit = false; }
+    s.respawnAt = this.now() + RESPAWN_DELAY_MS;
+    s.inputs.length = 0; s.history.length = 0;
+    p.deaths += 1;
+    this.broadcast(S2C.Kill, {
+      killer: p.id, killerName: p.name, killerTeam: p.team as Team,
+      victim: p.id, victimName: p.name, victimTeam: p.team as Team, weapon: "c4", headshot: false,
+    } satisfies KillEvent);
   }
 
   private fallDeath(p: PlayerState, s: Session): void {

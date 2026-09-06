@@ -127,6 +127,24 @@ it("2.2: a defuse kit is a defender's buy in the buy phase, halves the defuse an
     .applyDamage(h.player(a.sessionId), b.sessionId, 999, false, undefined);
   expect(h.player(b.sessionId).kit, "lost on death").toBe(false);
 });
+it("2.3: the detonation is a c4 boom that kills whoever is near the site and spares the far", async () => {
+  const { a, b, c } = await match(); const site = BOMB_SITES[0];
+  const carrier = h.state.bomb.carrier;
+  const who = h.clients.find((x) => x.sessionId === carrier) ?? a;
+  const other = [a, c].find((x) => x.sessionId !== carrier)!;
+  await h.place(carrier, { ...site, yaw: 0, team: 0 });
+  await h.place(b.sessionId, { ...site, x: site.x + 4, z: site.z + 2, yaw: 0, team: 1 });
+  await h.place(other.sessionId, { x: 0, y: 0, z: -18, yaw: 0, team: 0 });
+  await h.advance(300);
+  await hold(who, BOMB.plantMs + 300); expect(h.state.bomb.stage).toBe("planted");
+  await h.advance(BOMB.fuseMs + 200);
+  expect(h.state.bomb.result).toBe("BOMB DETONATED");
+  expect(h.broadcastsOf("boom").some((m) => (m.payload as { kind: string }).kind === "c4")).toBe(true);
+  expect(h.player(b.sessionId).alive, "a defender next to the charge").toBe(false);
+  expect(h.player(carrier).alive, "the planter standing on it").toBe(false);
+  expect(h.player(other.sessionId).alive, "an attacker 45 m away").toBe(true);
+  expect(h.broadcastsOf("kill").some((m) => (m.payload as { weapon: string; victim: string }).weapon === "c4" && (m.payload as { victim: string }).victim === b.sessionId)).toBe(true);
+});
 it("2.2: a plant lands where the planter stood, anywhere inside the zone", async () => {
   const { a } = await match(); const site = BOMB_SITES[1];
   const carrier = h.state.bomb.carrier;

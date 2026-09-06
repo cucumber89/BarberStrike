@@ -17,6 +17,8 @@ export const BOMB = {
   halfRounds: 6, maxRounds: 12, wins: 7, startMoney: 800, winMoney: 3250, plantMoney: 300, defuseMoney: 300, kitPrice: 400,
   /** Walking within this of a dropped charge picks it up; defusing needs the defender within it too. */
   pickupRadius: 1.4, defuseRadius: 1.8,
+  /** The blast (2.3): certain death inside `blastLethal` m, falling off to nothing at `blastRadius` m. */
+  blastLethal: 9, blastRadius: 22, blastDamage: 500,
   /**
    * Whoever dropped the charge on purpose cannot scoop it straight back: a drop is a hand-over.
    * They get it back the CS way — by stepping this far away from it and walking over it again.
@@ -123,6 +125,14 @@ export function stepBomb(b: BombData, players: readonly BombPlayer[], now: numbe
   b.stage = "planted"; b.site = site!.id; b.x = actor.x; b.y = Math.max(site!.y, actor.y); b.z = actor.z;
   b.endsAt = now + BOMB.fuseMs; b.carrier = ""; b.actor = ""; b.progress = 0;
   return null;
+}
+
+/** Damage the detonation deals at `distance` metres: 500 up to 9 m, a square fall-off to 0 at 22 m. */
+export function blastDamage(distance: number): number {
+  if (distance <= BOMB.blastLethal) return BOMB.blastDamage;
+  if (distance >= BOMB.blastRadius) return 0;
+  const f = (BOMB.blastRadius - distance) / (BOMB.blastRadius - BOMB.blastLethal);
+  return Math.round(BOMB.blastDamage * f * f);
 }
 
 /** Seconds the current action needs from scratch, for the HUD's hint. */

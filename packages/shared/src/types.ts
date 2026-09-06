@@ -201,8 +201,8 @@ export interface KillEvent {
   victim: string;
   victimName: string;
   victimTeam: Team;
-  /** Weapon or grenade that killed (see `killerName()` in economy.ts for display). */
-  weapon: WeaponId | GrenadeId;
+  /** Weapon or grenade that killed (see `killerName()` in economy.ts for display); "c4" is the charge. */
+  weapon: WeaponId | GrenadeId | "c4";
   headshot: boolean;
 }
 
@@ -229,7 +229,8 @@ export interface ThrowEvent {
 
 export interface BoomEvent {
   id: number;
-  kind: GrenadeId;
+  /** A grenade kind, or "c4": the planted charge going off (2.3). */
+  kind: GrenadeId | "c4";
   x: number; y: number; z: number;
   /** Surface normal for stuck knives / resting orientation. */
   nx: number; ny: number; nz: number;

@@ -52,6 +52,17 @@ Compact shared state. Read `ARCHITECTURE.md` first. Keep this file short.
       out). Local feel: FOV +6 %, a 6 cm dip, a touch of roll, a "cloth over concrete" sound
       (`sfx.slide`). Tests: `slide.movement.test.ts` (5) and the e2e "2.3: a slide" — predicted and
       replicated in a real room with ≤ 2 corrections.
+- [x] **The charge beeps and goes off like the classics** (2.3): `view/BombSites.ts` fires hooks — a beep
+      per LED on-phase (`max(110, left/45)·2` ms, so ~1.8 s apart at 40 s down to 0.22 s), one long tone
+      in the last 1.15 s, `bombPlanted` / `bombDefused` on the stage edges — and `audio/index.ts` plays
+      them (`sfx.bombBeep` positional from the charge, max 110 m; the announcements non-positional).
+      The detonation is a `BoomEvent` of kind `"c4"` (type widened: `GrenadeId | "c4"`): `Grenades.blast`
+      stacks three fireballs + a white core, a 30 m shockwave torus, a 45 m light, every spark and dust
+      particle, a 7 m scorch; `sfx.c4Blast` is the frag's shape with a 1.6 s sub and a 4 s tail, ducked
+      to 45 m; shake 0.2·(1 − d/60). SERVER: `blastDamage(d)` (shared, tested) — 500 up to 9 m, square
+      fall-off to 0 at 22 m — through plates, either side, kill feed weapon `"c4"` (`killerName` →
+      "C4 CHARGE", kill feed no longer says "fell" for it). Bomb.test: near defender and planter die,
+      an attacker 45 m away lives, the boom and the c4 kill are broadcast.
 - [x] **Render region**: `render.yaml` now says `frankfurt`. MEASURED: the default Oregon service gave
       ~200 ms ping from Poland. Render cannot move an existing service, so HOSTING.md tells the owner
       to delete it and re-apply the blueprint.

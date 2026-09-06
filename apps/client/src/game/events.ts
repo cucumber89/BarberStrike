@@ -36,6 +36,10 @@ export interface GameEventMap {
   footstep: { sprint: boolean; crouch: boolean };
   /** Slide (2.3): the local body dropped into a slide. */
   slide: Record<string, never>;
+  /** Bomb Plant (2.3): the planted charge's beep (urgency 0..1; ≥ 2 = the final tone), a plant, a defuse. */
+  bombBeep: { x: number; y: number; z: number; urgency: number };
+  bombPlanted: { x: number; y: number; z: number };
+  bombDefused: { x: number; y: number; z: number };
   matchPhase: MatchEventMessage;
   /** Settings changed at runtime. */
   settings: Record<string, never>;

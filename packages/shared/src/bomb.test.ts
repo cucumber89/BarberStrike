@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOMB, BOMB_SITES, dropBomb, insideSite, resetBomb, siteAt, stepBomb, type BombData, type BombPlayer } from "./bomb";
+import { BOMB, BOMB_SITES, blastDamage, dropBomb, insideSite, resetBomb, siteAt, stepBomb, type BombData, type BombPlayer } from "./bomb";
 const A = BOMB_SITES[0];
 const player = (id: string, team: number): BombPlayer => ({ id, team, alive: true, connected: true, x: A.x, y: A.y, z: A.z, using: false });
 const empty = (): BombData => ({ round: 0, attackTeam: 0, stage: "idle", carrier: "", site: "", x: 0, y: 0, z: 0, endsAt: 0, roundEndsAt: 0, actor: "", progress: 0, result: "", droppedBy: "", droppedAt: 0 });
@@ -77,6 +77,12 @@ describe("bomb objective", () => {
     expect(b.carrier, "walking back over it picks it up again").toBe("a");
     expect(dropBomb(b, "a", 6300)).toBe(true);
     expect(stepBomb(b, players, b.roundEndsAt, 100), "a charge left on the floor is a lost round").toBe(1);
+  });
+  it("the blast is certain death near the charge, a graze at the edge, nothing beyond", () => {
+    expect(blastDamage(0)).toBe(BOMB.blastDamage); expect(blastDamage(BOMB.blastLethal)).toBe(BOMB.blastDamage);
+    expect(blastDamage(12)).toBeGreaterThanOrEqual(100);
+    expect(blastDamage(20)).toBeLessThan(40); expect(blastDamage(20)).toBeGreaterThan(0);
+    expect(blastDamage(BOMB.blastRadius)).toBe(0); expect(blastDamage(40)).toBe(0);
   });
   it("awards the defence an unplanted timeout, hands the charge to a random attacker and swaps sides only at halftime", () => {
     const { b, players } = setup(); expect(stepBomb(b, players, b.roundEndsAt, 100)).toBe(1);
