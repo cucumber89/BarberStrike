@@ -1,0 +1,40 @@
+# HTTPS, kompresja i cache dla BARBERSTRIKE. Caddy sam bierze certyfikat z Let's Encrypt
+# przy pierwszym starcie i sam go odnawia — nic tu nie trzeba ustawiać poza domeną w .env.
+
+{
+	email {$ACME_EMAIL}
+	# Mniej logów niż domyślnie: na 2 vCPU nie ma po co zapisywać każdego GET-a assetów.
+	servers {
+		metrics
+	}
+}
+
+# www przekierowane na goły adres, żeby gra miała jeden kanoniczny URL
+# (i żeby certyfikat obejmował obie formy — Caddy weźmie go dla obu automatycznie).
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Hashowane assety Vite (nazwa zmienia się przy każdym buildzie) — cache na rok.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	# Modele GLB: nazwy stałe, więc miesiąc + rewalidacja. Duże pliki, warto je trzymać u gracza.
+	@models path /models/*
+	header @models Cache-Control "public, max-age=2592000"
+
+	# index.html nigdy nie cache'owany — inaczej deploy jest niewidoczny do wygaśnięcia cache'u.
+	@html path / /index.html
+	header @html Cache-Control "no-cache"
+
+	# WebSocket Colyseusa i całą resztę obsługuje ten sam upstream; Caddy przepuszcza upgrade sam.
+	reverse_proxy game:2567
+
+	log {
+		output stderr
+		level WARN
+	}
+}

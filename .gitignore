@@ -16,3 +16,6 @@ apps/client/e2e/tools/__*.mjs
 **/__probe*.ts
 **/_probe*.ts
 **/__dbg*.ts
+
+# Konfiguracja wdrożenia (domena, mail) — lokalna dla serwera.
+deploy/.env

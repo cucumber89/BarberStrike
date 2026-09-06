@@ -1,0 +1,49 @@
+# BARBERSTRIKE na VPS: gra + Caddy (HTTPS z Let's Encrypt, kompresja, cache).
+#
+#   cd ~/barberstrike && docker compose -f deploy/docker-compose.yml up -d --build
+#
+# Domenę i mail ustaw w pliku deploy/.env (patrz deploy/env.example).
+
+services:
+  game:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        # Wypalane w build klienta: adres, pod który poleci WebSocket. Musi być wss://TWOJA_DOMENA
+        # bez portu — inaczej klient dobija się do :2567, a tam z zewnątrz nikogo nie ma.
+        VITE_SERVER_URL: "wss://${DOMAIN}"
+    restart: unless-stopped
+    environment:
+      PORT: "2567"
+      CORS_ORIGIN: "https://${DOMAIN}"
+      # FB_DEV_TOOLS zostaje puste. Włączone daje każdemu graczowi teleport.
+    expose:
+      - "2567"
+    # Serwer gry nie wystawia portu na świat — ruch wchodzi wyłącznie przez Caddy.
+    deploy:
+      resources:
+        limits:
+          # Zostawia rdzeń i pamięć systemowi; przy 2 vCPU Node i tak liczy na jednym wątku.
+          cpus: "1.5"
+          memory: 2g
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: "${DOMAIN}"
+      ACME_EMAIL: "${ACME_EMAIL}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # certyfikaty — bez tego wolumenu Let's Encrypt wyczerpiesz limitem
+      - caddy_config:/config
+    depends_on:
+      - game
+
+volumes:
+  caddy_data:
+  caddy_config:

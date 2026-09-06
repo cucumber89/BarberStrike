@@ -1,13 +1,8 @@
-node_modules
 **/node_modules
 **/dist
-.git
-.github
-docs
-*.md
-!README.md
+**/test-results
+**/playwright-report
 apps/client/e2e/out
-apps/client/test-results
-apps/client/playwright-report
-.env
+.git
 *.log
+deploy/.env
