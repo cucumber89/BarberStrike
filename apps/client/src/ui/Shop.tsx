@@ -1,12 +1,12 @@
 import React, { useEffect } from "react";
 import { MatchPhase,
-  ARMOR, ARMOR_ORDER, ECONOMY, GRENADES, GRENADE_ORDER, PERKS, PERK_ORDER, PRIMARY_ORDER, SECONDARY_ORDER, WEAPONS, WEAPON_PRICES,
+  ARMOR, ARMOR_ORDER, BOMB, ECONOMY, GRENADES, GRENADE_ORDER, KIT_ITEM, PERKS, PERK_ORDER, PRIMARY_ORDER, SECONDARY_ORDER, WEAPONS, WEAPON_PRICES,
   canBuy, canSell, perkActive, primaryOf, secondaryOf,
   type GrenadeId, type ShopItemId, type Wallet, type WeaponId,
 } from "@frankibarber/shared";
 import type { HudState } from "../game/store";
 import { uiSound } from "../game/audio";
-import { ArmorArt, GrenadeArt, PerkArt, WeaponArt } from "./art/GearArt";
+import { ArmorArt, GrenadeArt, KitArt, PerkArt, WeaponArt } from "./art/GearArt";
 import { GRENADE_BLURB, WEAPON_BLURB } from "./gearText";
 
 export interface ShopApi {
@@ -37,8 +37,9 @@ const money = (n: number) => `$${n.toLocaleString("en-US")}`;
  * releases the pointer while it is up.
  */
 export function Shop({ h, api, now }: Props) {
-  const wallet: Wallet = { money: h.money, owned: h.owned, lethal: h.lethal, lethalCount: h.lethalCount, tactical: h.tactical, tacticalCount: h.tacticalCount, armor: h.armor, perks: h.perks };
-  const ctx = { now: h.serverNow, spawnedAt: -1e9, phase: h.phase, alive: h.alive, nearStation: true }; // window state comes from `buyWindowLeft` already
+  const wallet: Wallet = { money: h.money, owned: h.owned, lethal: h.lethal, lethalCount: h.lethalCount, tactical: h.tactical, tacticalCount: h.tacticalCount, armor: h.armor, perks: h.perks, kit: h.kit };
+  const bombDefender = h.mode === "bomb" && !!h.bomb && h.bomb.attackTeam !== h.myTeam;
+  const ctx = { now: h.serverNow, spawnedAt: -1e9, phase: h.phase, alive: h.alive, nearStation: true, bombDefender }; // window state comes from `buyWindowLeft` already
   const open = h.buyWindowLeft > 0;
   const primary = primaryOf(wallet);
   const secondary = secondaryOf(wallet);
@@ -164,6 +165,26 @@ export function Shop({ h, api, now }: Props) {
 
         <div className="shop-section">ARMOUR <span className="shop-hint">absorbs half of every hit · lost on death · you have {h.armor}</span></div>
         <div className="shop-grid perks">
+          {bombDefender && (() => {
+            const v = verdict(KIT_ITEM);
+            return (
+              <div className={`shop-item ${h.kit ? "carried" : ""} ${!h.kit && !v.ok ? "locked" : ""}`} data-testid="shop-kit">
+                <div className="shop-item-art sq"><KitArt /></div>
+                <div className="shop-item-head">
+                  <span className="shop-item-name">Defuse kit</span>
+                  <span className="shop-item-price">{money(BOMB.kitPrice)}</span>
+                </div>
+                <div className="shop-item-stats"><span>DEFUSE {BOMB.defuseKitMs / 1000} S</span><span>WITHOUT {BOMB.defuseMs / 1000} S</span></div>
+                <div className="shop-item-blurb">Cuts the defuse in half. Lost on death, kept between rounds while you live.</div>
+                <div className="shop-item-actions">
+                  {h.kit && <span className="shop-tag">CARRIED</span>}
+                  <button className="shop-btn" disabled={!v.ok} onClick={click(() => api.buy(KIT_ITEM))} title={!v.ok ? REASONS[v.reason] : undefined}>
+                    {v.ok ? "BUY" : v.reason === "money" ? "TOO POOR" : h.kit ? "OWNED" : "—"}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
           {ARMOR_ORDER.map((id) => {
             const a = ARMOR[id];
             const worn = h.armor >= a.armor;
@@ -204,5 +225,6 @@ function nameOf(item: string): string {
   if (item in GRENADES) return GRENADES[item as GrenadeId].name;
   if (item in PERKS) return PERKS[item as keyof typeof PERKS].name;
   if (item in ARMOR) return ARMOR[item as keyof typeof ARMOR].name;
+  if (item === KIT_ITEM) return "Defuse kit";
   return item;
 }

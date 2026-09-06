@@ -26,6 +26,8 @@ export interface KeyBindings {
   leanRight: string[];
   /** Bomb Plant: hold to plant / defuse (2.1: rebindable, T by default). */
   objective: string[];
+  /** Bomb Plant (2.2): let go of the charge for a teammate. */
+  dropBomb: string[];
 }
 
 export const DEFAULT_BINDINGS: KeyBindings = {
@@ -48,6 +50,7 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   leanLeft: ["KeyQ"],
   leanRight: ["KeyE"],
   objective: ["KeyT"],
+  dropBomb: ["KeyH"],
 };
 
 /** Two sprint presses within this window latch the tactical sprint (drop 4). */
@@ -105,6 +108,8 @@ export class InputState {
   chatOpenRequested: "all" | "team" | null = null;
   /** Middle mouse pressed while locked: mark / ping. Drained by the game. */
   markRequested = false;
+  /** Bomb Plant (2.2): the drop key pressed while locked. Drained by the game. */
+  dropBombRequested = false;
 
   private target: HTMLElement | null = null;
   private bindings: KeyBindings = DEFAULT_BINDINGS;
@@ -226,6 +231,7 @@ export class InputState {
     this.escapeRequested = false;
     this.chatOpenRequested = null;
     this.markRequested = false;
+    this.dropBombRequested = false;
     this.scoreboardHeld = false;
     this.tacLatched = false;
     this.lastSprintDownAt = -Infinity;
@@ -258,6 +264,7 @@ export class InputState {
     }
     if (b.melee.includes(e.code)) this.slotRequests.push(3);
     if (b.inspect.includes(e.code) && this.pointerLocked) this.inspectRequested = true;
+    if (b.dropBomb.includes(e.code) && this.pointerLocked) this.dropBombRequested = true;
     if (b.reload.includes(e.code)) this.reloadRequested = true;
     if (b.lastWeapon.includes(e.code)) this.lastWeaponRequested = true;
     if (b.lethal.includes(e.code) && this.pointerLocked) this.lethalHeld = true;

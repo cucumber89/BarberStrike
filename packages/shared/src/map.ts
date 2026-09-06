@@ -1,5 +1,6 @@
 import { type Box, boxFrom, CollisionWorld } from "./collision";
 import { expandDistrict } from "./districtExpansion";
+import { dressDistrict } from "./districtDressing";
 import type { Team } from "./types";
 
 /**
@@ -44,7 +45,13 @@ export interface Solid {
 export type PropKind =
   | "barber_chair" | "mirror" | "shelf" | "sign" | "lamp" | "trash" | "crate" | "dumpster" | "pole" | "sink"
   | "counter_top" | "neon" | "graffiti" | "vent" | "poster" | "bottle_row" | "towel_stack" | "board"
-  | "clippers" | "terminal" | "receipt" | "sticker" | "tube_light" | "cable" | "pendant" | "wheel" | "ac_unit" | "pipe" | "barber_pole";
+  | "clippers" | "terminal" | "receipt" | "sticker" | "tube_light" | "cable" | "pendant" | "wheel" | "ac_unit" | "pipe" | "barber_pole"
+  // 2.2 district dressing (districtDressing.ts): interiors, streets and the yard.
+  | "cafe_table" | "coffee_machine" | "cups" | "napkins" | "menu_board" | "wall_clock" | "plant" | "pinboard"
+  | "tool_board" | "tyre_stack" | "jack" | "oil_cans" | "shelf_rack" | "work_lamp" | "hazard_tape" | "calendar"
+  | "coat_rack" | "magazines" | "certificate" | "cash_tray" | "jars" | "broom" | "laundry_basket" | "mop_bucket" | "fuse_box"
+  | "cone" | "puddle" | "litter" | "wire" | "string_lights" | "banner" | "a_frame" | "bicycle" | "chalk"
+  | "pallet_sacks" | "tarp_heap" | "fire_barrel" | "stencil";
 
 export interface PropHint {
   kind: PropKind;
@@ -571,6 +578,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   ];
 
   const arenaSpawns = expandDistrict(solids, props, lights);
+  dressDistrict(props, lights);
   return {
     id: "night_district",
     name: "Night District",

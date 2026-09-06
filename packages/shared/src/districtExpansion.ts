@@ -49,20 +49,36 @@ export function expandDistrict(solids: Solid[], props: PropHint[], lights: Light
   // A raised industrial canopy gives A a recognizable silhouette, with supported roof beams.
   s("depot_site_roof", -40, 4.4, 22, 10, .2, 6, "corrugated_red");
   for (const x of [-39.85, -30.3]) for (const z of [22.15, 27.7]) s(`site_pillar_${x}_${z}`, x, 0, z, .2, 4.4, .2, "metal");
-  // High cover on the edge of each site; centre and both exits remain clear for plants and retakes.
+  // Site cover (2.2). The plant zones are 10 × 8 m (see BOMB_SITES): a few pieces INSIDE each zone
+  // give the planter a corner to hide the charge in and the retake something to clear, the centre
+  // and every entrance stay open. Everything outside a zone is lane cover as before.
   for (const [x, z, w, h, d, look, mat] of [
-    [-42, 20, 3.5, 2.4, 2, "container", "corrugated_red"], [-32, 26, 2, 1.3, 2, "crate", "wood"],
+    // A / DEPOT (x -40..-30, z 20.5..28.5): a container on the west edge, drums in the north-west
+    // corner, a pallet stack on the south edge, a crate on the east side, a low block wall making
+    // a plant nook against the north edge.
+    [-42, 20, 3.5, 2.4, 2, "container", "corrugated_red"], [-39.3, 25.6, 1.3, 1.1, 1.3, "drums", "paint_yellow"],
+    [-35.2, 20.7, 1.8, 0.9, 1.2, "pallets", "wood"], [-32, 26, 2, 1.3, 2, "crate", "wood"],
+    [-38, 27.6, 2.6, 0.9, 0.4, "planter", "concrete_block"],
     [-39, 30, 3, 1.1, 1, "planter", "wall_concrete"], [-35, -12, 2, 1.8, 3, "dumpster", "paint_green"],
-    [38, 23, 2.2, 2.2, 2, "crate", "paint_blue"], [47, 27, 3, 1.2, 2, "crate", "wood"],
+    // B / COURTYARD (x 38..48, z 20.5..28.5): a crate on the west edge, a low planter in the
+    // north-west quarter, a bench on the south edge, drums in the north-east corner, a crate
+    // outside to the east. The centre (also Domination's C) stays open.
+    [38, 23, 2.2, 2.2, 2, "crate", "paint_blue"], [40.5, 25.8, 2.4, 0.7, 2.2, "planter", "wall_concrete"],
+    [44.6, 20.7, 1.9, 0.5, 0.5, "crate", "wood"], [45.9, 26.9, 1.3, 1.1, 1.3, "drums", "paint_blue"],
+    [47.6, 27, 2.4, 1.2, 2, "crate", "wood"],
     [43, 32, 3.5, 1.1, 1, "planter", "wall_concrete"], [43, -10, 2, 1.8, 3, "dumpster", "paint_blue"],
     [-42, 36, 4, 2.7, 3, "portacabin", "paint_white"], [47, 37, 4, 2.7, 3, "portacabin", "paint_blue"],
   ] as const) solids.push({ name: `district_cover_${x}_${z}`, box: boxFrom(x, 0, z, w, h, d), look, mat });
   // Gatehouse baffles break the new long lanes without making dead ends.
   for (const [x, z] of [[-39, -3], [-36, 16], [42, -3], [44, 17]]) s(`lane_baffle_${x}`, x, 0, z, 2.8, 1.5, .4, "wall_sand");
-  for (const [x, z, title] of [[-35, 24, "A / DEPOT"], [43, 24, "B / COURTYARD"]] as const) {
-    props.push({ kind: "lamp", x, y: 0, z: z - 5, variant: "post" });
-    lights.push({ kind: "point", x, y: 4.3, z: z - 5, color: "#ffd29d", intensity: 27, range: 14, priority: 6 });
-    props.push({ kind: "sign", x: x < 0 ? -44.97 : 52.97, y: 2.5, z, yaw: x < 0 ? Math.PI / 2 : -Math.PI / 2, text: title, w: 4.5, h: 1.3 });
+  for (const [x, z, id, title] of [[-35, 24.5, "A", "A / DEPOT"], [43, 24.5, "B", "B / COURTYARD"]] as const) {
+    props.push({ kind: "lamp", x, y: 0, z: z - 6, variant: "post" });
+    lights.push({ kind: "point", x, y: 4.3, z: z - 6, color: "#ffd29d", intensity: 27, range: 14, priority: 6 });
+    // The letter, big, on both walls that face the zone: readable from every approach.
+    props.push({ kind: "sign", x: x < 0 ? -44.97 : 52.97, y: 2.6, z, yaw: x < 0 ? Math.PI / 2 : -Math.PI / 2, text: title, w: 5, h: 1.4 });
+    // Stencilled site letters: on the lane wall facing the site and high on the far wall.
+    props.push({ kind: "stencil", x: x < 0 ? -27.33 : 35.33, y: 2.6, z, yaw: x < 0 ? -Math.PI / 2 : Math.PI / 2, variant: "yellow", text: id, w: 2.8, h: 2.8 });
+    props.push({ kind: "stencil", x: x < 0 ? -44.96 : 52.96, y: 4.8, z: z - 3, yaw: x < 0 ? Math.PI / 2 : -Math.PI / 2, variant: "yellow", text: `SITE ${id}`, w: 4.5, h: 1.4 });
   }
   return [
     { x: -40, y: .05, z: -12, yaw: 0, team: 0 }, { x: 49, y: .05, z: -13, yaw: 0, team: 0 },

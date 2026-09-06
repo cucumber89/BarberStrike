@@ -2,6 +2,41 @@
 
 Compact shared state. Read `ARCHITECTURE.md` first. Keep this file short.
 
+## 2.2 (2026-09-06) — Bomb Plant the classic way, rebuilt sites, relief materials, a lived-in district
+- [x] **Bomb rules** (`shared/bomb.ts`, pure, tested): `resetBomb` hands the charge to a RANDOM living
+      attacker (`rand` injected, the room passes its seeded RNG); `dropBomb` (C2S `dropbomb`, key
+      `dropBomb` = H) lands it 0.6 m ahead of the carrier; pickup is walking within `pickupRadius`
+      (1.4 m); whoever dropped it on purpose is barred until they step outside `redropLeaveRadius`
+      (2.2 m) — a distance rule, not a timer (a timer let the dropper camp on it and the e2e page at
+      3 fps could not even see the "dropped" state). Planting: hold `objective` standing still
+      ANYWHERE inside a site rectangle (`BombSite {x,z,hw,hd}`, `insideSite` / `siteAt`); the charge
+      lands where the planter stood. Defusing: within `defuseRadius` (1.8 m) with LOS, 10 s or 5 s
+      with a kit. Plant / defuse pay $300 (`plantMoney` / `defuseMoney`).
+- [x] **Defuse kit**: shop item `kit` (`economy.ts`, $400, `BuyContext.bombDefender` gates it to the
+      defending side in Bomb only), `PlayerState.kit`, lost on death and at halftime, HUD shows
+      "DEFUSE KIT" in the round line. Shop card only appears to defenders (`Shop.tsx`, `KitArt`).
+- [x] **Carrier visuals**: `Character.bombPack` (pack, cell, straps — excluded from the merge like
+      `perkBand`), `RemotePlayer.carrying`, a "◆ C4" tag for the local carrier, HUD names the carrier
+      for the escort line and prints the bound keys instead of a hard-coded T.
+- [x] **Sites** (`view/BombSites.ts`, `shared/districtExpansion.ts`): a 1024-px DynamicTexture plate per
+      site (hazard border, hatch, letter, "PLANT ANYWHERE INSIDE"), four lit corner posts, a detailed
+      charge (straps, bezel, LED that beats faster as the fuse runs, wires, antenna), a dropped-charge
+      beacon column; cover inside each zone (container, crates, drums, planter, bench) with the DOM
+      flag C kept clear at B; stencil letters + "SITE A/B" plates on the walls. Gotcha (measured): a
+      negative `uScale`/`vScale` on a clamped DynamicTexture smears row 0 across the plate — flip on
+      the canvas (`translate(0,H); scale(1,-1)`) instead; screenshot from the south confirms the text.
+- [x] **Materials** (`world/materials.ts`): `generateSurface(kind)` builds a 512-px albedo AND a normal
+      map per surface kind (brick, plaster, concrete, metal, wood, tile…) as RawTextures; `bumpTexture`
+      on every StandardMaterial. Generation time is logged in DEV.
+- [x] **Dressing** (`shared/districtDressing.ts` called from `map.ts` after `expandDistrict`, ~40 new
+      `PropKind`s in `world/props.ts`): café, depot, shop, back hall, kiosk, streets and yard. Every
+      placement is validated by `map.test.ts` (WALL / FLOOR kind sets, no overlap with solids).
+      Gotcha: `Palette.text` needs a string — named poster variants map to texts, never `undefined`.
+- [x] Tests: shared 135, server Bomb 10 (drop / kit / plant-anywhere through the real handlers), e2e
+      "bomb plant and defuse" covers drop → camp (still dropped) → step away → pick up → plant → defuse.
+- Open: bots do not drop or pass the charge (they carry and plant only); no "bomb is here" minimap
+  icon; the kit is not drawn on the character.
+
 ## 2.1 (2026-09-06) — own repository, menu, progression loops, one-image hosting
 Moved out of the SideQuest monorepo into `cucumber89/BarberStrike` (import commit keeps the tree
 verbatim). Landed on top of 2.0 beta:

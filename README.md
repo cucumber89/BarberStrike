@@ -87,6 +87,22 @@ Troubleshooting:
 - Reconnection: an unexpected socket drop keeps the player on the server for 15 s; the client resumes the same
   session automatically (HUD shows "RECONNECTING").
 
+## 2.2 — what changed (2026-09-06)
+- Bomb Plant plays like the classics: one attacker gets the charge at random, **H** drops it a step
+  ahead for a teammate (whoever dropped it has to step away and come back to take it again), any
+  attacker walks over it to pick it up, and it is planted by holding **T** while standing still
+  anywhere inside the painted zone of A or B — the charge lands where the planter stood. Defenders
+  defuse next to the charge (10 s, or 5 s with a **defuse kit**, $400 in the buy phase, lost on death).
+  Plant and defuse pay $300. The carrier wears the pack, the HUD names the carrier and the keys.
+- Sites A (depot) and B (courtyard) rebuilt: hazard-striped zones painted on the floor with the
+  letter, lit corner posts, stencilled letters and site signs on the walls, cover to plant behind.
+- Materials get relief: every wall / floor look now has a generated normal map and colour variation
+  (`world/materials.ts`), so brick, plaster, concrete and metal read as surfaces, not flat paint.
+- The district is dressed as a place people use (`shared/districtDressing.ts`, `world/props.ts`):
+  café tables, coffee machine and menu board, the depot's tool boards, tyre stacks and jack, the
+  shop's clock, calendar, coat rack and magazines, string lights, a fire barrel, an A-frame sign,
+  bicycles, puddles, litter, tape and cones on the streets.
+
 ## 2.1 — what changed (2026-09-06)
 - Menu rebuilt: PLAY / ARMOURY / PROFILE / PLAY ONLINE / HOW TO PLAY / SETTINGS, with the level card,
   today's challenges and the server line on the first screen.
@@ -162,9 +178,10 @@ the game runs unchanged with the packs deleted. To swap or add: drop a CC0/CC-BY
 - See the "Known issues" section of `docs/BUILD_STATE.md` for measured decisions and caveats.
 
 ## Procedural combat and map update (2026-09-06)
-- Bomb Plant is separate from continuous modes: 90 s to reach A / B, hold **T** while standing still
-  for 3 s to plant or 5 s to defuse; 40 s fuse, one life per round, sides alternate, first to four wins.
-  A dropped charge is picked up by walking over it. Late joins wait for the next round.
+- Bomb Plant is separate from continuous modes: rounds of 115 s, a 10 s buy phase, hold **T** while
+  standing still inside site A / B for 3.2 s to plant, 10 s to defuse (5 s with a kit); 40 s fuse,
+  one life per round, sides swap after 6 rounds, first to 7 wins. A dropped charge is picked up by
+  walking over it (see 2.2 above for the drop / hand-over rules). Late joins wait for the next round.
 - Detailed procedural facades, divided shop windows, striped awning, interior trims and cabinetry;
   the centre repair garage now provides a sheltered west-lane passage.
 - Smoke blocks bot sight and the view from inside; flashes blind bots too. Bots use a forward field

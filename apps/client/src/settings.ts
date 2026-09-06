@@ -41,6 +41,7 @@ export const BINDABLE_ACTIONS: readonly { id: BindableAction; label: string }[] 
   { id: "leanLeft", label: "Lean left" },
   { id: "leanRight", label: "Lean right" },
   { id: "objective", label: "Plant / defuse the bomb (hold, stand still)" },
+  { id: "dropBomb", label: "Drop the bomb for a teammate" },
 ];
 
 export interface Settings {

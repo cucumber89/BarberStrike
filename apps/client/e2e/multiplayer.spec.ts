@@ -124,6 +124,22 @@ test.describe("two clients", () => {
       const teleport = (p: Page, x: number) => p.evaluate(x => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x, y: 0, z: 24 }), x);
       await teleport(a, -35);
       await expect.poll(async () => Math.abs((await pos(a)).x + 35)).toBeLessThan(0.2);
+      // 2.2: the carrier can drop the charge (H) for a teammate; standing on it does not hand it
+      // back, stepping away and walking over it again does (the CS rule).
+      expect((await hud(a)).bomb?.carrier).toBe((await hud(a)).myId);
+      await a.keyboard.press("KeyH");
+      await expect.poll(async () => (await hud(a)).bomb?.stage, { timeout: 5000 }).toBe("dropped");
+      await a.waitForTimeout(1500);
+      expect((await hud(a)).bomb?.stage, "the dropper camping on the charge does not get it back").toBe("dropped");
+      // The bar lifts when the SERVER sees the dropper away from the charge, so wait for the
+      // replicated position, not the local body (a dev teleport lands on the client at once, and
+      // two of them can fall inside one server tick).
+      const srvX = (p: Page) => p.evaluate(() => { const c = (window.__fb.game as unknown as { conn: { sessionId: string; state: { players: Map<string, { x: number }> } } }).conn; return c.state.players.get(c.sessionId)?.x ?? NaN; });
+      await teleport(a, -31);
+      await expect.poll(async () => Math.abs((await srvX(a)) + 31)).toBeLessThan(0.2);
+      await teleport(a, -35);
+      await expect.poll(async () => Math.abs((await srvX(a)) + 35)).toBeLessThan(0.2);
+      await expect.poll(async () => (await hud(a)).bomb?.stage, { timeout: 10000 }).toBe("carried");
       await a.keyboard.down("KeyT");
       await expect.poll(async () => (await hud(a)).bomb?.stage, { timeout: 10000 }).toBe("planted");
       await a.keyboard.up("KeyT");

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { GAME_VERSION, GRENADES, MATCH, MODES, MatchPhase, PERKS, PERK_ORDER, TEAM_NAMES, WEAPONS, BADGES, killerName, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
+import { BOMB, GAME_VERSION, GRENADES, MATCH, MODES, MatchPhase, PERKS, PERK_ORDER, TEAM_NAMES, WEAPONS, BADGES, killerName, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import type { MatchReward } from "../game/progression/profile";
-import { CROSSHAIR_COLORS, type Settings } from "../settings";
+import { CROSSHAIR_COLORS, keyLabel, resolveBindings, type Settings } from "../settings";
 import { SettingsPanel } from "./SettingsPanel";
 import { Shop, type ShopApi } from "./Shop";
 import { Chat, type ChatApi } from "./Chat";
@@ -75,6 +75,8 @@ function useClock(intervalMs: number): number {
 }
 
 const money = (n: number) => `$${n.toLocaleString("en-US")}`;
+/** The carrier's name for the escort line, from the scoreboard rows. */
+const carrierName = (h: ReturnType<typeof useHud>): string => h.players.find((p) => p.id === h.bomb?.carrier)?.name ?? "THE CARRIER";
 const REASON_SHORT: Record<string, string> = { kill: "KILL", headshot: "HEAD SHOT", assist: "ASSIST", buy: "", sell: "SOLD", reset: "" };
 
 export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar }: Props) {
@@ -120,6 +122,8 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
   // current FOV) when the dynamic option is on; clamped for readability either way.
   const ui = settings.interface;
   const ch = ui.crosshair;
+  const bindings = resolveBindings(settings.keys);
+  const keyOf = (a: keyof typeof bindings) => keyLabel(bindings[a][0]);
   const gap = Math.round(Math.min(34 + ch.gap, ch.gap + (ch.dynamic ? h.crosshairSpread * 900 : 0)));
   const chStyle = {
     "--gap": `${gap}px`, "--ch-len": `${ch.size}px`, "--ch-thick": `${ch.thickness}px`, "--ch-color": CROSSHAIR_COLORS[ch.color],
@@ -157,15 +161,16 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
     <div className={`hud ${lowHealth ? "low-health" : ""}`} data-testid="hud" style={{ zoom: ui.hudScale }}>
       {h.smokeOpacity > 0 && <div className="smoke-screen" data-testid="smoke-screen" style={{ opacity: h.smokeOpacity }} />}
       {h.bomb && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && <div className={`bomb-hud ${h.bomb.stage === "planted" ? "armed" : ""}`} data-testid="bomb-hud">
-        <b>ROUND {h.bomb.round} / 12 · {h.bomb.attackTeam === h.myTeam ? "ATTACK" : "DEFEND"} · FIRST TO 7</b>
-        <span>{h.bomb.stage === "buy" ? `${h.bomb.round === 7 ? "SIDES SWITCHED · " : ""}B TO BUY · START IN ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
+        <b>ROUND {h.bomb.round} / {BOMB.maxRounds} · {h.bomb.attackTeam === h.myTeam ? "ATTACK" : "DEFEND"} · FIRST TO {BOMB.wins}{h.kit ? " · DEFUSE KIT" : ""}</b>
+        <span>{h.bomb.stage === "buy" ? `${h.bomb.round === BOMB.halfRounds + 1 ? "SIDES SWITCHED · " : ""}${keyOf("shop")} TO BUY · START IN ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
           : h.phase === MatchPhase.Prep ? `${h.bomb.result} · NEXT ROUND ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
-          : h.bomb.stage === "planted" ? `BOMB ARMED AT ${h.bomb.site} · ${h.bomb.attackTeam === h.myTeam ? "GUARD THE CHARGE" : "HOLD T TO DEFUSE"}`
-          : h.bomb.carrier === h.myId ? "YOU HAVE THE BOMB · HOLD T AT A / B TO PLANT"
+          : h.bomb.stage === "planted" ? `BOMB ARMED AT ${h.bomb.site} · ${h.bomb.attackTeam === h.myTeam ? "GUARD THE CHARGE" : `HOLD ${keyOf("objective")} AT THE CHARGE TO DEFUSE (${(h.kit ? BOMB.defuseKitMs : BOMB.defuseMs) / 1000} S)`}`
+          : h.bomb.carrier === h.myId ? `YOU HAVE THE BOMB · HOLD ${keyOf("objective")} INSIDE A / B TO PLANT · ${keyOf("dropBomb")} TO HAND IT OVER`
           : h.bomb.attackTeam !== h.myTeam ? "PROTECT SITES A / B"
-          : h.bomb.stage === "dropped" ? "BOMB DROPPED · WALK OVER IT TO PICK UP" : "ESCORT THE BOMB CARRIER"}</span>
-        {h.bomb.actor && <><div className="bomb-progress"><i style={{ width: `${h.bomb.progress * 100}%` }} /></div><small>{h.bomb.actor === h.myId ? "KEEP HOLDING T · STAND STILL" : h.bomb.stage === "planted" ? "DEFUSING" : "PLANTING"}</small></>}
+          : h.bomb.stage === "dropped" ? "BOMB ON THE GROUND · WALK OVER IT TO PICK UP" : `ESCORT ${carrierName(h)} · THE BOMB`}</span>
+        {h.bomb.actor && <><div className="bomb-progress"><i style={{ width: `${h.bomb.progress * 100}%` }} /></div><small>{h.bomb.actor === h.myId ? `KEEP HOLDING ${keyOf("objective")} · STAND STILL` : h.bomb.stage === "planted" ? "DEFUSING" : "PLANTING"}</small></>}
       </div>}
+      {h.bomb && h.bomb.stage === "carried" && h.bomb.carrier === h.myId && h.phase === MatchPhase.Playing && <div className="bomb-carry" data-testid="bomb-carry">◆ C4</div>}
       {/* Damage vignette / direction */}
       {dmgAge < 600 && <div className="damage-dir" style={{ transform: `rotate(${h.damageAngle}rad)`, opacity: 1 - dmgAge / 600 }} />}
 

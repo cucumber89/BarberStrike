@@ -116,6 +116,8 @@ export interface HudState {
   breath: number;
   /** Last hit marker was on a plate. */
   hitArmor: boolean;
+  /** Bomb Plant (2.2): defuse kit carried. */
+  kit: boolean;
   // ---- drop 4: modes, flags, movement
   mode: GameMode;
   /** 2.1: the room's name, for the pause screen's invite link ("" for an unnamed quick-play room). */
@@ -151,7 +153,7 @@ export const initialHud: HudState = {
   money: 0, owned: ["pistol"], lethal: "", lethalCount: 0, tactical: "", tacticalCount: 0,
   buyWindowLeft: 0, nearStation: false, shopOpen: false, shopResult: null, moneyToasts: [],
   cookingKind: "", cooking: 0, flashStrength: 0, flashUntil: 0, flashAt: 0,
-  armor: 0, perks: { flask: 0, roids: 0, energy: 0, fade: 0 }, armorBrokeAt: 0, scoped: false, breath: 0, hitArmor: false,
+  armor: 0, perks: { flask: 0, roids: 0, energy: 0, fade: 0 }, armorBrokeAt: 0, scoped: false, breath: 0, hitArmor: false, kit: false,
   mode: "tdm", roomName: "", smokeOpacity: 0, bomb: null, flags: [], inFlag: -1, winnerId: "", winnerName: "", flagNotice: null, tac: 1, tacOn: false,
   chat: [], chatOpen: null, marks: [],
 };

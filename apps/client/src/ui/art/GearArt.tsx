@@ -555,3 +555,20 @@ export function ArmorArt({ id, className, title }: ArtProps<ArmorId>): JSX.Eleme
   const Draw = ARMOR_ART[id];
   return <Frame id={id} viewBox="0 0 100 100" className={className} title={title}><Draw /></Frame>;
 }
+
+/** Bomb Plant (2.2): the defuse kit — a belt pouch, open, with wire cutters and a probe. */
+export function KitArt({ className, title }: { className?: string; title?: string }): JSX.Element {
+  return (
+    <Frame id="kit" viewBox="0 0 100 100" className={className} title={title}>
+      <M d="M18 38 h64 v40 a6 6 0 0 1 -6 6 h-52 a6 6 0 0 1 -6 -6 z" o={0.18} />
+      <P d="M18 38 v-8 a6 6 0 0 1 6 -6 h52 a6 6 0 0 1 6 6 v8" />
+      <F d="M26 38 v-6 h48 v6" />
+      <F d="M44 24 h12 v6 h-12 z" />
+      <P d="M34 62 l14 -14 M48 48 l-4 -6 l6 -3 l4 6 z" />
+      <P d="M40 56 l-8 10 M46 62 l-8 8" />
+      <F d="M60 50 l12 18 M72 68 l4 -2 l-3 -5" />
+      <F d="M28 78 h44" />
+    </Frame>
+  );
+}
+

@@ -97,6 +97,8 @@ export const C2S = {
   Chat: "chat",
   /** Ping / mark a spot or an enemy for the team: MarkMessage (drop 5). */
   Mark: "mark",
+  /** Bomb Plant (2.2): the carrier lets go of the charge for a teammate (no payload). */
+  DropBomb: "dropbomb",
 } as const;
 
 /** Drop 5: chat limits (the server enforces them, the client mirrors them in the box). */

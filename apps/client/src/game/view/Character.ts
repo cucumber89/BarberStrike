@@ -58,6 +58,8 @@ export interface CharacterInput {
   /** Drop 4: lean (-1..1) tilts the torso and head sideways; tac raises the gun across the chest. */
   lean?: number;
   tac?: boolean;
+  /** Bomb Plant (2.2): this player carries the charge — a pack on the back everyone can read. */
+  bomb?: boolean;
 }
 
 /** Joint angles exposed for tests/tools (radians). */
@@ -138,6 +140,7 @@ export class Character {
   private flinchZ = 0;
   private flinchAmt = 0;
   private perkBand: Mesh;
+  private bombPack: Mesh[] = [];
 
   constructor(private scene: Scene, team: Team, name: string) {
     const M = teamMats(scene, team);
@@ -179,6 +182,11 @@ export class Character {
     }
     this.perkBand = box("perkBand", this.head, 0.25, 0.03, 0.27, 0, 0.215, 0.01, M.accent);
     this.perkBand.setEnabled(false);
+    // The charge on the carrier's back: an olive pack with a red blinking cell, straps over the vest.
+    this.bombPack.push(box("bomb_pack", this.torso, 0.3, 0.34, 0.16, 0, 0.3, -0.23, M.boots));
+    this.bombPack.push(box("bomb_cell", this.torso, 0.1, 0.06, 0.03, 0.06, 0.4, -0.32, M.accent));
+    for (const x of [-0.11, 0.11]) this.bombPack.push(box("bomb_strap", this.torso, 0.04, 0.4, 0.3, x, 0.32, -0.02, M.vest));
+    for (const m of this.bombPack) m.setEnabled(false);
 
     this.armR = node("armR", this.torso, 0.3, 0.48, 0);
     box("upperR", this.armR, 0.11, 0.3, 0.11, 0, -0.15, 0, M.cloth);
@@ -212,13 +220,13 @@ export class Character {
     // Added clothing detail therefore does not add a draw call for every pouch or buckle.
     const groups = new Map<TransformNode, Map<PBRMaterial, Mesh[]>>();
     for (const m of this.meshes) {
-      if (m === this.perkBand) continue;
+      if (m === this.perkBand || this.bombPack.includes(m)) continue;
       const parent = m.parent as TransformNode, mat = m.material as PBRMaterial;
       const materials = groups.get(parent) ?? new Map<PBRMaterial, Mesh[]>();
       const meshes = materials.get(mat) ?? []; meshes.push(m);
       materials.set(mat, meshes); groups.set(parent, materials);
     }
-    this.meshes = [this.perkBand];
+    this.meshes = [this.perkBand, ...this.bombPack];
     for (const [parent, materials] of groups) for (const [mat, meshes] of materials) {
       // Merge in joint-local space; the joint's world transform must not be baked twice.
       for (const m of meshes) { m.parent = null; m.computeWorldMatrix(true); }
@@ -314,6 +322,8 @@ export class Character {
     if (this.fade < 1) { this.fade = Math.min(1, this.fade + dt * 3); for (const m of this.meshes) m.visibility = this.fade; }
     const perked = !!inp.perked && inp.alive;
     if (this.perkBand.isEnabled() !== perked) this.perkBand.setEnabled(perked);
+    const bomb = !!inp.bomb && inp.alive;
+    if (this.bombPack[0] && this.bombPack[0].isEnabled() !== bomb) for (const m of this.bombPack) m.setEnabled(bomb);
 
     // ---- Death: buckle (0–0.25) → fall away from the killer with a tumble (0.25–0.8) → settle.
     if (this.deathT >= 0) {

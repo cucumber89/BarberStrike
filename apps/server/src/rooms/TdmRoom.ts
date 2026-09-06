@@ -4,7 +4,7 @@ import {
   MAX_INPUT_QUEUE, MAX_INPUT_RATE, MAX_OTHER_MSG_RATE, MAX_PLAYERS, MatchPhase, NIGHT_DISTRICT, PLAYER,
   RESPAWN_DELAY_MS, SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER,
   isLive, isFrozen, maskInput, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
-  BOMB, BOMB_SITES, bombAttackTeam, resetBomb, stepBomb, type BombPlayer,
+  BOMB, BOMB_SITES, KIT_ITEM, bombAttackTeam, dropBomb, resetBomb, stepBomb, type BombPlayer,
   buildCollisionWorld, createBody, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
   makeRayHit, mulberry32, pickSpawn, sanitizeName, simulateBody, spreadDirection, traceBullet, unpackInput,
   ECONOMY, GRENADES, THROW_INTERVAL_MS, FIRE_DPS, applyBuy, applySell, buyWindowOpen, giveGrenade, takeGrenade, killReward, weaponForSlot,
@@ -185,6 +185,13 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       const s = this.sessions.get(client.sessionId);
       if (!s || this.mode !== "bomb" || typeof msg !== "boolean" || this.rateLimited(s, "other")) return;
       s.objectiveUntil = msg ? this.now() + 400 : 0;
+    }));
+    // Bomb Plant (2.2): the carrier hands the charge over by dropping it a step ahead.
+    this.onMessage(C2S.DropBomb, this.guarded((client) => {
+      const s = this.sessions.get(client.sessionId);
+      const p = this.state.players.get(client.sessionId);
+      if (!s || !p || !p.alive || this.mode !== "bomb" || this.state.phase !== MatchPhase.Playing || this.rateLimited(s, "other")) return;
+      dropBomb(this.state.bomb, p.id, this.now(), [Math.sin(s.lastYaw), Math.cos(s.lastYaw)]);
     }));
     for (let i = 0; i < this.botCount; i++) this.addBot(i);
 
@@ -700,7 +707,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     victim.alive = false;
     victim.reloading = false;
     victim.armor = 0; // plates do not survive death
-    if (this.mode === "bomb") this.writeWallet(victim, { ...freshWallet(), money: victim.money });
+    if (this.mode === "bomb") { this.writeWallet(victim, { ...freshWallet(), money: victim.money }); victim.kit = false; }
     // A fresh fade (drop 3) is spent here: quicker respawn and a longer shield on the next spawn.
     const fade = perkActive(this.perksOf(victim), "fade", this.now());
     if (fade) { victim.perks.set("fade", 0); vs.fadeShield = true; }
@@ -833,7 +840,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private bombPlayers(): BombPlayer[] {
     return Array.from(this.state.players.values(), p => {
       const s = this.sessions.get(p.id);
-      return { id: p.id, team: p.team, alive: p.alive, connected: p.connected,
+      return { id: p.id, team: p.team, alive: p.alive, connected: p.connected, kit: p.kit,
         x: p.x, y: p.y, z: p.z, using: !!s && s.objectiveUntil > this.now()
           && s.body.grounded && Math.hypot(s.body.vx, s.body.vz) < 0.4 && !p.reloading
           && this.now() > Math.max(s.equipEndsAt, s.lastFireAt + 350, s.lastThrowAt + 700, s.lastDamageAt + 500, s.blindedUntil) };
@@ -864,10 +871,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
     if (st.bomb.round === BOMB.halfRounds) {
       this.bombLosses = [0, 0];
-      for (const p of st.players.values()) this.writeWallet(p, { ...freshWallet(), money: BOMB.startMoney });
+      for (const p of st.players.values()) { this.writeWallet(p, { ...freshWallet(), money: BOMB.startMoney }); p.kit = false; }
     }
     if (respawn) for (const [id, p] of st.players) if (p.connected) this.spawn(id);
-    resetBomb(st.bomb, now, this.bombPlayers());
+    resetBomb(st.bomb, now, this.bombPlayers(), this.rand);
     st.bomb.stage = "buy"; st.bomb.roundEndsAt = st.phaseEndsAt + BOMB.roundMs;
     this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Prep, winner: -1, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
   }
@@ -882,14 +889,18 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private stepBombMode(now: number): void {
     if (this.mode !== "bomb" || this.state.phase !== MatchPhase.Playing) return;
-    const carrier = this.state.bomb.carrier, plantedBefore = this.state.bomb.stage === "planted";
+    const carrier = this.state.bomb.carrier, plantedBefore = this.state.bomb.stage === "planted", actorBefore = this.state.bomb.actor;
     const winner = stepBomb(this.state.bomb, this.bombPlayers(), now, TICK_MS,
       (p, q) => !this.losBlocked(p.x, p.y + 1, p.z, q.x, q.y + 0.3, q.z));
     if (!plantedBefore && this.state.bomb.stage === "planted") {
       const planter = this.state.players.get(carrier);
-      if (planter) { this.pay(planter, 300, "capture"); planter.score += 200; }
+      if (planter) { this.pay(planter, BOMB.plantMoney, "capture"); planter.score += 200; }
     }
     if (winner === null) return;
+    if (this.state.bomb.result === "BOMB DEFUSED") {
+      const defuser = this.state.players.get(actorBefore);
+      if (defuser) { this.pay(defuser, BOMB.defuseMoney, "capture"); defuser.score += 300; }
+    }
     if (this.state.bomb.result === "BOMB DETONATED") {
       const b = this.state.bomb;
       this.broadcast(S2C.Boom, { id: this.nextProjectileId++, kind: "frag", x: b.x, y: b.y + 0.15, z: b.z,
@@ -1117,7 +1128,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private walletOf(p: PlayerState): Wallet {
     return {
       money: p.money, owned: Array.from(p.owned) as WeaponId[], lethal: p.lethal as GrenadeId | "", lethalCount: p.lethalCount,
-      tactical: p.tactical as GrenadeId | "", tacticalCount: p.tacticalCount, armor: p.armor, perks: this.perksOf(p),
+      tactical: p.tactical as GrenadeId | "", tacticalCount: p.tacticalCount, armor: p.armor, perks: this.perksOf(p), kit: p.kit,
     };
   }
 
@@ -1126,6 +1137,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (p.owned.length !== w.owned.length || w.owned.some((id, i) => p.owned[i] !== id)) { p.owned.clear(); for (const id of w.owned) p.owned.push(id); }
     p.lethal = w.lethal; p.lethalCount = w.lethalCount; p.tactical = w.tactical; p.tacticalCount = w.tacticalCount;
     p.armor = w.armor;
+    p.kit = !!w.kit;
     for (const id of PERK_ORDER) if ((p.perks.get(id) ?? 0) !== w.perks[id]) p.perks.set(id, w.perks[id]);
   }
 
@@ -1145,6 +1157,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private buyContext(p: PlayerState, s: Session): BuyContext {
     return {
       bombBuying: this.mode === "bomb" ? this.state.phase === MatchPhase.Prep && this.state.bomb.stage === "buy" : undefined,
+      bombDefender: this.mode === "bomb" && p.team !== this.state.bomb.attackTeam,
       now: this.now(), spawnedAt: s.spawnedAt, phase: this.state.phase as MatchPhase, alive: p.alive,
       nearStation: this.nearStation(s.body),
       releaseAt: this.state.phase === MatchPhase.Prep ? this.state.phaseEndsAt : 0,
@@ -1177,6 +1190,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   /** The purchase itself (humans via `onBuy`, bots at spawn): rules, wallet, equip, money event. */
   private buyItem(p: PlayerState, s: Session, item: ShopItemId): ShopResult {
     if (this.mode === "bomb" && (isPerkId(item) || item === "launcher")) return { ok: false, item, reason: "closed" };
+    if (this.mode !== "bomb" && item === KIT_ITEM) return { ok: false, item, reason: "closed" };
     const w = this.walletOf(p);
     const v = applyBuy(w, item, this.buyContext(p, s));
     if (!v.ok) return { ok: false, item, reason: v.reason };

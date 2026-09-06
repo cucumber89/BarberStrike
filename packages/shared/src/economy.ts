@@ -1,3 +1,4 @@
+import { BOMB } from "./bomb";
 import { GRENADES, isGrenadeId, type GrenadeId, type GrenadeSlot } from "./grenades";
 import { ARMOR, PERKS, PERK_ARMED_MS, isArmorId, isPerkId, noPerks, perkActive, type ArmorId, type PerkId, type PerkTimes } from "./perks";
 import { MatchPhase } from "./types";
@@ -32,9 +33,12 @@ export const WEAPON_PRICES: Record<WeaponId, number> = {
   pistol: 0, revolver: 600, smg: 1200, smg2: 1300, shotgun: 1400, rifle: 2600, lmg: 2800, dmr: 2900, sniper: 3400, launcher: 3200, clippers: 0,
 };
 
-export type ShopItemId = WeaponId | GrenadeId | PerkId | ArmorId;
-export const isShopItemId = (v: unknown): v is ShopItemId => isWeaponId(v) || (isGrenadeId(v) && GRENADES[v].shop) || isPerkId(v) || isArmorId(v);
+/** Bomb Plant (2.2): the defuse kit is bought like a plate, by defenders, in the buy phase. */
+export const KIT_ITEM = "kit" as const;
+export type ShopItemId = WeaponId | GrenadeId | PerkId | ArmorId | typeof KIT_ITEM;
+export const isShopItemId = (v: unknown): v is ShopItemId => isWeaponId(v) || (isGrenadeId(v) && GRENADES[v].shop) || isPerkId(v) || isArmorId(v) || v === KIT_ITEM;
 export function itemPrice(item: ShopItemId): number {
+  if (item === KIT_ITEM) return BOMB.kitPrice;
   if (isWeaponId(item)) return WEAPON_PRICES[item];
   if (isGrenadeId(item)) return GRENADES[item].price;
   if (isPerkId(item)) return PERKS[item].price;
@@ -54,12 +58,16 @@ export interface Wallet {
   armor: number;
   /** Active perks as `until` timestamps (server clock ms). */
   perks: PerkTimes;
+  /** Bomb Plant (2.2): defuse kit carried. Optional so older wallet literals stay valid. */
+  kit?: boolean;
 }
 
 export const freshWallet = (): Wallet => ({ money: ECONOMY.startMoney, owned: [FREE_SIDEARM], lethal: "", lethalCount: 0, tactical: "", tacticalCount: 0, armor: 0, perks: noPerks() });
 
 export interface BuyContext {
   bombBuying?: boolean;
+  /** Bomb Plant: the buyer defends this round (the kit is theirs to buy). */
+  bombDefender?: boolean;
   now: number;
   spawnedAt: number;
   phase: MatchPhase;
@@ -133,6 +141,13 @@ export function canBuy(w: Wallet, item: ShopItemId, ctx: BuyContext): BuyVerdict
     if (w.money < price) return { ok: false, reason: "money" };
     return { ok: true, cost: price, refund: 0 };
   }
+  if (item === KIT_ITEM) {
+    // Bomb Plant only, defenders only: the attackers have nothing to defuse.
+    if (!ctx.bombDefender) return { ok: false, reason: "closed" };
+    if (w.kit) return { ok: false, reason: "owned" };
+    if (w.money < price) return { ok: false, reason: "money" };
+    return { ok: true, cost: price, refund: 0 };
+  }
   const def = GRENADES[item];
   const slot: GrenadeSlot = def.slot;
   const kind = slot === "lethal" ? w.lethal : w.tactical;
@@ -159,6 +174,8 @@ export function applyBuy(w: Wallet, item: ShopItemId, ctx: BuyContext): BuyVerdi
     w.perks = { ...w.perks, [item]: def.durationMs > 0 ? from + def.durationMs : from + PERK_ARMED_MS };
   } else if (isArmorId(item)) {
     w.armor = ARMOR[item].armor;
+  } else if (item === KIT_ITEM) {
+    w.kit = true;
   } else {
     const def = GRENADES[item];
     if (def.slot === "lethal") { w.lethal = item; w.lethalCount += 1; } else { w.tactical = item; w.tacticalCount += 1; }

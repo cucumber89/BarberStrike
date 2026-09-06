@@ -17,6 +17,8 @@ export interface NetPlayer {
   lean: number; tac: boolean;
   /** Drop 5: scoreboard assists; server-driven bot. */
   assists: number; bot: boolean;
+  /** Bomb Plant (2.2): defuse kit carried. */
+  kit: boolean;
 }
 
 /** Drop 4: a Domination flag as replicated. */

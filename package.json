@@ -1,7 +1,7 @@
 {
   "name": "frankibarber-after-hours",
   "private": true,
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "FRANKIBARBER: AFTER HOURS — multiplayer browser FPS (Babylon.js + Colyseus).",
   "packageManager": "pnpm@10.33.0",
   "engines": {

@@ -44,7 +44,9 @@ export class RemotePlayer {
   vx = 0; vz = 0; reloading = false; weapon: WeaponId = "pistol";
   lean = 0; tac = false;
   private wasAlive = true;
-  private input = { speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol" as WeaponId, moveDir: 0, perked: false, lean: 0, tac: false };
+  private input = { speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol" as WeaponId, moveDir: 0, perked: false, lean: 0, tac: false, bomb: false };
+  /** Bomb Plant (2.2): set by the game each frame from the replicated carrier id. */
+  carrying = false;
 
   /**
    * `displayTeam` (drop 4) is the side this player is DRAWN as: in FFA everyone is on team 0 for
@@ -128,7 +130,7 @@ export class RemotePlayer {
     inp.speed = this.speed; inp.grounded = this.grounded; inp.crouch = this.crouch; inp.pitch = this.pitch;
     inp.alive = this.alive; inp.reloading = this.reloading; inp.weapon = this.weapon;
     inp.perked = b.perkUntil > renderT;
-    inp.lean = this.lean; inp.tac = this.tac;
+    inp.lean = this.lean; inp.tac = this.tac; inp.bomb = this.carrying;
     // Direction of travel relative to facing (for the strafe lean).
     inp.moveDir = this.speed > 0.3 ? Math.atan2(this.vx, this.vz) - this.yaw : 0;
     c.update(inp, dtMs);

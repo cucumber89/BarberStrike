@@ -182,6 +182,7 @@ button { font-family: inherit; }
 .bomb-hud.armed { border-color: #ff7050; color: #ff9070; }
 .bomb-progress { height: 5px; background: #ffffff25; }
 .bomb-progress i { display: block; height: 100%; background: #e5ae52; transition: width .1s linear; }
+.bomb-carry { position: absolute; right: 26px; bottom: 150px; padding: 4px 10px; border: 1px solid #ff7050; color: #ff9070; background: rgba(10,10,12,.6); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.2em; animation: pulse 1.4s ease-in-out infinite; }
 
 .result { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: rgba(6,6,8,.78); pointer-events: auto; }
 .result-title { font-family: var(--font-display); font-size: 96px; letter-spacing: 0.2em; line-height: 1; }

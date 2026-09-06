@@ -471,6 +471,7 @@ export class Game {
     // Drop 5: chat box and marks.
     if (this.input.chatOpenRequested) { const kind = this.input.chatOpenRequested; this.input.chatOpenRequested = null; if (!this.shopOpen) this.openChat(kind); }
     if (this.input.markRequested) { this.input.markRequested = false; if (this.local.alive) this.sendMark(); }
+    if (this.input.dropBombRequested) { this.input.dropBombRequested = false; if (this.local.alive && this.conn.state.mode === "bomb" && this.conn.state.bomb?.carrier === this.conn.sessionId) this.conn.send(C2S.DropBomb, {}); }
     if (this.input.inspectRequested) { this.input.inspectRequested = false; if (this.local.alive && !this.weapons.busy(now)) this.events.emit("weaponInspect", {}); }
     if (this.input.lethalHeld && !this.lethalWasHeld && !this.weapons.busy(now)) this.throwing.pressLethal(now);
     this.lethalWasHeld = this.input.lethalHeld;
@@ -488,7 +489,8 @@ export class Game {
 
     // Remote interpolation.
     const renderT = this.conn.serverNow() - INTERP_DELAY_MS;
-    for (const r of this.remotes.values()) r.update(renderT, dtMs);
+    const carrier = this.conn.state.mode === "bomb" && this.conn.state.bomb?.stage === "carried" ? this.conn.state.bomb.carrier : "";
+    for (const [id, r] of this.remotes) { r.carrying = id === carrier; r.update(renderT, dtMs); }
 
     for (const cb of this.frameCbs) cb(dtMs);
     this.scene.render();
@@ -562,7 +564,7 @@ export class Game {
       mode: s.mode ?? "tdm", flags, inFlag, winnerId: s.winnerId ?? "", winnerName: s.winnerName ?? "",
       bomb: s.mode === "bomb" && s.bomb ? { round: s.bomb.round, attackTeam: s.bomb.attackTeam, stage: s.bomb.stage, carrier: s.bomb.carrier,
         site: s.bomb.site, x: s.bomb.x, y: s.bomb.y, z: s.bomb.z, endsAt: s.bomb.endsAt, roundEndsAt: s.bomb.roundEndsAt,
-        actor: s.bomb.actor, progress: s.bomb.progress, result: s.bomb.result } : null,
+        actor: s.bomb.actor, progress: s.bomb.progress, result: s.bomb.result, droppedBy: s.bomb.droppedBy, droppedAt: s.bomb.droppedAt } : null,
       tac: this.local.tacFraction, tacOn: this.local.isTacSprinting(),
       // Drop 5: expired chat lines (unless the box is open) and marks drop out here.
       chat: !cur.chatOpen && cur.chat.some((l) => now - l.seen > CHAT.showMs) ? cur.chat.filter((l) => now - l.seen <= CHAT.showMs) : cur.chat,
@@ -573,7 +575,7 @@ export class Game {
       serverNow: this.conn.serverNow(), spawnProtectedUntil: me?.protectedUntil ?? 0,
       killFeed: cur.killFeed.filter((k) => now - k.at < 6000),
       money: me?.money ?? 0, owned: this.weapons.owned,
-      armor: me?.armor ?? 0, perks: { ...this.myPerks }, scoped: scope.scoped, breath: scope.winded ? 0 : scope.breath,
+      armor: me?.armor ?? 0, kit: !!me?.kit, perks: { ...this.myPerks }, scoped: scope.scoped, breath: scope.winded ? 0 : scope.breath,
       lethal: this.throwing.lethal, lethalCount: this.throwing.lethalCount, tactical: this.throwing.tactical, tacticalCount: this.throwing.tacticalCount,
       buyWindowLeft: windowLeft, nearStation: near, shopOpen: this.shopOpen,
       cookingKind: this.throwing.state.kind ?? "", cooking: this.throwing.state.cook,
