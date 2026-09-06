@@ -32,7 +32,7 @@ export function HowToPlay({ settings, onControls }: { settings: Settings; onCont
       </section>
       <section>
         <h3>PROGRESS</h3>
-        <p>Every match pays XP for kills, head shots, assists, captures, waves survived and the win. Levels bring barber-shop titles, badges name things you actually did, each weapon has its own <b>mastery</b> from BRĄZ to DIAMENT, and three <b>daily challenges</b> pay extra. None of it changes a fight: everything in the shop is open from level 1.</p>
+        <p>Every match pays XP for kills, head shots, assists, captures, Bomb rounds survived and the win. Levels bring barber-shop titles, badges name things you actually did, each weapon has its own <b>mastery</b> from BRĄZ to DIAMENT, and three <b>daily challenges</b> pay extra. None of it changes a fight: everything in the shop is open from level 1.</p>
       </section>
       <section>
         <h3>CONTROLS <button type="button" className="link inline" onClick={onControls}>CHANGE KEYS →</button></h3>
