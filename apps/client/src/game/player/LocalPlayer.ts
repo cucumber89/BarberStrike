@@ -16,6 +16,8 @@ interface PendingInput {
 
 export interface LookSettings {
   sensitivity: number; // radians per pixel * 1000
+  /** 2.1: sensitivity multiplier at full ADS, blended by `adsBlend` in between. */
+  adsSensitivity: number;
   invertY: boolean;
   fov: number; // degrees
   bobScale: number; // 0..1
@@ -104,7 +106,8 @@ export class LocalPlayer {
   private applyLook(): void {
     const m = { dx: 0, dy: 0 };
     this.input.consumeMouse(m);
-    const s = this.settings.sensitivity * 0.001;
+    const ads = this.settings.adsSensitivity ?? 1;
+    const s = this.settings.sensitivity * 0.001 * (1 + (ads - 1) * this.adsBlend);
     this.yaw = wrapAngle(this.yaw + m.dx * s);
     const dy = this.settings.invertY ? -m.dy : m.dy;
     this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch + dy * s));

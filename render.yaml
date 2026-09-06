@@ -1,0 +1,11 @@
+# Render blueprint: New → Blueprint → this repository. See docs/HOSTING.md.
+services:
+  - type: web
+    name: barberstrike
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production

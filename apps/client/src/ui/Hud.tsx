@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { GAME_VERSION, GRENADES, MATCH, MODES, MatchPhase, PERKS, PERK_ORDER, TEAM_NAMES, WEAPONS, BADGES, killerName, perkActive, respawnInMs, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import type { MatchReward } from "../game/progression/profile";
-import type { Settings } from "../settings";
+import { CROSSHAIR_COLORS, type Settings } from "../settings";
 import { SettingsPanel } from "./SettingsPanel";
 import { Shop, type ShopApi } from "./Shop";
 import { Chat, type ChatApi } from "./Chat";
 import { Minimap } from "./Minimap";
+import { CopyRow } from "./Online";
+import { inviteLink } from "./invite";
 import type { RadarSnapshot } from "../game/Game";
 
 interface Props {
@@ -83,6 +85,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
   const [scoreboard, setScoreboard] = useState(false);
   const [paused, setPaused] = useState(false);
   const [telemetry, setTelemetry] = useState(false);
+  const [pauseSettings, setPauseSettings] = useState(false);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -114,8 +117,15 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
   const hitAge = performance.now() - h.hitAt;
   const dmgAge = performance.now() - h.damageAt;
   const lowHealth = h.alive && h.health <= 30;
-  // Crosshair gap grows with the effective spread (radians → px at the current FOV). Clamped for readability.
-  const gap = Math.round(Math.min(34, 5 + h.crosshairSpread * 900));
+  // Crosshair (2.1: player-styled). The gap grows with the effective spread (radians → px at the
+  // current FOV) when the dynamic option is on; clamped for readability either way.
+  const ui = settings.interface;
+  const ch = ui.crosshair;
+  const gap = Math.round(Math.min(34 + ch.gap, ch.gap + (ch.dynamic ? h.crosshairSpread * 900 : 0)));
+  const chStyle = {
+    "--gap": `${gap}px`, "--ch-len": `${ch.size}px`, "--ch-thick": `${ch.thickness}px`, "--ch-color": CROSSHAIR_COLORS[ch.color],
+    "--ch-outline": ch.outline ? "0 0 2px rgba(0,0,0,.9)" : "none",
+  } as React.CSSProperties;
   const protectedNow = h.alive && h.spawnProtectedUntil > h.serverNow;
   const reloadMs = w.reloadMs;
   const winnerTeam = h.winner === -1 ? "DRAW" : h.winner === h.myTeam ? "VICTORY" : "DEFEAT";
@@ -145,14 +155,15 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
   const winnerFfa = h.winnerId === "" ? "DRAW" : h.winnerId === h.myId ? "VICTORY" : "DEFEAT";
 
   return (
-    <div className={`hud ${lowHealth ? "low-health" : ""}`} data-testid="hud">
+    <div className={`hud ${lowHealth ? "low-health" : ""}`} data-testid="hud" style={{ zoom: ui.hudScale }}>
       {/* Damage vignette / direction */}
       {dmgAge < 600 && <div className="damage-dir" style={{ transform: `rotate(${h.damageAngle}rad)`, opacity: 1 - dmgAge / 600 }} />}
 
       {/* Crosshair (hidden in ADS and while a grenade is in the hand: the cook ring takes its place) */}
       {h.alive && h.pointerLocked && !h.aiming && h.cookingKind === "" && (
-        <div className={`crosshair ${hitAge < 180 ? (h.hitKill ? "kill" : h.hitHead ? "head" : h.hitArmor ? "armor" : "hit") : ""} ${protectedNow ? "shield" : ""}`} data-testid="crosshair" style={{ "--gap": `${gap}px` } as React.CSSProperties}>
-          <span className="ch-top" /><span className="ch-bottom" /><span className="ch-left" /><span className="ch-right" />
+        <div className={`crosshair ${hitAge < 180 ? (h.hitKill ? "kill" : h.hitHead ? "head" : h.hitArmor ? "armor" : "hit") : ""} ${protectedNow ? "shield" : ""}`} data-testid="crosshair" style={chStyle}>
+          {ch.size > 0 && <><span className="ch-top" /><span className="ch-bottom" /><span className="ch-left" /><span className="ch-right" /></>}
+          {ch.dot && <span className="ch-dot" />}
           {hitAge < 180 && <span className="hitmarker" />}
           {protectedNow && <span className="ch-shield" />}
         </div>
@@ -209,13 +220,13 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
       )}
 
       {/* Minimap + compass (drop 5): hidden behind the scope and the result screen */}
-      {h.connected && !h.scoped && h.phase !== MatchPhase.Ended && <Minimap radar={radar} />}
+      {h.connected && ui.minimap && !h.scoped && h.phase !== MatchPhase.Ended && <Minimap radar={radar} />}
       {/* Chat (drop 5) */}
       {h.connected && <Chat lines={h.chat} open={h.chatOpen} teams={teams} myId={h.myId} api={chat} />}
 
       {/* Kill feed */}
       <ul className="killfeed" data-testid="killfeed">
-        {h.killFeed.map((k) => (
+        {ui.killFeed && h.killFeed.map((k) => (
           <li key={k.key} className={k.victim === h.myId ? "me-victim" : k.killer === h.myId ? "me-killer" : ""}>
             <span className={`kf-name ${teams ? `t${k.killerTeam}` : "ffa"}`}>{k.killer === k.victim ? "" : k.killerName}</span>
             <span className="kf-weapon">{k.killer === k.victim ? "fell" : killerName(k.weapon).split(" ")[0]}{k.headshot ? " ✦" : ""}</span>
@@ -260,7 +271,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
         </div>
       )}
       <div className="money-toasts" aria-live="polite">
-        {toasts.map((t) => (
+        {ui.moneyToasts && toasts.map((t) => (
           <div key={t.key} className={`money-toast ${t.delta < 0 ? "neg" : ""}`}>{t.delta > 0 ? "+" : ""}{money(t.delta)}<span className="why">{REASON_SHORT[t.reason] ?? t.reason.toUpperCase()}</span></div>
         ))}
       </div>
@@ -347,13 +358,22 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
           <div className="pause-card">
             <div className="wordmark small">BARBERSTRIKE</div>
             <button className="menu-btn primary" onClick={onResume} data-testid="btn-resume">RESUME</button>
-            <details><summary className="menu-btn">SETTINGS</summary><SettingsPanel settings={settings} onChange={onSettings} /></details>
+            <button className="menu-btn" onClick={() => setPauseSettings((v) => !v)} data-testid="btn-pause-settings">{pauseSettings ? "HIDE SETTINGS" : "SETTINGS"}</button>
+            {pauseSettings && <SettingsPanel settings={settings} onChange={onSettings} />}
+            {!pauseSettings && (
+              <div className="pause-invite">
+                <small>INVITE A FRIEND TO THIS ROOM</small>
+                <CopyRow value={inviteLink(location.href, h.roomName, h.mode)} testid="pause-invite" />
+              </div>
+            )}
             <button className="menu-btn" onClick={onLeave} data-testid="btn-leave">LEAVE MATCH</button>
             <div className="version">v{GAME_VERSION}</div>
           </div>
         </div>
       )}
 
+      {/* FPS / ping (2.1: a setting, so a player can check a stutter without a dev build) */}
+      {!import.meta.env.DEV && ui.showFps && <div className="fps" data-testid="fps">{h.fps} FPS · {h.ping} MS</div>}
       {/* Debug overlay (dev only) */}
       {import.meta.env.DEV && (
         <div className="debug" data-testid="debug">

@@ -6,6 +6,8 @@ import { MatchPhase,
 } from "@frankibarber/shared";
 import type { HudState } from "../game/store";
 import { uiSound } from "../game/audio";
+import { ArmorArt, GrenadeArt, PerkArt, WeaponArt } from "./art/GearArt";
+import { GRENADE_BLURB, WEAPON_BLURB } from "./gearText";
 
 export interface ShopApi {
   buy(item: ShopItemId): void;
@@ -24,29 +26,6 @@ const REASONS: Record<string, string> = {
   pistol: "Free gear stays with you.",
   none: "Not carried.",
   unknown: "Unknown item.",
-};
-
-const WEAPON_BLURB: Record<WeaponId, string> = {
-  pistol: "Free sidearm. Always in slot 2 unless you carry the revolver.",
-  revolver: "Six big rounds. Two to the chest, one to the head.",
-  smg: "Fast, forgiving up close. Cheap entry ticket.",
-  smg2: "Screams through a mag in 1.4 s. Fastest hands in the game.",
-  shotgun: "One-shot inside the shop, useless across the street.",
-  rifle: "The all-rounder. Learn the recoil and it wins most fights.",
-  lmg: "100 rounds, slow to swing, holds a lane on its own.",
-  dmr: "Two-tap at range. Slow, punishing, satisfying.",
-  sniper: "Scoped. One shot to the head, two to the body. Shift steadies the reticle.",
-  launcher: "One shell, a 4.5 m blast, breaks open to reload. Mind the walls.",
-  clippers: "Always on you (V). From behind it is a haircut nobody walks away from.",
-};
-
-const GRENADE_BLURB: Record<GrenadeId, string> = {
-  frag: "Hold G to cook, release to throw. 3.2 s fuse.",
-  molotov: "Breaks on impact; burns the floor for 6 s.",
-  knife: "Silent, straight, 70 damage on a hit. Sticks in walls.",
-  flash: "Blinds everyone looking at it. Press 4 to throw.",
-  smoke: "12 s of cover. Press 4 to throw.",
-  shell: "",
 };
 
 const money = (n: number) => `$${n.toLocaleString("en-US")}`;
@@ -83,6 +62,7 @@ export function Shop({ h, api, now }: Props) {
     const swapping = w.slot === 1 ? primary : secondary !== "pistol" ? secondary : null;
     return (
       <div key={id} className={`shop-item ${carried ? "carried" : ""} ${!carried && !v.ok ? "locked" : ""}`} data-testid={`shop-${id}`}>
+        <div className="shop-item-art"><WeaponArt id={id} /></div>
         <div className="shop-item-head">
           <span className="shop-item-name">{w.name}{w.scoped && <span className="shop-slot">SCOPE</span>}</span>
           <span className="shop-item-price">{WEAPON_PRICES[id] === 0 ? "FREE" : money(WEAPON_PRICES[id])}</span>
@@ -139,6 +119,7 @@ export function Shop({ h, api, now }: Props) {
             const v = verdict(id);
             return (
               <div key={id} className={`shop-item ${count > 0 ? "carried" : ""} ${count === 0 && !v.ok ? "locked" : ""}`} data-testid={`shop-${id}`}>
+                <div className="shop-item-art sq"><GrenadeArt id={id} /></div>
                 <div className="shop-item-head">
                   <span className="shop-item-name">{g.name}<span className={`shop-slot ${g.slot}`}>{g.slot === "lethal" ? "G" : "4"}</span></span>
                   <span className="shop-item-price">{money(g.price)}</span>
@@ -164,8 +145,9 @@ export function Shop({ h, api, now }: Props) {
             const v = verdict(id);
             return (
               <div key={id} className={`shop-item ${active ? "carried" : ""} ${!active && !v.ok ? "locked" : ""}`} data-testid={`shop-${id}`}>
+                <div className="shop-item-art sq"><PerkArt id={id} /></div>
                 <div className="shop-item-head">
-                  <span className="shop-item-name"><span className="shop-glyph">{p.glyph}</span>{p.name}</span>
+                  <span className="shop-item-name">{p.name}</span>
                   <span className="shop-item-price">{money(p.price)}</span>
                 </div>
                 <div className="shop-item-blurb">{p.blurb}</div>
@@ -188,8 +170,9 @@ export function Shop({ h, api, now }: Props) {
             const v = verdict(id);
             return (
               <div key={id} className={`shop-item ${worn ? "carried" : ""} ${!worn && !v.ok ? "locked" : ""}`} data-testid={`shop-${id}`}>
+                <div className="shop-item-art sq"><ArmorArt id={id} /></div>
                 <div className="shop-item-head">
-                  <span className="shop-item-name">🛡 {a.name}</span>
+                  <span className="shop-item-name">{a.name}</span>
                   <span className="shop-item-price">{money(a.price)}</span>
                 </div>
                 <div className="shop-item-stats"><span>PLATE {a.armor}</span></div>

@@ -17,3 +17,5 @@ export * from "./nav";
 export * from "./rounds";
 export * from "./progression";
 export * from "./bots";
+export * from "./mastery";
+export * from "./challenges";

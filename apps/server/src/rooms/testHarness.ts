@@ -42,6 +42,7 @@ interface SessionLike {
   lastPitch: number;
   bank: number;
   otherCount: number;
+  respawnAt: number;
 }
 
 interface RoomPrivates {

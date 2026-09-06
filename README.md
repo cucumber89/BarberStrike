@@ -1,10 +1,26 @@
 # BARBERSTRIKE (formerly FRANKIBARBER: AFTER HOURS)
 
 A multiplayer browser FPS set in a premium barber shop district after closing time.
-Team Deathmatch, 2–12 players, server-authoritative, playable in Chrome/Chromium.
+Team Deathmatch, Free For All and Domination, 2–12 players, server-authoritative, playable in Chrome/Chromium.
+
+> The YAML block at the top of this file is for Hugging Face Spaces (it tells a Docker Space which
+> port the game listens on). GitHub shows it as a small table; it is harmless everywhere else.
+
+## Play online
+The server serves the page, so **one address is the whole setup**: whoever opens it plays there.
+`docs/HOSTING.md` (Polish) walks through the three ways to get such an address — from your own PC
+with a tunnel, a free Hugging Face Space (the repo has a GitHub Action that syncs to one), or
+Fly.io / Render / a VPS with the root `Dockerfile`. In the game, **PLAY ONLINE** shows the server
+line and the invite link; the lobby's **INVITE** button makes a link with the room name filled in
+(`?room=late-shift&mode=tdm`).
 
 ## What it is
-- Fast arena-style FPS: sprint, jump, crouch, ADS, five distinct weapons (pistol, SMG, rifle, shotgun, DMR).
+- Fast arena-style FPS: sprint, tactical sprint, lean, jump, crouch, ADS; eleven weapons (two sidearms,
+  eight primaries, the clippers), five grenades, four barber perks, two plates, an in-match economy.
+- Progression that never touches a fight: levels with barber-shop titles, badges, per-weapon mastery
+  (BRĄZ → DIAMENT) and three daily challenges — all local, no accounts.
+- A menu that explains itself: an armoury with hand-drawn art and stats for every item, a profile
+  page, how-to-play, tabbed settings (crosshair editor, ADS sensitivity, HUD, key rebinding).
 - Real multiplayer: Colyseus rooms, 60 Hz authoritative simulation, client prediction + reconciliation,
   snapshot interpolation for remote players, lag-compensated hitscan.
 - One intentionally designed map, **Night District**: front street → barber shop → back hall → courtyard,
@@ -69,6 +85,17 @@ Troubleshooting:
   `shot1.mjs` (screenshots of the map, characters and HUD in headless Chromium).
 - Reconnection: an unexpected socket drop keeps the player on the server for 15 s; the client resumes the same
   session automatically (HUD shows "RECONNECTING").
+
+## 2.1 — what changed (2026-09-06)
+- Menu rebuilt: PLAY / ARMOURY / PROFILE / PLAY ONLINE / HOW TO PLAY / SETTINGS, with the level card,
+  today's challenges and the server line on the first screen.
+- Shop and armoury show a drawing of every weapon, grenade, perk and plate (`ui/art/GearArt.tsx`).
+- Settings in tabs: ADS sensitivity, crosshair editor (colour, size, gap, thickness, dot, dynamic,
+  outline), HUD scale, minimap / kill feed / toasts / FPS toggles, key rebinding with conflict marks.
+- Weapon mastery and daily challenges (`shared/mastery.ts`, `shared/challenges.ts`), recent matches
+  and profile export / import / reset.
+- Invite links (`?room=…&mode=…`, `?join=<roomId>`), `/health` reports players and rooms.
+- One Docker image for server + client (`Dockerfile`), Hugging Face sync workflow, `fly.toml`, `render.yaml`, CI.
 
 ## Production build
 ```

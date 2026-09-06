@@ -29,7 +29,7 @@ import { installAudio } from "./audio";
 import { installPostFx } from "./world/postfx";
 import { installPerf } from "./perf";
 import { hud, type ChatLine, type HudFlag, type HudMark, type HudState, type ScoreRow } from "./store";
-import type { Settings } from "../settings";
+import { resolveBindings, type Settings } from "../settings";
 
 /**
  * A manifest prop kind can stand in for several of the procedural builder's instancing sources.
@@ -98,7 +98,7 @@ export class Game {
   private lastHudSync = 0;
   private killFeedKey = 0;
   /** Progression (2.0): counts the local player's match, then pays it into the profile at the end. */
-  private readonly tracker: MatchTracker;
+  private tracker = new MatchTracker();
 
   /**
    * The whistle: turn the match into XP, save the profile and hand the summary to the HUD.
@@ -113,7 +113,7 @@ export class Game {
     const teams = MODES[h.mode as GameMode]?.teams ?? true;
     const result = matchResult(teams, h.myTeam, e.winner, e.winnerId ?? "", h.myId);
     const stats = this.tracker.finish(row, result, h.mode as GameMode);
-    const { profile, reward } = applyMatch(loadProfile(), stats, this.tracker.clipperKills);
+    const { profile, reward } = applyMatch(loadProfile(), stats, this.tracker.clipperKills, this.tracker.weaponKills);
     saveProfile(profile);
     hud.set({ reward, profile });
   }
@@ -165,8 +165,9 @@ export class Game {
     this.map = buildMap(scene, mapDef, { shadows: this.settings.graphics.shadows !== "off", shadowMapSize: this.settings.graphics.shadows === "high" ? 2048 : 1024, models, propSources });
 
     this.input.attach(this.opts.canvas);
+    this.input.setBindings(resolveBindings(this.settings.keys));
     this.local = new LocalPlayer(scene, world, this.input, {
-      sensitivity: this.settings.gameplay.sensitivity, invertY: this.settings.gameplay.invertY,
+      sensitivity: this.settings.gameplay.sensitivity, adsSensitivity: this.settings.gameplay.adsSensitivity, invertY: this.settings.gameplay.invertY,
       fov: this.settings.gameplay.fov, bobScale: this.settings.gameplay.headBob, shakeScale: this.settings.gameplay.cameraShake,
     });
     this.weapons = new WeaponController(this.conn, this.local);
@@ -182,7 +183,6 @@ export class Game {
     this.local.serverNow = () => this.conn.serverNow();
     this.local.onTac = (on) => this.events.emit("tacSprint", { on });
     this.throwing = new Throwing(this.conn, this.local);
-    this.tracker = new MatchTracker();
     this.throwing.onPrime = (kind, cookable) => this.events.emit("grenadePrime", { kind, cookable });
     this.throwing.onThrow = (kind) => this.events.emit("grenadeThrow", { kind });
     this.throwing.onCancel = () => this.events.emit("grenadeCancel", {});
@@ -203,7 +203,7 @@ export class Game {
       this.weapons.syncFrom(me);
       this.throwing.syncFrom(me);
     }
-    hud.set({ connected: true, myId: this.conn.sessionId, myTeam: (me?.team ?? 0) as Team, loadStage: "players", mode: this.conn.state.mode ?? "tdm" });
+    hud.set({ connected: true, myId: this.conn.sessionId, myTeam: (me?.team ?? 0) as Team, loadStage: "players", mode: this.conn.state.mode ?? "tdm", roomName: this.conn.state.roomName ?? "" });
 
     const ctx: GameContext = {
       scene, engine, rendererKind: kind, camera: this.local.camera, events: this.events,
@@ -723,7 +723,9 @@ export class Game {
   applySettings(s: Settings): void {
     Object.assign(this.settings, s); // keep the reference modules hold
     this.local.settings.sensitivity = s.gameplay.sensitivity;
+    this.local.settings.adsSensitivity = s.gameplay.adsSensitivity;
     this.local.settings.invertY = s.gameplay.invertY;
+    this.input.setBindings(resolveBindings(s.keys));
     this.local.settings.bobScale = s.gameplay.headBob;
     this.local.settings.shakeScale = s.gameplay.cameraShake;
     this.local.setFov(s.gameplay.fov);

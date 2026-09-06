@@ -2,6 +2,42 @@
 
 Compact shared state. Read `ARCHITECTURE.md` first. Keep this file short.
 
+## 2.1 (2026-09-06) — own repository, menu, progression loops, one-image hosting
+Moved out of the SideQuest monorepo into `cucumber89/BarberStrike` (import commit keeps the tree
+verbatim). Landed on top of 2.0 beta:
+- [x] **Menu** (`ui/Menu.tsx` + `Armoury` / `Profile` / `HowToPlay` / `Online`): first screen shows
+      the level card, today's challenges and the server line; every panel is one BACK deep. Lobby
+      keeps the room name, suggests one (⚄), and makes an **invite link** (`ui/invite.ts`:
+      `?room=…&mode=…`, `?join=<roomId>` auto-joins once a nickname is in). `/health` now carries
+      `players` / `rooms`; `Connection.health()` probes it with a 4 s abort.
+- [x] **Art**: `ui/art/GearArt.tsx` — 23 inline SVG line drawings (11 weapons, 6 grenades incl. the
+      launcher shell, 4 perks, 2 plates), `currentColor` so the shop tints them (brass / dim when
+      locked / white when carried). Shown in the shop, the armoury and nowhere else yet (the HUD
+      weapon panel stays text). Test asserts every id renders with ≥ 4 shapes.
+- [x] **Settings** (`settings.ts`, `ui/SettingsPanel.tsx`, tabbed): ADS sensitivity (blended by
+      `adsBlend` in `LocalPlayer.applyLook`), crosshair editor (CSS vars on `.crosshair`, live
+      preview at rest and at full bloom), HUD scale (`zoom` on `.hud`), minimap / kill feed / toasts /
+      FPS toggles, key rebinding (`InputState.setBindings`, `resolveBindings`, conflicts flagged,
+      reserved keys refused: Esc, Tab, Enter, Y, 1–3). `repairSettings` clamps every field.
+      Gotcha: the settings blob key stays `fb_settings_v1`; missing sections default, so old blobs load.
+- [x] **Progression loops** (`shared/mastery.ts`, `shared/challenges.ts`, client `profile.ts`):
+      kills per weapon → tiers BRĄZ 10 / SREBRO 30 / ZŁOTO 75 / PLATYNA 150 / DIAMENT 300, paid once
+      per tier as a summary line; three daily challenges picked by FNV-1a(day) → mulberry32, never two
+      of one family, progress per day, forgotten at local midnight; recent matches (12); profile
+      export / import / reset (`repairProfile` coerces any blob). `MatchTracker.weaponKills` feeds both.
+      Still cosmetic: nothing here changes a fight.
+- [x] **Hosting**: root `Dockerfile` (server bundle + built client in one image, `PORT` at runtime),
+      `README.md` front matter for a Hugging Face Docker Space (port 7860),
+      `.github/workflows/sync-to-hf.yml` (needs `HF_TOKEN` secret + `HF_SPACE` variable), `fly.toml`,
+      `render.yaml`, `ci.yml`. `docs/HOSTING.md` rewritten in Polish with the three paths. Not
+      verifiable here: the Docker build itself (no daemon in the sandbox) — the same steps were run
+      by hand (`pnpm build` + `PORT=7860 node apps/server/dist/index.js`).
+- [x] Typecheck fixes from the import: `SessionLike.respawnAt` in the test harness, `waveMs` /
+      `prepMs` widened to `number`, `Game.tracker` initialised at declaration.
+- Open: the HUD weapon panel could show the drawing; a language toggle (the UI is English, the
+  progression strings Polish — a deliberate 2.0 choice, left as is); a server-side profile if
+  accounts ever arrive (the rules already live in `shared/` for that reason).
+
 ## 1.0 beta (2026-09-03) — after the first real playtest
 See `V1_BETA_PLAN.md` for the measured reasoning. Landed, in order:
 - [x] Version string (`GAME_VERSION`) in menu / pause / F3 / `/health`.

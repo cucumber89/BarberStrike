@@ -104,7 +104,7 @@ export class InputState {
   markRequested = false;
 
   private target: HTMLElement | null = null;
-  private bindings = DEFAULT_BINDINGS;
+  private bindings: KeyBindings = DEFAULT_BINDINGS;
   private lastWheelAt = -Infinity;
   private lastSprintDownAt = -Infinity;
   /**
@@ -113,6 +113,15 @@ export class InputState {
    * the raw event stream knows it, so it is resolved here.
    */
   private aimSuppressed = false;
+
+  /** 2.1: rebinding. Held keys are released, so a key that changed meaning mid-press cannot stick. */
+  setBindings(b: KeyBindings): void {
+    this.bindings = b;
+    this.keys.clear();
+    this.tacLatched = false;
+  }
+
+  get currentBindings(): KeyBindings { return this.bindings; }
 
   attach(target: HTMLElement): void {
     this.target = target;

@@ -1,7 +1,7 @@
 /** Simulation / networking constants shared by client and server. Single source of truth. */
 
 /** Product version shown in the menu, pause screen, telemetry and `/health`. Bump with package.json. */
-export const GAME_VERSION = "2.0 beta";
+export const GAME_VERSION = "2.1";
 
 export const TICK_RATE = 60;
 export const TICK_DT = 1 / TICK_RATE;

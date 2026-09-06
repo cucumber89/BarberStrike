@@ -161,8 +161,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   /** Rotation counter for the bots' path-search permission; see `Session.planPhase`. */
   private navTick = 0;
   /** Respawn-wave cadence for this room (MATCH defaults; overridable in dev/test only). */
-  private waveMs = MATCH.waveMs;
-  private prepMs = MATCH.prepMs;
+  private waveMs: number = MATCH.waveMs;
+  private prepMs: number = MATCH.prepMs;
   private roamPoints: NavPoint[] = [];
   private senseEnemies: BotView[] = [];
 

@@ -129,6 +129,21 @@ export class Connection {
   private reconnectHandlers: ((active: boolean) => void)[] = [];
   onReconnecting(cb: (active: boolean) => void): void { this.reconnectHandlers.push(cb); }
 
+  /** 2.1: the server's health line, for the menu. Resolves `ok: false` rather than throwing. */
+  static async health(url: string): Promise<{ ok: boolean; version?: string; players?: number; rooms?: number }> {
+    try {
+      const ctl = new AbortController();
+      const t = window.setTimeout(() => ctl.abort(), 4000);
+      const res = await fetch(`${httpUrl(url)}/health`, { signal: ctl.signal });
+      window.clearTimeout(t);
+      if (!res.ok) return { ok: false };
+      const j = (await res.json()) as { ok?: boolean; version?: string; players?: number; rooms?: number };
+      return { ok: j.ok === true, version: j.version, players: j.players, rooms: j.rooms };
+    } catch {
+      return { ok: false };
+    }
+  }
+
   static async listRooms(url: string): Promise<RoomListing[]> {
     const res = await fetch(`${httpUrl(url)}/rooms`);
     if (!res.ok) throw new Error(`rooms: ${res.status}`);
