@@ -346,8 +346,10 @@ test.describe("two clients", () => {
     await expect.poll(() => a.evaluate(() => window.__fb.game.stats.throws), { timeout: 5000 }).toBeGreaterThan(0);
     // Cooked ~0.9 s of a 3.2 s fuse: the boom lands within a few seconds.
     await expect.poll(() => a.evaluate(() => window.__fb.game.stats.booms), { timeout: 10_000 }).toBeGreaterThan(booms0);
-    // Both clients saw the throw (broadcast) — B never threw anything.
-    await expect.poll(() => b.evaluate(() => window.__fb.game.stats.throws), { timeout: 3000 }).toBeGreaterThan(0);
+    // Both clients saw the throw (broadcast) — B never threw anything. Ten seconds, not three: B is
+    // an idle second client on a SOFTWARE renderer at ~3 fps since the procedural characters run at
+    // every preset, and a message is only handled between its frames. MEASURED: it lands ~1 s late.
+    await expect.poll(() => b.evaluate(() => window.__fb.game.stats.throws), { timeout: 10_000 }).toBeGreaterThan(0);
     // Server-side count agrees (snapshot after the optimistic decrement).
     await a.waitForTimeout(400);
     expect((await hud(a)).lethalCount).toBe(0);
