@@ -4,6 +4,8 @@ services:
     name: barberstrike
     runtime: docker
     plan: free
+    # Frankfurt: ~30 ms from Poland. The default (Oregon) measured ~200 ms on the first deploy.
+    region: frankfurt
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     envVars:

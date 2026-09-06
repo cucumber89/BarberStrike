@@ -66,6 +66,19 @@ poczeka, reszta wchodzi od razu). RAM 512 MB wystarcza na 12 graczy.
 
 Każdy kolejny push do `main` przebudowuje usługę automatycznie.
 
+### Region: Frankfurt, nie Oregon (ping)
+
+`render.yaml` ustawia `region: frankfurt`. Domyślny region Rendera to Oregon (USA) i z Polski daje to
+**ok. 200 ms** pingu (zmierzone na pierwszym wdrożeniu); Frankfurt daje 25–40 ms. Render **nie pozwala
+zmienić regionu istniejącej usługi**, więc jeśli usługa powstała przed tą zmianą:
+
+1. Dashboard → usługa `barberstrike` → **Settings** → na dole **Delete Web Service**.
+2. **New → Blueprint** → to samo repo → **Apply**. Nowa usługa powstanie już we Frankfurcie, pod tym
+   samym adresem (nazwa wraca do puli po usunięciu; jeśli Render doda przyrostek, po prostu wyślij
+   znajomym nowy link).
+
+W grze ping widać po F3 albo w tabeli wyników (Tab).
+
 ### Sprawdzenie
 
 ```

@@ -60,6 +60,8 @@ export interface CharacterInput {
   tac?: boolean;
   /** Bomb Plant (2.2): this player carries the charge — a pack on the back everyone can read. */
   bomb?: boolean;
+  /** Slide (2.3): leaning back on one leg, the other out front. */
+  slide?: boolean;
 }
 
 /** Joint angles exposed for tests/tools (radians). */
@@ -121,6 +123,7 @@ export class Character {
   private blendAir = 0;
   private blendLean = 0;
   private blendTac = 0;
+  private blendSlide = 0;
   private blendRun = 0;
   private deathT = -1;
   private deathDir = 0;       // world yaw the body falls towards
@@ -352,6 +355,7 @@ export class Character {
 
     const k = Math.min(1, dt * 10);
     this.blendCrouch += ((inp.crouch ? 1 : 0) - this.blendCrouch) * k;
+    this.blendSlide += ((inp.slide ? 1 : 0) - this.blendSlide) * Math.min(1, dt * 14);
     this.blendLean += ((inp.lean ?? 0) - this.blendLean) * k;
     this.blendTac += ((inp.tac ? 1 : 0) - this.blendTac) * k;
     const leanB = this.blendLean, tacB = this.blendTac;
@@ -385,14 +389,14 @@ export class Character {
     if (inp.grounded && inp.speed > 0.3) this.phase += dt * freq; else this.phase += dt * 1.5 * this.blendAir;
     const s = Math.sin(this.phase), c = Math.cos(this.phase);
     const run = this.blendRun * (1 - this.blendAir);
-    const cr = this.blendCrouch;
+    const cr = this.blendCrouch, sl = this.blendSlide;
     const idle = (1 - run) * (1 - this.blendAir);
     const shift = Math.sin(this.time * 0.9) * idle;       // slow weight shift
     const breathe = Math.sin(this.time * 1.6) * idle;
 
     // Hips: crouch lowers, running bounces, landing squashes; lean into strafes and turns.
     const bounce = Math.abs(c) * 0.03 * run;
-    this.hips.position.y = 0.95 - 0.38 * cr + bounce - 0.05 * this.blendAir - 0.16 * this.landSquash + 0.006 * shift;
+    this.hips.position.y = 0.95 - 0.38 * cr + bounce - 0.05 * this.blendAir - 0.16 * this.landSquash + 0.006 * shift - 0.1 * sl;
     const strafe = Math.sin(inp.moveDir);
     this.root.rotation.z = -strafe * 0.08 * run + this.turnLean * (0.4 + 0.6 * run) + 0.02 * shift * (1 - run);
     this.root.rotation.x = 0;
@@ -405,17 +409,18 @@ export class Character {
     // Lean (drop 4): the torso tips sideways (negative Z = towards +X = the character's right) and the
     // hips shift a little the other way, so the feet stay planted and the head moves ~0.45 m.
     this.torso.rotation.z = -fl * 0.25 * this.flinchX - 0.42 * leanB;
-    this.torso.rotation.x += 0.12 * tacB;
+    this.torso.rotation.x += 0.12 * tacB - 0.5 * sl;
     this.hips.position.x = -0.05 * leanB;
-    this.head.rotation.x = inp.pitch * 0.45 - 0.2 * cr + fl * 0.5 * this.flinchZ;
+    this.head.rotation.x = inp.pitch * 0.45 - 0.2 * cr + fl * 0.5 * this.flinchZ + 0.3 * sl;
     this.head.rotation.y = fl * 0.55 * this.flinchX;
     this.head.rotation.z = -0.12 * leanB;
     // Legs: alternating swing; airborne = tucked; landing = knees bend.
     const swing = 0.75 * run * (1 + 0.5 * sprint);
-    this.legR.rotation.x = s * swing - 0.9 * cr + 0.5 * this.blendAir - 0.4 * this.landSquash;
-    this.legL.rotation.x = -s * swing - 0.9 * cr - 0.2 * this.blendAir - 0.4 * this.landSquash;
-    this.shinR.rotation.x = Math.max(0, -c) * 1.1 * run + 1.0 * cr + 0.6 * this.blendAir + 0.8 * this.landSquash;
-    this.shinL.rotation.x = Math.max(0, c) * 1.1 * run + 1.0 * cr + 0.9 * this.blendAir + 0.8 * this.landSquash;
+    // Slide: the right leg shoots out straight ahead, the left folds under, the torso lies back.
+    this.legR.rotation.x = s * swing - 0.9 * cr + 0.5 * this.blendAir - 0.4 * this.landSquash - 0.55 * sl;
+    this.legL.rotation.x = -s * swing - 0.9 * cr - 0.2 * this.blendAir - 0.4 * this.landSquash + 0.25 * sl;
+    this.shinR.rotation.x = Math.max(0, -c) * 1.1 * run + 1.0 * cr + 0.6 * this.blendAir + 0.8 * this.landSquash - 0.95 * sl;
+    this.shinL.rotation.x = Math.max(0, c) * 1.1 * run + 1.0 * cr + 0.9 * this.blendAir + 0.8 * this.landSquash + 0.5 * sl;
     // Arms: weapon held two-handed; counter-swing with the stride; kick on fire; reload = left hand down; flinch tightens.
     const aim = inp.pitch;
     const idleSway = Math.sin(this.time * 1.3) * 0.02;

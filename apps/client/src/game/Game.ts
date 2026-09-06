@@ -122,6 +122,7 @@ export class Game {
   private frameCbs = new Set<(dt: number) => void>();
   private afterCbs = new Set<(dt: number) => void>();
   private wasGrounded = true;
+  private wasSliding = false;
   private stepAcc = 0;
   /** Total rendered frames (debug overlay / tests). */
   frameCount = 0;
@@ -517,6 +518,9 @@ export class Game {
     if (groundedBefore && !b.grounded && b.vy > 0) this.events.emit("jump", {});
     if (!groundedBefore && b.grounded) this.events.emit("landed", { impactSpeed: Math.abs(vyBefore) });
     this.wasGrounded = b.grounded;
+    const sliding = b.slide > 0;
+    if (sliding && !this.wasSliding) this.events.emit("slide", {});
+    this.wasSliding = sliding;
     const speed = Math.hypot(b.vx, b.vz);
     if (b.grounded && speed > 1.0) {
       const stride = b.crouching ? 0.55 : speed > 6 ? 0.78 : 0.68; // metres per step

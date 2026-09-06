@@ -28,7 +28,7 @@ export function HowToPlay({ settings, onControls }: { settings: Settings; onCont
       </section>
       <section>
         <h3>MOVEMENT</h3>
-        <p><b>{key("sprint")}</b> sprints; tap it twice for a <b>tactical sprint</b> — faster, gun up, on a 4 s budget. <b>{key("leanLeft")} / {key("leanRight")}</b> lean around corners without stepping out. <b>{key("crouch")}</b> tightens your spread. Aiming down sights (RMB) halves it; sprinting, jumping and getting hit widen it.</p>
+        <p><b>{key("sprint")}</b> sprints; tap it twice for a <b>tactical sprint</b> — faster, gun up, on a 4 s budget. <b>{key("leanLeft")} / {key("leanRight")}</b> lean around corners without stepping out. <b>{key("crouch")}</b> tightens your spread; tap it <b>while sprinting</b> to <b>slide</b> — a burst of speed at crouch height that bleeds off in under a second, with a jump out of it if you want the momentum. Aiming down sights (RMB) halves it; sprinting, jumping and getting hit widen it.</p>
       </section>
       <section>
         <h3>PROGRESS</h3>

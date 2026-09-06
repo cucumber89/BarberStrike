@@ -1100,6 +1100,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       p.x = b.x; p.y = b.y; p.z = b.z;
       p.vx = b.vx; p.vy = b.vy; p.vz = b.vz;
       p.grounded = b.grounded; p.crouch = b.crouching;
+      const sl = Math.round(b.slide), scd = Math.round(b.slideCd);
+      if (p.slide !== sl) p.slide = sl;
+      if (p.slideCd !== scd) p.slideCd = scd;
       p.yaw = s.lastYaw; p.pitch = s.lastPitch;
       // Drop 4: lean / tac from the last simulated buttons, for origin checks and the remote pose.
       s.lean = leanOf(s.prevButtons, b.crouching);

@@ -98,6 +98,9 @@ Troubleshooting:
   letter, lit corner posts, stencilled letters and site signs on the walls, cover to plant behind.
 - Materials get relief: every wall / floor look now has a generated normal map and colour variation
   (`world/materials.ts`), so brick, plaster, concrete and metal read as surfaces, not flat paint.
+- Slide: tap crouch while sprinting for a burst past sprint speed at crouch height that bleeds
+  off in under a second; jump out of it to keep the momentum (`shared/movement.ts`, SLIDE).
+- Render region is Frankfurt (`render.yaml`); the default Oregon gave ~200 ms from Poland.
 - The main menu has a live cover, CS 1.6 style: the game's own characters, both sides, lit by a
   brass and a violet practical, idling behind the menu on a wet floor (`view/MenuCover.ts`).
 - The district is dressed as a place people use (`shared/districtDressing.ts`, `world/props.ts`):
