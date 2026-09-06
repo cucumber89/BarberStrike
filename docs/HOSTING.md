@@ -9,10 +9,15 @@ Są trzy sposoby, od najprostszego dla „raz na wieczór” do „stały adres 
 | Sposób | Koszt | Kiedy | Adres |
 |---|---|---|---|
 | **A. Hostuj z własnego PC** (`pnpm host` + tunel) | 0 zł | jeden wieczór | zmienia się co uruchomienie |
-| **B. Hugging Face Spaces** (Docker, darmowy CPU) | 0 zł | na stałe, hobbystycznie | `https://<user>-barberstrike.hf.space` |
-| **C. Fly.io / Render / Railway / VPS** | od 0 zł | na stałe, więcej kontroli | własna domena |
+| **B. Render** (Docker, plan Free) | 0 zł | na stałe, hobbystycznie | `https://barberstrike.onrender.com` |
+| **C. Koyeb / Fly.io / Railway / VPS** | od 0 zł | na stałe, więcej kontroli | własna domena |
 
 Wszystkie używają tego samego `Dockerfile` w katalogu głównym repo (B i C) albo `pnpm host` (A).
+
+> **Hugging Face Spaces** — od 2026 typ Space „Docker” jest oznaczony jako **Paid** (na zrzucie z
+> formularza: Static i Gradio darmowe, Docker płatny). Static nie uruchomi serwera, a Gradio to
+> Python, więc dla tej gry HF przestał być darmową opcją. Workflow `sync-to-hf.yml` zostaje w repo
+> na wypadek płatnego planu; nie robi nic, dopóki nie ustawisz zmiennej `HF_SPACE`.
 
 ---
 
@@ -42,50 +47,49 @@ każdym uruchomieniu.
 
 ---
 
-## B. Hugging Face Spaces (darmowy, stały adres)
+## B. Render (darmowy, stały adres) — zalecane
 
-Space typu **Docker** uruchamia nasz `Dockerfile` i wystawia go pod `https://<login>-<nazwa>.hf.space`
-z HTTPS i WebSocketami. Darmowy CPU basic (2 vCPU, 16 GB RAM) w zupełności starcza na 12 graczy.
-Space usypia po 48 h bez ruchu i budzi się przy pierwszym wejściu (ok. 30–60 s).
+Render buduje nasz `Dockerfile` prosto z GitHuba i daje adres `https://<nazwa>.onrender.com` z HTTPS
+i WebSocketami. Plan **Free**: 750 godzin miesięcznie (starcza na jedną usługę non stop), usługa
+**usypia po 15 minutach bez ruchu** i budzi się przy pierwszym wejściu (30–60 s — pierwsza osoba
+poczeka, reszta wchodzi od razu). RAM 512 MB wystarcza na 12 graczy.
 
-### Jednorazowa konfiguracja (ok. 5 minut)
+### Konfiguracja (ok. 5 minut, karta nie jest wymagana)
 
-1. Załóż Space: https://huggingface.co/new-space
-   - **Space name**: `barberstrike`
-   - **SDK**: **Docker** → **Blank**
-   - **Hardware**: CPU basic (free)
-   - **Visibility**: Public (znajomi nie muszą się logować)
-2. Zrób token z prawem **write**: https://huggingface.co/settings/tokens
-3. W GitHubie, w repo `cucumber89/BarberStrike` → **Settings → Secrets and variables → Actions**:
-   - **Secrets** → New repository secret: `HF_TOKEN` = token z punktu 2
-   - **Variables** → New repository variable: `HF_SPACE` = `sd89/barberstrike` (twój login/nazwa Space)
-4. Zmerguj gałąź do `main` (albo uruchom ręcznie **Actions → Sync to Hugging Face Space → Run workflow**).
+1. Zmerguj gałąź do `main` w GitHubie (Render buduje z gałęzi, którą wskażesz; `main` jest najprościej).
+2. Wejdź na https://dashboard.render.com i zaloguj się kontem GitHub.
+3. **New → Blueprint** → wybierz repo `cucumber89/BarberStrike` → Render sam czyta `render.yaml`
+   (usługa `barberstrike`, runtime Docker, plan free, health check `/health`) → **Apply**.
+   Alternatywnie **New → Web Service** → repo → Runtime: Docker → Instance type: Free → Create.
+4. Pierwszy build trwa 5–8 minut (widać log). Gdy status zmieni się na **Live**, adres gry to
+   **`https://barberstrike.onrender.com`** (albo z przyrostkiem, jeśli nazwa była zajęta — Render pokaże).
 
-Workflow `.github/workflows/sync-to-hf.yml` wypycha repo do Space; Space buduje obraz (pierwszy raz
-5–8 minut, potem szybciej) i uruchamia serwer na porcie 7860 (front matter w `README.md` mówi Space'owi,
-że to Docker na porcie 7860). Adres gry: **`https://sd89-barberstrike.hf.space`** — to jest link dla
-znajomych.
-
-### Ręcznie, bez GitHub Actions
-
-```bash
-git remote add hf https://huggingface.co/spaces/sd89/barberstrike
-git push hf main     # poprosi o login (user) i token (hasło)
-```
+Każdy kolejny push do `main` przebudowuje usługę automatycznie.
 
 ### Sprawdzenie
 
 ```
-https://sd89-barberstrike.hf.space/health   → {"ok":true,"game":"BARBERSTRIKE","players":0,...}
+https://barberstrike.onrender.com/health   → {"ok":true,"game":"BARBERSTRIKE","players":0,...}
 ```
 
-W menu gry linia **ONLINE · N PLAYING** ma świecić na zielono.
+W menu gry linia **ONLINE · N PLAYING** ma świecić na zielono, a panel **PLAY ONLINE** pokaże
+gotowy link do wysłania znajomym.
+
+### Żeby serwer nie usypiał w trakcie wieczoru
+
+Usypianie liczy się od ostatniego żądania HTTP, a gra po wejściu używa WebSocketu. Dopóki ktoś jest
+w menu lub w meczu, klient odpytuje `/health` (menu co 5 s) i utrzymuje socket, więc w praktyce
+usługa nie zasypia w trakcie grania. Jeśli chcesz, żeby budziła się szybciej dla pierwszej osoby,
+darmowy monitor typu UptimeRobot / cron-job.org odpytujący `/health` co 10 minut załatwia sprawę.
 
 ---
 
-## C. Fly.io / Render / własny serwer
+## C. Koyeb / Fly.io / Railway / własny serwer
 
 Wszystkie budują ten sam obraz. Serwer czyta `PORT` ze środowiska; nic więcej nie trzeba ustawiać.
+
+**Koyeb** (plan Free: jedna usługa web, też usypia bez ruchu): https://app.koyeb.com → Create
+Service → GitHub → repo → Builder: **Dockerfile** → Instance: Free → Deploy. Adres: `https://<nazwa>-<login>.koyeb.app`.
 
 **Fly.io** (`fly.toml` jest w repo; region `waw` = Warszawa):
 
@@ -94,9 +98,6 @@ fly launch --copy-config --no-deploy    # nazwa aplikacji: barberstrike (lub wł
 fly deploy
 fly open
 ```
-
-**Render**: New → Blueprint → wskaż repo; `render.yaml` opisuje usługę (plan free usypia po 15 min
-bez ruchu, budzi się w ~30 s).
 
 **Railway**: New project → Deploy from GitHub → wykryje `Dockerfile`. Ustaw *Networking → Generate domain*.
 
@@ -116,7 +117,7 @@ przekazuje WebSockety bez konfiguracji.
 
 | Zmienna | Domyślnie | Co robi |
 |---|---|---|
-| `PORT` | 2567 | Port strony i gry (HF Spaces: 7860, Fly: 8080). |
+| `PORT` | 2567 | Port strony i gry (Render/Koyeb ustawiają własny, Fly: 8080). |
 | `BS_CLIENT_DIR` | auto | Gdzie leży zbudowany klient, jeśli nie obok serwera. |
 | `CORS_ORIGIN` | dowolny | Lista originów po przecinku, gdy strona jest serwowana z innego miejsca niż serwer (np. klient na Vercel). |
 | `FB_DEV_TOOLS` | wyłączone | Komunikaty deweloperskie (`dev:teleport`, `dev:endmatch`). **Nigdy** na publicznym serwerze. |

@@ -3,14 +3,15 @@
 A multiplayer browser FPS set in a premium barber shop district after closing time.
 Team Deathmatch, Free For All and Domination, 2–12 players, server-authoritative, playable in Chrome/Chromium.
 
-> The YAML block at the top of this file is for Hugging Face Spaces (it tells a Docker Space which
-> port the game listens on). GitHub shows it as a small table; it is harmless everywhere else.
+> The YAML block at the top of this file is for a Hugging Face Docker Space (now a paid tier). GitHub
+> shows it as a small table; it is harmless everywhere else.
 
 ## Play online
 The server serves the page, so **one address is the whole setup**: whoever opens it plays there.
 `docs/HOSTING.md` (Polish) walks through the three ways to get such an address — from your own PC
-with a tunnel, a free Hugging Face Space (the repo has a GitHub Action that syncs to one), or
-Fly.io / Render / a VPS with the root `Dockerfile`. In the game, **PLAY ONLINE** shows the server
+with a tunnel, a free Render service built from the root `Dockerfile` (`render.yaml` is the
+blueprint), or Koyeb / Fly.io / a VPS with the same image. (Hugging Face Docker Spaces have become a
+paid tier; the sync workflow stays for anyone on that plan.) In the game, **PLAY ONLINE** shows the server
 line and the invite link; the lobby's **INVITE** button makes a link with the room name filled in
 (`?room=late-shift&mode=tdm`).
 

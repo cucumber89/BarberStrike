@@ -65,7 +65,7 @@ export function Online({ status, room, mode }: { status: ServerStatus | null; ro
             </div>
             <div className="host-option">
               <b>PUT IT ON A SERVER</b>
-              <span>Always on, one address for good. Hugging Face Spaces, Fly.io or Render run the Docker image.</span>
+              <span>Always on, one address for good. Render (free), Koyeb or Fly.io run the Docker image straight from GitHub.</span>
               <pre>{`docs/HOSTING.md`}</pre>
               <small>Step-by-step for each host, including the free tiers.</small>
             </div>
