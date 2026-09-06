@@ -87,6 +87,7 @@ export const installAudio: GameModule = (ctx) => {
   on("weaponEquip", (e) => { reloadVoice?.stop(); reloadVoice = null; play(sfx.equip(WEAPONS[e.weapon].equipMs), Priority.reload, 0.7); });
   on("footstep", (e) => play(sfx.footstep(e.sprint, e.crouch), Priority.movement, 0.55));
   on("jump", () => play(sfx.jump, Priority.movement, 0.7));
+  on("slide", () => play(sfx.slide(), Priority.movement, 0.7));
   on("landed", (e) => { if (e.impactSpeed > 1.5) play(sfx.landing(e.impactSpeed), Priority.movement, 0.8); });
   on("localHit", (e) => { play(sfx.hitConfirm(e.kill ? "kill" : e.headshot ? "head" : "body"), Priority.hit, 0.9); if (e.armor && !e.kill) play(sfx.plate(false), Priority.hit, 0.35); });
   on("localDamaged", (e) => {

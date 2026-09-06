@@ -16,6 +16,8 @@ export interface NetPlayer {
   armor: number; perks: { get(id: string): number | undefined };
   /** Drop 4: lean (-1/0/1) and tactical sprint, for the third-person pose. */
   lean: number; tac: boolean;
+  /** Slide (2.3): ms left and cooldown, for reconciliation and the remote pose. */
+  slide: number; slideCd: number;
   /** Drop 5: scoreboard assists; server-driven bot. */
   assists: number; bot: boolean;
   /** Bomb Plant (2.2): defuse kit carried. */

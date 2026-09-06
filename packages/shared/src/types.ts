@@ -77,6 +77,9 @@ export interface BodyState {
   jumpCooldown: number;
   /** Tactical sprint budget left (ms); drains while tac-sprinting, refills otherwise (drop 4). */
   tac: number;
+  /** Slide (2.3): ms of slide left (0 = not sliding) and ms before the next one may start. */
+  slide: number;
+  slideCd: number;
 }
 
 /** Client→server message names. */

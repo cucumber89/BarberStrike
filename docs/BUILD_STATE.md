@@ -43,6 +43,18 @@ Compact shared state. Read `ARCHITECTURE.md` first. Keep this file short.
       Camera uses a FIXED HORIZONTAL fov so the cast stays at the edges on 4:3 too (measured at
       1024×768: with a vertical fov they crowded under the menu). `.menu-cover-shade` darkens the
       middle so the text stays readable; sub-panels dim it further. Not shown on touch-only devices.
+- [x] **Slide** (`shared/movement.ts` `SLIDE`, `BodyState.slide/slideCd`): crouch PRESSED out of a sprint
+      (≥ 6.2 m/s, on the ground, off cooldown) → speed × 1.12, crouch height, its own friction (× 0.37
+      after the 800 ms), a sideways nudge from the strafe keys, no speed clamp; ends on the timer,
+      on crouch release, below 3.2 m/s, or into a jump (which keeps the speed — the clamp is skipped
+      on that frame); 700 ms cooldown. Replicated as `slide` / `slideCd` (uint16 ms) so the client
+      reconciles the same body and remotes get the pose (`CharacterInput.slide`: torso back, right leg
+      out). Local feel: FOV +6 %, a 6 cm dip, a touch of roll, a "cloth over concrete" sound
+      (`sfx.slide`). Tests: `slide.movement.test.ts` (5) and the e2e "2.3: a slide" — predicted and
+      replicated in a real room with ≤ 2 corrections.
+- [x] **Render region**: `render.yaml` now says `frankfurt`. MEASURED: the default Oregon service gave
+      ~200 ms ping from Poland. Render cannot move an existing service, so HOSTING.md tells the owner
+      to delete it and re-apply the blueprint.
 - [x] **Hosting fixes after the first Render deploy**: `ENV CI=true` in the Dockerfile (pnpm refused to
       purge node_modules without a TTY) and `net/serverUrl.ts` — a hosted page talks to its own origin
       instead of `:2567` (the old fallback timed out on Render). Both measured on the live service.

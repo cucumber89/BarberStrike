@@ -57,6 +57,9 @@ export class PlayerState extends Schema {
   // ---- drop 4: lean (-1 / 0 / 1) and tactical sprint, for the third-person pose.
   @type("int8") lean = 0;
   @type("boolean") tac = false;
+  /** Slide (2.3): ms left / cooldown, replicated so the predicting client reconciles the same body. */
+  @type("uint16") slide = 0;
+  @type("uint16") slideCd = 0;
   // ---- drop 5: scoreboard v2 assists; bots are flagged so the HUD can tag them.
   @type("uint16") assists = 0;
   @type("boolean") bot = false;
