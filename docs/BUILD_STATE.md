@@ -32,6 +32,16 @@ verbatim). Landed on top of 2.0 beta:
       `render.yaml`, `ci.yml`. `docs/HOSTING.md` rewritten in Polish with the three paths. Not
       verifiable here: the Docker build itself (no daemon in the sandbox) — the same steps were run
       by hand (`pnpm build` + `PORT=7860 node apps/server/dist/index.js`).
+- [x] **Merged the owner's ChatGPT branch** (sidequest `chatgpt-frankibarber`, grafted onto the import
+      commit so git could three-way merge it): individual 3.2 s respawns replace the waves in TDM /
+      FFA / DOM (owner decision — do not bring waves back); **Bomb Plant** (`shared/bomb.ts`, rounds,
+      buy phase, sides swap at 6, first to 7, its own economy); smoke blocks bots' sight
+      (`shared/smoke.ts`); district 62 → 98 m wide (`shared/districtExpansion.ts`, two new interiors);
+      procedural characters and bevelled weapons at every preset (the imported character / weapon
+      packs are no longer used — the scenery toggle keeps the prop packs only). Resolutions: the
+      plant / defuse key is the rebindable `objective` action (T); HOW TO PLAY explains Bomb instead
+      of waves; `wavesSurvived` now counts Bomb rounds survived (labels updated, stat kept).
+      `FABLE_HANDOFF.md` at the root is ChatGPT's own working note, kept verbatim.
 - [x] Typecheck fixes from the import: `SessionLike.respawnAt` in the test harness, `waveMs` /
       `prepMs` widened to `number`, `Game.tracker` initialised at declaration.
 - Open: the HUD weapon panel could show the drawing; a language toggle (the UI is English, the

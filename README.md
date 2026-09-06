@@ -97,6 +97,8 @@ Troubleshooting:
   and profile export / import / reset.
 - Invite links (`?room=…&mode=…`, `?join=<roomId>`), `/health` reports players and rooms.
 - One Docker image for server + client (`Dockerfile`), Hugging Face sync workflow, `fly.toml`, `render.yaml`, CI.
+- Merged the owner's parallel ChatGPT work: Bomb Plant, smoke, the wider district, procedural
+  characters, individual respawns (see "Procedural combat and map update" below).
 
 ## Production build
 ```
