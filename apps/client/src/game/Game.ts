@@ -98,7 +98,7 @@ export class Game {
   private lastHudSync = 0;
   private killFeedKey = 0;
   /** Progression (2.0): counts the local player's match, then pays it into the profile at the end. */
-  private readonly tracker: MatchTracker;
+  private readonly tracker = new MatchTracker();
 
   /**
    * The whistle: turn the match into XP, save the profile and hand the summary to the HUD.
@@ -156,10 +156,11 @@ export class Game {
     this.mapDef = mapDef;
     const world = buildCollisionWorld(mapDef);
     this.world = world;
-    // Drop 6/6b: optional glTF assets (public/models/manifest.json); an empty manifest costs one
-    // fetch. LOW turns them off entirely — the models are cheap in draw calls but a skinned
-    // character is vertex work a weak renderer pays for every frame.
-    const assets = this.settings.graphics.importedModels ? await loadAssetManifest() : EMPTY_ASSETS;
+    // Optional scenery packs; LOW turns these off entirely.
+    const scenery = this.settings.graphics.importedModels ? await loadAssetManifest() : EMPTY_ASSETS;
+    // Characters and weapons share our procedural art at every quality level. Saved graphics
+    // settings can still enable scenery packs, but cannot replace the new combat silhouettes.
+    const assets: AssetManifest = { ...scenery, characters: [], weapons: {} };
     const models = Object.keys(assets.models).length ? new ModelLibrary(scene, assets.models) : undefined;
     const propSources = await this.prepareAssets(scene, assets);
     this.map = buildMap(scene, mapDef, { shadows: this.settings.graphics.shadows !== "off", shadowMapSize: this.settings.graphics.shadows === "high" ? 2048 : 1024, models, propSources });
@@ -182,7 +183,6 @@ export class Game {
     this.local.serverNow = () => this.conn.serverNow();
     this.local.onTac = (on) => this.events.emit("tacSprint", { on });
     this.throwing = new Throwing(this.conn, this.local);
-    this.tracker = new MatchTracker();
     this.throwing.onPrime = (kind, cookable) => this.events.emit("grenadePrime", { kind, cookable });
     this.throwing.onThrow = (kind) => this.events.emit("grenadeThrow", { kind });
     this.throwing.onCancel = () => this.events.emit("grenadeCancel", {});
@@ -267,9 +267,7 @@ export class Game {
         this.throwing.cancel();
         if (this.shopOpen) this.setShopOpen(false, false);
         Object.assign(patch, {
-          // Warm-up only. During a match respawn is a WAVE and the HUD counts down the phase clock
-          // instead — see `respawnInMs`. Leaving this local guess in place for a match would have
-          // shown a confident, wrong "RESPAWN IN 3".
+          // Individual respawn countdown in both warm-up and the live match.
           alive: false, health: 0, respawnAt: performance.now() + RESPAWN_DELAY_MS,
           killerName: e.killer === e.victim ? "" : e.killerName, killerWeapon: e.weapon,
         });
@@ -297,7 +295,7 @@ export class Game {
       if (e.phase === MatchPhase.Prep) this.throwing.cancel();
       // Progression (2.0). A room is reused between matches, so the counters have to be reset by
       // the START of one — otherwise the second match pays for the first one's kills as well.
-      if (e.phase === MatchPhase.Playing && prevPhase !== MatchPhase.Prep) {
+      if ((e.phase === MatchPhase.Playing && prevPhase !== MatchPhase.Prep) || (e.phase === MatchPhase.Prep && prevPhase === MatchPhase.Countdown)) {
         this.tracker.start(c.sessionId);
         hud.set({ reward: null }); // the previous match's summary is not this match's news
       }
@@ -496,6 +494,7 @@ export class Game {
     for (const cb of this.afterCbs) cb(dtMs);
 
     if (now - this.lastHudSync > 100) {
+      if (this.conn.state.mode === "bomb") this.conn.send("objective", this.input.objectiveHeld && this.local.alive && !this.shopOpen);
       this.lastHudSync = now;
       this.syncHud(now);
     }
@@ -535,7 +534,8 @@ export class Game {
     s.players.forEach((p) => rows.push({ id: p.id, name: p.name, team: p.team as Team, kills: p.kills, deaths: p.deaths, score: p.score, ping: p.ping, alive: p.alive, connected: p.connected, assists: p.assists ?? 0, money: p.money, bot: !!p.bot }));
     rows.sort((a, b) => b.score - a.score || b.kills - a.kills);
     const near = this.nearStation();
-    const windowLeft = me ? buyWindowLeft({ now: this.conn.serverNow(), spawnedAt: me.spawnedAt ?? 0, phase: s.phase, alive: me.alive, nearStation: near }) : 0;
+    const windowLeft = me ? buyWindowLeft({ now: this.conn.serverNow(), spawnedAt: me.spawnedAt ?? 0, phase: s.phase, alive: me.alive, nearStation: near,
+      bombBuying: s.mode === "bomb" ? s.phase === MatchPhase.Prep && s.bomb.stage === "buy" : undefined, releaseAt: s.phaseEndsAt }) : 0;
     const cur = hud.get();
     const scope = this.local.scopeState();
     // Drop 4: flags (Domination) and which zone we stand in.
@@ -559,6 +559,9 @@ export class Game {
       weapon: this.weapons.weapon, ammo: this.weapons.ammo, reserve: this.weapons.reserve, reloading: this.weapons.reloading,
       phase: s.phase, phaseEndsAt: s.phaseEndsAt, matchEndsAt: s.matchEndsAt, scoreA: s.scoreA, scoreB: s.scoreB, winner: s.winner as Team | -1,
       mode: s.mode ?? "tdm", flags, inFlag, winnerId: s.winnerId ?? "", winnerName: s.winnerName ?? "",
+      bomb: s.mode === "bomb" && s.bomb ? { round: s.bomb.round, attackTeam: s.bomb.attackTeam, stage: s.bomb.stage, carrier: s.bomb.carrier,
+        site: s.bomb.site, x: s.bomb.x, y: s.bomb.y, z: s.bomb.z, endsAt: s.bomb.endsAt, roundEndsAt: s.bomb.roundEndsAt,
+        actor: s.bomb.actor, progress: s.bomb.progress, result: s.bomb.result } : null,
       tac: this.local.tacFraction, tacOn: this.local.isTacSprinting(),
       // Drop 5: expired chat lines (unless the box is open) and marks drop out here.
       chat: !cur.chatOpen && cur.chat.some((l) => now - l.seen > CHAT.showMs) ? cur.chat.filter((l) => now - l.seen <= CHAT.showMs) : cur.chat,
@@ -596,7 +599,9 @@ export class Game {
     if (this.shopOpen) { this.setShopOpen(false); return; }
     const me = this.conn.me();
     if (!me || !me.alive) return;
-    const left = buyWindowLeft({ now: this.conn.serverNow(), spawnedAt: me.spawnedAt ?? 0, phase: this.conn.state.phase, alive: me.alive, nearStation: this.nearStation() });
+    const state = this.conn.state;
+    const left = buyWindowLeft({ now: this.conn.serverNow(), spawnedAt: me.spawnedAt ?? 0, phase: state.phase, alive: me.alive, nearStation: this.nearStation(),
+      bombBuying: state.mode === "bomb" ? state.phase === MatchPhase.Prep && state.bomb.stage === "buy" : undefined, releaseAt: state.phaseEndsAt });
     if (left <= 0) { hud.set({ shopResult: { ok: false, item: "", reason: "closed", at: performance.now() } }); return; }
     this.setShopOpen(true);
   }

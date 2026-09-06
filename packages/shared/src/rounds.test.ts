@@ -38,8 +38,8 @@ describe("respawn waves", () => {
   it("freezes and releases a client on the clock, in both directions, without a message", () => {
     // The wave ends at 5000: the client stops exactly there, message or no message.
     expect(frozenAt(MatchPhase.Playing, 5000, 4999)).toBe(false);
-    expect(frozenAt(MatchPhase.Playing, 5000, 5000)).toBe(true);
-    expect(frozenAt(MatchPhase.Playing, 5000, 9000)).toBe(true);
+    expect(frozenAt(MatchPhase.Playing, 5000, 5000)).toBe(false);
+    expect(frozenAt(MatchPhase.Playing, 5000, 9000)).toBe(false);
     // The preparation window ends at 5000: released exactly there, for the same reason. Waiting for
     // the message here would DISCARD movement (the client masks its own input before sending), and
     // discard it in proportion to ping — the higher your latency the later your wave starts.

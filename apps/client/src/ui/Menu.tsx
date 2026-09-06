@@ -17,7 +17,7 @@ const CONTROLS: [string, string][] = [
   ["W A S D", "Move"], ["Mouse", "Aim"], ["LMB", "Fire"], ["RMB", "Aim down sights"], ["Shift", "Sprint · hold breath (scope)"],
   ["Shift ×2", "Tactical sprint (faster, on a budget)"], ["Q / E", "Lean left / right"], ["Space", "Jump"], ["Ctrl / C", "Crouch"],
   ["R", "Reload"], ["1 / 2 / Wheel", "Primary / sidearm"], ["3 / V", "Clippers"], ["X", "Last weapon"], ["G", "Lethal (hold to cook a frag)"],
-  ["4", "Tactical grenade"], ["B", "Buy menu"], ["F", "Inspect weapon"], ["Tab", "Scoreboard"],
+  ["4", "Tactical grenade"], ["T (hold)", "Plant / defuse bomb · stand still"], ["B", "Buy menu"], ["F", "Inspect weapon"], ["Tab", "Scoreboard"],
   ["Enter / Y", "Chat (all / team)"], ["MMB", "Mark a spot · spot an enemy"], ["Esc", "Release mouse / pause"],
 ];
 
@@ -33,7 +33,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   const [name, setName] = useState(settings.nickname || "");
   const [roomName, setRoomName] = useState("");
   const [gameMode, setGameMode] = useState<GameMode>(() => {
-    try { const m = localStorage.getItem("fb_mode"); return m === "ffa" || m === "dom" ? m : "tdm"; } catch { return "tdm"; }
+    try { const m = localStorage.getItem("fb_mode"); return m === "ffa" || m === "dom" || m === "bomb" ? m : "tdm"; } catch { return "tdm"; }
   });
   const pickMode = (m: GameMode) => { setGameMode(m); try { localStorage.setItem("fb_mode", m); } catch { /* private mode */ } };
   const [botCount, setBotCount] = useState(() => { try { return Math.max(0, Math.min(MAX_BOTS, Number(localStorage.getItem("fb_bots") ?? 0) || 0)); } catch { return 0; } });

@@ -7,8 +7,10 @@ import { Effects } from "./Effects";
 import { Nameplates } from "./Nameplates";
 import { Grenades } from "./Grenades";
 import { Flags } from "./Flags";
+import { BombSites } from "./BombSites";
 import { Marks } from "./Marks";
-import { INTERP_DELAY_MS, WEAPONS } from "@frankibarber/shared";
+import { hud } from "../store";
+import { INTERP_DELAY_MS, MatchPhase, WEAPONS, makeRayHit } from "@frankibarber/shared";
 
 /**
  * Presentation module: first-person viewmodel, muzzle flashes, tracers, impacts, decals,
@@ -26,6 +28,7 @@ export const installView: GameModule = (ctx) => {
   const grenades = new Grenades(ctx.scene, ctx.world, ctx.serverNow);
   // Drop 4: flag poles / rings only in Domination.
   const flags = ctx.connection.state.mode === "dom" ? new Flags(ctx.scene, ctx.mapDef, () => ctx.connection.state.flags) : null;
+  const bomb = ctx.connection.state.mode === "bomb" ? new BombSites(ctx.scene) : null;
   // Drop 5: team marks as world billboards.
   const marks = new Marks(ctx.scene, ctx.remotes, () => ({ x: ctx.local.body.x, y: ctx.local.body.y, z: ctx.local.body.z }));
   grenades.setHooks({
@@ -43,6 +46,7 @@ export const installView: GameModule = (ctx) => {
   const tmpA = new Vector3();
   const tmpB = new Vector3();
   const tmpC = new Vector3();
+  const shotHit = makeRayHit();
   const density = () => ctx.settings.graphics.effects;
   effects.setDensity(density());
 
@@ -64,6 +68,7 @@ export const installView: GameModule = (ctx) => {
   };
 
   const offs = [
+    ctx.events.on("matchPhase", e => { if (e.phase === MatchPhase.Prep || e.phase === MatchPhase.Ended || e.phase === MatchPhase.Playing) grenades.reset(); }),
     ctx.events.on("localShot", (s) => {
       viewmodel.onFire();
       const kind = WEAPONS[s.weapon].kind;
@@ -71,7 +76,9 @@ export const installView: GameModule = (ctx) => {
       if (kind === "launcher") { effects.flash(localMuzzle(), 0.35, true); ctx.local.addShake(0.014); return; } // the shell draws its own arc
       const m = localMuzzle();
       effects.flash(m, 0.22, true);
-      tmpB.set(s.origin[0] + s.dir[0] * 60, s.origin[1] + s.dir[1] * 60, s.origin[2] + s.dir[2] * 60);
+      ctx.world.raycast(...s.origin, ...s.dir, WEAPONS[s.weapon].rangeMax, shotHit);
+      const distance = shotHit.hit ? shotHit.t : WEAPONS[s.weapon].rangeMax;
+      tmpB.set(s.origin[0] + s.dir[0] * distance, s.origin[1] + s.dir[1] * distance, s.origin[2] + s.dir[2] * distance);
       tracers.spawn(m, tmpB, density());
       const ej = viewmodel.ejectNode; ej.computeWorldMatrix(true);
       effects.eject(tmpC.copyFrom(ej.getAbsolutePosition()), ctx.local.yaw);
@@ -114,8 +121,11 @@ export const installView: GameModule = (ctx) => {
     ctx.events.on("localShot", (s) => {
       if (WEAPONS[s.weapon].kind !== "hitscan") return;
       tmpB.set(s.origin[0], s.origin[1], s.origin[2]);
-      tmpC.set(s.origin[0] + s.dir[0] * 80, s.origin[1] + s.dir[1] * 80, s.origin[2] + s.dir[2] * 80);
-      effects.impact(tmpB, tmpC, 0);
+      ctx.world.raycast(...s.origin, ...s.dir, WEAPONS[s.weapon].rangeMax, shotHit);
+      if (shotHit.hit) {
+        tmpC.set(s.origin[0] + s.dir[0] * shotHit.t, s.origin[1] + s.dir[1] * shotHit.t, s.origin[2] + s.dir[2] * shotHit.t);
+        effects.impact(tmpB, tmpC, 0);
+      }
     }),
     ctx.events.on("localDamaged", () => ctx.local.addShake(0.015)),
     ctx.events.on("remoteJoin", ({ player }) => { for (const m of player.character.allMeshes) ctx.mapInstance.addCaster(m); }),
@@ -149,20 +159,24 @@ export const installView: GameModule = (ctx) => {
       effects.update(dt);
       grenades.update(dt);
       flags?.update(dt);
+      if (bomb && ctx.connection.state.bomb) bomb.update(ctx.connection.state.bomb, ctx.serverNow());
       marks.update();
       const b = ctx.local.body;
       eye.set(b.x, b.y + 1.62, b.z);
+      hud.set({ smokeOpacity: grenades.obscurityAt(eye.x, eye.y, eye.z) });
       nameplates.update(ctx.remotes, eye);
     }),
   ];
 
   return () => {
+    hud.set({ smokeOpacity: 0 });
     for (const off of offs) off();
     tracers.dispose();
     viewmodel.dispose();
     effects.dispose();
     grenades.dispose();
     flags?.dispose();
+    bomb?.dispose();
     marks.dispose();
     nameplates.dispose();
   };

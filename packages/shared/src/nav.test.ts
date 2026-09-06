@@ -11,6 +11,15 @@ describe("findPath", () => {
   const map = NIGHT_DISTRICT;
   const walk = walkable(map);
 
+  it("reaches the new lookout from the yard and crosses to the container roof", () => {
+    const top = { x: -2.5, y: 2.5, z: 29.5 };
+    const roof = { x: 0.6, y: 2.5, z: 26 };
+    const up = findPath(walk, { x: -10, y: 0, z: 30 }, top);
+    expect(up).not.toBeNull();
+    expect(up!.at(-1)!.y).toBeCloseTo(2.5);
+    expect(findPath(walk, top, roof)).not.toBeNull();
+  });
+
   it("connects a south spawn to a north spawn with grid-adjacent steps that respect the jump rule", () => {
     const a = map.spawns.find((s) => s.team === 0)!;
     const b = map.spawns.find((s) => s.team === 1)!;

@@ -4,9 +4,9 @@ import type { GrenadeId } from "./grenades";
 export type Team = 0 | 1;
 
 /** Drop 4: game modes. TDM and Domination are team modes; FFA puts everyone on team 0 with no friendly checks. */
-export type GameMode = "tdm" | "ffa" | "dom";
-export const GAME_MODES: readonly GameMode[] = ["tdm", "ffa", "dom"] as const;
-export const isGameMode = (v: unknown): v is GameMode => v === "tdm" || v === "ffa" || v === "dom";
+export type GameMode = "tdm" | "ffa" | "dom" | "bomb";
+export const GAME_MODES: readonly GameMode[] = ["tdm", "ffa", "dom", "bomb"] as const;
+export const isGameMode = (v: unknown): v is GameMode => v === "tdm" || v === "ffa" || v === "dom" || v === "bomb";
 
 export enum MatchPhase {
   Waiting = "waiting",

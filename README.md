@@ -1,7 +1,7 @@
 # BARBERSTRIKE (formerly FRANKIBARBER: AFTER HOURS)
 
 A multiplayer browser FPS set in a premium barber shop district after closing time.
-Team Deathmatch, 2–12 players, server-authoritative, playable in Chrome/Chromium.
+Team Deathmatch, Free For All, Domination and Bomb Plant, 2–12 players, server-authoritative, playable in Chrome/Chromium.
 
 ## What it is
 - Fast arena-style FPS: sprint, jump, crouch, ADS, five distinct weapons (pistol, SMG, rifle, shotgun, DMR).
@@ -121,13 +121,35 @@ the game runs unchanged with the packs deleted. To swap or add: drop a CC0/CC-BY
 
 ## Known limitations
 - Desktop only; touch controls are not implemented (mobile devices get a notice).
-- Imported models are on from the MEDIUM graphics preset up and off on LOW (SETTINGS → "Imported
-  models"). A skinned character is ~12.5 k vertices against a few hundred for the procedural one, so
-  a weak or software renderer is better off with LOW; draw calls are actually LOWER with the models.
-- Audio is entirely procedural. Art is a mix: imported low-poly characters, guns and bottles (CC0/CC-BY),
-  everything else — map, props, textures, effects — generated at runtime. The shotgun and the clippers
-  have no imported model and stay procedural.
-- One map. Modes: Team Deathmatch, Free For All, Domination (picked in the lobby); bots at three levels. A second map is a stretch goal.
+- Characters and all weapons are built from geometry in the game at every graphics preset. Team
+  masks, vests, bevelled weapons and animated hands need no model downloads. The optional scenery
+  setting enables existing prop packs from MEDIUM upwards.
+- Audio is entirely procedural. Map geometry, characters, weapons and effects are generated at runtime;
+  some scenery can use the existing CC0/CC-BY packs.
+- One map. Modes: Team Deathmatch, Free For All, Domination and Bomb Plant (picked in the lobby); bots at three levels. A second map is a stretch goal.
 - Tuning (sensitivity, recoil, bob) was validated logically and via headless screenshots; final feel needs a
   real-GPU playtest.
 - See the "Known issues" section of `docs/BUILD_STATE.md` for measured decisions and caveats.
+
+## Procedural combat and map update (2026-09-06)
+- Bomb Plant is separate from continuous modes: 90 s to reach A / B, hold **T** while standing still
+  for 3 s to plant or 5 s to defuse; 40 s fuse, one life per round, sides alternate, first to four wins.
+  A dropped charge is picked up by walking over it. Late joins wait for the next round.
+- Detailed procedural facades, divided shop windows, striped awning, interior trims and cabinetry;
+  the centre repair garage now provides a sheltered west-lane passage.
+- Smoke blocks bot sight and the view from inside; flashes blind bots too. Bots use a forward field
+  of view, slower reactions, short bursts with pauses and retreat from visible fire. Spawns prefer
+  cover and avoid fire. Molotov damage respects walls; bullet trails stop at world surfaces.
+- Continuous matches: no repeating preparation windows or team respawn waves. Each casualty
+  respawns independently after 3 seconds (shorter with Fade); survivors keep fighting until
+  the match time or score limit. Applies to TDM, FFA and Domination, including bots.
+- Team-coloured masked characters with vests, pouches and knee pads; joint-local mesh merging,
+  weapons built only when equipped, shared materials preserved when another player leaves.
+- Bevelled weapon geometry, brighter satin metal, open sight notches, correct support-hand positions
+  for sidearms and long guns, and magazines that keep their authored position through equip/reload.
+- Night market cover on the main street and a stair-fed yard lookout linked to the container roof.
+- Bots choose from more affordable primaries, use weapon-specific distance, aim at range, retreat
+  with an empty magazine and keep a target when two opponents repeatedly trade nearest position.
+- Visual check: with dev servers running and `FB_DEV_TOOLS=1`, run
+  `node apps/client/e2e/tools/art-review.mjs` (`PW_CHROMIUM` can name a Chrome executable;
+  `SHOT_DIR` selects the screenshot directory).

@@ -28,6 +28,8 @@ interface Spec {
 // 1.0 beta palette: mid-tones lifted ~1.6× over 0.1 (which was black-to-dark-grey after
 // toLinearSpace) and colour on the object materials, so cover reads as objects, not as blocks.
 const SPECS: Record<MaterialTag, Spec> = {
+  wall_sand: { albedo: "#c6a27d", roughness: .85, metallic: 0, tex: "plaster", scale: 3 },
+  wall_teal: { albedo: "#668d89", roughness: .8, metallic: 0, tex: "plaster", scale: 3 },
   floor_tile: { albedo: "#3c3c40", roughness: 0.35, metallic: 0.0, tex: "checker", scale: 1.2 },
   floor_concrete: { albedo: "#6c6a66", roughness: 0.9, metallic: 0.0, tex: "concrete", scale: 3 },
   floor_wood: { albedo: "#7c5a42", roughness: 0.55, metallic: 0.0, tex: "planks", scale: 2 },
@@ -145,9 +147,9 @@ function proceduralTexture(scene: Scene, kind: NonNullable<Spec["tex"]>, tag: st
       let alpha = 255;
       const u = x / size, w = y / size;
       switch (kind) {
-        case "concrete": v = 0.45 + noise(x * 0.5, y * 0.5, seed) * 0.25 + noise(x * 0.08, y * 0.08, seed + 1) * 0.3; break;
+        case "concrete": v = 0.72 + noise(x, y, seed) * 0.08 + Math.sin(u * Math.PI * 4) * Math.cos(w * Math.PI * 4) * .025; break;
         case "asphalt": v = 0.35 + noise(x, y, seed) * 0.35 + noise(x * 0.1, y * 0.1, seed + 2) * 0.2; break;
-        case "plaster": v = 0.55 + noise(x * 0.2, y * 0.2, seed) * 0.15 + noise(x * 0.03, y * 0.03, seed + 3) * 0.3; break;
+        case "plaster": v = 0.79 + noise(x, y, seed) * 0.045 + Math.cos(u * Math.PI * 2) * Math.sin(w * Math.PI * 2) * .02; break;
         case "metal": v = 0.5 + noise(x * 0.05, y * 2, seed) * 0.2 + noise(x, y, seed + 4) * 0.1; break;
         case "brick": {
           const row = Math.floor(w * 8), off = (row % 2) * 0.5;

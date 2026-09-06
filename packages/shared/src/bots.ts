@@ -26,8 +26,8 @@ export interface BotPreset {
 
 export const BOT_PRESETS: Record<BotLevel, BotPreset> = {
   easy: { id: "easy", name: "EASY", reactionMs: 750, aimError: 0.06, turnRate: 3.2, engageRange: 28, cadence: 1.7, sightRange: 38 },
-  normal: { id: "normal", name: "NORMAL", reactionMs: 420, aimError: 0.032, turnRate: 5.5, engageRange: 38, cadence: 1.25, sightRange: 46 },
-  hard: { id: "hard", name: "HARD", reactionMs: 220, aimError: 0.014, turnRate: 9, engageRange: 50, cadence: 1.0, sightRange: 55 },
+  normal: { id: "normal", name: "NORMAL", reactionMs: 650, aimError: 0.045, turnRate: 4.8, engageRange: 32, cadence: 1.4, sightRange: 40 },
+  hard: { id: "hard", name: "HARD", reactionMs: 400, aimError: 0.025, turnRate: 6.5, engageRange: 42, cadence: 1.15, sightRange: 48 },
 };
 
 /** Room option bounds: bots per room (humans + bots never exceed MAX_PLAYERS; the room clamps). */

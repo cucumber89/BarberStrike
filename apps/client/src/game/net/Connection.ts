@@ -1,6 +1,6 @@
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import type { ArraySchema, MapSchema } from "@colyseus/schema";
-import { C2S, S2C, MatchPhase, type BotLevel, type GameMode, type WelcomeMessage } from "@frankibarber/shared";
+import { C2S, S2C, MatchPhase, type BombData, type BotLevel, type GameMode, type WelcomeMessage } from "@frankibarber/shared";
 
 /** Client-side mirror of the server's PlayerState schema (read-only). */
 export interface NetPlayer {
@@ -27,6 +27,7 @@ export interface NetState {
   mapId: string; roomName: string;
   mode: GameMode; winnerId: string; winnerName: string;
   flags: ArraySchema<NetFlag>;
+  bomb: BombData;
   players: MapSchema<NetPlayer>;
 }
 

@@ -7,6 +7,13 @@ import { mulberry32 } from "./hitscan";
 
 describe("FFA spawn selection", () => {
   const map = NIGHT_DISTRICT;
+  it("prefers cover over distance and avoids burning spawn points", () => {
+    const arena = { ...map, spawns: [0, 15, 35].map(x => ({ x, y: 0, z: 0, yaw: 0, team: 0 as const })) };
+    const context = { enemies: [{ x: 45, y: 0, z: 0 }], allies: [], rand: () => 0,
+      canSee: (_ax: number, _ay: number, _az: number, bx: number) => bx !== 15 };
+    expect(pickSpawn(arena, 0, context).x).toBe(15);
+    expect(pickSpawn(arena, 0, { ...context, danger: x => x === 15 }).x).toBe(0);
+  });
 
   it("draws from both teams' points and picks the one farthest from the crowd", () => {
     const rand = mulberry32(7);

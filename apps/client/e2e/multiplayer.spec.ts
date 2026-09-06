@@ -16,6 +16,8 @@ interface DebugHandle {
     money: number; owned: string[]; lethal: string; lethalCount: number; tactical: string; tacticalCount: number; buyWindowLeft: number; shopOpen: boolean; cookingKind: string; cooking: number; flashUntil: number;
     armor: number; perks: Record<string, number>; scoped: boolean; breath: number; aiming: boolean;
     mode: string; flags: { id: string; owner: number; capTeam: number; cap: number; contested: boolean }[]; inFlag: number; scoreA: number; scoreB: number; tac: number; tacOn: boolean; winnerName: string;
+    bomb: { stage: string; round: number; attackTeam: number; carrier: string; progress: number; result: string } | null;
+    smokeOpacity: number;
     chat: { name: string; text: string }[]; chatOpen: string | null; marks: { kind: string }[]; flagNotice: { text: string } | null;
     reward: { total: number; earned: string[] } | null; profile: { xp: number; badges: string[] };
   } };
@@ -88,6 +90,56 @@ async function waveRoom(p: Page, ms: number): Promise<void> {
 }
 
 test.describe("two clients", () => {
+  test("smoke obscures the view from inside and clears when leaving", async ({ browser }) => {
+    const c = await browser.newContext(ctxOpts);
+    try {
+      await c.addInitScript(v => localStorage.setItem("fb_settings_v1", v), LOW_SETTINGS);
+      const p = await c.newPage();
+      await joinRoom(p, "SMOKE REVIEW", `smoke-${Date.now()}`); await fakeLock(p);
+      await p.evaluate(() => window.__fb.game.buy("smoke"));
+      await expect.poll(async () => (await hud(p)).tactical).toBe("smoke");
+      await p.evaluate(() => {
+        const g = window.__fb.game as unknown as { events: { on(t: string, cb: (e: { kind: string; x: number; y: number; z: number }) => void): void }; conn: { send(t: string, m: unknown): void } };
+        g.events.on("boom", e => { if (e.kind === "smoke") g.conn.send("dev:teleport", { x: e.x, y: Math.max(0.2, e.y), z: e.z }); });
+        window.__fb.game.localPlayer.pitch = 1.2;
+      });
+      await p.keyboard.press("Digit4");
+      await expect.poll(async () => (await hud(p)).smokeOpacity, { timeout: 10000 }).toBe(1);
+      await expect(p.getByTestId("smoke-screen")).toBeVisible();
+      await p.evaluate(() => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x: 27, y: 0, z: 21.5 }));
+      await expect.poll(async () => (await hud(p)).smokeOpacity).toBe(0);
+    } finally { await c.close(); }
+  });
+  test("bomb plant and defuse with held input and a proper round change", async ({ browser }) => {
+    const ca = await browser.newContext(ctxOpts), cb = await browser.newContext(ctxOpts);
+    const errors: string[] = [];
+    try {
+      for (const c of [ca, cb]) await c.addInitScript(v => { localStorage.setItem("fb_settings_v1", v); localStorage.setItem("fb_mode", "bomb"); localStorage.setItem("fb_bots", "0"); }, LOW_SETTINGS);
+      const a = await ca.newPage(), b = await cb.newPage();
+      for (const p of [a, b]) p.on("pageerror", e => errors.push(e.message));
+      const room = `bomb-${Date.now()}`;
+      await joinRoom(a, "PLANTER", room); await joinRoom(b, "DEFENDER", room);
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 30000 }).toBe("playing");
+      await fakeLock(a); await fakeLock(b);
+      const teleport = (p: Page, x: number) => p.evaluate(x => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x, y: 0, z: 24 }), x);
+      await teleport(a, -35);
+      await expect.poll(async () => Math.abs((await pos(a)).x + 35)).toBeLessThan(0.2);
+      await a.keyboard.down("KeyT");
+      await expect.poll(async () => (await hud(a)).bomb?.stage, { timeout: 10000 }).toBe("planted");
+      await a.keyboard.up("KeyT");
+      await expect(a.getByTestId("bomb-hud")).toContainText("BOMB ARMED AT A");
+      await teleport(b, -34.2);
+      await expect.poll(async () => Math.abs((await pos(b)).x + 34.2)).toBeLessThan(0.2);
+      await b.keyboard.down("KeyT");
+      await expect.poll(async () => (await hud(b)).bomb?.result, { timeout: 15000 }).toBe("BOMB DEFUSED");
+      await b.keyboard.up("KeyT");
+      expect((await hud(b)).scoreB).toBe(1);
+      await expect.poll(async () => (await hud(b)).bomb?.round, { timeout: 10000 }).toBe(2);
+      expect((await hud(b)).bomb?.attackTeam).toBe(0);
+      expect((await hud(b)).bomb?.stage).toBe("buy");
+      expect(errors).toEqual([]);
+    } finally { await ca.close(); await cb.close(); }
+  });
   test("see each other, move, shoot, kill, respawn", async ({ browser }) => {
     const ctxA = await browser.newContext(ctxOpts);
     const ctxB = await browser.newContext(ctxOpts);
@@ -192,26 +244,21 @@ test.describe("two clients", () => {
     expect(rowsB.find((r) => r.id === idA)?.deaths).toBe(1);
     await expect(a.getByTestId("death")).toBeVisible();
 
-    // Respawn is a WAVE (drop 7): nobody comes back on a timer of their own, everyone returns
-    // together when the preparation window opens. The wait is therefore up to a full wave plus the
-    // freeze, not the old flat 3.2 s — and the phase it lands in is the proof of the rule.
-    await expect.poll(async () => (await hud(a)).phase, { timeout: 25_000 }).toBe("prep");
-    expect((await hud(a)).alive, "the wave brings you back at the START of the countdown").toBe(true);
-    await expect(a.getByTestId("prep")).toBeVisible();
-    await expect.poll(async () => (await hud(a)).health, { timeout: 3000 }).toBe(100);
-
-    // Frozen: holding forward through the countdown moves nobody.
-    const beforeFreeze = await a.evaluate(() => { const b = window.__fb.game.localPlayer.body; return { x: b.x, z: b.z }; });
-    await a.keyboard.down("KeyW");
-    await waitForFrames(a, 30);
-    const afterFreeze = await a.evaluate(() => { const b = window.__fb.game.localPlayer.body; return { x: b.x, z: b.z }; });
-    await a.keyboard.up("KeyW");
-    expect(Math.hypot(afterFreeze.x - beforeFreeze.x, afterFreeze.z - beforeFreeze.z),
-      "movement during the preparation window").toBeLessThan(0.2);
-
-    // …and released together when it ends.
-    await expect.poll(async () => (await hud(a)).phase, { timeout: 15_000 }).toBe("playing");
-
+    // Only the casualty returns. The survivor and match clock carry on uninterrupted.
+    const survivorBefore = await b.evaluate(() => {
+      const body = window.__fb.game.localPlayer.body;
+      return { x: body.x, z: body.z, health: window.__fb.hud.get().health, deadline: window.__fb.hud.get().matchEndsAt };
+    });
+    await expect.poll(async () => (await hud(a)).alive, { timeout: 6000 }).toBe(true);
+    expect((await hud(a)).phase).toBe("playing");
+    await expect(a.getByTestId("prep")).toHaveCount(0);
+    await expect(a.getByTestId("death")).toHaveCount(0);
+    expect((await hud(a)).health).toBe(100);
+    const survivorAfter = await b.evaluate(() => {
+      const body = window.__fb.game.localPlayer.body;
+      return { x: body.x, z: body.z, health: window.__fb.hud.get().health, deadline: window.__fb.hud.get().matchEndsAt };
+    });
+    expect(survivorAfter).toEqual(survivorBefore);
     // Drop 2: everyone spawns with the free pistol; a primary is bought inside the spawn window.
     expect((await hud(a)).weapon).toBe("pistol");
     await a.evaluate(() => window.__fb.game.buy("smg"));

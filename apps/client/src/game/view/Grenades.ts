@@ -9,7 +9,7 @@ import { Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
 import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
 import type { Texture } from "@babylonjs/core/Materials/Textures/texture";
-import { GRENADES, TICK_MS, createProjectile, stepProjectile, type BoomEvent, type CollisionWorld, type GrenadeId, type Projectile, type ThrowEvent } from "@frankibarber/shared";
+import { GRENADES, TICK_MS, MAX_SMOKE_CLOUDS, SMOKE_CENTER_Y, smokeRadius, createProjectile, stepProjectile, type SmokeCloud, type BoomEvent, type CollisionWorld, type GrenadeId, type Projectile, type ThrowEvent } from "@frankibarber/shared";
 import { softDiscTexture } from "./Effects";
 
 /**
@@ -23,7 +23,7 @@ import { softDiscTexture } from "./Effects";
  */
 
 const MAX_FIRES = 3;
-const MAX_SMOKES = 4;
+const MAX_SMOKES = MAX_SMOKE_CLOUDS;
 const SCORCH_MAX = 12;
 const FIREBALL_POOL = 4;
 /** After the local fuse ran out, give the authoritative Boom this long before detonating visually anyway. */
@@ -50,7 +50,7 @@ interface Flight {
 
 interface Fireball { mesh: Mesh; life: number; ttl: number; size: number }
 interface Fire { node: TransformNode; ps: ParticleSystem; light: PointLight; until: number; flicker: number }
-interface Smoke { ps: ParticleSystem; until: number; stopAt: number }
+interface Smoke { ps: ParticleSystem; until: number; stopAt: number; core: Mesh; cloud: SmokeCloud }
 interface Stuck { node: TransformNode; until: number }
 
 export interface GrenadeViewHooks {
@@ -363,8 +363,9 @@ export class Grenades {
     }
     for (let i = this.smokes.length - 1; i >= 0; i--) {
       const s = this.smokes[i];
+      s.core.scaling.setAll(Math.max(0.001, smokeRadius(s.cloud, now)));
       if (now >= s.stopAt && s.ps.emitRate > 0) s.ps.emitRate = 0;
-      if (now >= s.until) { s.ps.dispose(); this.smokes.splice(i, 1); }
+      if (now >= s.until) { s.ps.dispose(); s.core.dispose(false, true); this.smokes.splice(i, 1); }
     }
     for (let i = this.stuck.length - 1; i >= 0; i--) {
       if (now >= this.stuck[i].until) { this.stuck[i].node.dispose(false, false); this.stuck.splice(i, 1); }
@@ -456,7 +457,7 @@ export class Grenades {
   }
 
   private startSmoke(x: number, y: number, z: number, effectMs: number): void {
-    if (this.smokes.length >= MAX_SMOKES) { const old = this.smokes.shift()!; old.ps.dispose(); }
+    if (this.smokes.length >= MAX_SMOKES) { const old = this.smokes.shift()!; old.ps.dispose(); old.core.dispose(false, true); }
     const ps = new ParticleSystem("gr_smoke_ps", 260, this.scene);
     ps.particleTexture = this.smokeTex;
     ps.emitter = new Vector3(x, y + 0.2, z);
@@ -473,7 +474,13 @@ export class Grenades {
     ps.updateSpeed = 0.016;
     ps.start();
     const now = this.now();
-    this.smokes.push({ ps, stopAt: now + effectMs - 3500, until: now + effectMs + 1500 });
+    const core = MeshBuilder.CreateSphere("smoke_dense_core", { diameter: 2, segments: 12 }, this.scene);
+    core.convertToFlatShadedMesh(); core.position.set(x, y + SMOKE_CENTER_Y, z); core.isPickable = false;
+    const mat = new StandardMaterial("smoke_dense_mat", this.scene);
+    mat.diffuseColor = new Color3(0.42, 0.45, 0.46); mat.emissiveColor = new Color3(0.2, 0.22, 0.23);
+    mat.specularColor = Color3.Black(); mat.backFaceCulling = false;
+    core.material = mat; core.scaling.setAll(0.001);
+    this.smokes.push({ ps, core, cloud: { x, y, z, born: now, until: now + effectMs }, stopAt: now + effectMs - 3500, until: now + effectMs + 1500 });
   }
 
   private stickKnife(e: BoomEvent): void {
@@ -488,11 +495,32 @@ export class Grenades {
   /** Number of grenades currently in flight (debug / tests). */
   get inFlight(): number { return this.flights.size; }
 
+  obscurityAt(x: number, y: number, z: number): number {
+    let opacity = 0;
+    for (const s of this.smokes) {
+      const c = s.cloud;
+      const inside = smokeRadius(c, this.now()) - Math.hypot(x - c.x, y - c.y - SMOKE_CENTER_Y, z - c.z);
+      opacity = Math.max(opacity, Math.min(1, inside / 0.5));
+    }
+    return Math.round(opacity * 50) / 50;
+  }
+
+  reset(): void {
+    for (const f of this.flights.values()) f.node.dispose(false, false);
+    this.flights.clear();
+    for (const f of this.fires) this.endFire(f);
+    this.fires.length = 0;
+    for (const s of this.smokes) { s.ps.dispose(); s.core.dispose(false, true); }
+    this.smokes.length = 0;
+    for (const s of this.stuck) s.node.dispose(false, false);
+    this.stuck.length = 0;
+  }
+
   dispose(): void {
     for (const f of this.flights.values()) f.node.dispose(false, false);
     this.flights.clear();
     for (const f of this.fires) this.endFire(f);
-    for (const s of this.smokes) s.ps.dispose();
+    for (const s of this.smokes) { s.ps.dispose(); s.core.dispose(false, true); }
     for (const s of this.stuck) s.node.dispose(false, false);
     for (const b of this.fireballs) b.mesh.dispose();
     for (const d of this.scorches) d.dispose();

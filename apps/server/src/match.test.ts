@@ -15,11 +15,12 @@ describe("match phases", () => {
     expect(nextPhase(MatchPhase.Countdown, 100, 500, 2, OPEN)).toBe(MatchPhase.Countdown);
     expect(nextPhase(MatchPhase.Countdown, 500, 500, 2, OPEN)).toBe(MatchPhase.Playing);
   });
-  it("a live wave gives way to preparation, and preparation releases the next wave", () => {
+  it("keeps the match live after an old wave deadline", () => {
     // The wave clock is `phaseEndsAt`; the match clock is separate and still far away.
     expect(nextPhase(MatchPhase.Playing, 10, 20, 2, OPEN)).toBe(MatchPhase.Playing);
-    expect(nextPhase(MatchPhase.Playing, 20, 20, 2, OPEN)).toBe(MatchPhase.Prep);
-    expect(nextPhase(MatchPhase.Prep, 10, 20, 2, OPEN)).toBe(MatchPhase.Prep);
+    expect(nextPhase(MatchPhase.Playing, 20, 20, 2, OPEN)).toBe(MatchPhase.Playing);
+    expect(nextPhase(MatchPhase.Playing, 60000, 20, 2, OPEN)).toBe(MatchPhase.Playing);
+    expect(nextPhase(MatchPhase.Prep, 10, 20, 2, OPEN)).toBe(MatchPhase.Playing);
     expect(nextPhase(MatchPhase.Prep, 20, 20, 2, OPEN)).toBe(MatchPhase.Playing);
   });
   it("the match clock outranks the wave clock, from either phase", () => {

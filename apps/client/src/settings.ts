@@ -19,10 +19,8 @@ export interface Settings {
     /** Lower the render scale automatically when frames get slow (see perf/dynamicScale.ts). */
     dynamicResolution: boolean;
     /**
-     * Use the imported low-poly models (drop 6b) instead of the procedural ones. Off is not a
-     * downgrade in draw calls — MEASURED, the imported art is CHEAPER there (~10 per player vs ~31)
-     * — but a skinned character is ~12.5 k vertices against a few hundred, and that is vertex work a
-     * weak or software renderer pays for every frame. Off keeps the game identical apart from looks.
+     * Optional imported scenery. Characters and weapons always use the procedural builders
+     * so their silhouette and grip alignment remain consistent across quality presets.
      */
     importedModels: boolean;
   };

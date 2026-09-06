@@ -54,7 +54,7 @@ export function SettingsPanel({ settings, onChange }: Props) {
       <Toggle label="Dynamic resolution (keeps frame rate up)" value={gr.dynamicResolution} onChange={(v) => set({ graphics: { ...gr, dynamicResolution: v } })} />
       <Toggle label="Post-processing" value={gr.postProcessing} onChange={(v) => set({ graphics: { ...gr, postProcessing: v } })} />
       <Toggle label="Anti-aliasing" value={gr.antialiasing} onChange={(v) => set({ graphics: { ...gr, antialiasing: v } })} />
-      <Toggle label="Imported models (off = procedural art, lighter on weak GPUs)" value={gr.importedModels} onChange={(v) => set({ graphics: { ...gr, importedModels: v } })} />
+      <Toggle label="Extra scenery models (characters and weapons are built in-game)" value={gr.importedModels} onChange={(v) => set({ graphics: { ...gr, importedModels: v } })} />
       <Toggle label="Force WebGL2 (disable WebGPU)" value={gr.renderer === "webgl2"} onChange={(v) => set({ graphics: { ...gr, renderer: v ? "webgl2" : "auto" } })} />
 
       <h3>AUDIO</h3>

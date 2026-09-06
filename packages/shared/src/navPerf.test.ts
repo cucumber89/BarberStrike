@@ -16,7 +16,8 @@ describe("pathfinder cost on the real map", () => {
     const walk = walkable(NIGHT_DISTRICT);
     const pts = [...walk.cells.entries()].map(([k, ys]) => {
       const [cx, cz] = k.split(",").map(Number);
-      return { x: cx / 2, y: ys[0], z: cz / 2 };
+      // The key rounds the half-cell centre up: invert it to the centre, not the next cell edge.
+      return { x: cx / 2 - .25, y: ys[0], z: cz / 2 - .25 };
     });
     // Spread the endpoints across the whole grid: the first cells in iteration order are all in one
     // corner, and a pair of neighbours makes the search bail instantly — measuring nothing.

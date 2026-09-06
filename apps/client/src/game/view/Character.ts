@@ -2,12 +2,12 @@ import { Scene } from "@babylonjs/core/scene";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
-import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { PLAYER, TEAM_COLORS, WEAPONS, WEAPON_ORDER, type Team, type WeaponId } from "@frankibarber/shared";
+import { PLAYER, TEAM_COLORS, WEAPONS, type Team, type WeaponId } from "@frankibarber/shared";
 import { buildWeaponModel, createWeaponMaterials, forEachMesh, type WeaponMaterials, type WeaponModel } from "./weaponMeshes";
+import { beveledBox } from "./geometry";
 
 /**
  * Procedural articulated third-person character. No external assets: a jointed figure with a
@@ -88,11 +88,11 @@ function teamMats(scene: Scene, team: Team): SharedMats {
   };
   const accentHex = TEAM_COLORS[team];
   m = {
-    skin: mk("ch_skin", "#8a6a55", 0.7),
-    cloth: mk("ch_cloth", "#2a292e", 0.85),
-    vest: mk("ch_vest", "#3a383f", 0.6, 0.05),
+    skin: mk("ch_skin", "#c39270", 0.7, 0, "#1b100b"),
+    cloth: mk("ch_cloth", team === 0 ? "#455e70" : "#705044", 0.85, 0, "#10151c"),
+    vest: mk("ch_vest", "#939990", 0.7, 0.05, "#181b19"),
     accent: mk("ch_accent", accentHex, 0.45, 0.1, accentHex),
-    boots: mk("ch_boots", "#0e0d0f", 0.6),
+    boots: mk("ch_boots", "#292e35", 0.6, 0, "#090c10"),
     weapons: createWeaponMaterials(scene),
   };
   byTeam.set(team, m);
@@ -112,6 +112,7 @@ export class Character {
   private legL: TransformNode; private shinL: TransformNode;
   private gunHand: TransformNode;
   private weapons = new Map<WeaponId, WeaponModel>();
+  private weaponMaterials: WeaponMaterials;
   private currentWeapon: WeaponId = "rifle";
   private phase = 0;
   private blendCrouch = 0;
@@ -140,12 +141,13 @@ export class Character {
 
   constructor(private scene: Scene, team: Team, name: string) {
     const M = teamMats(scene, team);
+    this.weaponMaterials = M.weapons;
     this.root = new TransformNode(`char_${name}`, scene);
     const node = (n: string, parent: TransformNode, x: number, y: number, z: number) => {
       const t = new TransformNode(n, scene); t.position.set(x, y, z); t.parent = parent; return t;
     };
     const box = (n: string, parent: TransformNode, w: number, h: number, d: number, x: number, y: number, z: number, mat: PBRMaterial) => {
-      const m = MeshBuilder.CreateBox(n, { width: w, height: h, depth: d }, scene);
+      const m = beveledBox(n, w, h, d, scene);
       m.position.set(x, y, z); m.material = mat; m.parent = parent; m.isPickable = false; m.receiveShadows = true;
       this.meshes.push(m);
       return m;
@@ -164,6 +166,17 @@ export class Character {
     box("cap", this.head, 0.24, 0.07, 0.26, 0, 0.24, 0.01, M.cloth);
     box("visor", this.head, 0.22, 0.02, 0.1, 0, 0.21, 0.17, M.cloth);
     box("neck", this.head, 0.1, 0.08, 0.1, 0, -0.02, 0, M.skin);
+    box("goggle_frame", this.head, 0.238, 0.075, 0.045, 0, 0.155, 0.117, M.boots);
+    box("goggle_lens", this.head, 0.198, 0.039, 0.018, 0, 0.16, 0.145, M.accent);
+    box("face_mask", this.head, 0.19, 0.075, 0.055, 0, 0.068, 0.115, M.cloth);
+    box("headset", this.head, 0.04, 0.085, 0.09, 0.125, 0.15, 0, M.boots);
+    box("apron", this.torso, 0.31, 0.19, 0.025, 0, 0.035, 0.13, M.vest);
+    box("back_team_panel", this.torso, 0.32, 0.17, 0.02, 0, 0.37, -0.145, M.accent);
+    box("chest_team_stripe", this.torso, 0.37, 0.055, 0.02, 0, 0.48, 0.145, M.accent);
+    for (const x of [-0.13, 0, 0.13]) {
+      box("ammo_pouch", this.torso, 0.1, 0.13, 0.065, x, 0.24, 0.155, M.boots);
+      box("pouch_buckle", this.torso, 0.028, 0.02, 0.014, x, 0.28, 0.193, M.vest);
+    }
     this.perkBand = box("perkBand", this.head, 0.25, 0.03, 0.27, 0, 0.215, 0.01, M.accent);
     this.perkBand.setEnabled(false);
 
@@ -193,16 +206,40 @@ export class Character {
     this.shinL = node("shinL", this.legL, 0, -0.44, 0);
     box("calfL", this.shinL, 0.13, 0.4, 0.14, 0, -0.2, 0, M.cloth);
     box("bootL", this.shinL, 0.14, 0.1, 0.26, 0, -0.42, 0.04, M.boots);
+    for (const shin of [this.shinL, this.shinR]) box("knee_pad", shin, 0.145, 0.14, 0.065, 0, -0.045, 0.08, M.vest);
 
-    for (const id of WEAPON_ORDER) {
-      const model = buildWeaponModel(id, M.weapons, scene, `tp_${name}_${id}`);
-      model.root.parent = this.gunHand;
-      model.root.position.set(0, -0.02, 0.05);
-      model.root.scaling.setAll(0.95);
-      forEachMesh(model, (m) => { m.isPickable = false; m.receiveShadows = true; this.meshes.push(m); });
-      model.root.setEnabled(id === this.currentWeapon);
-      this.weapons.set(id, model);
+    // Merge only within a joint and material, retaining articulation and the toggled perk band.
+    // Added clothing detail therefore does not add a draw call for every pouch or buckle.
+    const groups = new Map<TransformNode, Map<PBRMaterial, Mesh[]>>();
+    for (const m of this.meshes) {
+      if (m === this.perkBand) continue;
+      const parent = m.parent as TransformNode, mat = m.material as PBRMaterial;
+      const materials = groups.get(parent) ?? new Map<PBRMaterial, Mesh[]>();
+      const meshes = materials.get(mat) ?? []; meshes.push(m);
+      materials.set(mat, meshes); groups.set(parent, materials);
     }
+    this.meshes = [this.perkBand];
+    for (const [parent, materials] of groups) for (const [mat, meshes] of materials) {
+      // Merge in joint-local space; the joint's world transform must not be baked twice.
+      for (const m of meshes) { m.parent = null; m.computeWorldMatrix(true); }
+      const merged = meshes.length === 1 ? meshes[0] : Mesh.MergeMeshes(meshes, true, true)!;
+      merged.parent = parent; merged.material = mat; merged.isPickable = false; merged.receiveShadows = true;
+      this.meshes.push(merged);
+    }
+
+    this.ensureWeapon(this.currentWeapon);
+  }
+
+  /** Build only weapons this player actually equips, instead of all eleven for every bot. */
+  private ensureWeapon(id: WeaponId): void {
+    if (this.weapons.has(id)) return;
+    const model = buildWeaponModel(id, this.weaponMaterials, this.scene, `tp_${this.root.name}_${id}`);
+    model.root.parent = this.gunHand;
+    model.root.position.set(0, -0.02, 0.05);
+    model.root.scaling.setAll(0.95);
+    forEachMesh(model, (m) => { m.isPickable = false; m.receiveShadows = true; m.visibility = this.fade; this.meshes.push(m); });
+    model.root.setEnabled(id === this.currentWeapon);
+    this.weapons.set(id, model);
   }
 
   get allMeshes(): Mesh[] { return this.meshes; }
@@ -268,7 +305,8 @@ export class Character {
   update(inp: CharacterInput, dtMs: number): void {
     const dt = Math.min(0.1, dtMs / 1000);
     this.time += dt;
-    if (inp.weapon !== this.currentWeapon && this.weapons.has(inp.weapon)) {
+    if (inp.weapon !== this.currentWeapon) {
+      this.ensureWeapon(inp.weapon);
       this.weapons.get(this.currentWeapon)?.root.setEnabled(false);
       this.currentWeapon = inp.weapon;
       this.weapons.get(inp.weapon)!.root.setEnabled(true);
@@ -403,7 +441,8 @@ export class Character {
   setEnabled(v: boolean): void { this.root.setEnabled(v); }
 
   dispose(): void {
-    this.root.dispose(false, true);
+    // Team clothing and weapon materials are shared by every body in this scene.
+    this.root.dispose(false, false);
   }
 }
 
