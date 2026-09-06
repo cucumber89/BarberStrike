@@ -10,6 +10,7 @@ import { DailyChallenges, LevelCard, ProfilePanel } from "./Profile";
 import { HowToPlay } from "./HowToPlay";
 import { CopyRow, Online, ServerLine, type ServerStatus } from "./Online";
 import { inviteLink, isSharedOrigin, parseInvite, suggestRoomName } from "./invite";
+import { MenuCover } from "./MenuCover";
 
 interface Props {
   settings: Settings;
@@ -125,6 +126,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
 
   return (
     <div className={`menu ${panel === "main" ? "" : "sub"}`} data-testid="menu" data-panel={panel}>
+      {!mobile && <MenuCover dim={panel !== "main"} />}
       <div className={`menu-inner ${panel === "main" ? "" : "wide"}`}>
         <header className={`brand ${panel === "main" ? "" : "row"}`}>
           {panel === "main" ? (
