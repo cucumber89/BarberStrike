@@ -12,7 +12,7 @@ import type { WeaponEntry } from "../world/models";
 /** Just enough of `AssetVault` for this library, so a test can hand it files from disk. */
 export interface ContainerSource { container(file: string): Promise<AssetContainer | null> }
 import { buildRig, type Rig } from "./weaponRig";
-import { fitAnchors, fitScale, gripOrigin, guessForward, unionBox, type PartBox } from "./weaponFit";
+import { fitAnchors, fitScale, gripOrigin, guessForward, supportHandHome, unionBox, type PartBox } from "./weaponFit";
 import { weaponMetrics, type WeaponModel } from "./weaponMeshes";
 import { tameImported } from "./gltfMaterials";
 
@@ -50,9 +50,21 @@ interface WeaponSource {
   statics: Mesh[];
   magazine: PartSource | null;
   action: PartSource | null;
-  anchors: { muzzle: [number, number, number]; eject: [number, number, number]; aimPoint: [number, number, number]; length: number };
+  anchors: { muzzle: [number, number, number]; eject: [number, number, number]; aimPoint: [number, number, number]; length: number; support: [number, number, number] };
   actionKind: WeaponModel["actionKind"];
   rig: Rig;
+  /** What `weaponParts` judges: every mesh's own box, and each rig role's box, in the FINAL frame. */
+  inspect: WeaponInspection;
+}
+
+/**
+ * The measured geometry of a prepared gun, in the frame the viewmodel sees (+Z forward, metres,
+ * origin at the top of the grip). Kept so the "nothing floats" check (`weaponParts.ts`,
+ * `pnpm check:weapons`) judges exactly what the game renders, not a re-parse of the file.
+ */
+export interface WeaponInspection {
+  parts: { name: string; box: PartBox }[];
+  roles: Partial<Record<keyof Rig, PartBox>>;
 }
 
 const V = (v: [number, number, number]) => new Vector3(v[0], v[1], v[2]);
@@ -145,7 +157,14 @@ export class WeaponModelLibrary {
       actionKind: src.actionKind,
       aimPoint: src.anchors.aimPoint,
       length: src.anchors.length,
+      support: src.anchors.support,
     };
+  }
+
+  /** The prepared gun's measured parts, anchors and rig — null when it fell back to procedural. */
+  async inspect(id: WeaponId): Promise<{ rig: Rig; anchors: WeaponSource["anchors"]; actionKind: WeaponSource["actionKind"] } & WeaponInspection | null> {
+    const src = await this.source(id);
+    return src ? { rig: src.rig, anchors: src.anchors, actionKind: src.actionKind, ...src.inspect } : null;
   }
 
   private source(id: WeaponId): Promise<WeaponSource | null> {
@@ -191,7 +210,14 @@ export class WeaponModelLibrary {
         prep.computeWorldMatrix(true);
         for (const n of nodes) (n as TransformNode).computeWorldMatrix?.(true);
         const all: PartBox[] = [];
-        for (const m of meshes) { const b = boxOf(m); if (b) all.push(b); }
+        // Each mesh's OWN box (not its subtree's): that is what a "part" means to the parts check.
+        const own: { name: string; box: PartBox }[] = [];
+        for (const m of meshes) {
+          const bb = m.getBoundingInfo().boundingBox;
+          const b: PartBox = { min: [bb.minimumWorld.x, bb.minimumWorld.y, bb.minimumWorld.z], max: [bb.maximumWorld.x, bb.maximumWorld.y, bb.maximumWorld.z] };
+          all.push(b);
+          own.push({ name: m.name, box: b });
+        }
         const part: Partial<Record<keyof Rig, PartBox>> = {};
         for (const role of ["magazine", "action", "frontSight", "rearSight", "muzzle", "eject", "grip", "trigger"] as const) {
           const nm = rig[role];
@@ -199,12 +225,12 @@ export class WeaponModelLibrary {
           const b = node ? boxOf(node) : undefined;
           if (b) part[role] = b;
         }
-        return { whole: unionBox(all), part };
+        return { whole: unionBox(all), part, own };
       };
 
       // ---- 1st pass: which way does it point?
       const m0 = measure();
-      const yaw = guessForward(m0.whole, m0.part.muzzle, m0.part.magazine);
+      const yaw = guessForward(m0.whole, m0.part.muzzle, m0.part.magazine, { front: m0.part.frontSight, rear: m0.part.rearSight });
       // Babylon's rotation vector is (pitch, yaw, roll): a model authored on its side needs Z.
       prep.rotation.set(0, yaw + (entry.yaw ?? 0), entry.roll ?? 0);
 
@@ -218,14 +244,16 @@ export class WeaponModelLibrary {
 
       // ---- 3rd pass: final metric-scale boxes, used for pivots. Anchors come from `fitAnchors`,
       // which does its own scaling from the UNSCALED boxes, so they are computed off `m1`.
-      const anchors = fitAnchors({
+      const fit = fitAnchors({
         whole: m1.whole,
         barrel: m1.part.muzzle,
         frontSight: m1.part.frontSight,
         rearSight: m1.part.rearSight,
         eject: m1.part.eject,
         targetLength: metrics.length,
+        parts: m1.own.map((p) => p.box),
       });
+      const anchors: WeaponSource["anchors"] = { ...fit, support: [0, 0, 0] };
       // fitAnchors measures from the model's own origin; shift onto the grip origin we just applied.
       const shift = (v: [number, number, number]): [number, number, number] =>
         [v[0] - origin[0] * s, v[1] - origin[1] * s, v[2] - origin[2] * s];
@@ -234,6 +262,8 @@ export class WeaponModelLibrary {
       anchors.aimPoint = shift(anchors.aimPoint);
 
       const m2 = measure();
+      // The support hand is measured in the FINAL frame: it rests on the fore-end's underside.
+      anchors.support = supportHandHome(metrics.length, m2.own.map((p) => p.box));
       const centreOf = (b: PartBox | undefined): [number, number, number] | null =>
         b ? [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2] : null;
 
@@ -302,6 +332,7 @@ export class WeaponModelLibrary {
         anchors,
         actionKind: actMerged ? metrics.actionKind : "none",
         rig,
+        inspect: { parts: m2.own, roles: m2.part },
       };
       // Every surviving mesh is now merged and re-parented, so what is left under `prep` is the
       // glTF's empty hierarchy. Dispose it recursively rather than orphaning it.

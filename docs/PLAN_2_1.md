@@ -1,0 +1,250 @@
+# BARBERSTRIKE 2.1 — Plan of record
+
+This file is the contract. Every session that touches the game reads it first, works on exactly
+one drop, and writes back to the ledger at the end. If work does not fit a drop, it goes to
+**Deferred**, not into the code. Decisions below are locked the same way `ARCHITECTURE.md` locks
+architecture: reopen only with a measurement, a failing test, or the owner's explicit word.
+
+## Vision (one paragraph, do not expand)
+
+BarberStrike is a small-group arena FPS where the barber shop is a mechanic, not a backdrop. The
+memorable moments are the ones players tell each other about the next day: getting shaved, the
+Fryzjer who saved the round, the skin somebody rolled. Nothing is gated — a friend who joins on
+Friday is never weaker than the friend who played on Thursday. Weapons must feel like different
+tools in the hand, look like real objects (nothing floats, nothing clips), and be worth showing off.
+
+## Locked decisions (append-only; date and sign every addition)
+
+- **L1.** No weapon, mode, map or role is ever gated by level, money outside a match, or ownership.
+  Skins and haircuts are the only progression rewards and are purely cosmetic. (owner, 2026-09-07)
+- **L2.** Roles ship first as **loadout presets** built from existing perks/armour/weapon slots.
+  Active abilities are not built until a playtest with ≥4 humans says a preset is the favourite.
+  (owner, 2026-09-07)
+- **L3.** Every visual claim about a weapon ("the scope sits on the rail", "the hand is on the grip")
+  is proven **numerically** with `vm-fit.mjs` / `hand-pose.mjs` / `gltf-info.mjs` and a screenshot
+  saved under `apps/client/e2e/out/`. "Looks fine to me" is not evidence. (2026-09-07)
+- **L4.** Skins are **seeded procedural textures**: a skin is `(generatorId, seed, params)`, never a
+  stored bitmap. Same inputs → byte-identical texture, tested by hash. This keeps the bundle small
+  and makes every skin reproducible on any client. (2026-09-07)
+- **L5.** Crates are earned (XP, badges, match awards). No purchase path exists in code. (owner)
+- **L6.** Server authority, tick rate, snapshot rate, prediction and interpolation stay exactly as
+  `ARCHITECTURE.md` says. Feel work happens on the client and in `WeaponDef` numbers only.
+- **L7.** Each drop lives on its own branch `drop/<letter>-<slug>`, merges to `main` only with
+  `pnpm test`, `pnpm typecheck`, `pnpm build` green and the e2e suite passing. Deploy is the
+  owner's action, never an agent's.
+
+## Working rules (token discipline)
+
+- A session works on **one drop**. It does not "quickly also" fix something in another drop; it
+  writes that to Deferred.
+- Read files with `grep -n` and ranged reads. Reading a 70 KB file whole to change one function is
+  a defect. `TdmRoom.ts`, `Hud.tsx`, `styles.css`, `map.ts`, `Game.ts` are the files this rule
+  exists for.
+- Subagents get **a file list and a question**, return **≤ 300 words plus file:line refs**. They do
+  not paste code back; the lead reads the lines it needs.
+- Screenshots and tool output go to files under `apps/client/e2e/out/`, never into chat.
+- The ledger entry is written **before** the final report, not after. A session that ends without
+  a ledger entry did not happen.
+
+---
+
+## Drops
+
+Order is the recommended order. A, B and D can run in parallel on separate branches because they
+touch disjoint files; C depends on A (skins need stable UVs and part names); E depends on D's
+mode plumbing; F, G, H come after a playtest of A–E.
+
+### Drop A — Weapons: structure and fit ("nothing floats")
+
+**Goal.** Every one of the 11 weapons is a physically coherent object in first and third person:
+every part is attached to the receiver, the hands are on the grip and foregrip, the muzzle is at
+the end of the barrel, sights/scope sit on the rail, magazines seat in the well, nothing clips the
+hands or the camera, and all of this holds through idle, sprint, ADS, reload and inspect.
+
+**Where the truth lives.** `apps/client/src/game/view/weaponRig.ts` (part-name → role),
+`weaponFit.ts` (measured anchors, orientation, grip origin), `weaponModels.ts` (import pipeline),
+`weaponMeshes.ts` (procedural detail builders and the procedural fallback), `Viewmodel` layers
+(wall push, inertia, crouch dip, ADS kick), `public/models/manifest.json`. Tools already there:
+`e2e/tools/gltf-info.mjs`, `vm-fit.mjs`, `hand-pose.mjs`, `pnpm shots:loadout`, `pnpm anim`.
+
+**Build this tool first:** `e2e/tools/weapon-parts.mjs` — for each weapon, loads the model the
+way the game does, and for every named part reports its bounding box, its nearest distance to
+the receiver box, and whether the grip/foregrip/muzzle/sight anchors lie inside the expected part.
+Emits a table and a non-zero exit code when any part is > 5 mm from the receiver or any anchor is
+outside its part. This becomes a unit-style check (`pnpm check:weapons`) and runs in CI.
+
+**Acceptance.**
+- `weapon-parts.mjs` passes for all 11 weapons.
+- `vm-fit.mjs` numbers per weapon recorded in `docs/WEAPON_FIT.md` (camera-space box of the gun,
+  grip origin, muzzle) and every weapon's aim point measured to ±1 px of screen centre in ADS.
+- `hand-pose.mjs`: every third-person gun's bore is within 5° of the character's facing.
+- Screenshots: idle / ADS / reload mid-frame / inspect for each weapon, both persons, in
+  `e2e/out/weapons/<id>/`. A reviewer agent (not the implementer) checks them for clipping.
+- No change to any `WeaponDef` number. This drop is geometry only.
+
+### Drop B — Weapons: handling and function (they must feel different)
+
+**Goal.** Blind test: a player who fires each weapon at a wall can name it from the feel alone.
+Each weapon has a distinct signature across six axes — recoil shape, fire cadence, ADS time and
+zoom, handling weight (sway, sprint-out, equip time), audio report, and visual violence (flash,
+shake, tracer, casing). And every scoped/special function works: the sniper's scope actually
+zooms, has an overlay, hides the viewmodel, scales sensitivity, and hold-breath steadies it; the
+launcher arcs; the shotgun's spread reads on the crosshair; the LMG's bipod/heavy handling is felt.
+
+**Where the truth lives.** `packages/shared/src/weapons.ts` (`WeaponDef`: `recoilPattern`,
+`recoilJitter`, `recoilRecoverDelayMs`, `adsZoom`, `adsMs`, `slot`, `kind`, `scoped`,
+`effectiveSpread()`), `apps/client/src/game/combat/WeaponController.ts`,
+`player/LocalPlayer.ts` (`addRecoil`, `addShake`, `aimBlend`), `audio/` (procedural per-weapon
+voices), `view/` (muzzle flash, tracers, casings), HUD scope overlay in `ui/Hud.tsx`.
+
+**Method.** First write `docs/WEAPON_MATRIX.md`: a table, one row per weapon, the six axes as
+columns, with the *intended* character in words and numbers. Get owner sign-off on the matrix
+before touching code (this is the artefact that stops feel work drifting). Then implement to the
+matrix. TTK numbers from `BUILD_STATE.md` ("The weapons") are already tuned — do not move damage.
+
+**Build this tool:** `e2e/tools/weapon-signature.mjs` — fires N shots per weapon in a headless
+client with the pointer locked and records the recoil trajectory (crosshair offset per shot), ADS
+blend time, equip time, and sound-envelope peaks from the audio graph. Outputs a JSON per weapon
+under `e2e/out/signature/`. A test asserts no two weapons have a signature closer than a
+threshold (distance on normalised axes), which is the "they feel different" claim made checkable.
+
+**Acceptance.**
+- Matrix signed off; every row implemented; signature test green.
+- Sniper: scope overlay, zoom, viewmodel hidden at `aimBlend > 0.9`, sensitivity scaled by zoom,
+  breath hold reduces sway measurably, un-scope on sprint. Verified on a real GPU by the owner
+  (SwiftShader cannot judge this — say so in the report rather than claim it).
+- `pnpm test` (weapons.test, movement.feel.test) green; e2e green; prediction corrections per
+  minute not higher than before (F3 telemetry) — recoil is client-side, server spread unchanged.
+
+### Drop C — Skin Studio: procedural weapon skins and crates
+
+**Goal.** A generator that produces attractive, varied, reproducible weapon skins; a studio app
+to design and curate them; a runtime that applies them to the real weapon models; crates that
+roll a skin by rarity and hand it to the player's profile.
+
+**Design (L4).** A skin = `{ generator: string, seed: number, params: Record<string, number|string> }`.
+Generators are pure functions `(ctx: CanvasRenderingContext2D, seed, params) → void` in
+`packages/skins/` (new workspace package, browser-only canvas code, no Babylon import), composed
+of layers: base finish (matte/gloss/metal/anodised), pattern (barber-pole stripes, damask, hex,
+splinter camo, marble, tape/wrap, chrome flake), palette (by rarity tier), wear (edge mask from
+the model's AO/curvature baked once per weapon), decals (FRANKIBARBER wordmark, razor motif,
+pole), emissive accents. Seeded with `mulberry32` from `shared/util.ts`. Output: albedo +
+roughness/metallic + emissive at 1024² per weapon, rendered on demand and cached per
+`(weapon, skinId)`.
+
+**Runtime.** `apps/client/src/game/view/skins.ts`: given a weapon mesh from `weaponModels.ts`,
+builds `RawTexture`s from the canvases and swaps them into the material via `gltfMaterials.ts`.
+Skins replicate as a `skinId` string on `PlayerState` (schema, one field, changes only on equip)
+so everyone sees them. Profile stores owned skins; equipped skin per weapon.
+
+**Crates.** `packages/shared/src/crates.ts`: pure rules — crate types, rarity weights, pity
+counter, roll with a seed from the server so it cannot be forged client-side (server sends the
+seed in the match summary; client renders the reveal). Crates are granted by `progression.ts`
+events (level-up, badge, match award). No purchase path (L5).
+
+**Build this tool:** `apps/skinstudio/` — a Vite page (workspace app, not shipped in the game
+bundle) that loads the real weapon glTFs, shows a weapon, lets you pick generator/seed/params
+with sliders, live-applies, and has three buttons: "randomise", "save to catalog", "batch render
+thumbnails for catalog". The catalog (`packages/skins/catalog.json`) is what the game ships:
+named, curated skins with their generator inputs and rarity. Also `e2e/tools/skin-batch.mjs`
+to render every catalog entry to `e2e/out/skins/` for review, and a unit test that hashes the
+albedo of three fixed seeds and asserts the hashes never change (determinism guard).
+
+**Acceptance.**
+- ≥ 6 generators, ≥ 40 curated catalog skins across 4 rarities, thumbnails reviewed by a separate
+  reviewer agent for "would a player want this" (reject muddy, low-contrast, or unreadable ones).
+- Determinism test green; skin apply adds ≤ 2 draw calls per weapon and no per-frame cost.
+- Crate roll is server-seeded; e2e: finish a match → summary shows crate → reveal → skin in
+  profile → equip → visible to the other client.
+- Skin Studio runs with `pnpm --filter @frankibarber/skinstudio dev`.
+
+### Drop D — Join by link, Gun Game, Ostrzyżeni
+
+**Join by link.** `barberstrike.click/r/<room>[?mode=…]` lands in that room with the nick
+prompt only. Client routing + the existing `filterBy(["room","mode"])` matchmaking. `hostcheck.mjs`
+extended to prove the link path.
+
+**Gun Game.** `shared/modes.ts` + room: everyone starts with weapon 1 of a fixed ladder of all
+11; a kill advances (a clippers kill sets the victim back one); first to finish the ladder wins;
+no economy, no shop, respawn 3 s, FFA spawn pool. Ladder order is in `modes.ts` as data.
+
+**Ostrzyżeni (infection).** One random player starts as Ostrzyżony with clippers only, speed
+perk, and a visible shaved head; anyone killed by clippers joins them; survivors have full shop
+at round start; round ends when nobody unshaved remains or the timer runs out (survivors win).
+Reuses team gating (`teams` getter), `rounds.ts`, perks, and the clippers path.
+
+**Acceptance.** Both modes in the lobby picker, bots can play both (BotBrain needs a
+per-mode goal; Gun Game = default, Ostrzyżeni = chase / flee), unit tests for the ladder and the
+conversion rule, e2e: two clients, one full Gun Game to the end.
+
+### Drop E — The shave (ogolenie) and haircuts
+
+Clippers backstab kill = **shave**. The victim respawns with a visible bad haircut for the rest
+of the match (character head material/mesh variant), the kill feed shows a razor icon, the
+scoreboard gets a `shaved` column, the match summary awards "Najgorsza fryzura". Haircuts as
+cosmetics: a set of head variants earned via progression (L1: cosmetic only), equipped in the
+profile, replicated like `skinId`. Depends on D only for the summary/award plumbing.
+
+### Drop F — Roles as loadout presets (L2)
+
+Three presets in `shared/roles.ts` built purely from existing data: Ochroniarz (armour, shotgun
+or LMG, −speed), Kurier (+speed perk, SMG, extra grenades), Fryzjer (pistol + clippers, a
+"odświeżenie" that grants the regen perk to a nearby teammate on use — the one new verb, gated
+behind a playtest verdict). Lobby picker, bots pick a role, HUD shows role icon. A playtest
+form (`docs/PLAYTEST_TEMPLATE.md`) is filled in by the owner before anything further is built.
+
+### Drop G — Second map
+
+Small, 2–6 players, one strong theme (the back alley / delivery yard at night, or the
+upstairs flat). Reuses the map pipeline and the validity test (walk grid, spawn LOS, prop
+placement, "nothing floats"). Layout drafted as a top-down diagram in `docs/MAP_2.md` and
+approved before geometry.
+
+### Drop H — Accounts and leaderboard (after A–E have been played)
+
+Nick + password or Discord OAuth, server-side profile (skins, haircuts, XP), weekly leaderboard
+(kills, shaves, wins) on a `/stats` page served by Caddy. Only if people are coming back.
+
+---
+
+## Ledger (append a row per session; never edit old rows)
+
+| Date | Drop | Branch | Session did | Evidence (paths) | Tests | Status |
+|---|---|---|---|---|---|---|
+| 2026-09-07 | — | main | Plan written | docs/PLAN_2_1.md | — | planned |
+| 2026-09-07 | A | claude/new-session-o0hcng (harness-assigned; stands in for `drop/a-weapons-fit`) | Built `weapon-parts.mjs` / `pnpm check:weapons` (pure `weaponParts.ts` + `weaponParts.check.test.ts` on the real import pipeline, CI step). First run 2/11. Fixed what it found: support hand hovering 13–25 mm under every long gun and sitting at the muzzle on the MDR/MPA (measured `WeaponModel.support`); derived ejection port in mid-air on MK14/SRSA1/RPG; RPG built backwards (sights now orient the model); LMG grip/stock/sight/belt box, shotgun stock, clippers anchors floating (spec numbers). Now 11/11. `docs/WEAPON_FIT.md` started. | apps/client/e2e/out/weapons/parts.md (regenerate with `pnpm check:weapons`), docs/WEAPON_FIT.md | typecheck ✓ test ✓ (433) build ✓ check:weapons ✓ e2e — (not run: needs servers) | in progress |
+
+Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
+
+## Decisions log (append-only)
+
+- 2026-09-07 — Plan created from the owner's brief: weapons structure + feel, procedural skins with
+  crates, party modes, shave mechanic, roles as presets, second map, accounts last.
+- 2026-09-07 — Drop A, "> 5 mm from the receiver" is read as **attachment**: a part passes when it is
+  connected to the receiver through a chain of parts that touch within 5 mm (barrel → handguard →
+  receiver), and the plain distance to the receiver is reported as evidence, not judged. The literal
+  reading would flag every muzzle device on every rifle. (lead agent; owner to confirm or reopen)
+- 2026-09-07 — Drop A: the branch is the harness-assigned `claude/new-session-o0hcng`, not
+  `drop/a-…` — the session may only push there. Treat it as the Drop A branch until merged. (lead)
+- 2026-09-07 — Drop A: the parts check runs inside `pnpm test` (it is a vitest file) AND as its own
+  CI step `pnpm check:weapons`, which prints the table. Double run costs ~3 s. (lead)
+
+## Deferred (things noticed, deliberately not done)
+
+- Server perf pass (shared nav grid, bot LOS cache, compression, snapshot trimming) — separate
+  brief `OPTIMIZATION_PROMPT.md`; runs on its own branch, does not block any drop above.
+- `defaultServerUrl` same-origin fallback (`Connection.ts:253-261`) — in the perf brief.
+- Drop A, next session: `vm-fit.mjs` ±1 px ADS numbers, `hand-pose.mjs` 5° bore check, the
+  idle/ADS/reload/inspect screenshot set and its art review — all need the dev server + browser.
+- Drop A: the LMG's procedural front sight is now 76 mm tall (base dropped onto the barrel, top kept
+  at the rail-height sight line). Lowering the sight line means lowering the rear sight too; judge
+  on a screenshot first.
+- Drop A: the sidearm rule puts the left hand 29–40 mm INTO the pistol/revolver frame (two-handed
+  hold, unchanged from before) and the SMGs' support hand now rests under the magazine well. Both
+  are what the numbers say a two-handed hold is, but only a screenshot says whether they read.
+- Drop A: the RPG model has no pistol grip (`Side_Grip_Left/Right` are 4 mm strips at the rear
+  cover); the hand origin is the box-proportion fallback. A hand-set grip would need a manifest
+  field the plan does not name — ask before adding one.
+- Drop A: `weaponRig` has no `receiver` / `foregrip` roles; `weaponParts.pickReceiver` names the
+  receiver by regex-then-volume instead. Fine for this pack; revisit if a model has a named
+  handguard the support hand should be told about.

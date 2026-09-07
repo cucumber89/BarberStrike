@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitAnchors, fitScale, gripOrigin, guessForward, sizeOf, unionBox, type PartBox } from "./weaponFit";
+import { HAND_SIZE, fitAnchors, fitScale, gripOrigin, guessForward, sizeOf, supportHandHome, unionBox, type PartBox } from "./weaponFit";
 
 /** Drop 6b: the measured anchors that let a glTF gun drop into the procedural viewmodel poses. */
 
@@ -157,5 +157,88 @@ describe("gripOrigin", () => {
     expect(o[0]).toBeCloseTo(0, 6);
     expect(o[1]).toBeCloseTo(0.11, 6);   // 55 % up
     expect(o[2]).toBeCloseTo(0.3, 6);    // 30 % back from the rear
+  });
+});
+
+describe("fitAnchors: derived ejection port lands on the gun (drop A)", () => {
+  // Receiver 1 unit wide (x ±0.5); a bolt handle sticks out to x = 1.5 at a different height.
+  const receiver = box(-0.5, 0, 0, 0.5, 2, 10);
+  const handle = box(0.5, 0.2, 4, 1.5, 0.4, 4.5);
+  const whole = unionBox([receiver, handle]);
+  it("uses the widest point when it knows no parts (the old behaviour)", () => {
+    const a = fitAnchors({ whole, targetLength: 0.4 });
+    expect(a.eject[0]).toBeCloseTo(1.5 * 0.04);
+  });
+  it("takes the right face of the part that spans the point when parts are given", () => {
+    const a = fitAnchors({ whole, targetLength: 0.4, parts: [receiver, handle] });
+    // 40 % up from the centre and 25 % forward of it: on the receiver, not the handle.
+    expect(a.eject[0]).toBeCloseTo(0.5 * 0.04);
+    expect(a.eject[1]).toBeCloseTo((1 + 0.4) * 0.04);
+    expect(a.eject[2]).toBeCloseTo((5 + 1.25) * 0.04);
+  });
+  it("slides onto the nearest part when no part spans the derived point (the RPG's tube)", () => {
+    // Only the handle is known: the derived point (y 1.4, z 6.25) is above it, so it lands on the
+    // handle's top-right edge at the nearest z.
+    const a = fitAnchors({ whole, targetLength: 0.4, parts: [handle] });
+    expect(a.eject[0]).toBeCloseTo(1.5 * 0.04);
+    expect(a.eject[1]).toBeCloseTo(0.4 * 0.04);
+    expect(a.eject[2]).toBeCloseTo(4.5 * 0.04);
+  });
+  it("still uses the widest point when it knows no parts at all", () => {
+    expect(fitAnchors({ whole, targetLength: 0.4, parts: [] }).eject[0]).toBeCloseTo(1.5 * 0.04);
+  });
+});
+
+describe("supportHandHome (drop A)", () => {
+  it("keeps the sidearm rule for anything 20 cm or shorter", () => {
+    expect(supportHandHome(0.2)).toEqual([-0.03, -0.065, -0.005]);
+    expect(supportHandHome(0.2, [box(-0.02, 0, 0, 0.02, 0.05, 0.2)])).toEqual([-0.03, -0.065, -0.005]);
+  });
+  it("puts a long gun's hand half-way out, capped at 36 cm, when it knows no parts", () => {
+    expect(supportHandHome(0.5)).toEqual([-0.03, -0.035, 0.26]);
+    expect(supportHandHome(0.8)[2]).toBe(0.36);
+  });
+  it("rests the hand's top 4 mm inside the fore-end's underside, ignoring parts off the centre line", () => {
+    const foreEnd = box(-0.02, 0.01, 0.15, 0.02, 0.05, 0.45);      // underside at y = 0.01
+    const bipodLeg = box(0.03, -0.2, 0.2, 0.04, 0.0, 0.3);         // lower, but off to the right
+    const stock = box(-0.02, -0.05, -0.4, 0.02, 0.05, -0.1);       // lower, but behind the hand
+    const home = supportHandHome(0.5, [foreEnd, bipodLeg, stock]);
+    expect(home[2]).toBeCloseTo(0.45 * 0.55, 9);                     // 55 % of the way to the front
+    expect(home[1]).toBeCloseTo(0.01 - HAND_SIZE[1] / 2 + 0.004, 9);
+    expect(home[1] + HAND_SIZE[1] / 2).toBeCloseTo(0.014, 9);      // hand top 4 mm inside
+  });
+  it("falls back to the fixed height when nothing spans the hand", () => {
+    // The only part is off to the right of the centre line, so nothing carries the hand.
+    const home = supportHandHome(0.5, [box(0.03, 0, -0.3, 0.05, 0.05, 0.1)]);
+    expect(home[1]).toBe(-0.035);
+    expect(home[2]).toBeCloseTo(0.1 * 0.55, 9);
+  });
+  it("measures from the grip to the FRONT, so a bullpup's hand stays off its flash hider", () => {
+    // MDR-like: declared 0.8 m, but the grip is mid-gun and the muzzle only 0.374 ahead of it.
+    const shell = box(-0.03, -0.02, -0.3, 0.03, 0.06, 0.3);
+    const hider = box(-0.012, 0.02, 0.3, 0.012, 0.044, 0.374);
+    const home = supportHandHome(0.8, [shell, hider]);
+    expect(home[2] + HAND_SIZE[2] / 2).toBeLessThan(0.3);            // hand front behind the hider
+    expect(supportHandHome(0.8)[2]).toBe(0.36);                      // the blind rule would not be
+  });
+});
+
+describe("guessForward: sights outrank the barrel (drop A)", () => {
+  // The RPG: one centred tube, no magazine, front sight at −Z, rear sight at +Z.
+  const tube: PartBox = { min: [-0.035, -0.065, -0.25], max: [0.035, 0.005, 0.25] };
+  const frontAtBack: PartBox = { min: [-0.015, -0.008, -0.23], max: [0.013, 0.053, -0.22] };
+  const rearAtFront: PartBox = { min: [-0.01, -0.002, 0.15], max: [0.01, 0.053, 0.16] };
+  it("turns a launcher whose front sight is at −Z by half a turn", () => {
+    expect(guessForward(tube, tube, undefined)).toBe(0);                                   // no signal: assumed +Z
+    expect(guessForward(tube, tube, undefined, { front: frontAtBack, rear: rearAtFront })).toBe(Math.PI);
+  });
+  it("leaves a gun alone when the front sight is already forward", () => {
+    expect(guessForward(tube, tube, undefined, { front: rearAtFront, rear: frontAtBack })).toBe(0);
+  });
+  it("ignores sights that sit at the same station and falls through to the barrel", () => {
+    const barrelFwd: PartBox = { min: [-0.01, -0.02, 0.05], max: [0.01, 0.0, 0.25] };
+    expect(guessForward(tube, barrelFwd, undefined, { front: rearAtFront, rear: rearAtFront })).toBe(0);
+    const barrelBack: PartBox = { min: [-0.01, -0.02, -0.25], max: [0.01, 0.0, -0.05] };
+    expect(guessForward(tube, barrelBack, undefined, { front: rearAtFront, rear: rearAtFront })).toBe(Math.PI);
   });
 });

@@ -11,6 +11,7 @@ import type { LocalPlayer } from "../player/LocalPlayer";
 import { buildWeaponModel, createWeaponMaterials, forEachMesh, type WeaponMaterials, type WeaponModel } from "./weaponMeshes";
 import type { WeaponModelLibrary } from "./weaponModels";
 import { beveledBox } from "./geometry";
+import { HAND_SIZE } from "./weaponFit";
 
 /** Gap between background weapon upgrades: enough frames for the game to stay responsive. */
 const UPGRADE_GAP_MS = 400;
@@ -368,7 +369,7 @@ export class Viewmodel {
       const pivot = new TransformNode(`${name}_pivot`, this.scene);
       pivot.parent = this.gunPivot;
       pivot.position.set(x, y, z);
-      const hand = beveledBox(name, 0.058, 0.04, 0.075, this.scene);
+      const hand = beveledBox(name, ...HAND_SIZE, this.scene);
       hand.rotation.set(rx, ry, rz);
       hand.material = this.handMat;
       hand.renderingGroupId = VIEWMODEL_GROUP;
@@ -394,9 +395,9 @@ export class Viewmodel {
   setWeapon(id: WeaponId, animate = true): void {
     // A sidearm is supported at the grip; the old universal 30 cm offset put the left
     // hand beyond its muzzle. Long weapons keep their support under the fore-end.
-    const length = this.models.get(id)!.length;
-    this.handLHome.set(-0.03, length <= 0.2 ? -0.065 : -0.035,
-      length <= 0.2 ? -0.005 : Math.min(0.36, length * 0.52));
+    // Measured against the gun's own parts (`supportHandHome`), so `pnpm check:weapons` can prove
+    // the hand touches the fore-end instead of hovering under it.
+    this.handLHome.set(...this.models.get(id)!.support);
     // Pull this gun's upgrade forward: you are about to look at it.
     if (this.modelLib && !this.upgraded.has(id)) void this.upgradeWeapon(id);
     for (const [wid, m] of this.models) m.root.setEnabled(wid === id);
