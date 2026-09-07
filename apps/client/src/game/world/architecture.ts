@@ -2,6 +2,7 @@ import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Scene } from "@babylonjs/core/scene";
 import type { MapDef, MaterialTag } from "@frankibarber/shared";
 import type { AddPiece } from "./dressing";
+import { buildStreetscape } from "./streetscape";
 
 /** Wall-mounted / surface detail only. Walkable architecture and cover live in the shared map. */
 export function buildArchitecture(scene: Scene, map: MapDef, add: AddPiece): void {
@@ -10,27 +11,20 @@ export function buildArchitecture(scene: Scene, map: MapDef, add: AddPiece): voi
     const m = MeshBuilder.CreateBox(`arch_${id++}`, { width: w, height: h, depth: d }, scene);
     m.position.set(x, y, z); m.rotation.y = ry; add(m, tag); return m;
   };
-  // Upper-floor windows sit against the existing perimeter walls; opaque panes read as closed rooms.
-  const window = (x: number, z: number, yaw: number, lit: boolean) => {
-    const piece = (tag: MaterialTag, ox: number, y: number, oz: number, w: number, h: number, d: number) =>
-      box(tag, x + ox * Math.cos(yaw) + oz * Math.sin(yaw), y, z - ox * Math.sin(yaw) + oz * Math.cos(yaw), w, h, d, yaw);
-    piece("paint_white", 0, 4.9, 0, 1.8, 2.05, 0.075);
-    piece(lit ? "brass" : "glass_dark", 0, 4.9, 0.05, 1.58, 1.82, 0.035);
-    piece("metal", 0, 4.9, 0.075, 0.065, 1.82, 0.04);
-    piece("metal", 0, 4.88, 0.075, 1.58, 0.07, 0.04);
-    piece("wall_concrete", 0, 3.86, 0.10, 2, 0.12, 0.28);
-  };
-  for (let x = -42, i = 0; x < 51; x += 4.7, i++) {
-    window(x, -21.94, 0, i % 4 === 1); window(x, 44.94, Math.PI, i % 5 === 0);
-    box(i % 2 ? "wall_plaster" : "wall_concrete", x + 2.15, 3.5, -21.92, 0.2, 7, 0.12);
-    box("metal", x, 6.5, -21.91, 4.6, 0.16, 0.22);
-    box("metal", x, 6.5, 44.91, 4.6, 0.16, 0.22);
+  buildStreetscape(scene, map, add);
+  // Finish the central shop as a small commercial building, with a capped parapet and
+  // masonry piers. These follow solid facade sections, clear of its doors and display glass.
+  box("wall_concrete", 1.85, 4.83, -.15, 12.7, .13, .5);
+  box("metal", 1.85, 4.92, -.15, 12.76, .045, .54);
+  for (const x of [-4.18, 7.62]) {
+    box("wall_brick", x, 1.65, -.09, .3, 3.3, .18);
+    box("wall_concrete", x, .19, -.12, .38, .38, .24);
+    box("wall_concrete", x, 3.25, -.12, .42, .16, .27);
   }
-  for (let z = -18, i = 0; z < 44; z += 5, i++) {
-    const closed = (x: number) => map.solids.some(s => s.box.minX <= x && s.box.maxX >= x && s.box.minZ < z - 1 && s.box.maxZ > z + 1 && s.box.maxY >= 6);
-    if (closed(-27.15)) window(-26.94, z, Math.PI / 2, i % 4 === 0);
-    if (closed(35.15)) window(34.94, z, -Math.PI / 2, i % 4 === 2);
-    window(-44.94, z, Math.PI / 2, i % 3 === 0); window(52.94, z, -Math.PI / 2, i % 4 === 1);
+  // Thin brass rules frame the existing sign without covering its text plane.
+  for (const y of [3.62, 4.30]) box("brass", 2, y, -.25, 11.5, .025, .025);
+  for (const z of [1.8, 5.8, 9.5]) {
+    box("metal", -4.48, 2.24, z, .075, 2.45, .075);
   }
   // New district storefronts: roof cornices, wall bands, closed display niches and canopy brackets.
   for (const [x, z, w, d, color] of [[-43, 0, 11, 12, "paint_red"], [38, 1, 12, 12, "paint_green"]] as const) {
@@ -45,7 +39,7 @@ export function buildArchitecture(scene: Scene, map: MapDef, add: AddPiece): voi
       box("brass", px, 1.8, z - .12, .05, 1.6, .03);
       box("wood", px, .87, z - .15, 2.4, .12, .35);
     }
-    for (let k = 0; k < 12; k++) box(k % 2 ? "paint_white" : color, x + .45 + k * (w / 12), 2.92, z - .7, w / 12, .12, 1.4);
+    for (let k = 0; k < 12; k++) box(k % 6 === 0 ? "wall_sand" : color, x + .45 + k * (w / 12), 2.92, z - .7, w / 12, .12, 1.4);
     for (const dz of [2.5, 6.5, 10.5]) box("wood", x + w / 2, 4.06, z + dz, w - .5, .13, .2);
     for (const dz of [3.3, 4.4, 5.5]) box("metal", x + 1.13, .55, z + dz, 1.02, .06, .03);
     for (let k = 0; k < 6; k++) {
@@ -60,8 +54,8 @@ export function buildArchitecture(scene: Scene, map: MapDef, add: AddPiece): voi
   for (const y of [1.03, 2.77]) box("brass", 5, y, 0.075, 4, 0.065, 0.15);
   box("paint_green", 2, 3.35, -0.2, 12.5, 0.22, 0.48);
   for (let i = 0; i < 16; i++) {
-    box(i % 2 ? "paint_white" : "paint_green", -3.6 + i * 0.74, 3.1, -0.66, 0.74, 0.10, 1.3);
-    box(i % 2 ? "paint_white" : "paint_green", -3.6 + i * 0.74, 2.98, -1.25, 0.74, 0.25, 0.06);
+    box(i % 8 === 0 ? "wall_sand" : "paint_green", -3.6 + i * 0.74, 3.1, -0.66, 0.74, 0.10, 1.3);
+    box(i % 8 === 0 ? "wall_sand" : "paint_green", -3.6 + i * 0.74, 2.98, -1.25, 0.74, 0.25, 0.06);
   }
   // Garage fascia and shutter slats. Every shutter corresponds to a sealed solid garage bay.
   for (let i = 0; i < 3; i++) {
