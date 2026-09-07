@@ -43,13 +43,14 @@ const reloadMs = await page.evaluate(() => Object.fromEntries(Object.values(wind
 for (const id of TP_ONLY ? [] : WEAPONS) {
   const dir = `${OUT}/${id}`;
   mkdirSync(dir, { recursive: true });
+  // A bought gun lands in its own slot: sidearms (pistol, revolver) in 2, everything else in 1.
   if (id === "pistol") await page.keyboard.press("Digit2");
   else if (id === "clippers") await page.keyboard.press("Digit3");
   else {
     await send("dev:money", 9000);
     await page.evaluate((w) => window.__fb.game.buy(w), id);
     await page.waitForFunction((w) => window.__fb.hud.get().weapon === w, id, { timeout: 8000 }).catch(() => {});
-    await page.keyboard.press("Digit1");
+    await page.keyboard.press(id === "revolver" ? "Digit2" : "Digit1");
   }
   await page.waitForFunction((w) => window.__fb.hud.get().weapon === w, id, { timeout: 8000 }).catch(() => console.log(`${id}: not equipped`));
   await page.waitForTimeout(1200); await frames(6);
