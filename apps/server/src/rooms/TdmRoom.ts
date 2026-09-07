@@ -5,14 +5,14 @@ import {
   RESPAWN_DELAY_MS, SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER,
   isLive, isFrozen, maskInput, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
   BOMB, BOMB_SITES, KIT_ITEM, bombAttackTeam, dropBomb, blastDamage, resetBomb, stepBomb, type BombPlayer,
-  buildCollisionWorld, createBody, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
+  createBody, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
   makeRayHit, mulberry32, pickSpawn, sanitizeName, simulateBody, spreadDirection, traceBullet, unpackInput,
   ECONOMY, GRENADES, THROW_INTERVAL_MS, FIRE_DPS, applyBuy, applySell, buyWindowOpen, giveGrenade, takeGrenade, killReward, weaponForSlot,
   primaryOf, isShopItemId, isGrenadeId, createProjectile, stepProjectile, explosionDamage, flashStrength, flashMs, eyeOf,
   rayBox, targetBox, freshWallet, secondaryOf, sprintActive, usesAmmo, isBackstab, MELEE, PERK_EFFECT, PERK_ORDER, noPerks, perkActive,
   perkSpeedScale, splitDamage, isPerkId, isArmorId,
   BTN_MASK, DOM, MODES, isGameMode, leanOf, tacActive, leanEye, inFlagZone, stepFlag, domTick, neutralFlag,
-  CHAT, MARK, MAX_BOTS, BOT_NAMES, botId, isBotLevel, prepareNav, walkable,
+  CHAT, MARK, MAX_BOTS, BOT_NAMES, botId, isBotLevel,
   type BodyState, type CollisionWorld, type DamagedEvent, type FireMessage, type HitEvent, type InputTuple, type KillEvent,
   type MapDef, type PlayerInput, type ShotEvent, type SpawnEvent, type Target, type Team, type WeaponId, type WelcomeMessage,
   type Projectile, type Wallet, type ThrowMessage, type ThrowEvent, type BoomEvent, type FlashedEvent, type MoneyEvent,
@@ -21,6 +21,7 @@ import {
 } from "@frankibarber/shared";
 import { FlagState, MatchState, PlayerState } from "../schema";
 import { nextPhase, teamForNewPlayer } from "../match";
+import { sharedCollisionWorld, sharedWalk } from "./sharedWorld";
 import { BotBrain, type BotSenses, type BotView } from "../bots/BotBrain";
 
 interface HistoryEntry { t: number; x: number; y: number; z: number; crouching: boolean }
@@ -136,7 +137,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   override state = new MatchState();
 
   private map: MapDef = NIGHT_DISTRICT;
-  private world: CollisionWorld = buildCollisionWorld(NIGHT_DISTRICT);
+  // Shared across rooms (performance pass, task 1): see sharedWorld.ts.
+  private world: CollisionWorld = sharedCollisionWorld();
   private sessions = new Map<string, Session>();
   private accumulator = 0;
   private rand = mulberry32(Date.now() & 0xffffffff);
@@ -291,8 +293,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private addBot(n: number): void {
     if (!this.walk) {
-      this.walk = walkable(this.map);
-      prepareNav(this.walk); // index now, at room creation, not inside the first tick that plans
+      this.walk = sharedWalk(); // built and warmed once per process, not per room (task 1)
       this.roamPoints = [...this.map.spawns, ...(this.map.arenaSpawns ?? []), ...this.map.flags, ...this.map.stations].map(p => ({ x: p.x, y: p.y, z: p.z }));
     }
     const id = botId(n);
