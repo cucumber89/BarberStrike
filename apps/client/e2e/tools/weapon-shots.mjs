@@ -9,7 +9,7 @@
  *   OUT=e2e/out/weapons WEAPONS=rifle,smg node e2e/tools/weapon-shots.mjs
  */
 import { chromium } from "@playwright/test";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 const OUT = process.env.OUT ?? "e2e/out/weapons";
 const WEAPONS = process.env.WEAPONS ? process.env.WEAPONS.split(",") : ["pistol", "revolver", "smg", "smg2", "rifle", "lmg", "shotgun", "dmr", "sniper", "launcher", "clippers"];
 /** TP_ONLY=1 skips the first-person set (the third-person room is the slow, bot-dependent half). */
@@ -38,7 +38,10 @@ const ads = (on) => page.evaluate((on) => { window.__fb.game.inputState.mouseBut
 // Face the open side, look level.
 await page.evaluate(() => { const lp = window.__fb.game.localPlayer; lp.yaw += Math.PI / 2; lp.pitch = 0.02; });
 
-const reloadMs = await page.evaluate(() => Object.fromEntries(Object.values(window.__fb.game.constructor.WEAPONS ?? {}).map((w) => [w.id, w.reloadMs])));
+// Real reload times from the shared WeaponDef table (TS source, so read as text): the 2 s
+// default used before caught the LMG (4.5 s) and the shotgun at 18 % of their reload, mag still in.
+const weaponsTs = readFileSync(new URL("../../../../packages/shared/src/weapons.ts", import.meta.url), "utf8");
+const reloadMs = Object.fromEntries([...weaponsTs.matchAll(/id:\s*"(\w+)"[\s\S]*?reloadMs:\s*(\d+)/g)].map((m) => [m[1], +m[2]]));
 
 for (const id of TP_ONLY ? [] : WEAPONS) {
   const dir = `${OUT}/${id}`;
@@ -72,8 +75,9 @@ for (const id of TP_ONLY ? [] : WEAPONS) {
     await page.evaluate(() => { window.__fb.game.inputState.reloadRequested = true; });
     const started = await page.waitForFunction(() => window.__fb.hud.get().reloading, null, { timeout: 4000 }).then(() => true).catch(() => false);
     if (!started) console.log(`${id}: reload did not start`);
-    const ms = RELOAD_MS[id] ?? reloadMs[id] ?? 2000;
-    await page.waitForTimeout(Math.max(250, ms * 0.4 - 150));
+    const ms = reloadMs[id] ?? RELOAD_MS[id] ?? 2000;
+    // 45 % in: every timeline has the magazine fully out (or the cylinder open) by then.
+    await page.waitForTimeout(Math.max(250, ms * 0.45 - 150));
     await page.screenshot({ path: `${dir}/fp_reload_mid.png` });
     // Inspect refuses to start while a reload runs, so wait for the HUD to drop RELOADING rather
     // than for a guessed duration (six inspect frames were the idle pose because of that guess).
@@ -101,7 +105,22 @@ await page.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().myId
 await page.evaluate(() => { const c = document.querySelector("canvas"); Object.defineProperty(document, "pointerLockElement", { get: () => c, configurable: true }); document.dispatchEvent(new Event("pointerlockchange")); });
 await page.waitForFunction(() => window.__fb.game.remotes.size > 0, null, { timeout: 30000 });
 await page.waitForTimeout(3000);
-await page.evaluate(() => { const lp = window.__fb.game.localPlayer; lp.pitch = 0.05; });
+// Face open ground: the bot is posed 2.2 m ahead of the camera, and a spawn that faces a wall put
+// it inside the wall (round 4: "no bot in frame"). Try eight headings, keep the one with the
+// longest clear line of sight.
+await page.evaluate(() => {
+  const g = window.__fb.game; const lp = g.localPlayer; const s = g.currentScene ?? g.scene;
+  let best = lp.yaw, bestD = -1;
+  for (let i = 0; i < 8; i++) {
+    lp.yaw = (i * Math.PI) / 4; lp.pitch = 0;
+    lp.camera.computeWorldMatrix(true);
+    const ray = lp.camera.getForwardRay(12);
+    const hit = s.pickWithRay(ray, (m) => m.isEnabled() && m.isVisible && !/^vm_|^tp_|nameplate/i.test(m.name));
+    const d = hit?.hit ? hit.distance : 12;
+    if (d > bestD) { bestD = d; best = lp.yaw; }
+  }
+  lp.yaw = best; lp.pitch = 0.05;
+});
 // The bot is hostile and will kill us; a dead camera shows the death screen, not the gun. So: only
 // shoot while alive, and after a death wait for the respawn (and for the bot to lose us) first.
 const alive = () => page.evaluate(() => window.__fb.hud.get().alive !== false && (window.__fb.hud.get().hp ?? window.__fb.hud.get().health ?? 1) > 0);
