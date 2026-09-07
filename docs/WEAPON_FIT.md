@@ -45,29 +45,29 @@ What the first run found (2 of 11 passed) and what changed, all in `apps/client/
 | shotgun stock 50 mm behind the receiver | 50 mm | stock lengthened to meet the receiver |
 | clippers muzzle past the teeth, aim point 37 mm above the body, hand 20 mm below the body | 10 / 37 / 20 mm | body extended down to the hand; anchors moved onto the comb |
 
-## First person, camera space (`vm-fit.mjs`) — 2026-09-07, 11/11 measured
+## First person, camera space (`vm-fit.mjs`) — 2026-09-07, slice 3 re-measure, 11/11
 
 Viewport 960×540, camera space +x right, +y up, +z forward, metres. "ADS aim" is the weapon's aim
 node projected to the screen, offset from the centre in pixels, MEAN over one breath (4.5 s): the
 viewmodel breathes ±2.5 mm (halved in ADS), which alone is ±1.3 px at this viewport and 3 px
-through the sniper's zoom. Acceptance ±1 px on the mean: **worst 0.16 px**. The sniper's 3 px peak
+through the sniper's zoom. Acceptance ±1 px on the mean: **worst 0.09 px** (after the smg2/dmr rebuild and the five re-seated specs). The sniper's 3 px peak
 is the breath through the scope (Drop B: hold-breath). "Near-plane cut" counts gun vertices inside
 the frustum but closer than the camera's 0.05 m near plane — the shotgun's pump had them before
 the ADS distance rule (`Viewmodel.ts`, aim point ≥ 15 cm ahead of the eye); now **0 everywhere**.
 
 | weapon | hip box min (x, y, z) | hip box max | hip muzzle | ADS box min | ADS box max | near-plane cut verts hip / ADS | ADS aim mean px (dx, dy) | ADS aim peak px | ADS fov |
 |---|---|---|---|---|---|---|---|---|---|
-| pistol | 0.209, -0.355, 0.316 | 0.263, -0.171, 0.541 | 0.226, -0.211, 0.55 | -0.017, -0.182, 0.178 | 0.019, -0.001, 0.4 | 0 / 0 | -0.01, -0.07 | 1.3 | 1.2566 |
-| revolver | 0.208, -0.348, 0.306 | 0.262, -0.172, 0.532 | 0.227, -0.211, 0.53 | -0.018, -0.177, 0.148 | 0.018, -0.002, 0.37 | 0 / 0 | 0.02, 0.02 | 1.34 | 1.2252 |
-| smg | 0.16, -0.426, 0.078 | 0.283, -0.153, 0.817 | 0.21, -0.212, 0.81 | -0.047, -0.268, -0.12 | 0.028, -0.001, 0.615 | 0 / 0 | 0.02, 0 | 1.34 | 1.2252 |
-| smg2 | 0.173, -0.401, 0.092 | 0.281, -0.162, 0.633 | 0.22, -0.214, 0.64 | -0.045, -0.233, -0.066 | 0.026, -0.001, 0.47 | 0 / 0 | -0.03, 0 | 1.3 | 1.2566 |
-| rifle | 0.13, -0.441, -0.032 | 0.274, -0.116, 1.147 | 0.169, -0.201, 1.139 | -0.035, -0.313, -0.22 | 0.036, 0, 0.955 | 0 / 0 | 0.02, -0.01 | 0.73 | 1.1781 |
-| lmg | 0.128, -0.408, -0.064 | 0.283, -0.095, 1.134 | 0.169, -0.2, 1.129 | -0.066, -0.297, -0.25 | 0.053, 0, 0.94 | 0 / 0 | 0, 0 | 0.83 | 1.1781 |
-| shotgun | 0.146, -0.341, -0.052 | 0.27, -0.147, 1.042 | 0.174, -0.194, 1.04 | -0.027, -0.194, -0.24 | 0.028, -0.001, 0.85 | 0 / 0 | 0.01, 0 | 0.53 | 1.3352 |
-| dmr | 0.126, -0.391, -0.092 | 0.287, -0.088, 1.312 | 0.159, -0.205, 1.309 | -0.027, -0.255, -0.05 | 0.074, 0.033, 1.35 | 0 / 0 | 0.02, -0.02 | 1.34 | 0.9425 |
-| sniper | 0.114, -0.372, -0.122 | 0.293, -0.082, 1.502 | 0.147, -0.21, 1.499 | — (viewmodel hidden in the scope) | — | 0 / 0 | 0.01, -0.02 | 3.04 | 0.4398 |
-| launcher | 0.162, -0.375, 0.038 | 0.287, -0.123, 0.854 | 0.207, -0.222, 0.86 | -0.04, -0.244, -0.01 | 0.046, 0.003, 0.8 | 0 / 0 | -0.04, 0.04 | 1.25 | 1.2881 |
-| clippers | 0.21, -0.31, 0.228 | 0.271, -0.227, 0.503 | 0.23, -0.239, 0.5 | -0.021, -0.074, 0.1 | 0.024, 0.005, 0.372 | 0 / 0 | 0.01, 0.16 | 0.95 | 1.5708 |
+| pistol | 0.209, -0.355, 0.316 | 0.263, -0.171, 0.541 | 0.226, -0.211, 0.54 | -0.017, -0.182, 0.178 | 0.019, -0.001, 0.4 | 0 / 0 | 0.01, -0.03 | 1.3 | 1.2566 |
+| revolver | 0.207, -0.348, 0.306 | 0.262, -0.172, 0.532 | 0.227, -0.211, 0.53 | -0.018, -0.177, 0.148 | 0.018, -0.002, 0.37 | 0 / 0 | -0.01, -0.05 | 1.34 | 1.2252 |
+| smg | 0.16, -0.426, 0.078 | 0.283, -0.153, 0.817 | 0.21, -0.212, 0.81 | -0.047, -0.268, -0.12 | 0.028, -0.001, 0.615 | 0 / 0 | -0.03, -0.02 | 1.34 | 1.2252 |
+| smg2 | 0.178, -0.432, 0.088 | 0.281, -0.147, 0.643 | 0.22, -0.214, 0.64 | -0.04, -0.266, -0.07 | 0.026, 0.015, 0.481 | 0 / 0 | -0.02, -0.02 | 1.31 | 1.2566 |
+| rifle | 0.13, -0.44, -0.032 | 0.273, -0.115, 1.147 | 0.169, -0.2, 1.139 | -0.035, -0.314, -0.22 | 0.036, -0.001, 0.955 | 0 / 0 | 0.01, -0.03 | 0.72 | 1.1781 |
+| lmg | 0.128, -0.407, -0.064 | 0.283, -0.094, 1.134 | 0.169, -0.199, 1.129 | -0.066, -0.298, -0.25 | 0.053, -0.001, 0.94 | 0 / 0 | 0, -0.02 | 0.83 | 1.1781 |
+| shotgun | 0.146, -0.34, -0.052 | 0.271, -0.146, 1.042 | 0.175, -0.193, 1.04 | -0.027, -0.194, -0.24 | 0.028, -0.002, 0.85 | 0 / 0 | 0, -0.01 | 0.52 | 1.3352 |
+| dmr | 0.126, -0.39, -0.092 | 0.275, -0.09, 1.312 | 0.158, -0.203, 1.309 | -0.027, -0.257, -0.05 | 0.048, 0.029, 1.35 | 0 / 0 | 0, 0.02 | 1.33 | 0.9425 |
+| sniper | 0.114, -0.37, -0.122 | 0.28, -0.08, 1.502 | 0.147, -0.208, 1.499 | — (viewmodel hidden in the scope) | — | 0 / 0 | 0.03, 0.03 | 3.03 | 0.4398 |
+| launcher | 0.162, -0.376, 0.038 | 0.287, -0.124, 0.854 | 0.207, -0.222, 0.85 | -0.04, -0.244, -0.01 | 0.046, 0.003, 0.8 | 0 / 0 | -0.01, -0.01 | 1.25 | 1.2881 |
+| clippers | 0.21, -0.31, 0.228 | 0.271, -0.227, 0.503 | 0.23, -0.239, 0.5 | -0.021, -0.074, 0.1 | 0.024, 0.005, 0.372 | 0 / 0 | 0.01, 0.09 | 0.95 | 1.5708 |
 
 ## Third person (`hand-pose.mjs`) — 2026-09-07, 2 bots × 11 weapons
 
@@ -78,35 +78,34 @@ tool, not a bore, recorded as is.
 
 | weapon | bore vs facing (deg, worst bot) | bore pitch (deg) | muzzle height (m) | muzzle forward (m) | muzzle side (m) |
 |---|---|---|---|---|---|
-| pistol | 2.4 | -0.5 | 1.417 | 0.444 | 0.196 |
-| revolver | 2.4 | 0.7 | 1.421 | 0.416 | 0.213 |
-| smg | 4.6 | -0.7 | 1.391 | 0.64 | 0.136 |
-| smg2 | 4.6 | 0.3 | 1.401 | 0.473 | 0.133 |
-| rifle | 4.6 | 0.1 | 1.408 | 0.967 | 0.081 |
-| lmg | 4.6 | -0.4 | 1.396 | 0.961 | 0.093 |
-| shotgun | 4.6 | 0.6 | 1.412 | 0.868 | 0.116 |
-| dmr | 4.6 | -0.7 | 1.387 | 1.133 | 0.089 |
-| sniper | 4.6 | 0.5 | 1.416 | 1.305 | 0.056 |
-| launcher | 4.6 | 0 | 1.4 | 0.684 | 0.108 |
-| clippers | 15.7 | -15 | 1.244 | 0.341 | 0.17 |
+| pistol | 2.4 | 0.6 | 1.422 | 0.426 | 0.209 |
+| revolver | 2.3 | -0.3 | 1.411 | 0.424 | 0.223 |
+| smg | 4.6 | -0.1 | 1.4 | 0.637 | 0.126 |
+| smg2 | 4.6 | 0.5 | 1.405 | 0.472 | 0.121 |
+| rifle | 4.6 | -0.6 | 1.394 | 0.972 | 0.088 |
+| lmg | 4.6 | 0.6 | 1.409 | 0.953 | 0.107 |
+| shotgun | 4.6 | -0.5 | 1.397 | 0.876 | 0.113 |
+| dmr | 4.6 | 0.1 | 1.406 | 1.128 | 0.074 |
+| sniper | 4.6 | 0.3 | 1.414 | 1.306 | 0.055 |
+| launcher | 4.6 | -0.6 | 1.389 | 0.678 | 0.124 |
+| clippers | 14.7 | -13.9 | 1.255 | 0.336 | 0.153 |
 
 ## Screenshots (`weapon-shots.mjs`) — `apps/client/e2e/out/weapons/<id>/`
 
+Art review round 3 (after the jointed hands, the smg2/dmr rebuild and five re-seated specs): the
+hands now read as a forearm reaching the fore-end (accepted; palm/fingers are a "mitten" at 720p —
+style limit); smg2 is distinct from smg and dmr from sniper in first person and the sniper/dmr in
+profile. Still rejected and Deferred: DMR opaque lens (Drop B), launcher sight slab (spec art),
+the reload read (choreography), the third-person front pose hiding the gun behind the arms
+(character animation), and the shotgun/dmr/rifle profiles sharing a plain-barrel silhouette.
+Capture faults it found (inspect pressed during shell-by-shell reloads, a bot kill between the
+alive check and the shutter) are fixed in `weapon-shots.mjs` and those frames re-shot.
+
+
 `fp_idle`, `fp_ads`, `fp_reload_mid` (40 % into the reload), `fp_inspect`, `tp_idle` (a bot 2.2 m
 away facing the camera), `tp_side` (the same bot in profile). Regenerate with
-`node e2e/tools/weapon-shots.mjs` from `apps/client` with the dev servers up.
-
-Art review, round 2 (separate reviewer agent, 65 images, 2026-09-07): **no floating or clipping in
-any first-person idle or inspect frame; right hand on the grip and left hand on the fore-end for
-every long gun, both hands on the sidearms; the bot holds every weapon and the bore points where
-the body faces in all 11 profiles.** Rejected: DMR ADS (opaque lens disc, no overlay — Drop B) and
-launcher ADS (the procedural sight is a fat block on the tube — spec art, Deferred); every
-mid-reload frame is "the idle pose tilted" because the magazine drops below the frame at the hip
-pose (Deferred, animation read). Round 1 had rejected 20 frames for harness faults (empty
-third-person frames, reloads never started, inspect pressed during a reload) — all three fixed in
-`weapon-shots.mjs` and re-shot. The reviewer also reads the DMR receiver as "cut by the near
-plane"; vm-fit's per-vertex count says 0 vertices inside the near plane for the DMR in ADS, so the
-numbers stand and the look is the flat-shaded slab, not a cut.
+`node e2e/tools/weapon-shots.mjs` from `apps/client` with the dev servers up. Reviewed by a
+separate art-reviewer agent; verdicts in the ledger.
 
 ## Open items
 

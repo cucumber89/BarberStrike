@@ -214,6 +214,7 @@ Nick + password or Discord OAuth, server-side profile (skins, haircuts, XP), wee
 | 2026-09-07 | — | main | Plan written | docs/PLAN_2_1.md | — | planned |
 | 2026-09-07 | A | claude/new-session-o0hcng (harness-assigned; stands in for `drop/a-weapons-fit`) | Built `weapon-parts.mjs` / `pnpm check:weapons` (pure `weaponParts.ts` + `weaponParts.check.test.ts` on the real import pipeline, CI step). First run 2/11. Fixed what it found: support hand hovering 13–25 mm under every long gun and sitting at the muzzle on the MDR/MPA (measured `WeaponModel.support`); derived ejection port in mid-air on MK14/SRSA1/RPG; RPG built backwards (sights now orient the model); LMG grip/stock/sight/belt box, shotgun stock, clippers anchors floating (spec numbers). Now 11/11. `docs/WEAPON_FIT.md` started. | apps/client/e2e/out/weapons/parts.md (regenerate with `pnpm check:weapons`), docs/WEAPON_FIT.md | typecheck ✓ test ✓ (433) build ✓ check:weapons ✓ e2e — (not run: needs servers) | in progress |
 | 2026-09-07 | A | claude/new-session-o0hcng | Slice 2, in a browser: `vm-fit.mjs` now buys all 11 weapons, projects each gun's new `aim` node in ADS (mean over one breath) and counts near-plane-cut vertices; `hand-pose.mjs` measures every weapon on the procedural `gunHand`; `weapon-shots.mjs` shoots idle/ADS/reload/inspect + third-person front and profile. Found and fixed: the shotgun's ADS put its receiver around the eye and its pump through the near plane (ADS distance rule, aim point ≥ 15 cm ahead). Art review round 1 (54 images): 2 harness faults (empty third-person frames, reloads not started — both fixed), plus hands-as-blocks, DMR lens disc, identical smg/smg2 and dmr/sniper silhouettes → Deferred. Round 2 review pending at the time of this row. Found: the running game never uses the imported glTF guns/characters (`Game.ts:164`) → proposal in Decisions. | docs/WEAPON_FIT.md (vm-fit, hand-pose tables); apps/client/e2e/out/weapons/{vm-fit.md,hand-pose.json,<id>/*.png} (regenerate) | typecheck ✓ test ✓ (435) build ✓ check:weapons ✓ e2e — | in progress |
+| 2026-09-07 | A | claude/new-session-o0hcng | Slice 3 (owner: "improve the procedural guns"): first-person hands rebuilt as a pure spec (palm, fingers, thumb, forearm jointed at the wrist) judged by the same attachment rule as the guns (`handSpec.test.ts`); smg2 and dmr given their own silhouettes with aim/muzzle/length untouched; `check:weapons` now judges every PROCEDURAL spec (parts[0] = receiver, magazine seats in its well) — which exposed five specs that had hidden behind glTFs (pistol, smg, rifle, sniper, launcher: detached stocks, loose parts, muzzles past the barrel), all re-seated. Re-measured: 19/19 parts, ADS aim worst 0.09 px mean, 0 near-plane cuts, bores ≤ 4.6°. Code review: nothing breaks (one judgment note on the seating rule, accepted). Art review round 3: hands and silhouettes pass; rejects left are Drop B / animation / character-pose items, all Deferred. | docs/WEAPON_FIT.md; apps/client/e2e/out/weapons/ (regenerate) | typecheck ✓ test ✓ (454) build ✓ check:weapons ✓ (19/19) e2e — | in progress |
 
 Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 
@@ -274,9 +275,15 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
   magazine drop happens below the frame at the default hip pose, the revolver's cylinder does not
   swing out, the sniper's bolt does not move in the mid-reload frame. Animation choreography, not
   fit; judge on a real GPU with the camera pitched down before changing timelines.
-- Drop A: the viewmodel hands are two beveled boxes per arm (`Viewmodel.buildHands`); during
-  inspect and reload they read as a pile of loose blocks (art review, every weapon). A jointed
-  hand/forearm or a rigged arm mesh is a Drop E/C-sized job, not geometry fitting.
+- Drop A: the viewmodel hands are now a jointed palm/fingers/thumb/forearm (`handSpec.ts`); at
+  720p the palm still reads as a mitten. Fingers that wrap per grip shape are a later polish.
+- Drop A / E: the third-person idle pose holds every weapon with both arms straight out at the
+  camera, so from the front the gun hides behind the hands ("tan brick", art review round 3) and
+  from the side smg/smg2 are twins and shotgun/dmr/rifle share a plain-barrel profile. Character
+  pose work (`Character.ts`), not weapon geometry; the profile frames are the ones to judge.
+- Drop A: the seating rule accepts a magazine touching ANY static part (a mag touching only a
+  sling loop would pass — code review). Tighten to "grip, receiver or magwell" if a spec ever
+  abuses it.
 - Drop A / B: the DMR's ADS looks through an opaque lens disc (it has a scope model but is not
   `scoped`, so no overlay); the sniper alone gets the overlay. Drop B decides whether the DMR is a
   scoped weapon.

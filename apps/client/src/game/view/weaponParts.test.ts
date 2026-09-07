@@ -88,6 +88,12 @@ describe("checkAnchors", () => {
     expect(bad).toEqual(["grip", "muzzle", "aimPoint", "magazine", "supportHand"]);
     expect(checks.find((c) => c.anchor === "muzzle")?.gap).toBeCloseTo(0.05, 9);
     expect(checks.find((c) => c.anchor === "magazine")?.gap).toBeCloseTo(0.01, 9);
+    // A magazine touching the grip (its well) counts as seated even when the receiver is far.
+    const gripFed = checkAnchors({ gripOrigin: [0, 0, 0], muzzle: [0, 0.028, 0.45], aimPoint: [0, 0.06, 0.025], magazine: [box("Magazine", [-0.01, -0.2, -0.015], [0.01, -0.1, 0.015])] },
+      [receiver, grip, barrel, front, rear, box("Magazine", [-0.01, -0.2, -0.015], [0.01, -0.1, 0.015])], receiver);
+    const seated = gripFed.find((c) => c.anchor === "magazine")!;
+    expect(seated.ok).toBe(true);
+    expect(seated.expected).toBe("Grip");
   });
 
   it("fails a hand that touches the gun but sits at the muzzle", () => {
