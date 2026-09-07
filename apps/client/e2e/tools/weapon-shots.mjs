@@ -61,12 +61,17 @@ for (const id of TP_ONLY ? [] : WEAPONS) {
   await page.waitForTimeout(800);
 
   if (id !== "clippers") {
-    // Fire one round so a reload is allowed, then catch the reload at ~40 % (magazine out, hand down).
-    await page.mouse.down(); await page.waitForTimeout(80); await page.mouse.up();
-    await page.waitForTimeout(400);
-    await page.keyboard.press("KeyR");
+    // Fire one round so a reload is allowed (through the input state — a synthetic mouse event
+    // does not reach the locked canvas), then catch the reload at ~40 % (magazine out, hand down).
+    await page.evaluate(() => { window.__fb.game.inputState.mouseButtons = 1; });
+    await frames(3);
+    await page.evaluate(() => { window.__fb.game.inputState.mouseButtons = 0; });
+    await page.waitForTimeout(500);
+    await page.evaluate(() => { window.__fb.game.inputState.reloadRequested = true; });
+    const started = await page.waitForFunction(() => window.__fb.hud.get().reloading, null, { timeout: 4000 }).then(() => true).catch(() => false);
+    if (!started) console.log(`${id}: reload did not start`);
     const ms = RELOAD_MS[id] ?? reloadMs[id] ?? 2000;
-    await page.waitForTimeout(Math.max(250, ms * 0.4));
+    await page.waitForTimeout(Math.max(250, ms * 0.4 - 150));
     await page.screenshot({ path: `${dir}/fp_reload_mid.png` });
     await page.waitForTimeout(ms);
   }
@@ -110,11 +115,13 @@ for (const id of WEAPONS) {
     const yaw = lp.yaw;
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
     const eye = lp.camera.globalPosition ?? lp.camera.position;
+    // revive() ONCE: it restarts the spawn fade-in (visibility 0 → 1 over a third of a second),
+    // so calling it every frame kept the bot at 10 % visibility — measured, not guessed.
+    r.character.revive();
     const pose = () => {
       r.character.root.position.set(eye.x + fx * 2.2, eye.y - 1.62, eye.z + fz * 2.2);
       r.yaw = yaw + Math.PI; r.character.root.rotation.y = yaw + Math.PI;
       r.weapon = id;
-      r.character.revive();
       r.character.update({ speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: id, moveDir: 0 }, 16);
     };
     if (window.__shotsPose) s.onBeforeRenderObservable.remove(window.__shotsPose);

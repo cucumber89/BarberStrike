@@ -73,9 +73,30 @@ const measure = () => p.evaluate(([W, H]) => {
     const pr = V.Project(pos, M.Identity(), s.getTransformMatrix(), cam.viewport.toGlobal(W, H));
     aimPx = [+(pr.x - W / 2).toFixed(2), +(pr.y - H / 2).toFixed(2)];
   }
+  // Near-plane cut: vertices of the gun that are inside the view frustum but closer than the
+  // camera's near plane (0.05 m). Every triangle they belong to is sliced open on screen — the
+  // shotgun's pump was. The merged per-material meshes' boxes cannot tell this, so it walks the
+  // vertices (a few hundred per gun).
+  let nearCut = 0, nearest = Infinity;
+  const tanV = Math.tan(cam.fov / 2), tanH = tanV * (W / H);
+  for (const m of vm.getChildMeshes(false)) {
+    if (!m.isEnabled() || !m.isVisible || !m.name.startsWith(`vm_${weapon}`)) continue;
+    const pos = m.getVerticesData("position"); if (!pos) continue;
+    const wm = m.getWorldMatrix().m;
+    for (let i = 0; i < pos.length; i += 3) {
+      const px = pos[i], py = pos[i + 1], pz = pos[i + 2];
+      const wx = px * wm[0] + py * wm[4] + pz * wm[8] + wm[12], wy = px * wm[1] + py * wm[5] + pz * wm[9] + wm[13], wz = px * wm[2] + py * wm[6] + pz * wm[10] + wm[14];
+      const cz = wx * inv.m[2] + wy * inv.m[6] + wz * inv.m[10] + inv.m[14];
+      if (cz <= 0) continue;
+      const cx = wx * inv.m[0] + wy * inv.m[4] + wz * inv.m[8] + inv.m[12], cy = wx * inv.m[1] + wy * inv.m[5] + wz * inv.m[9] + inv.m[13];
+      if (Math.abs(cx) > cz * tanH * 1.05 || Math.abs(cy) > cz * tanV * 1.05) continue;
+      nearest = Math.min(nearest, cz);
+      if (cz < cam.minZ) nearCut++;
+    }
+  }
   const f = (v) => +v.toFixed(3);
   return {
-    weapon, meshes: count, names: names.slice(0, 3),
+    weapon, meshes: count, names: names.slice(0, 3), nearCut, nearestZ: Number.isFinite(nearest) ? f(nearest) : null,
     min: mn.map(f), max: mx.map(f), size: [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]].map(f),
     aim: aimN ? camSpace(aimN).map(f) : null, muzzle: muzN ? camSpace(muzN).map(f) : null,
     aimPx, fov: +cam.fov.toFixed(4), aimBlend: +(g.localPlayer.aimBlend ?? -1).toFixed(3),
@@ -124,16 +145,17 @@ await b.close();
 mkdirSync(OUT, { recursive: true });
 writeFileSync(`${OUT}/vm-fit.json`, JSON.stringify(out, null, 1));
 const rows = [];
-rows.push("| weapon | meshes | hip box min (x,y,z) | hip box max | hip size | hip muzzle | ADS aim px mean (dx,dy) | ADS aim px peak | samples | ADS fov |");
-rows.push("|---|---|---|---|---|---|---|---|---|---|");
+rows.push("| weapon | meshes | hip box min (x,y,z) | hip box max | hip size | hip muzzle | ADS box min | ADS box max | near-plane cut verts hip / ADS (nearest z) | ADS aim px mean (dx,dy) | ADS aim px peak | samples | ADS fov |");
+rows.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
 for (const r of out) {
   if (r.error) { rows.push(`| ${r.weapon} | — | ${r.error} | | | | | | |`); continue; }
   const h = r.hip, a = r.ads;
-  rows.push(`| ${r.weapon} | ${h.meshes} | ${h.min.join(", ")} | ${h.max.join(", ")} | ${h.size.join(", ")} | ${h.muzzle?.join(", ") ?? "—"} | ${a?.aimPxMean ? a.aimPxMean.join(", ") : "—"} | ${a?.aimPxPeak ?? "—"} | ${a?.samples ?? 0} | ${a?.fov ?? "—"} |`);
+  rows.push(`| ${r.weapon} | ${h.meshes} | ${h.min.join(", ")} | ${h.max.join(", ")} | ${h.size.join(", ")} | ${h.muzzle?.join(", ") ?? "—"} | ${a?.min.join(", ") ?? "—"} | ${a?.max.join(", ") ?? "—"} | ${h.nearCut} (${h.nearestZ ?? "—"}) / ${a?.nearCut ?? "—"} (${a?.nearestZ ?? "—"}) | ${a?.aimPxMean ? a.aimPxMean.join(", ") : "—"} | ${a?.aimPxPeak ?? "—"} | ${a?.samples ?? 0} | ${a?.fov ?? "—"} |`);
 }
 const worst = Math.max(...out.filter((r) => r.ads?.aimPxMean).map((r) => Math.hypot(...r.ads.aimPxMean)));
 const peak = Math.max(...out.filter((r) => r.ads?.aimPxPeak).map((r) => r.ads.aimPxPeak));
-const summary = `vm-fit: ${out.filter((r) => !r.error).length}/${out.length} measured; worst mean ADS aim offset ${Number.isFinite(worst) ? worst.toFixed(2) : "?"} px over one breath (acceptance ±1 px), worst instantaneous ${Number.isFinite(peak) ? peak.toFixed(2) : "?"} px`;
+const cut = out.filter((r) => !r.error && (r.hip.nearCut > 0 || r.ads?.nearCut > 0)).map((r) => `${r.weapon}[hip ${r.hip.nearCut} ads ${r.ads?.nearCut ?? 0}]`);
+const summary = `vm-fit: ${out.filter((r) => !r.error).length}/${out.length} measured; worst mean ADS aim offset ${Number.isFinite(worst) ? worst.toFixed(2) : "?"} px over one breath (acceptance ±1 px), worst instantaneous ${Number.isFinite(peak) ? peak.toFixed(2) : "?"} px; near-plane cuts: ${cut.length ? cut.join(" ") : "none"}`;
 writeFileSync(`${OUT}/vm-fit.md`, [`# vm-fit — ${new Date().toISOString()}`, "", summary, "", `Viewport ${W}×${H}, camera space: +x right, +y up, +z forward, metres.`, "", ...rows].join("\n"));
 console.log(summary);
 for (const r of rows) console.log(r);
