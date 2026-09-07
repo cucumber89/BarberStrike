@@ -234,9 +234,12 @@ Potem wystarczy `bs logs -f`, `bs restart`, `bs down`, `bs ps`.
 wskazuje na serwer albo port 80 jest zamknięty. Sprawdź `ping barberstrike.click` z komputera i
 `sudo ufw status`. Logi Caddy'ego: `bs logs caddy`.
 
-**Strona się otwiera, ale gra nie łączy się z serwerem.** To znaczy, że klient został zbudowany ze
-złym `VITE_SERVER_URL`. Sprawdź `DOMAIN` w `deploy/.env` i przebuduj: `bs up -d --build`. W konsoli
-przeglądarki (F12) zobaczysz, pod jaki adres leci WebSocket.
+**Strona się otwiera, ale gra nie łączy się z serwerem.** Klient łączy się domyślnie z tym samym
+adresem, z którego załadował stronę (bez portu), więc przy Caddy na 443 nic nie trzeba ustawiać.
+`VITE_SERVER_URL` w `docker-compose.yml` to tylko nadpisanie na wypadek, gdyby strona i gra miały
+stać osobno — jeśli jest ustawione na złą domenę, klient pójdzie tam. Sprawdź `DOMAIN` w
+`deploy/.env` i przebuduj: `bs up -d --build`. W konsoli przeglądarki (F12) zobaczysz, pod jaki
+adres leci WebSocket.
 
 **`Killed` w trakcie budowania.** Zabrakło pamięci — wróć do kroku 4 i włącz swap.
 
