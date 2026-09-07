@@ -16,8 +16,6 @@ interface PendingInput {
 
 export interface LookSettings {
   sensitivity: number; // radians per pixel * 1000
-  /** 2.1: sensitivity multiplier at full ADS, blended by `adsBlend` in between. */
-  adsSensitivity: number;
   invertY: boolean;
   fov: number; // degrees
   bobScale: number; // 0..1
@@ -73,8 +71,6 @@ export class LocalPlayer {
   // ---- drop 4: lean (-1..1 incl. wall clearance, smoothed) and tactical sprint blend.
   private leanBlend = 0;
   private tacBlend = 0;
-  /** Slide (2.3): 0..1 blend for the FOV push, the roll and the dip. */
-  private slideBlend = 0;
   private wasTac = false;
   /** Called when the tactical sprint starts / stops (feel hooks). */
   onTac: ((on: boolean) => void) | null = null;
@@ -90,7 +86,7 @@ export class LocalPlayer {
 
   spawnAt(x: number, y: number, z: number, yaw: number): void {
     const b = this.body;
-    b.x = x; b.y = y; b.z = z; b.vx = b.vy = b.vz = 0; b.grounded = true; b.crouching = false; b.jumpCooldown = 0; b.slide = 0; b.slideCd = 0;
+    b.x = x; b.y = y; b.z = z; b.vx = b.vy = b.vz = 0; b.grounded = true; b.crouching = false; b.jumpCooldown = 0;
     this.yaw = yaw; this.pitch = 0;
     this.pending.length = 0;
     this.recoilPitch = this.recoilYaw = 0;
@@ -108,8 +104,7 @@ export class LocalPlayer {
   private applyLook(): void {
     const m = { dx: 0, dy: 0 };
     this.input.consumeMouse(m);
-    const ads = this.settings.adsSensitivity ?? 1;
-    const s = this.settings.sensitivity * 0.001 * (1 + (ads - 1) * this.adsBlend);
+    const s = this.settings.sensitivity * 0.001;
     this.yaw = wrapAngle(this.yaw + m.dx * s);
     const dy = this.settings.invertY ? -m.dy : m.dy;
     this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch + dy * s));
@@ -190,13 +185,11 @@ export class LocalPlayer {
     const b = this.body;
     if (this.pending.length === 0) {
       b.x = p.x; b.y = p.y; b.z = p.z; b.vx = p.vx; b.vy = p.vy; b.vz = p.vz; b.grounded = p.grounded; b.crouching = p.crouch;
-      b.slide = p.slide; b.slideCd = p.slideCd;
       copyBody(b, sb);
       return;
     }
     this.correctionCount++;
     b.x = p.x; b.y = p.y; b.z = p.z; b.vx = p.vx; b.vy = p.vy; b.vz = p.vz; b.grounded = p.grounded; b.crouching = p.crouch;
-    b.slide = p.slide; b.slideCd = p.slideCd;
     let prev = this.prevButtonsBefore(0);
     for (const e of this.pending) {
       simulateBody(this.world, b, e.input, WEAPONS[this.weapon].mobility * this.speedScale(sprintActive(e.input.buttons, b.crouching)), prev);
@@ -245,9 +238,7 @@ export class LocalPlayer {
     if (Math.abs(this.adsBlend - adsTarget) < 0.01) this.adsBlend = adsTarget;
     // Tactical sprint (drop 4): a wider FOV sells the extra speed.
     this.tacBlend += ((this.alive && this.wasTac ? 1 : 0) - this.tacBlend) * Math.min(1, dt * 6);
-    // Slide (2.3): a quick FOV push and a touch of roll on the way in, eased out on the way up.
-    this.slideBlend += ((this.alive && b.slide > 0 ? 1 : 0) - this.slideBlend) * Math.min(1, dt * (b.slide > 0 ? 14 : 6));
-    this.camera.fov = (this.settings.fov * Math.PI / 180) * (1 - this.adsBlend * (1 - wdef.adsZoom)) * (1 + 0.07 * this.tacBlend + 0.06 * this.slideBlend);
+    this.camera.fov = (this.settings.fov * Math.PI / 180) * (1 - this.adsBlend * (1 - wdef.adsZoom)) * (1 + 0.07 * this.tacBlend);
     // Lean (drop 4): the eye slides sideways as far as the wall allows, the view rolls with it.
     const leanWant = this.alive ? leanOf(this.lastButtons, b.crouching) : 0;
     const leanTarget = leanWant === 0 ? 0 : leanWant * leanClearance(this.world, b, this.yaw, leanWant);
@@ -290,8 +281,8 @@ export class LocalPlayer {
     } else this.shake = 0;
     const cam = this.camera;
     const side = bobX + LEAN.offset * this.leanBlend;
-    cam.position.set(b.x + Math.cos(this.yaw) * side, b.y + this.eyeBlend + bobY - this.landDip - LEAN.drop * Math.abs(this.leanBlend) - 0.06 * this.slideBlend, b.z - Math.sin(this.yaw) * side);
-    cam.rotation.set(this.pitch + this.recoilPitch + this.swayPitch + shakePitch, this.yaw + this.recoilYaw + this.swayYaw, Math.sin(this.bobPhase) * 0.004 * bobAmt + shakeRoll + LEAN.roll * this.leanBlend + 0.025 * this.slideBlend * this.settings.shakeScale);
+    cam.position.set(b.x + Math.cos(this.yaw) * side, b.y + this.eyeBlend + bobY - this.landDip - LEAN.drop * Math.abs(this.leanBlend), b.z - Math.sin(this.yaw) * side);
+    cam.rotation.set(this.pitch + this.recoilPitch + this.swayPitch + shakePitch, this.yaw + this.recoilYaw + this.swayYaw, Math.sin(this.bobPhase) * 0.004 * bobAmt + shakeRoll + LEAN.roll * this.leanBlend);
   }
 
   /** World-space eye position for shooting (without bob, with the lean — the server validates the same offset). */
@@ -301,9 +292,6 @@ export class LocalPlayer {
     out[1] = b.y + eyeHeight(b) - LEAN.drop * Math.abs(this.leanBlend);
     out[2] = b.z - Math.sin(this.yaw) * LEAN.offset * this.leanBlend;
   }
-
-  /** Sliding now (2.3). */
-  get sliding(): boolean { return this.body.slide > 0; }
 
   /** Smoothed lean -1..1 (already scaled by wall clearance) for the viewmodel. */
   get lean(): number { return this.leanBlend; }

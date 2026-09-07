@@ -6,6 +6,12 @@ const open = (over: Partial<BuyContext> = {}): BuyContext => ({ now: 5000, spawn
 const closed = (): BuyContext => open({ now: 50_000 });
 
 describe("buy window", () => {
+  it("gives a full 30 seconds and closes exactly at the deadline", () => {
+    expect(ECONOMY.buyWindowMs).toBe(30000);
+    expect(buyWindowLeft(open({ now: 29999 }))).toBe(1);
+    expect(buyWindowOpen(open({ now: 30000 }))).toBe(false);
+    expect(buyWindowLeft(open({ now: 30000 }))).toBe(0);
+  });
   it("is open after a spawn, closes after buyWindowMs, reopens at a station, always open in warm-up", () => {
     expect(buyWindowOpen(open())).toBe(true);
     expect(buyWindowOpen(open({ now: ECONOMY.buyWindowMs + 1 }))).toBe(false);

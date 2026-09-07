@@ -114,8 +114,8 @@ export class RoomHarness {
   session(id: string): SessionLike { const s = this.privates.sessions.get(id); if (!s) throw new Error(`no session ${id}`); return s; }
   now(): number { return this.room.clock.currentTime; }
 
-  async join(name: string): Promise<FakeClient> {
-    const seat = await matchMaker.reserveSeatFor(this.internals._listing, { name });
+  async join(name: string, options: Partial<TdmJoinOptions> = {}): Promise<FakeClient> {
+    const seat = await matchMaker.reserveSeatFor(this.internals._listing, { ...options, name });
     const client = fakeClient(seat.sessionId);
     await this.internals._onJoin(client, undefined);
     client.state = ClientState.JOINED; // the JOIN_ROOM ack a real socket would send

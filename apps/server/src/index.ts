@@ -13,16 +13,8 @@ const origins = (process.env.CORS_ORIGIN ?? "").split(",").map((s) => s.trim()).
 
 const app = express();
 app.use(cors({ origin: origins.length ? origins : true }));
-app.get("/health", async (_req, res) => {
-  // Player and room counts ride along (2.1): the menu shows "N playing" so a friend knows whether
-  // anyone is in before they join. A failing query must not turn the health check red.
-  let players = 0, rooms = 0;
-  try {
-    const list = await matchMaker.query({ name: "tdm" });
-    rooms = list.length;
-    players = list.reduce((n, r) => n + r.clients, 0);
-  } catch { /* counts are informational */ }
-  res.json({ ok: true, game: "BARBERSTRIKE", version: GAME_VERSION, maxPlayers: MAX_PLAYERS, uptime: process.uptime(), players, rooms });
+app.get("/health", (_req, res) => {
+  res.json({ ok: true, game: "BARBERSTRIKE", version: GAME_VERSION, maxPlayers: MAX_PLAYERS, uptime: process.uptime() });
 });
 
 // Room browser for the lobby: public, unlocked TDM rooms with their metadata.

@@ -16,10 +16,10 @@ const hit = makeRayHit();
  * (never through walls; enemies never get one — readability of the silhouette is their tell).
  */
 export class Nameplates {
-  private plates = new Map<string, { mesh: Mesh; mat: StandardMaterial; tex: DynamicTexture }>();
+  private plates = new Map<string, { mesh: Mesh; mat: StandardMaterial; tex: DynamicTexture; label: string }>();
   private tmp = new Vector3();
 
-  constructor(private scene: Scene, private world: CollisionWorld, private myTeam: () => Team) {}
+  constructor(private scene: Scene, private world: CollisionWorld, private myTeam: () => Team, private label: (p: RemotePlayer) => string = p => p.name) {}
 
   private make(p: RemotePlayer) {
     const tex = new DynamicTexture(`plate_${p.id}`, { width: 256, height: 64 }, this.scene, false);
@@ -40,7 +40,7 @@ export class Nameplates {
     mesh.billboardMode = Mesh.BILLBOARDMODE_ALL;
     mesh.isPickable = false;
     mesh.renderingGroupId = 0;
-    const entry = { mesh, mat, tex };
+    const entry = { mesh, mat, tex, label: "" };
     this.plates.set(p.id, entry);
     return entry;
   }
@@ -64,6 +64,21 @@ export class Nameplates {
       }
       entry.mesh.setEnabled(visible);
       if (visible) {
+        const label = this.label(p);
+        if (entry.label !== label) {
+          entry.label = label;
+          const canvas = entry.tex.getContext() as CanvasRenderingContext2D;
+          canvas.clearRect(0, 0, 256, 64);
+          canvas.font = '600 24px "Inter", system-ui, sans-serif';
+          canvas.textAlign = "center"; canvas.textBaseline = "middle";
+          const lines = label.split("\n");
+          for (let i = 0; i < lines.length; i++) {
+            const y = lines.length === 1 ? 32 : 17 + i * 30;
+            canvas.fillStyle = "rgba(0,0,0,.8)"; canvas.fillText(lines[i], 130, y + 2, 250);
+            canvas.fillStyle = TEAM_COLORS[p.team]; canvas.fillText(lines[i], 128, y, 250);
+          }
+          entry.tex.update(false);
+        }
         entry.mesh.position.set(p.x, p.y + (p.crouch ? 1.55 : 2.05), p.z);
         const s = 0.6 + Math.min(1.2, Math.hypot(p.x - eye.x, p.z - eye.z) / 12);
         entry.mesh.scaling.setAll(s);
