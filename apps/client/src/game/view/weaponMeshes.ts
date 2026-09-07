@@ -431,9 +431,18 @@ const SPECS: Record<WeaponId, Spec> = {
       B(0.04, 0.06, 0.25, 0, 0.025, -0.185, "tan"),                    // stock (butts against the receiver block)
       B(0.044, 0.07, 0.02, 0, 0.025, -0.31, "rubber"),                 // butt pad
       B(0.03, 0.05, 0.08, 0, -0.01, 0.24, "rubber"),                   // fore grip (reaches up to the tube)
-      B(0.03, 0.07, 0.03, 0, 0.1, 0.05, "steel"),                      // ladder sight (stands on the receiver block)
-      B(0.03, 0.004, 0.03, 0, 0.135, 0.05, "steel"),                   // ladder top
-      ...Array.from({ length: 3 }, (_, i) => B(0.032, 0.003, 0.004, 0, 0.095 + i * 0.012, 0.05, "brass")), // ladder rungs
+      // Flip-up ladder sight: the eye looks THROUGH it. A 9.8 mm square peep is centred on aimPoint
+      // (0, 0.135, 0.05); its frame stays 4.9 mm clear of that point (the parts oracle wants a part
+      // within 5 mm of the anchor, so the window cannot be wider).
+      B(0.032, 0.006, 0.012, 0, 0.068, 0.05, "steel"),                 // ladder base (sits on the receiver block top, y=0.065)
+      B(0.004, 0.08, 0.006, -0.014, 0.108, 0.05, "steel"),             // left rail (y 0.068..0.148)
+      B(0.004, 0.08, 0.006, 0.014, 0.108, 0.05, "steel"),              // right rail
+      B(0.032, 0.004, 0.006, 0, 0.148, 0.05, "steel"),                 // top bar (y 0.146..0.150)
+      B(0.028, 0.002, 0.004, 0, 0.1291, 0.05, "steel"),                // peep slider, lower crossbar (top edge 4.9 mm below the aim point)
+      B(0.028, 0.002, 0.004, 0, 0.1409, 0.05, "steel"),                // peep slider, upper crossbar (4.9 mm above)
+      B(0.002, 0.0138, 0.004, -0.0059, 0.135, 0.05, "steel"),          // peep left post (inner edge 4.9 mm off-axis)
+      B(0.002, 0.0138, 0.004, 0.0059, 0.135, 0.05, "steel"),           // peep right post
+      ...Array.from({ length: 4 }, (_, i) => B(0.028, 0.002, 0.004, 0, 0.078 + i * 0.012, 0.05, "brass")), // range rungs, below the peep only
       ...triggerGuard(-0.02, 0.04, 0.05),
     ],
     muzzle: [0, 0.05, 0.49], eject: [0.03, 0.05, 0.06],
