@@ -14,6 +14,11 @@ export const installPerf: GameModule = (ctx) => {
   const scene = ctx.scene;
   const dev = import.meta.env.DEV;
   const scaler = new DynamicScale({ target: ctx.settings.graphics.renderScale });
+  scaler.setTargetFps(ctx.settings.graphics.targetFps);
+  let target = ctx.settings.graphics.renderScale;
+  let enabled = ctx.settings.graphics.dynamicResolution;
+  let targetFps = ctx.settings.graphics.targetFps;
+  let ready = true, readinessAt = 0;
   let currentScale = ctx.settings.graphics.renderScale;
   // Babylon's draw-call counter only resets per frame under EngineInstrumentation; without it the
   // value is cumulative (the 1.0 playtest F3 showed "1 972 685"). Report the per-window delta.
@@ -27,18 +32,26 @@ export const installPerf: GameModule = (ctx) => {
   };
 
   const offSettings = ctx.events.on("settings", () => {
-    scaler.retarget(ctx.settings.graphics.renderScale);
-    applyScale(ctx.settings.graphics.renderScale);
+    const g = ctx.settings.graphics;
+    if (g.targetFps !== targetFps) { targetFps = g.targetFps; scaler.setTargetFps(targetFps); }
+    if (g.renderScale === target && g.dynamicResolution === enabled) return;
+    target = g.renderScale; enabled = g.dynamicResolution;
+    scaler.retarget(target);
+    applyScale(target);
   });
 
   const offFrame = ctx.onAfterRender((dt) => {
+    // Background-tab throttling and shader compilation are not sustained GPU load.
+    if (document.hidden) return;
+    const now = performance.now();
+    // Readiness walks the scene: checking it every frame would itself cost CPU time.
+    if (now - readinessAt > 500) { ready = scene.isReady(); readinessAt = now; }
     acc += dt; frames++;
     if (dt > worst) worst = dt;
-    if (ctx.settings.graphics.dynamicResolution) {
+    if (ctx.settings.graphics.dynamicResolution && ready) {
       const next = scaler.update(dt);
       if (next !== null) applyScale(next);
     }
-    const now = performance.now();
     if (now - last < 500) return;
     const fps = frames > 0 ? Math.round(1000 / (acc / frames)) : 0;
     if (dev) {

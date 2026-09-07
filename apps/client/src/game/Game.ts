@@ -741,7 +741,7 @@ export class Game {
     this.local.settings.bobScale = s.gameplay.headBob;
     this.local.settings.shakeScale = s.gameplay.cameraShake;
     this.local.setFov(s.gameplay.fov);
-    this.engine.setHardwareScalingLevel(1 / s.graphics.renderScale);
+    this.map.setShadowQuality(s.graphics.shadows);
     this.events.emit("settings", {});
   }
 

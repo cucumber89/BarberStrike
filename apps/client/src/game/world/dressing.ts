@@ -2,6 +2,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
+import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import type { MaterialTag, Solid } from "@frankibarber/shared";
 
 /**
@@ -62,6 +63,18 @@ export function dressSolid(scene: Scene, s: Solid, parent: TransformNode, add: A
   };
   const { L, Wd, Ht } = f;
   const body = s.mat;
+  // A tapered cabin gives the windscreen and rear glass an automotive silhouette with the
+  // same twelve triangles as a box. Recalculate normals after moving the upper corners.
+  const cabin = (w: number, h: number, d: number, y: number, z: number) => {
+    const m = MeshBuilder.CreateBox(`${s.name}_cabin`, { width: w, height: h, depth: d }, scene);
+    const pos = m.getVerticesData("position")!, normals = m.getVerticesData("normal")!;
+    for (let i = 0; i < pos.length; i += 3) if (pos[i + 1] > 0) {
+      pos[i] *= .83; pos[i + 2] *= .68;
+    }
+    VertexData.ComputeNormals(pos, m.getIndices()!, normals);
+    m.setVerticesData("position", pos); m.setVerticesData("normal", normals);
+    m.parent = pivot; m.position.set(0, y, z); add(m, "glass_dark");
+  };
 
   switch (s.look) {
     case "car": {
@@ -71,8 +84,8 @@ export function dressSolid(scene: Scene, s: Solid, parent: TransformNode, add: A
       box("rubber", Wd - 0.16, gap - 0.04, L - 0.5, 0, gap / 2, 0);
       box(body, Wd, 0.5, L, 0, gap + 0.25, 0);                                 // lower body
       box(body, Wd - 0.12, 0.18, L - 0.3, 0, gap + 0.59, 0);                     // belt line
-      box("glass_car", Wd - 0.22, Ht - gap - 0.62, L * 0.5, 0, (gap + 0.68 + Ht) / 2 - 0.02, -L * 0.05); // cabin glass
-      box(body, Wd - 0.18, 0.06, L * 0.5, 0, Ht - 0.03, -L * 0.05);            // roof
+      cabin(Wd - 0.22, Ht - gap - 0.68, L * 0.5, (gap + 0.56 + Ht) / 2, -L * 0.05);
+      box(body, (Wd - 0.22) * .83, 0.06, L * .34, 0, Ht - 0.03, -L * 0.05);
       box("metal", Wd + 0.04, 0.12, 0.12, 0, gap + 0.12, L / 2 - 0.02);         // bumpers
       box("metal", Wd + 0.04, 0.12, 0.12, 0, gap + 0.12, -L / 2 + 0.02);
       box("brass", 0.28, 0.1, 0.05, Wd / 2 - 0.3, gap + 0.5, L / 2 + 0.01);     // headlights
@@ -182,8 +195,18 @@ export function dressSolid(scene: Scene, s: Solid, parent: TransformNode, add: A
       const bushes = Math.max(1, Math.round(L / 1.2));
       for (let i = 0; i < bushes; i++) {
         const z = -L / 2 + (L * (i + 0.5)) / bushes;
-        box("foliage", Wd * 0.7, 0.5, 0.9, 0, Ht + 0.2, z, 0.4);
-        box("foliage", Wd * 0.55, 0.42, 0.7, 0.1, Ht + 0.42, z + 0.1, -0.5);
+        // One closed, irregular crown replaces two visibly intersecting green cubes.
+        // No alpha overdraw, wind updates or per-bush materials; merged with static foliage.
+        const crown = MeshBuilder.CreateIcoSphere(`${s.name}_shrub_${i}`, { radius: 1, subdivisions: 2, flat: false }, scene);
+        const p = crown.getVerticesData("position")!, n = crown.getVerticesData("normal")!;
+        for (let j = 0; j < p.length; j += 3) {
+          const r = 1 + .11 * Math.sin(p[j] * 13 + p[j + 1] * 9 + p[j + 2] * 17 + i * 2.3);
+          p[j] *= r * Wd * .43; p[j + 1] *= r * .36; p[j + 2] *= r * Math.min(.64, L / bushes * .65);
+        }
+        VertexData.ComputeNormals(p, crown.getIndices()!, n);
+        crown.setVerticesData("position", p); crown.setVerticesData("normal", n);
+        crown.parent = pivot; crown.position.set(Math.sin(i * 3.1) * Wd * .05, Ht + .27, z);
+        add(crown, "foliage");
       }
       break;
     }

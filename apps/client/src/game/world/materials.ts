@@ -12,7 +12,7 @@ export interface MaterialLibrary {
 }
 
 /** Procedural surface generator name (one height field + albedo per kind, see `generateSurface`). */
-export type SurfaceKind = "tiles" | "concrete" | "brick" | "wood" | "planks" | "asphalt" | "metal" | "plaster" | "panel" | "checker" | "corrugated" | "fence" | "blocks" | "leather" | "rubber";
+export type SurfaceKind = "tiles" | "concrete" | "brick" | "wood" | "planks" | "asphalt" | "metal" | "plaster" | "panel" | "checker" | "corrugated" | "fence" | "blocks" | "leather" | "rubber" | "leaves";
 
 interface Spec {
   albedo: string;
@@ -33,15 +33,15 @@ interface Spec {
 // The generated textures keep the same per-kind mean brightness as the 1.0 greyscale ones (the
 // test pins them), so this palette still means what it was measured to mean.
 const SPECS: Record<MaterialTag, Spec> = {
-  wall_sand: { albedo: "#c6a27d", roughness: .85, metallic: 0, tex: "plaster", scale: 3 },
-  wall_teal: { albedo: "#668d89", roughness: .8, metallic: 0, tex: "plaster", scale: 3 },
+  wall_sand: { albedo: "#aa947b", roughness: .85, metallic: 0, tex: "plaster", scale: 3 },
+  wall_teal: { albedo: "#697b73", roughness: .8, metallic: 0, tex: "plaster", scale: 3 },
   floor_tile: { albedo: "#3c3c40", roughness: 0.35, metallic: 0.0, tex: "checker", scale: 1.2 },
   floor_concrete: { albedo: "#6c6a66", roughness: 0.9, metallic: 0.0, tex: "concrete", scale: 3 },
   floor_wood: { albedo: "#7c5a42", roughness: 0.55, metallic: 0.0, tex: "planks", scale: 2 },
   floor_asphalt: { albedo: "#3a3a40", roughness: 0.95, metallic: 0.0, tex: "asphalt", scale: 4 },
   floor_metal: { albedo: "#585c64", roughness: 0.5, metallic: 0.6, tex: "metal", scale: 2 },
   wall_plaster: { albedo: "#6e665e", roughness: 0.85, metallic: 0.0, tex: "plaster", scale: 3 },
-  wall_brick: { albedo: "#7e5748", roughness: 0.9, metallic: 0.0, tex: "brick", scale: 2 },
+  wall_brick: { albedo: "#7e5748", roughness: 0.9, metallic: 0.0, tex: "brick", scale: 1 },
   wall_tile: { albedo: "#30323a", roughness: 0.25, metallic: 0.0, tex: "tiles", scale: 1 },
   wall_concrete: { albedo: "#7c7872", roughness: 0.9, metallic: 0.0, tex: "concrete", scale: 3 },
   wall_panel: { albedo: "#403630", roughness: 0.5, metallic: 0.05, tex: "panel", scale: 1.5 },
@@ -58,19 +58,19 @@ const SPECS: Record<MaterialTag, Spec> = {
   rubber: { albedo: "#1c1c1e", roughness: 0.95, metallic: 0.0, tex: "rubber", scale: 0.5 },
   ceiling: { albedo: "#3c3c42", roughness: 0.92, metallic: 0.0, tex: "plaster", scale: 3 },
   paint: { albedo: "#5a5960", roughness: 0.6, metallic: 0.05, tex: "plaster", scale: 2 },
-  paint_red: { albedo: "#b8362b", roughness: 0.45, metallic: 0.1, tex: "plaster", scale: 2 },
-  paint_blue: { albedo: "#2f5d9e", roughness: 0.45, metallic: 0.1, tex: "plaster", scale: 2 },
-  paint_green: { albedo: "#3e7a4f", roughness: 0.5, metallic: 0.1, tex: "plaster", scale: 2 },
-  paint_white: { albedo: "#d9d6cf", roughness: 0.5, metallic: 0.05, tex: "plaster", scale: 2 },
-  paint_yellow: { albedo: "#d9a441", roughness: 0.5, metallic: 0.05, tex: "plaster", scale: 2 },
-  paint_orange: { albedo: "#d4682a", roughness: 0.5, metallic: 0.05, tex: "plaster", scale: 2 },
-  corrugated_red: { albedo: "#a8382c", roughness: 0.55, metallic: 0.2, tex: "corrugated", scale: 1 },
-  corrugated_blue: { albedo: "#2c5a8e", roughness: 0.55, metallic: 0.2, tex: "corrugated", scale: 1 },
-  corrugated_green: { albedo: "#3c6e4a", roughness: 0.55, metallic: 0.2, tex: "corrugated", scale: 1 },
+  paint_red: { albedo: "#87483a", roughness: 0.45, metallic: 0.1, tex: "plaster", scale: 2 },
+  paint_blue: { albedo: "#4c6576", roughness: 0.45, metallic: 0.1, tex: "plaster", scale: 2 },
+  paint_green: { albedo: "#485f50", roughness: 0.5, metallic: 0.1, tex: "plaster", scale: 2 },
+  paint_white: { albedo: "#b7b0a0", roughness: 0.5, metallic: 0.05, tex: "plaster", scale: 2 },
+  paint_yellow: { albedo: "#b49655", roughness: 0.5, metallic: 0.05, tex: "plaster", scale: 2 },
+  paint_orange: { albedo: "#a5663c", roughness: 0.5, metallic: 0.05, tex: "plaster", scale: 2 },
+  corrugated_red: { albedo: "#824b3d", roughness: 0.55, metallic: 0.2, tex: "corrugated", scale: 1 },
+  corrugated_blue: { albedo: "#485f70", roughness: 0.55, metallic: 0.2, tex: "corrugated", scale: 1 },
+  corrugated_green: { albedo: "#4d6252", roughness: 0.55, metallic: 0.2, tex: "corrugated", scale: 1 },
   fence: { albedo: "#9aa0a8", roughness: 0.4, metallic: 0.8, tex: "fence", scale: 0.5, cutout: true },
   concrete_block: { albedo: "#8a8680", roughness: 0.9, metallic: 0.0, tex: "blocks", scale: 1.2 },
   soil: { albedo: "#3a2c20", roughness: 1.0, metallic: 0.0, tex: "concrete", scale: 1 },
-  foliage: { albedo: "#3f6b2a", roughness: 0.95, metallic: 0.0, tex: "concrete", scale: 0.7 },
+  foliage: { albedo: "#64734f", roughness: 0.95, metallic: 0.0, tex: "leaves", scale: 0.7 },
   none: { albedo: "#555555", roughness: 0.8, metallic: 0.0 },
 };
 
@@ -138,6 +138,7 @@ export function createMaterialLibrary(scene: Scene): MaterialLibrary {
       const s = surface(kind);
       m.albedoTexture = texture(`${kind}_${scale}_albedo`, s.albedo, scale);
       m.bumpTexture = texture(`${kind}_${scale}_normal`, s.normal, scale);
+      m.bumpTexture.level = kind === "plaster" ? 0.22 : kind === "leaves" ? 0.35 : 0.65;
       // The map has no tangent attributes, so the shader builds its frame from screen derivatives
       // (Babylon's cotangent_frame); with these flags a raised brick shades as raised — verified
       // against the moon direction in a screenshot, see the 2.1 materials pass.
@@ -269,7 +270,7 @@ interface KindGen {
   cutout?: boolean;
 }
 
-const KIND_SEED: Record<SurfaceKind, number> = { tiles: 11, concrete: 23, brick: 37, wood: 41, planks: 53, asphalt: 67, metal: 71, plaster: 83, panel: 97, checker: 101, corrugated: 113, fence: 127, blocks: 131, leather: 139, rubber: 149 };
+const KIND_SEED: Record<SurfaceKind, number> = { tiles: 11, concrete: 23, brick: 37, wood: 41, planks: 53, asphalt: 67, metal: 71, plaster: 83, panel: 97, checker: 101, corrugated: 113, fence: 127, blocks: 131, leather: 139, rubber: 149, leaves: 157 };
 
 // Cell scratch for the masonry-like kinds (module-level so the per-pixel path allocates nothing).
 let cCol = 0, cRow = 0, cFx = 0, cFy = 0, cD = 0, cCw = 0, cCh = 0;
@@ -462,6 +463,17 @@ function kindGen(kind: SurfaceKind, T: Tables): KindGen {
           const ov = 1 - 0.32 * oil;
           o[0] = v * ov * (1 + 0.04 * oil); o[1] = v * ov; o[2] = v * ov * (1 - 0.04 * oil);
           return h;
+        },
+      };
+    }
+    case "leaves": {
+      return {
+        relief: 0.8,
+        px(x, y, o) {
+          const leaf = v128(x, y), cluster = v32(x, y);
+          const v = .48 + .32 * leaf + .18 * cluster;
+          o[0] = v * .96; o[1] = v; o[2] = v * .84;
+          return .35 + .35 * leaf + .12 * cluster;
         },
       };
     }

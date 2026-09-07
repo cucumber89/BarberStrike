@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  BINDABLE_ACTIONS, CROSSHAIR_COLORS, DEFAULT_CROSSHAIR, PRESETS, RESERVED_CODES, bindingConflicts, defaultSettings, keyLabel, resolveBindings,
+  BINDABLE_ACTIONS, CROSSHAIR_COLORS, DEFAULT_CROSSHAIR, RESERVED_CODES, applyQualityPreset, isCustomGraphics, bindingConflicts, defaultSettings, keyLabel, resolveBindings,
   type BindableAction, type CrosshairColor, type QualityPreset, type Settings,
 } from "../settings";
 import { uiSound } from "../game/audio";
@@ -82,16 +82,18 @@ export function SettingsPanel({ settings, onChange, initialTab = "gameplay" }: P
       {tab === "graphics" && (
         <div className="tab-body">
           <Choice label="Quality preset" value={gr.preset} options={(["low", "medium", "high", "ultra"] as QualityPreset[]).map((p) => ({ id: p, label: p.toUpperCase() }))}
-            onChange={(p) => set({ graphics: { ...PRESETS[p], renderer: gr.renderer } })} hint="LOW for laptops and integrated graphics; MEDIUM is the default after a real playtest." />
+            onChange={(p) => set({ graphics: applyQualityPreset(gr, p) })} hint={isCustomGraphics(gr) ? "CUSTOM — individual options differ from this preset." : "Quality adjusts effects and resolution. Brightness stays the same."} />
+          <Slider label="Brightness" value={gr.brightness} min={0.75} max={1.5} step={0.05} onChange={(v) => set({ graphics: { ...gr, brightness: v } })} format={pct} hint="Display calibration. Preserved when you change quality." />
           <Slider label="Render scale" value={gr.renderScale} min={0.5} max={1} step={0.05} onChange={(v) => set({ graphics: { ...gr, renderScale: v } })} format={pct} />
           <Choice label="Shadows" value={gr.shadows} options={[{ id: "off", label: "OFF" }, { id: "medium", label: "MEDIUM" }, { id: "high", label: "HIGH" }] as const} onChange={(v) => set({ graphics: { ...gr, shadows: v } })} />
           <Slider label="Effects density" value={gr.effects} min={0} max={1} step={0.1} onChange={(v) => set({ graphics: { ...gr, effects: v } })} format={pct} />
-          <Toggle label="Dynamic resolution" hint="Lowers the render scale when frames get slow, so the game stays smooth." value={gr.dynamicResolution} onChange={(v) => set({ graphics: { ...gr, dynamicResolution: v } })} />
-          <Toggle label="Post-processing" hint="Bloom, tone mapping and vignette." value={gr.postProcessing} onChange={(v) => set({ graphics: { ...gr, postProcessing: v } })} />
-          <Toggle label="Anti-aliasing" value={gr.antialiasing} onChange={(v) => set({ graphics: { ...gr, antialiasing: v } })} />
+          <Toggle label="Dynamic resolution" hint="Adjusts sharpness up to your render scale to approach the FPS target. Does not change brightness." value={gr.dynamicResolution} onChange={(v) => set({ graphics: { ...gr, dynamicResolution: v } })} />
+          <Choice label="Dynamic resolution target" value={String(gr.targetFps)} options={[{id:"60",label:"60 FPS"},{id:"90",label:"90 FPS"},{id:"120",label:"120 FPS"}]} onChange={(v) => set({graphics:{...gr,targetFps:Number(v) as 60 | 90 | 120}})} hint="Choose a target your display and hardware can reach. This is not an FPS cap." />
+          <Toggle label="Post-processing" hint="HIGH: bloom. ULTRA: bloom and sharpening. Colour correction stays enabled at every quality." value={gr.postProcessing} onChange={(v) => set({ graphics: { ...gr, postProcessing: v } })} />
+          <Toggle label="Anti-aliasing" hint="FXAA edge smoothing. Works independently of post-processing." value={gr.antialiasing} onChange={(v) => set({ graphics: { ...gr, antialiasing: v } })} />
           <Toggle label="Extra scenery models" hint="Characters and weapons are always built in-game; this adds the optional CC0 scenery packs. Off is lighter on weak GPUs." value={gr.importedModels} onChange={(v) => set({ graphics: { ...gr, importedModels: v } })} />
           <Toggle label="Force WebGL2 (disable WebGPU)" hint="Try this if the screen stays black or the renderer crashes." value={gr.renderer === "webgl2"} onChange={(v) => set({ graphics: { ...gr, renderer: v ? "webgl2" : "auto" } })} />
-          <p className="muted small">Render scale and field of view apply at once; the rest applies on the next match.</p>
+          <p className="muted small">Brightness, shadows, effects, anti-aliasing and resolution apply immediately. Renderer and extra scenery models apply on the next match.</p>
         </div>
       )}
 
