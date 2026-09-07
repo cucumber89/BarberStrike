@@ -212,6 +212,7 @@ Nick + password or Discord OAuth, server-side profile (skins, haircuts, XP), wee
 | Date | Drop | Branch | Session did | Evidence (paths) | Tests | Status |
 |---|---|---|---|---|---|---|
 | 2026-09-07 | — | main | Plan written | docs/PLAN_2_1.md | — | planned |
+| 2026-09-07 | A | claude/new-session-o0hcng (harness-assigned; stands in for `drop/a-weapons-fit`) | Built `weapon-parts.mjs` / `pnpm check:weapons` (pure `weaponParts.ts` + `weaponParts.check.test.ts` on the real import pipeline, CI step). First run 2/11. Fixed what it found: support hand hovering 13–25 mm under every long gun and sitting at the muzzle on the MDR/MPA (measured `WeaponModel.support`); derived ejection port in mid-air on MK14/SRSA1/RPG; RPG built backwards (sights now orient the model); LMG grip/stock/sight/belt box, shotgun stock, clippers anchors floating (spec numbers). Now 11/11. `docs/WEAPON_FIT.md` started. | apps/client/e2e/out/weapons/parts.md (regenerate with `pnpm check:weapons`), docs/WEAPON_FIT.md | typecheck ✓ test ✓ (433) build ✓ check:weapons ✓ e2e — (not run: needs servers) | in progress |
 
 Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 
@@ -219,9 +220,31 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 
 - 2026-09-07 — Plan created from the owner's brief: weapons structure + feel, procedural skins with
   crates, party modes, shave mechanic, roles as presets, second map, accounts last.
+- 2026-09-07 — Drop A, "> 5 mm from the receiver" is read as **attachment**: a part passes when it is
+  connected to the receiver through a chain of parts that touch within 5 mm (barrel → handguard →
+  receiver), and the plain distance to the receiver is reported as evidence, not judged. The literal
+  reading would flag every muzzle device on every rifle. (lead agent; owner to confirm or reopen)
+- 2026-09-07 — Drop A: the branch is the harness-assigned `claude/new-session-o0hcng`, not
+  `drop/a-…` — the session may only push there. Treat it as the Drop A branch until merged. (lead)
+- 2026-09-07 — Drop A: the parts check runs inside `pnpm test` (it is a vitest file) AND as its own
+  CI step `pnpm check:weapons`, which prints the table. Double run costs ~3 s. (lead)
 
 ## Deferred (things noticed, deliberately not done)
 
 - Server perf pass (shared nav grid, bot LOS cache, compression, snapshot trimming) — separate
   brief `OPTIMIZATION_PROMPT.md`; runs on its own branch, does not block any drop above.
 - `defaultServerUrl` same-origin fallback (`Connection.ts:253-261`) — in the perf brief.
+- Drop A, next session: `vm-fit.mjs` ±1 px ADS numbers, `hand-pose.mjs` 5° bore check, the
+  idle/ADS/reload/inspect screenshot set and its art review — all need the dev server + browser.
+- Drop A: the LMG's procedural front sight is now 76 mm tall (base dropped onto the barrel, top kept
+  at the rail-height sight line). Lowering the sight line means lowering the rear sight too; judge
+  on a screenshot first.
+- Drop A: the sidearm rule puts the left hand 29–40 mm INTO the pistol/revolver frame (two-handed
+  hold, unchanged from before) and the SMGs' support hand now rests under the magazine well. Both
+  are what the numbers say a two-handed hold is, but only a screenshot says whether they read.
+- Drop A: the RPG model has no pistol grip (`Side_Grip_Left/Right` are 4 mm strips at the rear
+  cover); the hand origin is the box-proportion fallback. A hand-set grip would need a manifest
+  field the plan does not name — ask before adding one.
+- Drop A: `weaponRig` has no `receiver` / `foregrip` roles; `weaponParts.pickReceiver` names the
+  receiver by regex-then-volume instead. Fine for this pack; revisit if a model has a named
+  handguard the support hand should be told about.
