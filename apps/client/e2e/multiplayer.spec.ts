@@ -319,11 +319,16 @@ test.describe("two clients", () => {
       await p.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().myId !== "", null, { timeout: 30_000 });
     }
     await expect.poll(async () => (await hud(a)).phase, { timeout: 20_000 }).toBe("playing");
+    // At a $ BUY counter the shop is open by rule, however long the second page took to load: the
+    // 15 s post-spawn window MEASURED expired once while B was still compiling shaders (25 s).
+    const station = await a.evaluate(() => window.__fb.game.mapDefinition.stations[0]);
+    await a.evaluate((st) => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x: st.x, y: st.y, z: st.z }), station);
+    await expect.poll(async () => (await hud(a)).nearStation, { timeout: 10_000 }).toBe(true);
     await fakeLock(a);
     await a.mouse.move(320, 180);
     await waitForFrames(a, 5);
 
-    // Wallet: start money, pistol only, spawn window open.
+    // Wallet: start money, pistol only, the counter keeps the window open.
     const h0 = await hud(a);
     expect(h0.money).toBe(2000);
     expect(h0.owned).toEqual(["pistol"]);
@@ -346,6 +351,10 @@ test.describe("two clients", () => {
     await expect(a.getByTestId("shop")).toBeHidden();
     await expect.poll(async () => (await hud(a)).shopOpen).toBe(false);
     await fakeLock(a);
+    // Back out into the open yard for the grenades: a flash lobbed at the feet behind a shop counter
+    // is a flash nobody sees (the white-out needs line of sight from the burst).
+    await a.evaluate(() => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x: 0, y: 0, z: 30 }));
+    await expect.poll(async () => Math.abs((await pos(a)).z - 30), { timeout: 10_000 }).toBeLessThan(0.3);
 
     // Cook a frag: G held shows the cook ring, the count drops when it leaves the hand, the server booms it.
     await a.evaluate(() => { window.__fb.game.localPlayer.pitch = -0.4; }); // lob it up and away
@@ -635,13 +644,24 @@ test.describe("two clients", () => {
         const b = lp.body; let best = 0, bestYaw = 0;
         for (let i = 0; i < 16; i++) {
           const yaw = i * Math.PI / 8; let d = 0;
-          for (; d < 30; d += 0.5) { const x = b.x + Math.sin(yaw) * d, z = b.z + Math.cos(yaw) * d; if (lp.world.overlaps(x - 0.35, b.y + 0.45, z - 0.35, x + 0.35, b.y + 1.7, z + 0.35)) break; }
+          // Feet to head: a cone or a kerb (below the 0.4 m step) still kills a slide's speed.
+          for (; d < 30; d += 0.5) { const x = b.x + Math.sin(yaw) * d, z = b.z + Math.cos(yaw) * d; if (lp.world.overlaps(x - 0.35, b.y + 0.05, z - 0.35, x + 0.35, b.y + 1.7, z + 0.35)) break; }
           if (d > best) { best = d; bestYaw = yaw; }
         }
         lp.yaw = bestYaw; lp.pitch = 0; return best;
       });
       expect(run, "metres of clear floor ahead").toBeGreaterThan(14);
       const body = () => a.evaluate(() => { const l = window.__fb.game.localPlayer as unknown as { body: { slide: number; slideCd: number; vx: number; vz: number; crouching: boolean }; correctionCount: number }; return { slide: l.body.slide, cd: l.body.slideCd, speed: Math.hypot(l.body.vx, l.body.vz), crouch: l.body.crouching, corrections: l.correctionCount }; });
+      // Set up BEFORE the sprint: the clear run ahead is 14–30 m and a sprint eats it in seconds,
+      // so the crouch must follow the speed check at once.
+      // The watcher latches the slide from every decoded patch: a 0.8 s slide can fall between two
+      // of its frames on the software renderer, so polling its state from outside could miss it.
+      const aId = await a.evaluate(() => window.__fb.hud.get().myId);
+      for (const p of [a, b]) await p.evaluate((id) => {
+        const w = window as unknown as { __slideSeen?: boolean; __patches?: number; __fb: { game: { conn: { room: { onStateChange(cb: (s: { players: Map<string, { slide: number }> }) => void): void } } } } };
+        w.__slideSeen = false; w.__patches = 0;
+        w.__fb.game.conn.room.onStateChange((s) => { w.__patches!++; if ((s.players.get(id)?.slide ?? 0) > 0) w.__slideSeen = true; });
+      }, aId);
       await a.keyboard.down("KeyW"); await a.keyboard.down("ShiftLeft");
       await expect.poll(async () => (await body()).speed, { timeout: 10_000 }).toBeGreaterThan(6.5);
       const before = (await body()).corrections;
@@ -650,13 +670,19 @@ test.describe("two clients", () => {
       const mid = await body();
       expect(mid.crouch).toBe(true);
       expect(mid.speed, "faster than a crouch walk while sliding").toBeGreaterThan(4);
-      const aId = await a.evaluate(() => window.__fb.hud.get().myId);
-      await expect.poll(async () => b.evaluate((id) => (window.__fb.game as unknown as { conn: { state: { players: Map<string, { slide: number }> } } }).conn.state.players.get(id)?.slide ?? 0, aId), { timeout: 5_000 }).toBeGreaterThan(0);
-      await expect.poll(async () => (await body()).slide, { timeout: 10_000 }).toBe(0);
+      const seen = (p: Page) => p.evaluate(() => { const w = window as unknown as { __slideSeen?: boolean; __patches?: number }; return { seen: w.__slideSeen, patches: w.__patches, fps: window.__fb.hud.get().fps }; });
+      // The server's verdict comes back in A's own replicated state first; the watcher's page
+      // renders on the same software GPU and MEASURED processed a third of the patches A did in
+      // the same ten seconds, so it gets the time its backlog needs, not a guess.
+      await expect.poll(async () => (await seen(a)).seen, { timeout: 10_000 }).toBe(true);
+      // The end of the slide and its cooldown are checked the moment it ends (the cooldown is 0.7 s
+      // of simulated time, gone long before the watcher's backlog clears).
+      await expect.poll(async () => (await body()).slide, { timeout: 15_000 }).toBe(0);
       const after = await body();
       expect(after.cd, "cooldown after the slide").toBeGreaterThan(0);
       expect(after.corrections - before, "prediction and server agree on the slide").toBeLessThanOrEqual(2);
       await a.keyboard.up("ControlLeft"); await a.keyboard.up("ShiftLeft"); await a.keyboard.up("KeyW");
+      await expect.poll(async () => (await seen(b)).seen, { timeout: 30_000, message: "the watcher sees the slide once its patch backlog clears" }).toBe(true);
     } finally { await ca.close(); await cb.close(); }
   });
 

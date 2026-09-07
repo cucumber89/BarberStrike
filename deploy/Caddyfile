@@ -16,19 +16,11 @@ www.{$DOMAIN} {
 }
 
 {$DOMAIN} {
+	# Kompresja w locie tylko dla odpowiedzi, które nie mają jeszcze Content-Encoding (JSON z /health,
+	# /rooms). Assety klienta przychodzą z serwera gry już skompresowane (.br/.gz z builda) — Caddy
+	# ich nie dotyka, a Cache-Control ustawia serwer gry (apps/server/src/hosting.ts), żeby żadna
+	# odpowiedź nie niosła dwóch nagłówków.
 	encode zstd gzip
-
-	# Hashowane assety Vite (nazwa zmienia się przy każdym buildzie) — cache na rok.
-	@assets path /assets/*
-	header @assets Cache-Control "public, max-age=31536000, immutable"
-
-	# Modele GLB: nazwy stałe, więc miesiąc + rewalidacja. Duże pliki, warto je trzymać u gracza.
-	@models path /models/*
-	header @models Cache-Control "public, max-age=2592000"
-
-	# index.html nigdy nie cache'owany — inaczej deploy jest niewidoczny do wygaśnięcia cache'u.
-	@html path / /index.html
-	header @html Cache-Control "no-cache"
 
 	# WebSocket Colyseusa i całą resztę obsługuje ten sam upstream; Caddy przepuszcza upgrade sam.
 	reverse_proxy game:2567

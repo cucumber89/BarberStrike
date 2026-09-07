@@ -1,6 +1,6 @@
 import { Scene } from "@babylonjs/core/scene";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { LEAN, PERK_ORDER, PLAYER, lerp, lerpAngle, type Team, type WeaponId } from "@frankibarber/shared";
+import { LEAN, PERK_ORDER, PLAYER, dequantAngle, dequantVel, lerp, lerpAngle, type Team, type WeaponId } from "@frankibarber/shared";
 import type { NetPlayer } from "../net/Connection";
 import { Character, type CharacterLike } from "../view/Character";
 
@@ -60,9 +60,9 @@ export class RemotePlayer {
     this.team = displayTeam;
     this.character = (make ?? ((s, t, i) => new Character(s, t, i)))(scene, this.team, p.id);
     this.pushFrom(p, 0);
-    this.x = p.x; this.y = p.y; this.z = p.z; this.yaw = p.yaw;
+    this.x = p.x; this.y = p.y; this.z = p.z; this.yaw = dequantAngle(p.yaw);
     this.character.root.position.set(p.x, p.y, p.z);
-    this.character.root.rotation.y = p.yaw;
+    this.character.root.rotation.y = this.yaw;
   }
 
   get root() { return this.character.root; }
@@ -78,8 +78,8 @@ export class RemotePlayer {
   }
 
   private fill(s: Snapshot, p: NetPlayer, t: number): void {
-    s.t = t; s.x = p.x; s.y = p.y; s.z = p.z; s.yaw = p.yaw; s.pitch = p.pitch;
-    s.crouch = p.crouch; s.alive = p.alive; s.vx = p.vx; s.vz = p.vz; s.grounded = p.grounded;
+    s.t = t; s.x = p.x; s.y = p.y; s.z = p.z; s.yaw = dequantAngle(p.yaw); s.pitch = dequantAngle(p.pitch);
+    s.crouch = p.crouch; s.alive = p.alive; s.vx = dequantVel(p.vx); s.vz = dequantVel(p.vz); s.grounded = p.grounded;
     s.reloading = p.reloading; s.weapon = p.weapon as WeaponId;
     let until = 0;
     for (const id of PERK_ORDER) { const u = p.perks?.get(id) ?? 0; if (u > until) until = u; }

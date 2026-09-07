@@ -13,11 +13,13 @@ export class PlayerState extends Schema {
   @type("float32") x = 0;
   @type("float32") y = 0;
   @type("float32") z = 0;
-  @type("float32") yaw = 0;
-  @type("float32") pitch = 0;
-  @type("float32") vx = 0;
-  @type("float32") vy = 0;
-  @type("float32") vz = 0;
+  // Task 5: angles in 0.1 mrad and velocities in cm/s as int16 — half the bytes of float32 for
+  // precision nothing on the client can tell apart (see quantAngle / quantVel in shared types).
+  @type("int16") yaw = 0;
+  @type("int16") pitch = 0;
+  @type("int16") vx = 0;
+  @type("int16") vy = 0;
+  @type("int16") vz = 0;
   @type("boolean") grounded = true;
   @type("boolean") crouch = false;
 
@@ -35,7 +37,6 @@ export class PlayerState extends Schema {
   @type("uint16") score = 0;
   @type("uint16") ping = 0;
   /** Last input sequence the server has simulated (for client reconciliation). */
-  @type("uint32") ack = 0;
   @type("boolean") connected = true;
 
   // ---- economy (1.1 drop 2): wallet + loadout, mirrored by the client's shop UI.

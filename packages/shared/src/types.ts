@@ -57,6 +57,19 @@ export interface PlayerInput {
   pitch: number;
 }
 
+/**
+ * Snapshot quantisation (performance pass, task 5). Angles ride as int16 in 0.1 mrad (±3.2767 rad
+ * covers ±π), velocities as int16 cm/s (±327 m/s; the fastest body does 9). Both ends use these
+ * two pairs, so the server writes and the client reads the same units by construction.
+ */
+export const NET_ANGLE_SCALE = 10000;
+export const NET_VEL_SCALE = 100;
+const I16 = (n: number) => Math.max(-32768, Math.min(32767, Math.round(n)));
+export const quantAngle = (rad: number): number => I16(rad * NET_ANGLE_SCALE);
+export const dequantAngle = (q: number): number => q / NET_ANGLE_SCALE;
+export const quantVel = (v: number): number => I16(v * NET_VEL_SCALE);
+export const dequantVel = (q: number): number => q / NET_VEL_SCALE;
+
 /** Wire form of PlayerInput: [seq, dtMs, buttons, yaw, pitch]. */
 export type InputTuple = [number, number, number, number, number];
 
@@ -119,6 +132,8 @@ export interface MarkEvent { id: string; name: string; team: Team; x: number; y:
 export const S2C = {
   Welcome: "welcome",
   Pong: "pong",
+  /** Your last acknowledged input seq (number), sent to you alone right before each state patch. */
+  Ack: "ack",
   Shot: "shot",
   Hit: "hit",
   Damaged: "dmg",
