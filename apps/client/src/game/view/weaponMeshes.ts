@@ -37,6 +37,8 @@ export interface WeaponModel {
   actionKind: ActionKind;
   /** Aim point in root space (top of the front sight / scope axis): in ADS this sits on the camera axis. */
   aimPoint: [number, number, number];
+  /** The same aim point as a node, so a tool can read where it lands on screen (`vm-fit.mjs`). */
+  aim: TransformNode;
   /** Approximate length along +Z (metres), for pose tuning. */
   length: number;
   /** Where the support (left) hand rests, in root space — measured against the fore-end (`supportHandHome`). */
@@ -462,6 +464,9 @@ export function buildWeaponModel(id: WeaponId, mats: WeaponMaterials, scene: Sce
   const eject = new TransformNode(`${name}_eject`, scene);
   eject.position.set(...spec.eject);
   eject.parent = root;
+  const aim = new TransformNode(`${name}_aim`, scene);
+  aim.position.set(...spec.aimPoint);
+  aim.parent = root;
   let magazine: TransformNode | null = null;
   if (spec.magazine) {
     magazine = new TransformNode(`${name}_mag`, scene);
@@ -475,7 +480,7 @@ export function buildWeaponModel(id: WeaponId, mats: WeaponMaterials, scene: Sce
     action.parent = root;
     buildParts(`${name}_action`, spec.action.parts, mats, scene, action);
   }
-  return { root, muzzle, eject, magazine, action, actionKind: spec.action?.kind ?? "none", aimPoint: spec.aimPoint, length: spec.length, support: proceduralParts(id).support };
+  return { root, muzzle, eject, aim, magazine, action, actionKind: spec.action?.kind ?? "none", aimPoint: spec.aimPoint, length: spec.length, support: proceduralParts(id).support };
 }
 
 /** Sets rendering group + shadow flags on every mesh of a model. */

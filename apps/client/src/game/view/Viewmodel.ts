@@ -493,7 +493,11 @@ export class Viewmodel {
     // ADS: put the weapon's aim point (front sight / scope axis) exactly on the camera axis at
     // `adsZ` in front of the lens — solved, not eyeballed, so every weapon lines up.
     const [ax, ay, az] = model.aimPoint;
-    const adsZ = longGun ? 0.5 : 0.36;
+    // Measured (drop A, vm-fit.mjs): a fixed 0.5 m put the shotgun's BEAD half a metre out and so
+    // its receiver and pump inside the eye (gun box z −0.57…0.52 in camera space, the pump filling
+    // the frame). The aim point must sit at least 15 cm ahead of the grip's eye position, so a gun
+    // sighted at its muzzle is held out far enough to look OVER the receiver.
+    const adsZ = Math.max(longGun ? 0.5 : 0.36, az + 0.15);
     const adsX = -ax, adsY = -ay, adsRootZ = adsZ - az;
     tx = tx + (adsX - tx) * ads; ty = ty + (adsY - ty) * ads; tz = tz + (adsRootZ - tz) * ads;
     trx *= 1 - ads; try_ *= 1 - ads; trz *= 1 - ads;

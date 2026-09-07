@@ -213,6 +213,7 @@ Nick + password or Discord OAuth, server-side profile (skins, haircuts, XP), wee
 |---|---|---|---|---|---|---|
 | 2026-09-07 | — | main | Plan written | docs/PLAN_2_1.md | — | planned |
 | 2026-09-07 | A | claude/new-session-o0hcng (harness-assigned; stands in for `drop/a-weapons-fit`) | Built `weapon-parts.mjs` / `pnpm check:weapons` (pure `weaponParts.ts` + `weaponParts.check.test.ts` on the real import pipeline, CI step). First run 2/11. Fixed what it found: support hand hovering 13–25 mm under every long gun and sitting at the muzzle on the MDR/MPA (measured `WeaponModel.support`); derived ejection port in mid-air on MK14/SRSA1/RPG; RPG built backwards (sights now orient the model); LMG grip/stock/sight/belt box, shotgun stock, clippers anchors floating (spec numbers). Now 11/11. `docs/WEAPON_FIT.md` started. | apps/client/e2e/out/weapons/parts.md (regenerate with `pnpm check:weapons`), docs/WEAPON_FIT.md | typecheck ✓ test ✓ (433) build ✓ check:weapons ✓ e2e — (not run: needs servers) | in progress |
+| 2026-09-07 | A | claude/new-session-o0hcng | Slice 2, in a browser: `vm-fit.mjs` now buys all 11 weapons, projects each gun's new `aim` node in ADS (mean over one breath) and counts near-plane-cut vertices; `hand-pose.mjs` measures every weapon on the procedural `gunHand`; `weapon-shots.mjs` shoots idle/ADS/reload/inspect + third-person front and profile. Found and fixed: the shotgun's ADS put its receiver around the eye and its pump through the near plane (ADS distance rule, aim point ≥ 15 cm ahead). Art review round 1 (54 images): 2 harness faults (empty third-person frames, reloads not started — both fixed), plus hands-as-blocks, DMR lens disc, identical smg/smg2 and dmr/sniper silhouettes → Deferred. Round 2 review pending at the time of this row. Found: the running game never uses the imported glTF guns/characters (`Game.ts:164`) → proposal in Decisions. | docs/WEAPON_FIT.md (vm-fit, hand-pose tables); apps/client/e2e/out/weapons/{vm-fit.md,hand-pose.json,<id>/*.png} (regenerate) | typecheck ✓ test ✓ (435) build ✓ check:weapons ✓ e2e — | in progress |
 
 Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 
@@ -228,6 +229,26 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
   `drop/a-…` — the session may only push there. Treat it as the Drop A branch until merged. (lead)
 - 2026-09-07 — Drop A: the parts check runs inside `pnpm test` (it is a vitest file) AND as its own
   CI step `pnpm check:weapons`, which prints the table. Double run costs ~3 s. (lead)
+- 2026-09-07 — **PROPOSAL, owner to decide.** The plan says the weapons' truth lives in the glTF
+  import pipeline (`weaponModels.ts`), but the running game never uses it: `Game.ts:164` empties
+  the manifest's `characters` and `weapons` since the ChatGPT merge ("procedural art at every
+  quality level"), so every player sees the procedural guns and characters, and `assets-check.mjs`
+  reports 0 imported weapon sources on a live client. Drop A's tools now measure both (the parts
+  check runs the import pipeline headlessly; vm-fit / hand-pose / screenshots measure what is on
+  screen, i.e. procedural). Options: (a) the procedural set is the product — retire the import
+  path, delete the 7 MB of glTFs from the bundle, and Drops B/C target the procedural meshes;
+  (b) re-enable the imports for weapons only (one line in Game.ts) and re-run the tools on them.
+  Until answered the session keeps both paths green. (lead)
+- 2026-09-07 — **DECIDED (owner): option (a).** The procedural weapons are the product ("the imported
+  ones looked weak; I prefer the ones generated in-game, they need improving"). Consequences, as
+  Deferred work: retire the glTF weapon import path and drop the 7 MB of firearm .glb files from
+  the bundle (keep `weaponRig` / `weaponFit` tests only as long as the code stays); Drops B and C
+  target the procedural meshes; "improving" the procedural guns is geometry work for Drop A's next
+  slices (hands, silhouettes) and skins for Drop C. (owner, 2026-09-07)
+- 2026-09-07 — Drop A: ADS distance is no longer a fixed 0.36 / 0.5 m; the aim point sits at least
+  15 cm ahead of the eye (`Viewmodel.ts`). Measured cause: the shotgun's bead-at-the-muzzle aim
+  point put its receiver around the camera and its pump through the near plane. Changes only the
+  shotgun and the LMG; the sight alignment (±1 px) is unchanged. (lead)
 
 ## Deferred (things noticed, deliberately not done)
 
@@ -245,6 +266,24 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 - Drop A: the RPG model has no pistol grip (`Side_Grip_Left/Right` are 4 mm strips at the rear
   cover); the hand origin is the box-proportion fallback. A hand-set grip would need a manifest
   field the plan does not name — ask before adding one.
+- Drop A (owner decision, option a): remove the glTF weapon import path — `weaponModels.ts`, the
+  `weapons` block of `public/models/manifest.json`, the eight firearm .glb files, and the "gltf"
+  branch of `weaponParts.check.test.ts` — in its own commit, after the owner confirms the
+  characters' import path goes the same way (it is disabled in `Game.ts` too).
+- Drop A: art review round 2 asks for a real inspect/reload READ on the procedural guns: the
+  magazine drop happens below the frame at the default hip pose, the revolver's cylinder does not
+  swing out, the sniper's bolt does not move in the mid-reload frame. Animation choreography, not
+  fit; judge on a real GPU with the camera pitched down before changing timelines.
+- Drop A: the viewmodel hands are two beveled boxes per arm (`Viewmodel.buildHands`); during
+  inspect and reload they read as a pile of loose blocks (art review, every weapon). A jointed
+  hand/forearm or a rigged arm mesh is a Drop E/C-sized job, not geometry fitting.
+- Drop A / B: the DMR's ADS looks through an opaque lens disc (it has a scope model but is not
+  `scoped`, so no overlay); the sniper alone gets the overlay. Drop B decides whether the DMR is a
+  scoped weapon.
+- Drop B / C: the smg / smg2 and dmr / sniper procedural silhouettes are near-identical at a
+  glance (art review). Feel (B) and skins (C) can separate them; geometry cannot without new specs.
+- Drop A: the sniper's breath through the scope is ±3 px at 960×540 (vm-fit); hold-breath (Drop B)
+  is the fix, not a geometry change.
 - Drop A: `weaponRig` has no `receiver` / `foregrip` roles; `weaponParts.pickReceiver` names the
   receiver by regex-then-volume instead. Fine for this pack; revisit if a model has a named
   handguard the support hand should be told about.
