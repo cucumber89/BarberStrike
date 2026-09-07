@@ -24,7 +24,7 @@ export const XP = {
   assist: 50,
   /** Domination capture. */
   capture: 150,
-  /** Surviving a whole Bomb Plant round, i.e. still alive when the round ends (continuous modes have no rounds). */
+  /** Surviving a whole wave, i.e. still alive when the preparation window opens (2.0 drop 7). */
   waveSurvived: 25,
   /** Finishing the match at all, win or lose: showing up is worth something. */
   played: 100,
@@ -61,7 +61,7 @@ export function xpForMatch(s: MatchStats): { lines: XpLine[]; total: number } {
   add(`Trafienia w głowę ×${s.headshots}`, s.headshots * XP.headshot);
   add(`Asysty ×${s.assists}`, s.assists * XP.assist);
   add(`Przejęcia ×${s.captures}`, s.captures * XP.capture);
-  add(`Przetrwane rundy ×${s.wavesSurvived}`, s.wavesSurvived * XP.waveSurvived);
+  add(`Przetrwane fale ×${s.wavesSurvived}`, s.wavesSurvived * XP.waveSurvived);
   add("Rozegrany mecz", XP.played);
   if (s.result === 1) add("Wygrana", XP.win);
   else if (s.result === 0) add("Remis", XP.draw);
@@ -159,7 +159,7 @@ export const BADGES: readonly BadgeDef[] = [
   { id: "flawless", name: "BEZ DRAŚNIĘCIA", blurb: "Mecz bez śmierci", earned: (s) => s.flawless >= 1 },
   { id: "wins-10", name: "STAŁY KLIENT", blurb: "10 wygranych", earned: (s) => s.wins >= 10 },
   { id: "best-15", name: "DOBRY WIECZÓR", blurb: "15 zabójstw w jednym meczu", earned: (s) => s.bestKills >= 15 },
-  { id: "waves-100", name: "TWARDZIEL", blurb: "100 przetrwanych rund Bomb", earned: (s) => s.wavesSurvived >= 100 },
+  { id: "waves-100", name: "TWARDZIEL", blurb: "100 przetrwanych fal", earned: (s) => s.wavesSurvived >= 100 },
 ];
 
 /** Adds one match to a lifetime total. Pure: the caller decides what to do with the result. */

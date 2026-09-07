@@ -10,7 +10,7 @@ import { Flags } from "./Flags";
 import { BombSites } from "./BombSites";
 import { Marks } from "./Marks";
 import { hud } from "../store";
-import { INTERP_DELAY_MS, MatchPhase, WEAPONS, makeRayHit } from "@frankibarber/shared";
+import { boysClass, INTERP_DELAY_MS, MatchPhase, WEAPONS, makeRayHit } from "@frankibarber/shared";
 
 /**
  * Presentation module: first-person viewmodel, muzzle flashes, tracers, impacts, decals,
@@ -24,15 +24,15 @@ export const installView: GameModule = (ctx) => {
   // procedural weapons are already up, and a slow or missing file must not delay the first frame.
   if (ctx.weaponModels) void viewmodel.useModels(ctx.weaponModels);
   const effects = new Effects(ctx.scene, ctx.world);
-  const nameplates = new Nameplates(ctx.scene, ctx.world, () => (ctx.connection.me()?.team ?? 0) as 0 | 1);
+  const nameplates = new Nameplates(ctx.scene, ctx.world, () => (ctx.connection.me()?.team ?? 0) as 0 | 1, p => {
+    const net = ctx.connection.state.players.get(p.id);
+    return ctx.connection.state.mode === "boys" && net
+      ? `${p.name}\n${boysClass(net.boysClass).name} · ${net.health} HP` : p.name;
+  });
   const grenades = new Grenades(ctx.scene, ctx.world, ctx.serverNow);
   // Drop 4: flag poles / rings only in Domination.
-  const flags = ctx.connection.state.mode === "dom" ? new Flags(ctx.scene, ctx.mapDef, () => ctx.connection.state.flags) : null;
-  const bomb = ctx.connection.state.mode === "bomb" ? new BombSites(ctx.scene, {
-    onBeep: (x, y, z, urgency) => ctx.events.emit("bombBeep", { x, y, z, urgency }),
-    onPlanted: (x, y, z) => ctx.events.emit("bombPlanted", { x, y, z }),
-    onDefused: (x, y, z) => ctx.events.emit("bombDefused", { x, y, z }),
-  }) : null;
+  const flags = (ctx.connection.state.mode === "dom" || ctx.connection.state.mode === "boys") ? new Flags(ctx.scene, ctx.mapDef, () => ctx.connection.state.flags) : null;
+  const bomb = ctx.connection.state.mode === "bomb" ? new BombSites(ctx.scene) : null;
   // Drop 5: team marks as world billboards.
   const marks = new Marks(ctx.scene, ctx.remotes, () => ({ x: ctx.local.body.x, y: ctx.local.body.y, z: ctx.local.body.z }));
   grenades.setHooks({
@@ -43,11 +43,6 @@ export const installView: GameModule = (ctx) => {
         const b = ctx.local.body;
         const d = Math.hypot(b.x - e.x, b.y + 1 - e.y, b.z - e.z);
         ctx.local.addShake(Math.max(0, 0.05 * (1 - d / 16)));
-      } else if (e.kind === "c4") {
-        // The charge: a kick you feel across the whole map, a violent one at the site.
-        const b = ctx.local.body;
-        const d = Math.hypot(b.x - e.x, b.y + 1 - e.y, b.z - e.z);
-        ctx.local.addShake(Math.max(0.02, 0.2 * (1 - d / 60)));
       }
     },
   });

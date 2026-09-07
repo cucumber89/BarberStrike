@@ -34,6 +34,9 @@ RUN pnpm --filter @frankibarber/client build \
 
 # ---- prod deps: ten sam lockfile, bez vite/esbuild/vitest
 FROM deps AS prod-deps
+# CI=true: ta warstwa przechodzi z pełnego node_modules na produkcyjne, więc pnpm chce najpierw
+# wyczyścić katalog — a bez terminala pyta o zgodę i przerywa (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY).
+ENV CI=true
 RUN pnpm install --frozen-lockfile --prod --filter @frankibarber/server...
 
 # ---- runtime

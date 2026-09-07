@@ -24,10 +24,6 @@ export interface KeyBindings {
   /** Lean left / right (drop 4). */
   leanLeft: string[];
   leanRight: string[];
-  /** Bomb Plant: hold to plant / defuse (2.1: rebindable, T by default). */
-  objective: string[];
-  /** Bomb Plant (2.2): let go of the charge for a teammate. */
-  dropBomb: string[];
 }
 
 export const DEFAULT_BINDINGS: KeyBindings = {
@@ -49,8 +45,6 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   inspect: ["KeyF"],
   leanLeft: ["KeyQ"],
   leanRight: ["KeyE"],
-  objective: ["KeyT"],
-  dropBomb: ["KeyH"],
 };
 
 /** Two sprint presses within this window latch the tactical sprint (drop 4). */
@@ -108,11 +102,9 @@ export class InputState {
   chatOpenRequested: "all" | "team" | null = null;
   /** Middle mouse pressed while locked: mark / ping. Drained by the game. */
   markRequested = false;
-  /** Bomb Plant (2.2): the drop key pressed while locked. Drained by the game. */
-  dropBombRequested = false;
 
   private target: HTMLElement | null = null;
-  private bindings: KeyBindings = DEFAULT_BINDINGS;
+  private bindings = DEFAULT_BINDINGS;
   private lastWheelAt = -Infinity;
   private lastSprintDownAt = -Infinity;
   /**
@@ -121,15 +113,6 @@ export class InputState {
    * the raw event stream knows it, so it is resolved here.
    */
   private aimSuppressed = false;
-
-  /** 2.1: rebinding. Held keys are released, so a key that changed meaning mid-press cannot stick. */
-  setBindings(b: KeyBindings): void {
-    this.bindings = b;
-    this.keys.clear();
-    this.tacLatched = false;
-  }
-
-  get currentBindings(): KeyBindings { return this.bindings; }
 
   attach(target: HTMLElement): void {
     this.target = target;
@@ -183,7 +166,7 @@ export class InputState {
     return false;
   }
 
-  get objectiveHeld(): boolean { return this.enabled && this.pointerLocked && !this.typing && this.isDown(this.bindings.objective); }
+  get objectiveHeld(): boolean { return this.enabled && this.pointerLocked && !this.typing && this.keys.has("KeyT"); }
 
   /** Packs the current state into the shared button bitmask. */
   buttons(): number {
@@ -231,7 +214,6 @@ export class InputState {
     this.escapeRequested = false;
     this.chatOpenRequested = null;
     this.markRequested = false;
-    this.dropBombRequested = false;
     this.scoreboardHeld = false;
     this.tacLatched = false;
     this.lastSprintDownAt = -Infinity;
@@ -264,7 +246,6 @@ export class InputState {
     }
     if (b.melee.includes(e.code)) this.slotRequests.push(3);
     if (b.inspect.includes(e.code) && this.pointerLocked) this.inspectRequested = true;
-    if (b.dropBomb.includes(e.code) && this.pointerLocked) this.dropBombRequested = true;
     if (b.reload.includes(e.code)) this.reloadRequested = true;
     if (b.lastWeapon.includes(e.code)) this.lastWeaponRequested = true;
     if (b.lethal.includes(e.code) && this.pointerLocked) this.lethalHeld = true;

@@ -6,6 +6,7 @@ import { emptyProfile, type MatchReward, type Profile } from "./progression/prof
 export interface HudFlag { id: string; name: string; owner: number; capTeam: number; cap: number; contested: boolean }
 
 export interface ScoreRow {
+  boysClass?: number;
   id: string;
   name: string;
   team: Team;
@@ -71,7 +72,7 @@ export interface HudState {
   pointerLocked: boolean;
   serverNow: number;
   spawnProtectedUntil: number;
-  /** Startup progress: "connecting" | "engine" | "map" | "players" | "ready". */
+  /** Startup progress: "connecting" | "engine" | "map" | "players" | "finishing" | "ready". */
   loadStage: string;
   /** Current effective crosshair spread (radians) for a dynamic crosshair. */
   crosshairSpread: number;
@@ -116,12 +117,9 @@ export interface HudState {
   breath: number;
   /** Last hit marker was on a plate. */
   hitArmor: boolean;
-  /** Bomb Plant (2.2): defuse kit carried. */
-  kit: boolean;
   // ---- drop 4: modes, flags, movement
+  boysClass: number; nextClass: number;
   mode: GameMode;
-  /** 2.1: the room's name, for the pause screen's invite link ("" for an unnamed quick-play room). */
-  roomName: string;
   flags: HudFlag[];
   /** Index of the flag we are standing in, -1 otherwise. */
   inFlag: number;
@@ -153,8 +151,8 @@ export const initialHud: HudState = {
   money: 0, owned: ["pistol"], lethal: "", lethalCount: 0, tactical: "", tacticalCount: 0,
   buyWindowLeft: 0, nearStation: false, shopOpen: false, shopResult: null, moneyToasts: [],
   cookingKind: "", cooking: 0, flashStrength: 0, flashUntil: 0, flashAt: 0,
-  armor: 0, perks: { flask: 0, roids: 0, energy: 0, fade: 0 }, armorBrokeAt: 0, scoped: false, breath: 0, hitArmor: false, kit: false,
-  mode: "tdm", roomName: "", smokeOpacity: 0, bomb: null, flags: [], inFlag: -1, winnerId: "", winnerName: "", flagNotice: null, tac: 1, tacOn: false,
+  armor: 0, perks: { flask: 0, roids: 0, energy: 0, fade: 0 }, armorBrokeAt: 0, scoped: false, breath: 0, hitArmor: false,
+  boysClass: 1, nextClass: 1, mode: "tdm", smokeOpacity: 0, bomb: null, flags: [], inFlag: -1, winnerId: "", winnerName: "", flagNotice: null, tac: 1, tacOn: false,
   chat: [], chatOpen: null, marks: [],
 };
 

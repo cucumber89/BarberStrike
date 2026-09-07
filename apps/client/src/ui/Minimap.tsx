@@ -98,7 +98,7 @@ export function Minimap({ radar }: Props) {
         const b = st.bomb;
         if (b && (b.stage === "planted" || (b.attackTeam === st.myTeam && b.stage !== "resolved"))) glyph(b.x, b.z, "◆", "#ff7050");
       }
-      if (st.mode === "dom") st.flags.forEach((f, i) => {
+      if ((st.mode === "dom" || st.mode === "boys")) st.flags.forEach((f, i) => {
         const def = map.flags[i];
         if (!def) return;
         const color = f.owner === -1 ? NEUTRAL : TEAM_COLORS[f.owner as 0 | 1];
@@ -126,7 +126,7 @@ export function Minimap({ radar }: Props) {
       };
       mark(0, "N", "#fff"); mark(Math.PI / 2, "E", "#bbb"); mark(Math.PI, "S", "#bbb"); mark(-Math.PI / 2, "W", "#bbb");
       if (st.mode === "bomb") for (const s of BOMB_SITES) mark(bearingTo(r.x, r.z, s.x, s.z), s.id, "#e5ae52");
-      if (st.mode === "dom") st.flags.forEach((f, i) => { const def = map.flags[i]; if (def) mark(bearingTo(r.x, r.z, def.x, def.z), f.id, f.owner === -1 ? NEUTRAL : TEAM_COLORS[f.owner as 0 | 1]); });
+      if ((st.mode === "dom" || st.mode === "boys")) st.flags.forEach((f, i) => { const def = map.flags[i]; if (def) mark(bearingTo(r.x, r.z, def.x, def.z), f.id, f.owner === -1 ? NEUTRAL : TEAM_COLORS[f.owner as 0 | 1]); });
       for (const m of st.marks) mark(bearingTo(r.x, r.z, m.x, m.z), m.kind === "spot" ? "!" : "▼", m.kind === "spot" ? "#ff5a5a" : TEAM_COLORS[m.team]);
       cc.fillStyle = "#fff"; cc.fillRect(W / 2 - 1, 0, 2, 4); cc.fillRect(W / 2 - 1, H - 4, 2, 4);
     };
