@@ -5,7 +5,7 @@ import {
   RESPAWN_DELAY_MS, SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER,
   isLive, isFrozen, maskInput, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
   BOMB, BOMB_SITES, KIT_ITEM, bombAttackTeam, dropBomb, blastDamage, resetBomb, stepBomb, type BombPlayer,
-  createBody, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
+  createBody, quantAngle, quantVel, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
   makeRayHit, mulberry32, pickSpawn, sanitizeName, simulateBody, spreadDirection, traceBullet, unpackInput,
   ECONOMY, GRENADES, THROW_INTERVAL_MS, FIRE_DPS, applyBuy, applySell, buyWindowOpen, giveGrenade, takeGrenade, killReward, weaponForSlot,
   primaryOf, isShopItemId, isGrenadeId, createProjectile, stepProjectile, explosionDamage, flashStrength, flashMs, eyeOf,
@@ -30,7 +30,7 @@ interface HistoryEntry { t: number; x: number; y: number; z: number; crouching: 
 const HISTORY_LEN = 30;
 /** Seconds a dropped (non-consented) client may reconnect before its player is removed. */
 const RECONNECT_GRACE_S = 15;
-/** Input `seq` is replicated as uint32 (PlayerState.ack); anything beyond cannot be acknowledged. */
+/** Input `seq` travels back as a uint32 ack (S2C.Ack); anything beyond cannot be acknowledged. */
 const MAX_SEQ = 0xffffffff;
 
 const isInputTuple = (t: unknown): t is InputTuple =>
@@ -52,6 +52,14 @@ class Session {
    * re-plans about once every fifteen seconds.
    */
   planPhase = 0;
+  /**
+   * Last input seq simulated for this player, and the last one told to them (task 5). The ack used
+   * to be a replicated field, i.e. every player's reconciliation number went to every client 20
+   * times a second; now it goes to its owner alone, right before the patch it belongs to
+   * (`onBeforePatch`), so the client pairs it with the same state it always did.
+   */
+  ack = 0;
+  ackSent = -1;
   /**
    * Line-of-sight results per enemy id (performance pass, task 2): a full-world raycast per enemy
    * in the cone per bot per tick was the single largest bot cost (worst case 88 raycasts a tick).
@@ -361,6 +369,20 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (s.inputs.length < MAX_INPUT_QUEUE) s.inputs.push(d.input);
     if (d.reload && !p.reloading) this.reloadFor(p, s);
     if (d.fire && isLive(this.state.phase as MatchPhase)) this.fireCore(undefined, p, s, { seq: 0, weapon: w.id, o: d.fire.o, d: d.fire.d, t: now });
+  }
+
+  /**
+   * Right before each state patch: each human gets their own ack, and only when it moved. Sent on
+   * the same socket ahead of the patch, so it arrives first and the client reconciles the patch
+   * against exactly the input the server had simulated when it encoded that state (task 5).
+   */
+  override onBeforePatch(): void {
+    for (const client of this.clients) {
+      const s = this.sessions.get(client.sessionId);
+      if (!s || s.ack === s.ackSent) continue;
+      s.ackSent = s.ack;
+      client.send(S2C.Ack, s.ack);
+    }
   }
 
   private onPing(client: Client, msg: unknown): void {
@@ -1115,24 +1137,26 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         simulateBody(this.world, s.body, inp, mobility * perkSpeedScale(perks, now, sprintActive(inp.buttons, s.body.crouching)), s.prevButtons);
         s.prevButtons = inp.buttons;
         s.lastYaw = inp.yaw; s.lastPitch = inp.pitch;
-        p.ack = inp.seq;
+        s.ack = inp.seq;
         processed++;
       }
       // Idle body still needs gravity (e.g. floor removed / spawn on ledge).
       if (processed === 0 && !s.body.grounded) {
-        simulateBody(this.world, s.body, { seq: p.ack, dt: TICK_MS, buttons: s.prevButtons & ~Btn.Jump, yaw: s.lastYaw, pitch: s.lastPitch }, mobility, s.prevButtons);
+        simulateBody(this.world, s.body, { seq: s.ack, dt: TICK_MS, buttons: s.prevButtons & ~Btn.Jump, yaw: s.lastYaw, pitch: s.lastPitch }, mobility, s.prevButtons);
       }
 
       const b = s.body;
       if (b.y < this.map.killY) { this.fallDeath(p, s); continue; }
 
       p.x = b.x; p.y = b.y; p.z = b.z;
-      p.vx = b.vx; p.vy = b.vy; p.vz = b.vz;
+      p.vx = quantVel(b.vx); p.vy = quantVel(b.vy); p.vz = quantVel(b.vz);
       p.grounded = b.grounded; p.crouch = b.crouching;
       const sl = Math.round(b.slide), scd = Math.round(b.slideCd);
       if (p.slide !== sl) p.slide = sl;
       if (p.slideCd !== scd) p.slideCd = scd;
-      p.yaw = s.lastYaw; p.pitch = s.lastPitch;
+      const qy = quantAngle(s.lastYaw), qp = quantAngle(s.lastPitch);
+      if (p.yaw !== qy) p.yaw = qy;
+      if (p.pitch !== qp) p.pitch = qp;
       // Drop 4: lean / tac from the last simulated buttons, for origin checks and the remote pose.
       s.lean = leanOf(s.prevButtons, b.crouching);
       s.tac = tacActive(s.prevButtons, b);

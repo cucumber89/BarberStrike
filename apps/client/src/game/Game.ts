@@ -442,7 +442,7 @@ export class Game {
     const t = s.t;
     s.players.forEach((p, id) => {
       if (id === this.conn.sessionId) {
-        this.local.reconcile(p);
+        this.local.reconcile(p, this.conn.ack);
         this.weapons.syncFrom(p);
         this.throwing.syncFrom(p);
         for (const k of PERK_ORDER) this.myPerks[k] = p.perks?.get(k) ?? 0;
