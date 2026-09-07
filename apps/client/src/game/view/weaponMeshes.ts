@@ -297,20 +297,20 @@ const SPECS: Record<WeaponId, Spec> = {
       B(0.05, 0.03, 0.26, 0, 0.03, 0.5, "polymer"),                    // handguard
       B(0.012, 0.16, 0.012, 0.03, -0.05, 0.62, "steel"),               // bipod leg R (folded)
       B(0.012, 0.16, 0.012, -0.03, -0.05, 0.62, "steel"),              // bipod leg L
-      B(0.03, 0.03, 0.03, 0, -0.14, 0.62, "rubber"),                   // bipod feet
-      ...grip(0, -0.06, 0.0, 0.036, 0.1, 0.05),
-      B(0.045, 0.08, 0.26, 0, 0.03, -0.26, "polymer"),                 // stock
+      B(0.06, 0.03, 0.03, 0, -0.14, 0.62, "rubber"),                   // bipod feet
+      ...grip(0, -0.05, 0.0, 0.036, 0.1, 0.05),
+      B(0.045, 0.08, 0.34, 0, 0.03, -0.22, "polymer"),                 // stock
       B(0.048, 0.09, 0.02, 0, 0.03, -0.39, "rubber"),                  // butt pad
       B(0.06, 0.02, 0.05, 0, 0.09, 0.06, "steel"),                     // carry handle base
       B(0.012, 0.03, 0.12, 0, 0.115, 0.06, "polymer"),                 // carry handle
-      ...frontSight(0.142, 0.46, 0.1),
+      ...frontSight(0.142, 0.46, 0.066),
       ...rearSight(0.14, 0.06, 0.115),
       ejectionPort(0.029, 0.05, 0.2),
       chargingHandle(0.038, 0.06, 0.0),
       ...triggerGuard(-0.02, 0.06, 0.05),
     ],
     muzzle: [0, 0.055, 0.79], eject: [0.035, 0.06, 0.2],
-    magazine: [B(0.09, 0.11, 0.13, 0, 0, 0, "polymer"), B(0.08, 0.02, 0.1, 0, 0.055, 0.0, "brass"), B(0.092, 0.006, 0.132, 0, -0.045, 0, "rubber")], magazinePos: [-0.02, -0.07, 0.18], length: 0.8,
+    magazine: [B(0.09, 0.11, 0.13, 0, 0, 0, "polymer"), B(0.08, 0.02, 0.1, 0, 0.055, 0.0, "brass"), B(0.092, 0.006, 0.132, 0, -0.045, 0, "rubber")], magazinePos: [-0.02, -0.06, 0.18], length: 0.8,
     aimPoint: [0, 0.142, 0.46],
   },
   shotgun: {
@@ -321,7 +321,7 @@ const SPECS: Record<WeaponId, Spec> = {
       C(0.04, 0.02, 0, 0.02, 0.6, "metal"),                            // tube cap
       B(0.014, 0.01, 0.4, 0, 0.078, 0.4, "steel"),                     // vent rib
       ...grip(0, -0.05, -0.02, 0.036, 0.1, 0.05, "wood"),
-      B(0.04, 0.07, 0.28, 0, 0.025, -0.24, "wood"),                    // stock
+      B(0.04, 0.07, 0.33, 0, 0.025, -0.215, "wood"),                   // stock
       B(0.044, 0.08, 0.02, 0, 0.025, -0.38, "rubber"),                 // butt pad
       B(0.01, 0.015, 0.01, 0, 0.085, 0.68, "brass"),                   // bead
       ejectionPort(0.026, 0.045, 0.08),
@@ -409,8 +409,8 @@ const SPECS: Record<WeaponId, Spec> = {
   },
   clippers: {
     parts: [
-      B(0.04, 0.05, 0.13, 0, 0.0, 0.02, "polymer"),                    // body
-      ...Array.from({ length: 4 }, (_, i) => B(0.042, 0.004, 0.006, 0, -0.01 + i * 0.008, -0.02, "rubber")), // grip ribs
+      B(0.04, 0.07, 0.13, 0, -0.01, 0.02, "polymer"),                  // body
+      ...Array.from({ length: 4 }, (_, i) => B(0.042, 0.004, 0.006, 0, -0.028 + i * 0.01, -0.02, "rubber")), // grip ribs
       B(0.034, 0.02, 0.05, 0, 0.012, 0.11, "steel"),                   // blade head
       B(0.04, 0.006, 0.02, 0, 0.026, 0.13, "steel"),                   // comb
       ...Array.from({ length: 6 }, (_, i) => B(0.004, 0.008, 0.014, -0.015 + i * 0.006, 0.03, 0.135, "steel")), // teeth
@@ -418,9 +418,9 @@ const SPECS: Record<WeaponId, Spec> = {
       C(0.008, 0.08, 0, -0.01, -0.09, "rubber"),                       // cord stub
       B(0.02, 0.004, 0.04, 0, 0.026, 0.04, "steel"),                   // lever plate
     ],
-    muzzle: [0, 0.02, 0.15], eject: [0, 0, 0],
+    muzzle: [0, 0.026, 0.14], eject: [0, 0, 0],
     magazine: null, magazinePos: [0, 0, 0], length: 0.16,
-    aimPoint: [0, 0.06, 0.1],
+    aimPoint: [0, 0.03, 0.13],
   },
 };
 
