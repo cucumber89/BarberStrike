@@ -314,6 +314,13 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 - Drop B (recon): reload audio has exactly two shapes (shotgun shell-feed vs mag-out / mag-in /
   bolt, `sfx.ts:252-274`); the matrix's per-weapon mechanical sounds (hammer, pump, bolt,
   break-open, belt) will replace this if the matrix is signed.
+- Server (found by PR #13 CI, not Drop B's to fix): `TdmRoom.test.ts:53` "assigns balanced teams
+  and spawns each player alive at a map spawn point" is a coin toss on `main` since the ChatGPT
+  merge (8bc1256): `TdmRoom.ts:825` passes `anyTeam` to `pickSpawn` for TDM as well as FFA, so a
+  TDM join can land on the other team's point or an arena point, and `pickSpawn` picks at random
+  among the top three. Locally 1 in 10 runs fails; CI passed and failed the same commit. Either
+  the test accepts `[...spawns, ...arenaSpawns]` for TDM, or TDM goes back to `!this.teams` —
+  the owner decides which is the intended rule. Seeding the harness PRNG would only hide it.
 - Drop B: the ADS blend is a framerate-dependent lerp (`LocalPlayer.ts:243`), so `adsMs` is not
   the measured 0.1 → 0.9 time; `weapon-signature.mjs` measures the real time and the matrix quotes
   `adsMs` as intent. Making the blend exact is a one-line change to do with the tool in hand.
