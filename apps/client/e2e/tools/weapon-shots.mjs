@@ -103,7 +103,8 @@ for (const id of WEAPONS) {
   for (let attempt = 0; attempt < 4 && !shot; attempt++) {
   if (!(await alive())) { await page.waitForFunction(() => window.__fb.hud.get().alive !== false && (window.__fb.hud.get().hp ?? window.__fb.hud.get().health ?? 1) > 0, null, { timeout: 30000 }).catch(() => {}); await page.waitForTimeout(800); }
   await page.evaluate(() => { const lp = window.__fb.game.localPlayer; lp.pitch = 0.05; });
-  const ok = await page.evaluate((id) => {
+  for (const [tag, turn] of [["tp_idle", Math.PI], ["tp_side", Math.PI / 2]]) {
+  const ok = await page.evaluate(([id, turn]) => {
     const g = window.__fb.game;
     const r = [...g.remotes.values()][0];
     if (!r) return false;
@@ -120,7 +121,7 @@ for (const id of WEAPONS) {
     r.character.revive();
     const pose = () => {
       r.character.root.position.set(eye.x + fx * 2.2, eye.y - 1.62, eye.z + fz * 2.2);
-      r.yaw = yaw + Math.PI; r.character.root.rotation.y = yaw + Math.PI;
+      r.yaw = yaw + turn; r.character.root.rotation.y = yaw + turn;
       r.weapon = id;
       r.character.update({ speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: id, moveDir: 0 }, 16);
     };
@@ -128,14 +129,16 @@ for (const id of WEAPONS) {
     window.__shotsPose = s.onBeforeRenderObservable.add(pose);
     for (let i = 0; i < 30; i++) { pose(); s.render(); }
     return true;
-  }, id);
+  }, [id, turn]);
   if (!ok) { console.log("no bot to pose"); break; }
   await frames(4);
-  if (!(await alive())) continue;
-  await page.screenshot({ path: `${OUT}/${id}/tp_idle.png` });
-  shot = true;
+  if (!(await alive())) break;
+  // Facing us for the hands and the silhouette; in profile for the bore and the fore-end.
+  await page.screenshot({ path: `${OUT}/${id}/${tag}.png` });
+  if (tag === "tp_side") shot = true;
+  }
   }
   if (!shot) console.log(`${id}: no live third-person frame`);
 }
 await browser.close();
-console.log(`weapon-shots: ${WEAPONS.length} weapons under ${OUT}/<id>/ (fp_idle, fp_ads, fp_reload_mid, fp_inspect, tp_idle)`);
+console.log(`weapon-shots: ${WEAPONS.length} weapons under ${OUT}/<id>/ (fp_idle, fp_ads, fp_reload_mid, fp_inspect, tp_idle, tp_side)`);
