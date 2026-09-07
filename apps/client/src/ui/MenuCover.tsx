@@ -10,6 +10,14 @@ export function MenuCover({ dim }: { dim: boolean }) {
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
+    // An automated browser (Playwright) renders on a software GPU shared by every page in the run:
+    // MEASURED, the cover on a page still in the menu starved a page already in the match to the
+    // point that its 15 s buy window had passed before the test looked. Nothing in the tests is
+    // about the backdrop, so it stays off under automation unless a tool asks for it (fb_cover=1,
+    // which the screenshot tools set).
+    let wanted = true;
+    try { wanted = !navigator.webdriver || localStorage.getItem("fb_cover") === "1"; } catch { /* storage blocked: keep it */ }
+    if (!wanted) return;
     let cover: { dispose(): void } | null = null;
     let cancelled = false;
     void import("../game/view/MenuCover").then(({ MenuCover: Cover }) => {
