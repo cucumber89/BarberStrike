@@ -239,6 +239,12 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
   path, delete the 7 MB of glTFs from the bundle, and Drops B/C target the procedural meshes;
   (b) re-enable the imports for weapons only (one line in Game.ts) and re-run the tools on them.
   Until answered the session keeps both paths green. (lead)
+- 2026-09-07 — **DECIDED (owner): option (a).** The procedural weapons are the product ("the imported
+  ones looked weak; I prefer the ones generated in-game, they need improving"). Consequences, as
+  Deferred work: retire the glTF weapon import path and drop the 7 MB of firearm .glb files from
+  the bundle (keep `weaponRig` / `weaponFit` tests only as long as the code stays); Drops B and C
+  target the procedural meshes; "improving" the procedural guns is geometry work for Drop A's next
+  slices (hands, silhouettes) and skins for Drop C. (owner, 2026-09-07)
 - 2026-09-07 — Drop A: ADS distance is no longer a fixed 0.36 / 0.5 m; the aim point sits at least
   15 cm ahead of the eye (`Viewmodel.ts`). Measured cause: the shotgun's bead-at-the-muzzle aim
   point put its receiver around the camera and its pump through the near plane. Changes only the
@@ -260,6 +266,14 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 - Drop A: the RPG model has no pistol grip (`Side_Grip_Left/Right` are 4 mm strips at the rear
   cover); the hand origin is the box-proportion fallback. A hand-set grip would need a manifest
   field the plan does not name — ask before adding one.
+- Drop A (owner decision, option a): remove the glTF weapon import path — `weaponModels.ts`, the
+  `weapons` block of `public/models/manifest.json`, the eight firearm .glb files, and the "gltf"
+  branch of `weaponParts.check.test.ts` — in its own commit, after the owner confirms the
+  characters' import path goes the same way (it is disabled in `Game.ts` too).
+- Drop A: art review round 2 asks for a real inspect/reload READ on the procedural guns: the
+  magazine drop happens below the frame at the default hip pose, the revolver's cylinder does not
+  swing out, the sniper's bolt does not move in the mid-reload frame. Animation choreography, not
+  fit; judge on a real GPU with the camera pitched down before changing timelines.
 - Drop A: the viewmodel hands are two beveled boxes per arm (`Viewmodel.buildHands`); during
   inspect and reload they read as a pile of loose blocks (art review, every weapon). A jointed
   hand/forearm or a rigged arm mesh is a Drop E/C-sized job, not geometry fitting.

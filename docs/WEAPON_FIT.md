@@ -94,8 +94,19 @@ tool, not a bore, recorded as is.
 
 `fp_idle`, `fp_ads`, `fp_reload_mid` (40 % into the reload), `fp_inspect`, `tp_idle` (a bot 2.2 m
 away facing the camera), `tp_side` (the same bot in profile). Regenerate with
-`node e2e/tools/weapon-shots.mjs` from `apps/client` with the dev servers up. Reviewed by a
-separate art-reviewer agent; verdicts in the ledger.
+`node e2e/tools/weapon-shots.mjs` from `apps/client` with the dev servers up.
+
+Art review, round 2 (separate reviewer agent, 65 images, 2026-09-07): **no floating or clipping in
+any first-person idle or inspect frame; right hand on the grip and left hand on the fore-end for
+every long gun, both hands on the sidearms; the bot holds every weapon and the bore points where
+the body faces in all 11 profiles.** Rejected: DMR ADS (opaque lens disc, no overlay — Drop B) and
+launcher ADS (the procedural sight is a fat block on the tube — spec art, Deferred); every
+mid-reload frame is "the idle pose tilted" because the magazine drops below the frame at the hip
+pose (Deferred, animation read). Round 1 had rejected 20 frames for harness faults (empty
+third-person frames, reloads never started, inspect pressed during a reload) — all three fixed in
+`weapon-shots.mjs` and re-shot. The reviewer also reads the DMR receiver as "cut by the near
+plane"; vm-fit's per-vertex count says 0 vertices inside the near plane for the DMR in ADS, so the
+numbers stand and the look is the flat-shaded slab, not a cut.
 
 ## Open items
 

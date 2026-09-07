@@ -14,6 +14,7 @@ const OUT = process.env.OUT ?? "e2e/out/weapons";
 const WEAPONS = process.env.WEAPONS ? process.env.WEAPONS.split(",") : ["pistol", "revolver", "smg", "smg2", "rifle", "lmg", "shotgun", "dmr", "sniper", "launcher", "clippers"];
 /** TP_ONLY=1 skips the first-person set (the third-person room is the slow, bot-dependent half). */
 const TP_ONLY = !!process.env.TP_ONLY;
+const FP_ONLY = !!process.env.FP_ONLY;
 const RELOAD_MS = { pistol: 1200, revolver: 2300 };
 const SET = JSON.stringify({ graphics: { preset: "medium", renderer: "webgl2", renderScale: 1, shadows: "medium", postProcessing: false, effects: 0.7, antialiasing: false, importedModels: true } });
 const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || "/opt/pw-browsers/chromium", args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-webgl", "--disable-gpu-sandbox"] });
@@ -73,7 +74,10 @@ for (const id of TP_ONLY ? [] : WEAPONS) {
     const ms = RELOAD_MS[id] ?? reloadMs[id] ?? 2000;
     await page.waitForTimeout(Math.max(250, ms * 0.4 - 150));
     await page.screenshot({ path: `${dir}/fp_reload_mid.png` });
-    await page.waitForTimeout(ms);
+    // Inspect refuses to start while a reload runs, so wait for the HUD to drop RELOADING rather
+    // than for a guessed duration (six inspect frames were the idle pose because of that guess).
+    await page.waitForFunction(() => !window.__fb.hud.get().reloading, null, { timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(400);
   }
 
   await page.keyboard.press("KeyF");
@@ -83,6 +87,7 @@ for (const id of TP_ONLY ? [] : WEAPONS) {
 }
 
 // ---- third person: a second room with one bot, frozen in its idle pose with each weapon.
+if (FP_ONLY) { await browser.close(); console.log(`weapon-shots: first person only, ${WEAPONS.length} weapons under ${OUT}/<id>/`); process.exit(0); }
 await page.goto("http://localhost:5174/");
 await page.getByTestId("btn-play").click();
 await page.getByTestId("input-name").fill("SHOTS");
