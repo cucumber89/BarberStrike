@@ -23,4 +23,6 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - run: pnpm typecheck
       - run: pnpm test
+      # Drop A gate: every weapon is one attached object with its anchors on their parts.
+      - run: pnpm check:weapons
       - run: pnpm build

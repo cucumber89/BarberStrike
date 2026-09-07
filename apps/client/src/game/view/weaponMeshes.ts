@@ -7,6 +7,7 @@ import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { WeaponId } from "@frankibarber/shared";
 import { beveledBox } from "./geometry";
+import { supportHandHome, type PartBox } from "./weaponFit";
 
 /**
  * Procedural weapon models. Every weapon is a few dozen boxes/cylinders merged into ONE mesh per
@@ -38,6 +39,8 @@ export interface WeaponModel {
   aimPoint: [number, number, number];
   /** Approximate length along +Z (metres), for pose tuning. */
   length: number;
+  /** Where the support (left) hand rests, in root space — measured against the fore-end (`supportHandHome`). */
+  support: [number, number, number];
 }
 
 export type ActionKind = "none" | "slide" | "pump" | "bolt";
@@ -472,7 +475,7 @@ export function buildWeaponModel(id: WeaponId, mats: WeaponMaterials, scene: Sce
     action.parent = root;
     buildParts(`${name}_action`, spec.action.parts, mats, scene, action);
   }
-  return { root, muzzle, eject, magazine, action, actionKind: spec.action?.kind ?? "none", aimPoint: spec.aimPoint, length: spec.length };
+  return { root, muzzle, eject, magazine, action, actionKind: spec.action?.kind ?? "none", aimPoint: spec.aimPoint, length: spec.length, support: proceduralParts(id).support };
 }
 
 /** Sets rendering group + shadow flags on every mesh of a model. */
@@ -484,6 +487,74 @@ export function buildWeaponModel(id: WeaponId, mats: WeaponMaterials, scene: Sce
 export function weaponMetrics(id: WeaponId): { length: number; actionKind: ActionKind; hasMagazine: boolean } {
   const spec = SPECS[id];
   return { length: spec.length, actionKind: spec.action?.kind ?? "none", hasMagazine: spec.magazine !== null };
+}
+
+/** One procedural part's axis-aligned bounds, named `${list}${index}:${material}`. */
+export interface NamedBox { name: string; box: PartBox }
+
+/**
+ * The procedural model as pure geometry: the AABB of every part in root space, plus the anchors —
+ * what a headless "nothing floats" check needs without a Scene. Mirrors `buildWeaponModel` exactly:
+ * the action node sits at the origin, so its parts are already in root space; magazine parts are
+ * shifted by `magazinePos`.
+ */
+export interface ProceduralParts {
+  /** `spec.parts` followed by the action parts (`part${i}:${mat}` / `action${i}:${mat}`). */
+  parts: NamedBox[];
+  /** Magazine parts translated by `magazinePos` (`mag${i}:${mat}`); empty when there is no magazine. */
+  magazine: NamedBox[];
+  muzzle: [number, number, number];
+  eject: [number, number, number];
+  aimPoint: [number, number, number];
+  length: number;
+  /** Support-hand rest, measured against the parts (`supportHandHome`). */
+  support: [number, number, number];
+  actionKind: ActionKind;
+  hasMagazine: boolean;
+}
+
+/**
+ * AABB of one part, offset by `at`. A box rotates the way `mesh.rotation.set(rx, ry, rz)` does —
+ * Babylon's `RotationYawPitchRoll(ry, rx, rz)`: about Z by rz, then X by rx, then Y by ry — and the
+ * bounds are those of its eight rotated corners. A cylinder is the box that spans `len` along its
+ * axis and `dia` on the other two (no tessellation correction).
+ */
+export function partAabb(p: Part, at: [number, number, number] = [0, 0, 0]): PartBox {
+  const cx = p.x + at[0], cy = p.y + at[1], cz = p.z + at[2];
+  if (p.kind === "cyl") {
+    const r = p.dia / 2, h = p.len / 2;
+    const [ex, ey, ez] = p.axis === "x" ? [h, r, r] : p.axis === "y" ? [r, h, r] : [r, r, h];
+    return { min: [cx - ex, cy - ey, cz - ez], max: [cx + ex, cy + ey, cz + ez] };
+  }
+  const hw = p.w / 2, hh = p.h / 2, hd = p.d / 2;
+  const rx = p.rx ?? 0, ry = p.ry ?? 0, rz = p.rz ?? 0;
+  const cX = Math.cos(rx), sX = Math.sin(rx), cY = Math.cos(ry), sY = Math.sin(ry), cZ = Math.cos(rz), sZ = Math.sin(rz);
+  const min: [number, number, number] = [Infinity, Infinity, Infinity];
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < 8; i++) {
+    const x0 = i & 1 ? hw : -hw, y0 = i & 2 ? hh : -hh, z0 = i & 4 ? hd : -hd;
+    // roll (Z), then pitch (X), then yaw (Y)
+    const x1 = x0 * cZ - y0 * sZ, y1 = x0 * sZ + y0 * cZ;
+    const y2 = y1 * cX - z0 * sX, z2 = y1 * sX + z0 * cX;
+    const x3 = z2 * sY + x1 * cY, z3 = z2 * cY - x1 * sY;
+    const c = [cx + x3, cy + y2, cz + z3];
+    for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], c[k]); max[k] = Math.max(max[k], c[k]); }
+  }
+  return { min, max };
+}
+
+export function proceduralParts(id: WeaponId): ProceduralParts {
+  const spec = SPECS[id];
+  const named = (list: Part[], prefix: string, at?: [number, number, number]): NamedBox[] =>
+    list.map((p, i) => ({ name: `${prefix}${i}:${p.mat}`, box: partAabb(p, at) }));
+  const parts = [...named(spec.parts, "part"), ...(spec.action ? named(spec.action.parts, "action") : [])];
+  const magazine = spec.magazine ? named(spec.magazine, "mag", spec.magazinePos) : [];
+  return {
+    parts, magazine,
+    muzzle: spec.muzzle, eject: spec.eject, aimPoint: spec.aimPoint, length: spec.length,
+    support: supportHandHome(spec.length, [...parts, ...magazine].map((p) => p.box)),
+    actionKind: spec.action?.kind ?? "none", hasMagazine: spec.magazine !== null,
+  };
 }
 
 export function forEachMesh(model: WeaponModel, fn: (m: Mesh) => void): void {
