@@ -29,6 +29,7 @@ export interface MapInstance {
   lights: Light[];
   /** Registers a dynamic mesh (character, weapon) as a shadow caster. */
   addCaster(mesh: AbstractMesh): void;
+  setShadowQuality(quality: "off" | "medium" | "high"): void;
   dispose(): void;
 }
 
@@ -131,15 +132,15 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
   // ---- Lighting
   const lights: Light[] = [];
   const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-  ambient.intensity = 0.4;
-  ambient.diffuse = new Color3(0.42, 0.48, 0.66);
+  ambient.intensity = 0.48;
+  ambient.diffuse = new Color3(0.57, 0.62, 0.72);
   ambient.groundColor = new Color3(0.10, 0.085, 0.09);
   ambient.renderPriority = 100; // must always be among a mesh's lights
   lights.push(ambient);
 
   // Moon: cool, low, from the north-west — the one shadow caster (cheap, covers the whole block).
   const moon = new DirectionalLight("moon", new Vector3(0.45, -1, 0.35).normalize(), scene);
-  moon.diffuse = new Color3(0.55, 0.62, 0.85);
+  moon.diffuse = new Color3(0.64, 0.70, 0.84);
   moon.specular = new Color3(0.2, 0.22, 0.3);
   moon.intensity = 0.55;
   moon.position = new Vector3(-10, 30, -10);
@@ -148,29 +149,39 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
   lights.push(moon);
 
   const shadowGenerators: ShadowGenerator[] = [];
-  if (opts.shadows) {
-    const gen = new ShadowGenerator(opts.shadowMapSize, moon);
-    gen.usePercentageCloserFiltering = true;
-    gen.filteringQuality = opts.shadowMapSize >= 2048 ? ShadowGenerator.QUALITY_MEDIUM : ShadowGenerator.QUALITY_LOW;
-    gen.bias = 0.0025;
-    gen.normalBias = 0.05;
-    gen.darkness = 0.25;
-    // MEASURED (1.0 beta profiling): the shadow pass re-drew 222 static meshes every frame for a
-    // light that never moves — more draw calls than the main pass in most views. The map is static,
-    // so the map is rendered into the shadow map once. Characters do not cast moon shadows (they
-    // are unreadable at night anyway) — see addCaster below.
-    gen.getShadowMap()!.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
-    // Fit the orthographic frustum to the map bounds.
-    const b = map.bounds;
-    moon.orthoLeft = -Math.max(b.maxX - b.minX, b.maxZ - b.minZ) / 2 - 4;
-    moon.orthoRight = -moon.orthoLeft;
-    moon.orthoTop = -moon.orthoLeft;
-    moon.orthoBottom = moon.orthoLeft;
-    moon.autoUpdateExtends = false;
-    moon.position = new Vector3((b.minX + b.maxX) / 2 - 14, 32, (b.minZ + b.maxZ) / 2 - 11);
-    for (const c of casters) gen.addShadowCaster(c, false);
-    shadowGenerators.push(gen);
-  }
+  let shadowQuality = "";
+  const setShadowQuality = (quality: "off" | "medium" | "high") => {
+    if (quality === shadowQuality) return;
+    shadowQuality = quality;
+    for (const g of shadowGenerators) g.dispose();
+    shadowGenerators.length = 0;
+    if (quality !== "off") {
+      const size = quality === "high" ? 2048 : 1024;
+      const gen = new ShadowGenerator(size, moon);
+      gen.usePercentageCloserFiltering = true;
+      gen.filteringQuality = size >= 2048 ? ShadowGenerator.QUALITY_MEDIUM : ShadowGenerator.QUALITY_LOW;
+      gen.bias = 0.0025;
+      gen.normalBias = 0.05;
+      gen.darkness = 0.25;
+      // MEASURED (1.0 beta profiling): the shadow pass re-drew 222 static meshes every frame for a
+      // light that never moves — more draw calls than the main pass in most views. The map is static,
+      // so the map is rendered into the shadow map once. Characters do not cast moon shadows (they
+      // are unreadable at night anyway) — see addCaster below.
+      gen.getShadowMap()!.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
+      // Fit the orthographic frustum to the map bounds.
+      const b = map.bounds;
+      moon.orthoLeft = -Math.max(b.maxX - b.minX, b.maxZ - b.minZ) / 2 - 4;
+      moon.orthoRight = -moon.orthoLeft;
+      moon.orthoTop = -moon.orthoLeft;
+      moon.orthoBottom = moon.orthoLeft;
+      moon.autoUpdateExtends = false;
+      moon.position = new Vector3((b.minX + b.maxX) / 2 - 14, 32, (b.minZ + b.maxZ) / 2 - 11);
+      for (const c of casters) gen.addShadowCaster(c, false);
+      shadowGenerators.push(gen);
+    }
+    for (const material of scene.materials) material.markDirty(true);
+  };
+  setShadowQuality(opts.shadows ? opts.shadowMapSize >= 2048 ? "high" : "medium" : "off");
 
   for (const l of map.lights) {
     let light: PointLight | SpotLight;
@@ -214,7 +225,7 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
   scene.fogColor = new Color3(0.035, 0.035, 0.05);
 
   return {
-    root, shadowGenerators, materials, lights,
+    root, shadowGenerators, materials, lights, setShadowQuality,
     // The moon shadow map is rendered once (static map only); dynamic casters are accepted for API
     // stability but intentionally not added — see the refreshRate note above.
     addCaster(_mesh) { /* static shadow map */ },

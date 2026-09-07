@@ -28,7 +28,15 @@ test("clean entry, deferred spawn, visible buy timer and shop categories", async
   await expect.poll(() => page.evaluate(() => window.__fb.hud.get().alive)).toBe(true);
   await expect(page.getByTestId("pause")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.__fb.hud.get().phase), { timeout: 20000 }).toBe("playing");
-  await expect.poll(() => page.evaluate(() => window.__fb.hud.get().buyWindowLeft), { timeout: 10000 }).toBeGreaterThan(20000);
+  // Random spawns can be next to a station, where buying intentionally has no limit.
+  await page.evaluate(() => {
+    const flag = window.__fb.game.mapDefinition.flags[0];
+    (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x: flag.x, y: flag.y, z: flag.z });
+  });
+  await expect.poll(() => page.evaluate(() => {
+    const left = window.__fb.hud.get().buyWindowLeft;
+    return Number.isFinite(left) && left > 20000 && left <= 30000;
+  }), { timeout: 10000 }).toBe(true);
   const left = await page.evaluate(() => window.__fb.hud.get().buyWindowLeft);
   expect(left).toBeGreaterThan(20000); expect(left).toBeLessThanOrEqual(30000);
   await expect(page.getByTestId("buy-countdown")).toHaveText(/\d+s/);

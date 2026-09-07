@@ -2,6 +2,171 @@
 
 Compact shared state. Read `ARCHITECTURE.md` first. Keep this file short.
 
+## Current integration — The Boys and simplified UI (2026-09-07)
+The Boys replaces FFA in the menu; five classes, team control points, class shops and support healing.
+Entry waits for scene readiness and an explicit ENTER MATCH; 30-second buy windows, including Bomb.
+The simplified UI, movement without sliding and simplified Bomb rules from the local branch remain current;
+older feature entries below are historical. Main's weapon art/feel, map materials, graphics settings fixes,
+shared collision/navigation caches, compact snapshots, health statistics and precompressed hosting are retained.
+See `THE_BOYS.md` for current mode rules.
+
+## Performance pass (2026-09-07) — one core for the simulation, fewer bytes for the first load
+Handoff brief: `OPTIMIZATION_PROMPT` (owner's audit). Budget guard: `apps/server/src/rooms/tickCost.test.ts`
+(8 normal bots + 1 human, 600 ticks). Baseline on this machine: **mean 0.62 ms/tick, peak 10–13 ms**;
+after the pass **0.53–0.62 ms** (run-to-run noise on this box is ±0.05; the peak is harness jitter,
+see the test's own notes). The per-tick mean was never the problem — the measurable wins are room
+creation (235 → 2 ms), FFA bot cost (−27 %), first-load bytes (−71 %) and snapshot bandwidth (−41 %).
+Nothing observable in play changed: no weapon, movement, bot-aim or hit-registration value moved.
+- [x] **Task 1 — shared world and walk grid** (`rooms/sharedWorld.ts`): `walkable()` + `prepareNav()`
+      and `buildCollisionWorld()` once per process. MEASURED: a room used to pay 235 ms for its own
+      grid + index; now first room 170 ms, second 2 ms (`sharedWorld.test.ts`). Nothing writes to
+      either structure after construction; `findPath`'s scratch is module-level on one thread.
+- [x] **Task 2 — bot CPU**: bots think only while `isLive(phase)` AND a human is in the room; a
+      line-of-sight verdict per (bot, enemy) is kept for 3 ticks (`Session.losCache`, refreshed on
+      the bot's own tick of the rotation); no hazard filter when no fire burns. MEASURED (600 ticks,
+      8 bots): FFA with everyone in view 0.63 → 0.46 ms; TDM 0.52 → 0.48. Where the tick goes: 0.05
+      ms with no bots, 0.26 ms with 8 bots whose `think` is stubbed, 0.48 with them thinking. The
+      optional 30 Hz thinking was NOT done: the mean is far under 1 ms.
+- [x] **Task 3 — delivery** (`apps/client/scripts/precompress.mjs`, `hosting.ts: serveClient /
+      cacheControlFor`): `.br` + `.gz` siblings written at build, served as-is with
+      `Content-Encoding`; one `Cache-Control` per response (assets a year immutable, models a month,
+      index never, rest an hour); Caddy keeps `encode` for JSON only, no header directives. MEASURED:
+      main bundle 2645 kB → 565 kB br (713 gz); whole client 12.2 MB → 3.55 MB br. No barrel imports
+      of `@babylonjs/core` exist — the 2.6 MB is the deep-imported engine itself.
+- [x] **Task 4 — same-origin socket**: already landed in `net/serverUrl.ts` (2.2.1); deploy notes
+      corrected (`VITE_SERVER_URL` is an override, not what makes the game connect).
+- [x] **Task 5 — snapshot trim** (two-sided): `ack` is no longer replicated to everyone — each human
+      gets `S2C.Ack` in `onBeforePatch`, on the same socket ahead of the patch it belongs to, only
+      when it moved; `yaw`/`pitch` int16 in 0.1 mrad, `vx/vy/vz` int16 cm/s (`quantAngle/quantVel`
+      and their inverses in shared `types.ts`, used by `TdmRoom`, `RemotePlayer.fill` and
+      `LocalPlayer.reconcile`). MEASURED (`netBytes.test.ts`, 10 moving bodies, one client): 5.8 →
+      3.4 kB/s (−41 %). Verified through the real handlers (ack message asserted) and the two-browser
+      suite (the slide test counts reconciliation corrections).
+- [x] **Task 6 — cleanups**: `connectedCount` maintained at join / bot add / drop / reconnect / removal
+      (asserted through a drop → reconnect → expire sequence) instead of an array + filter per tick;
+      `maxClients = MAX_PLAYERS − botCount` (was 12 humans + bots); `/health.tick` = worst and mean
+      simulation tick over the last minute across rooms (`stats.ts`). Input batching NOT done: 720
+      decodes/s is not where the tick goes (0.05 ms/tick with no bots) and it would add 16 ms latency.
+- [x] **Task 7 — broadphase**: `buildCollisionWorld(NIGHT_DISTRICT).boxes.length` = **371**. NOT done:
+      the tick mean is 0.5 ms with eight bots, a quarter of the ~2 ms the brief set as the threshold;
+      a uniform grid would be the largest change in the set for nothing measurable at this load.
+
+## 2.2 (2026-09-06) — Bomb Plant the classic way, rebuilt sites, relief materials, a lived-in district
+- [x] **Bomb rules** (`shared/bomb.ts`, pure, tested): `resetBomb` hands the charge to a RANDOM living
+      attacker (`rand` injected, the room passes its seeded RNG); `dropBomb` (C2S `dropbomb`, key
+      `dropBomb` = H) lands it 0.6 m ahead of the carrier; pickup is walking within `pickupRadius`
+      (1.4 m); whoever dropped it on purpose is barred until they step outside `redropLeaveRadius`
+      (2.2 m) — a distance rule, not a timer (a timer let the dropper camp on it and the e2e page at
+      3 fps could not even see the "dropped" state). Planting: hold `objective` standing still
+      ANYWHERE inside a site rectangle (`BombSite {x,z,hw,hd}`, `insideSite` / `siteAt`); the charge
+      lands where the planter stood. Defusing: within `defuseRadius` (1.8 m) with LOS, 10 s or 5 s
+      with a kit. Plant / defuse pay $300 (`plantMoney` / `defuseMoney`).
+- [x] **Defuse kit**: shop item `kit` (`economy.ts`, $400, `BuyContext.bombDefender` gates it to the
+      defending side in Bomb only), `PlayerState.kit`, lost on death and at halftime, HUD shows
+      "DEFUSE KIT" in the round line. Shop card only appears to defenders (`Shop.tsx`, `KitArt`).
+- [x] **Carrier visuals**: `Character.bombPack` (pack, cell, straps — excluded from the merge like
+      `perkBand`), `RemotePlayer.carrying`, a "◆ C4" tag for the local carrier, HUD names the carrier
+      for the escort line and prints the bound keys instead of a hard-coded T.
+- [x] **Sites** (`view/BombSites.ts`, `shared/districtExpansion.ts`): a 1024-px DynamicTexture plate per
+      site (hazard border, hatch, letter, "PLANT ANYWHERE INSIDE"), four lit corner posts, a detailed
+      charge (straps, bezel, LED that beats faster as the fuse runs, wires, antenna), a dropped-charge
+      beacon column; cover inside each zone (container, crates, drums, planter, bench) with the DOM
+      flag C kept clear at B; stencil letters + "SITE A/B" plates on the walls. Gotcha (measured): a
+      negative `uScale`/`vScale` on a clamped DynamicTexture smears row 0 across the plate — flip on
+      the canvas (`translate(0,H); scale(1,-1)`) instead; screenshot from the south confirms the text.
+- [x] **Materials** (`world/materials.ts`): `generateSurface(kind)` builds a 512-px albedo AND a normal
+      map per surface kind (brick, plaster, concrete, metal, wood, tile…) as RawTextures; `bumpTexture`
+      on every StandardMaterial. Generation time is logged in DEV.
+- [x] **Dressing** (`shared/districtDressing.ts` called from `map.ts` after `expandDistrict`, ~40 new
+      `PropKind`s in `world/props.ts`): café, depot, shop, back hall, kiosk, streets and yard. Every
+      placement is validated by `map.test.ts` (WALL / FLOOR kind sets, no overlap with solids).
+      Gotcha: `Palette.text` needs a string — named poster variants map to texts, never `undefined`.
+- [x] Tests: shared 135, server Bomb 10 (drop / kit / plant-anywhere through the real handlers), e2e
+      "bomb plant and defuse" covers drop → camp (still dropped) → step away → pick up → plant → defuse.
+- [x] **Menu cover** (`view/MenuCover.ts`, `ui/MenuCover.tsx`): the game's own characters live behind
+      the main menu, CS 1.6 style — three FADE on the left under a brass practical, three TAPER on the
+      right under a violet one, crouched / standing / tac, one carrying the charge, on a wet floor in
+      fog, breathing and checking their weapons. Its own WebGL2 engine on its own canvas, half
+      resolution, 30 fps cap, paused when hidden, one frame under `prefers-reduced-motion`, lazily
+      imported, disposed on unmount (the match gets a fresh canvas anyway — see `App.freshCanvas`).
+      Camera uses a FIXED HORIZONTAL fov so the cast stays at the edges on 4:3 too (measured at
+      1024×768: with a vertical fov they crowded under the menu). `.menu-cover-shade` darkens the
+      middle so the text stays readable; sub-panels dim it further. Not shown on touch-only devices.
+- [x] **Slide** (`shared/movement.ts` `SLIDE`, `BodyState.slide/slideCd`): crouch PRESSED out of a sprint
+      (≥ 6.2 m/s, on the ground, off cooldown) → speed × 1.12, crouch height, its own friction (× 0.37
+      after the 800 ms), a sideways nudge from the strafe keys, no speed clamp; ends on the timer,
+      on crouch release, below 3.2 m/s, or into a jump (which keeps the speed — the clamp is skipped
+      on that frame); 700 ms cooldown. Replicated as `slide` / `slideCd` (uint16 ms) so the client
+      reconciles the same body and remotes get the pose (`CharacterInput.slide`: torso back, right leg
+      out). Local feel: FOV +6 %, a 6 cm dip, a touch of roll, a "cloth over concrete" sound
+      (`sfx.slide`). Tests: `slide.movement.test.ts` (5) and the e2e "2.3: a slide" — predicted and
+      replicated in a real room with ≤ 2 corrections.
+- [x] **The charge beeps and goes off like the classics** (2.3): `view/BombSites.ts` fires hooks — a beep
+      per LED on-phase (`max(110, left/45)·2` ms, so ~1.8 s apart at 40 s down to 0.22 s), one long tone
+      in the last 1.15 s, `bombPlanted` / `bombDefused` on the stage edges — and `audio/index.ts` plays
+      them (`sfx.bombBeep` positional from the charge, max 110 m; the announcements non-positional).
+      The detonation is a `BoomEvent` of kind `"c4"` (type widened: `GrenadeId | "c4"`): `Grenades.blast`
+      stacks three fireballs + a white core, a 30 m shockwave torus, a 45 m light, every spark and dust
+      particle, a 7 m scorch; `sfx.c4Blast` is the frag's shape with a 1.6 s sub and a 4 s tail, ducked
+      to 45 m; shake 0.2·(1 − d/60). SERVER: `blastDamage(d)` (shared, tested) — 500 up to 9 m, square
+      fall-off to 0 at 22 m — through plates, either side, kill feed weapon `"c4"` (`killerName` →
+      "C4 CHARGE", kill feed no longer says "fell" for it). Bomb.test: near defender and planter die,
+      an attacker 45 m away lives, the boom and the c4 kill are broadcast.
+- [x] **Render region**: `render.yaml` now says `frankfurt`. MEASURED: the default Oregon service gave
+      ~200 ms ping from Poland. Render cannot move an existing service, so HOSTING.md tells the owner
+      to delete it and re-apply the blueprint.
+- [x] **Hosting fixes after the first Render deploy**: `ENV CI=true` in the Dockerfile (pnpm refused to
+      purge node_modules without a TTY) and `net/serverUrl.ts` — a hosted page talks to its own origin
+      instead of `:2567` (the old fallback timed out on Render). Both measured on the live service.
+- Open: bots do not drop or pass the charge (they carry and plant only); no "bomb is here" minimap
+  icon; the kit is not drawn on the character.
+
+## 2.1 (2026-09-06) — own repository, menu, progression loops, one-image hosting
+Moved out of the SideQuest monorepo into `cucumber89/BarberStrike` (import commit keeps the tree
+verbatim). Landed on top of 2.0 beta:
+- [x] **Menu** (`ui/Menu.tsx` + `Armoury` / `Profile` / `HowToPlay` / `Online`): first screen shows
+      the level card, today's challenges and the server line; every panel is one BACK deep. Lobby
+      keeps the room name, suggests one (⚄), and makes an **invite link** (`ui/invite.ts`:
+      `?room=…&mode=…`, `?join=<roomId>` auto-joins once a nickname is in). `/health` now carries
+      `players` / `rooms`; `Connection.health()` probes it with a 4 s abort.
+- [x] **Art**: `ui/art/GearArt.tsx` — 23 inline SVG line drawings (11 weapons, 6 grenades incl. the
+      launcher shell, 4 perks, 2 plates), `currentColor` so the shop tints them (brass / dim when
+      locked / white when carried). Shown in the shop, the armoury and nowhere else yet (the HUD
+      weapon panel stays text). Test asserts every id renders with ≥ 4 shapes.
+- [x] **Settings** (`settings.ts`, `ui/SettingsPanel.tsx`, tabbed): ADS sensitivity (blended by
+      `adsBlend` in `LocalPlayer.applyLook`), crosshair editor (CSS vars on `.crosshair`, live
+      preview at rest and at full bloom), HUD scale (`zoom` on `.hud`), minimap / kill feed / toasts /
+      FPS toggles, key rebinding (`InputState.setBindings`, `resolveBindings`, conflicts flagged,
+      reserved keys refused: Esc, Tab, Enter, Y, 1–3). `repairSettings` clamps every field.
+      Gotcha: the settings blob key stays `fb_settings_v1`; missing sections default, so old blobs load.
+- [x] **Progression loops** (`shared/mastery.ts`, `shared/challenges.ts`, client `profile.ts`):
+      kills per weapon → tiers BRĄZ 10 / SREBRO 30 / ZŁOTO 75 / PLATYNA 150 / DIAMENT 300, paid once
+      per tier as a summary line; three daily challenges picked by FNV-1a(day) → mulberry32, never two
+      of one family, progress per day, forgotten at local midnight; recent matches (12); profile
+      export / import / reset (`repairProfile` coerces any blob). `MatchTracker.weaponKills` feeds both.
+      Still cosmetic: nothing here changes a fight.
+- [x] **Hosting**: root `Dockerfile` (server bundle + built client in one image, `PORT` at runtime),
+      `README.md` front matter for a Hugging Face Docker Space (port 7860),
+      `.github/workflows/sync-to-hf.yml` (needs `HF_TOKEN` secret + `HF_SPACE` variable), `fly.toml`,
+      `render.yaml`, `ci.yml`. `docs/HOSTING.md` rewritten in Polish with the three paths. Not
+      verifiable here: the Docker build itself (no daemon in the sandbox) — the same steps were run
+      by hand (`pnpm build` + `PORT=7860 node apps/server/dist/index.js`).
+- [x] **Merged the owner's ChatGPT branch** (sidequest `chatgpt-frankibarber`, grafted onto the import
+      commit so git could three-way merge it): individual 3.2 s respawns replace the waves in TDM /
+      FFA / DOM (owner decision — do not bring waves back); **Bomb Plant** (`shared/bomb.ts`, rounds,
+      buy phase, sides swap at 6, first to 7, its own economy); smoke blocks bots' sight
+      (`shared/smoke.ts`); district 62 → 98 m wide (`shared/districtExpansion.ts`, two new interiors);
+      procedural characters and bevelled weapons at every preset (the imported character / weapon
+      packs are no longer used — the scenery toggle keeps the prop packs only). Resolutions: the
+      plant / defuse key is the rebindable `objective` action (T); HOW TO PLAY explains Bomb instead
+      of waves; `wavesSurvived` now counts Bomb rounds survived (labels updated, stat kept).
+      `FABLE_HANDOFF.md` at the root is ChatGPT's own working note, kept verbatim.
+- [x] Typecheck fixes from the import: `SessionLike.respawnAt` in the test harness, `waveMs` /
+      `prepMs` widened to `number`, `Game.tracker` initialised at declaration.
+- Open: the HUD weapon panel could show the drawing; a language toggle (the UI is English, the
+  progression strings Polish — a deliberate 2.0 choice, left as is); a server-side profile if
+  accounts ever arrive (the rules already live in `shared/` for that reason).
+
 ## 1.0 beta (2026-09-03) — after the first real playtest
 See `V1_BETA_PLAN.md` for the measured reasoning. Landed, in order:
 - [x] Version string (`GAME_VERSION`) in menu / pause / F3 / `/health`.

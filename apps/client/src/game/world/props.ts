@@ -373,12 +373,13 @@ export function buildProps(scene: Scene, hints: PropHint[], imported?: Map<strin
 
 /**
  * MEASURED (1.0 beta profiling): props were ~300 loose meshes (a barber chair alone is 9 draw
- * calls). Everything here is static, so meshes sharing a material are merged per 12 m zone,
- * matching the map's zoning so light culling stays local. Text planes keep unique materials and
+ * calls). Everything here is static, so meshes sharing a material are merged per 16 m zone.
+ * Small surface details tolerate coarser light selection than structural walls; this reserves
+ * draw-call headroom for the rebuilt facades. Text planes keep unique materials and
  * therefore stay single; instances are never merged (their source is invisible).
  */
 function mergeStatic(meshes: Mesh[]): Mesh[] {
-  const ZONE = 12; // props are small: coarser zones than the map's 8 m structural tiles
+  const ZONE = 16;
   const groups = new Map<string, Mesh[]>();
   for (const m of meshes) {
     m.computeWorldMatrix(true);

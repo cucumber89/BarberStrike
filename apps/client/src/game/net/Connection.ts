@@ -7,10 +7,11 @@ export interface NetPlayer {
   boysClass?: number; nextClass?: number;
   id: string; name: string; team: number;
   x: number; y: number; z: number; yaw: number; pitch: number;
+  /** Quantised on the wire (task 5): yaw/pitch in 0.1 mrad, velocities in cm/s — read through dequantAngle / dequantVel. */
   vx: number; vy: number; vz: number; grounded: boolean; crouch: boolean;
   health: number; alive: boolean; weapon: string; ammo: number; reserve: number; reloading: boolean;
   protectedUntil: number;
-  kills: number; deaths: number; score: number; ping: number; ack: number; connected: boolean;
+  kills: number; deaths: number; score: number; ping: number; connected: boolean;
   money: number; owned: string[]; lethal: string; lethalCount: number; tactical: string; tacticalCount: number; spawnedAt: number;
   /** Drop 3: plate points and perk end times (server clock ms) keyed by perk id. */
   armor: number; perks: { get(id: string): number | undefined };
@@ -67,6 +68,8 @@ export class Connection {
   private offset = 0; // serverTime - performance.now()
   private offsetInitialised = false;
   rtt = 0;
+  /** Last input seq the server has simulated for us (S2C.Ack, sent right before each patch; task 5). */
+  ack = 0;
   private pingTimer: number | null = null;
   private pingSentAt = 0;
   private pingStamp = 0;
@@ -87,6 +90,7 @@ export class Connection {
     // handler keeps the SDK from warning about them.
     this.unbind.push(room.onMessage("*", () => {}));
     this.unbind.push(room.onMessage<{ c: number; s: number }>(S2C.Pong, (msg) => this.onPong(msg)));
+    this.unbind.push(room.onMessage<number>(S2C.Ack, (seq) => { if (typeof seq === "number" && seq >= this.ack) this.ack = seq; }));
     for (const h of this.msgHandlers) this.unbind.push(room.onMessage(h.type, h.cb));
     for (const cb of this.stateHandlers) room.onStateChange(cb);
     if (this.playerHandlers.length) {

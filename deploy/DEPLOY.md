@@ -176,6 +176,20 @@ menu gry. Otwórz drugie okno, wpisz tę samą nazwę pokoju i sprawdź, czy wid
 
 ---
 
+### Kompresja i cache (po co: 2 vCPU liczą mecz, nie gzipa)
+
+Build klienta zapisuje obok każdego pliku wersję `.br` i `.gz` (`apps/client/scripts/precompress.mjs`),
+a serwer gry wysyła je gotowe i sam ustawia `Cache-Control` (`apps/server/src/hosting.ts`): assety
+z hashem w nazwie na rok, modele na miesiąc, `index.html` nigdy. Caddy nie dokłada już własnych
+nagłówków, więc każda odpowiedź ma dokładnie jeden. Sprawdzenie z komputera:
+
+```bash
+curl -sI -H 'Accept-Encoding: br' https://TWOJA_DOMENA/ | grep -i -E 'cache-control|content-encoding'
+#   cache-control: no-cache            content-encoding: br
+curl -sI -H 'Accept-Encoding: br' "https://TWOJA_DOMENA/$(curl -s https://TWOJA_DOMENA/ | grep -o 'assets/index-[^"]*\.js' | head -1)" | grep -i -E 'cache-control|content-encoding'
+#   cache-control: public, max-age=31536000, immutable      content-encoding: br
+```
+
 ## 9. Aktualizacja gry (po każdej zmianie w kodzie)
 
 ```
@@ -220,9 +234,12 @@ Potem wystarczy `bs logs -f`, `bs restart`, `bs down`, `bs ps`.
 wskazuje na serwer albo port 80 jest zamknięty. Sprawdź `ping barberstrike.click` z komputera i
 `sudo ufw status`. Logi Caddy'ego: `bs logs caddy`.
 
-**Strona się otwiera, ale gra nie łączy się z serwerem.** To znaczy, że klient został zbudowany ze
-złym `VITE_SERVER_URL`. Sprawdź `DOMAIN` w `deploy/.env` i przebuduj: `bs up -d --build`. W konsoli
-przeglądarki (F12) zobaczysz, pod jaki adres leci WebSocket.
+**Strona się otwiera, ale gra nie łączy się z serwerem.** Klient łączy się domyślnie z tym samym
+adresem, z którego załadował stronę (bez portu), więc przy Caddy na 443 nic nie trzeba ustawiać.
+`VITE_SERVER_URL` w `docker-compose.yml` to tylko nadpisanie na wypadek, gdyby strona i gra miały
+stać osobno — jeśli jest ustawione na złą domenę, klient pójdzie tam. Sprawdź `DOMAIN` w
+`deploy/.env` i przebuduj: `bs up -d --build`. W konsoli przeglądarki (F12) zobaczysz, pod jaki
+adres leci WebSocket.
 
 **`Killed` w trakcie budowania.** Zabrakło pamięci — wróć do kroku 4 i włącz swap.
 

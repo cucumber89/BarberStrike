@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import express, { type RequestHandler } from "express";
 
 /**
  * Player-hosted games (2.0): one process serves BOTH the built client and the game server.
@@ -18,6 +19,77 @@ import { fileURLToPath } from "node:url";
  * the page and the socket are the same origin, and there is nothing to configure, no CORS and no
  * mixed content. The cost is that the host must have built the client once.
  */
+
+/**
+ * Cache policy per path (performance pass, task 3), set HERE so the reverse proxy does not have
+ * to know the layout and no response ever carries two Cache-Control headers (a live curl against
+ * the VPS returned both Caddy's `no-cache` and Express's `max-age=3600`):
+ *
+ *  - `/assets/*` — Vite hashes the name, so the content never changes: a year, immutable.
+ *  - `/models/*` — fixed names, big files, rarely change: a month.
+ *  - `index.html` (and `/`) — never cached, or a deploy stays invisible for an hour.
+ *  - everything else (favicon, manifest) — an hour.
+ */
+export function cacheControlFor(urlPath: string): string {
+  const p = urlPath.split("?")[0];
+  if (p.startsWith("/assets/")) return "public, max-age=31536000, immutable";
+  if (p.startsWith("/models/")) return "public, max-age=2592000";
+  if (p === "/" || p.endsWith("/index.html") || p === "/index.html") return "no-cache";
+  return "public, max-age=3600";
+}
+
+const TYPE_OF: Record<string, string> = {
+  ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8",
+  ".svg": "image/svg+xml", ".json": "application/json; charset=utf-8", ".map": "application/json; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8", ".webmanifest": "application/manifest+json", ".xml": "application/xml",
+  ".glb": "model/gltf-binary", ".wasm": "application/wasm",
+};
+
+/**
+ * Serve the built client with the precompressed siblings the build writes (`scripts/precompress.mjs`:
+ * `.br` and `.gz` next to every compressible file). A request that accepts brotli gets the `.br`
+ * file as-is with `Content-Encoding: br`; gzip likewise; anything else falls through to
+ * `express.static`. Nothing is compressed per request — on a 2-vCPU VPS that CPU belongs to the
+ * simulation — and the caller's cache policy (`cacheControlFor`) is applied on both paths.
+ *
+ * Existence is checked once per path and remembered: the build is immutable while the process
+ * lives, and a `stat` per asset request would be its own small tax.
+ */
+export function serveClient(dir: string): RequestHandler[] {
+  const known = new Map<string, string | null>(); // url path → precompressed file, or null
+  const precompressed: RequestHandler = (req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+    const accept = String(req.headers["accept-encoding"] ?? "");
+    const urlPath = req.path === "/" ? "/index.html" : req.path;
+    const ext = path.extname(urlPath);
+    if (!TYPE_OF[ext] || urlPath.includes("..")) return next();
+    const encodings = accept.includes("br") ? ["br", "gzip"] : accept.includes("gzip") ? ["gzip"] : [];
+    for (const enc of encodings) {
+      const key = `${urlPath}\0${enc}`;
+      let file = known.get(key);
+      if (file === undefined) {
+        const candidate = path.join(dir, urlPath) + (enc === "br" ? ".br" : ".gz");
+        file = fs.existsSync(candidate) ? candidate : null;
+        known.set(key, file);
+      }
+      if (!file) continue;
+      res.setHeader("Content-Encoding", enc);
+      res.setHeader("Content-Type", TYPE_OF[ext]);
+      res.setHeader("Vary", "Accept-Encoding");
+      res.setHeader("Cache-Control", cacheControlFor(urlPath));
+      return res.sendFile(file, (err) => { if (err) next(err); });
+    }
+    return next();
+  };
+  const plain = express.static(dir, {
+    index: "index.html",
+    setHeaders: (res, filePath) => {
+      res.setHeader("Cache-Control", cacheControlFor("/" + path.relative(dir, filePath).split(path.sep).join("/")));
+      res.setHeader("Vary", "Accept-Encoding");
+    },
+  });
+  return [precompressed, plain];
+}
 
 /** Where the built client lives, relative to this file in both `src` (tsx) and `dist` (node). */
 export function clientDir(): string | null {

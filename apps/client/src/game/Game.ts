@@ -4,7 +4,7 @@ import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import { type GameMode, MODES,
-  boysClass, Btn, C2S, S2C, CHAT, ECONOMY, INTERP_DELAY_MS, MAPS, MARK, DEFAULT_MAP_ID, PERK_ORDER, RESPAWN_DELAY_MS, TEAM_NAMES, MatchPhase, buildCollisionWorld, buyWindowLeft, inFlagZone, isShopItemId, isWeaponId, makeRayHit, noPerks, packInput, perkSpeedScale,
+  dequantAngle, boysClass, Btn, C2S, S2C, CHAT, ECONOMY, INTERP_DELAY_MS, MAPS, MARK, DEFAULT_MAP_ID, PERK_ORDER, RESPAWN_DELAY_MS, TEAM_NAMES, MatchPhase, buildCollisionWorld, buyWindowLeft, inFlagZone, isShopItemId, isWeaponId, makeRayHit, noPerks, packInput, perkSpeedScale,
   type BoomEvent, type ChatEvent, type CollisionWorld, type DamagedEvent, type FlagEvent, type FlashedEvent, type GrenadeId, type HitEvent, type KillEvent, type MapDef, type MarkEvent, type MarkMessage, type MatchEventMessage, type MoneyEvent,
   type PerkTimes, type ShopItemId, type ShopResult, type ShotEvent, type SpawnEvent, type Team, type ThrowEvent, type WeaponId,
 } from "@frankibarber/shared";
@@ -203,7 +203,7 @@ export class Game {
     this.conn.state.players.forEach((p, id) => this.onPlayerAdd(p, id));
     const me = this.conn.me();
     if (me) {
-      this.local.spawnAt(me.x, me.y, me.z, me.yaw);
+      this.local.spawnAt(me.x, me.y, me.z, dequantAngle(me.yaw));
       this.local.alive = me.alive;
       this.weapons.syncFrom(me);
       this.throwing.syncFrom(me);
@@ -459,7 +459,7 @@ export class Game {
     const t = s.t;
     s.players.forEach((p, id) => {
       if (id === this.conn.sessionId) {
-        this.local.reconcile(p);
+        this.local.reconcile(p, this.conn.ack);
         this.weapons.syncFrom(p);
         this.throwing.syncFrom(p);
         for (const k of PERK_ORDER) this.myPerks[k] = p.perks?.get(k) ?? 0;
@@ -770,7 +770,7 @@ export class Game {
     this.local.settings.bobScale = s.gameplay.headBob;
     this.local.settings.shakeScale = s.gameplay.cameraShake;
     this.local.setFov(s.gameplay.fov);
-    this.engine.setHardwareScalingLevel(1 / s.graphics.renderScale);
+    this.map.setShadowQuality(s.graphics.shadows);
     this.events.emit("settings", {});
   }
 

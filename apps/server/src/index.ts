@@ -6,15 +6,26 @@ import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { GAME_VERSION, MAX_PLAYERS } from "@frankibarber/shared";
 import { TdmRoom } from "./rooms/TdmRoom";
-import { clientDir, hostBanner } from "./hosting";
+import { cacheControlFor, clientDir, hostBanner, serveClient } from "./hosting";
+import { tickStats } from "./stats";
 
 const PORT = Number(process.env.PORT ?? 2567);
 const origins = (process.env.CORS_ORIGIN ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
 const app = express();
 app.use(cors({ origin: origins.length ? origins : true }));
-app.get("/health", (_req, res) => {
-  res.json({ ok: true, game: "BARBERSTRIKE", version: GAME_VERSION, maxPlayers: MAX_PLAYERS, uptime: process.uptime() });
+app.get("/health", async (_req, res) => {
+  // Player and room counts ride along (2.1): the menu shows "N playing" so a friend knows whether
+  // anyone is in before they join. A failing query must not turn the health check red.
+  let players = 0, rooms = 0;
+  try {
+    const list = await matchMaker.query({ name: "tdm" });
+    rooms = list.length;
+    players = list.reduce((n, r) => n + r.clients, 0);
+  } catch { /* counts are informational */ }
+  // `tick` (task 6): worst and mean simulation tick over the last minute, across rooms — the one
+  // number that says whether the core the simulation runs on is keeping up. Watch it with curl.
+  res.json({ ok: true, game: "BARBERSTRIKE", version: GAME_VERSION, maxPlayers: MAX_PLAYERS, uptime: process.uptime(), players, rooms, tick: tickStats() });
 });
 
 // Room browser for the lobby: public, unlocked TDM rooms with their metadata.
@@ -37,8 +48,12 @@ app.get("/rooms", async (_req, res) => {
  */
 const CLIENT_DIR = clientDir();
 if (CLIENT_DIR) {
-  app.use(express.static(CLIENT_DIR, { index: "index.html", maxAge: "1h" }));
-  app.get(/^\/(?!health$|rooms$).*/, (_req, res) => { res.sendFile(path.join(CLIENT_DIR, "index.html")); });
+  // Precompressed assets and one Cache-Control per response (performance pass, task 3): see hosting.ts.
+  app.use(serveClient(CLIENT_DIR));
+  app.get(/^\/(?!health$|rooms$).*/, (_req, res) => {
+    res.setHeader("Cache-Control", cacheControlFor("/index.html"));
+    res.sendFile(path.join(CLIENT_DIR, "index.html"));
+  });
 }
 
 const httpServer = http.createServer(app);

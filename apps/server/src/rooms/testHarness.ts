@@ -35,6 +35,8 @@ interface RoomInternals {
 interface SessionLike {
   brain: { onSpawn(yaw: number): void } | null;
   respawnAt: number;
+  /** Last input seq simulated (task 5: the ack lives on the session, not in the replicated state). */
+  ack: number;
   body: { x: number; y: number; z: number; vx: number; vy: number; vz: number; grounded: boolean; crouching: boolean; tac: number };
   inputs: { seq: number; dt: number }[];
   history: { t: number }[];

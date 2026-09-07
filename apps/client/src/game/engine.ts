@@ -20,20 +20,24 @@ export interface CreatedEngine {
  * `preferWebGPU=false` forces WebGL2 (settings / troubleshooting).
  */
 export async function createEngine(canvas: HTMLCanvasElement, preferWebGPU = true): Promise<CreatedEngine> {
+  let candidate: WebGPUEngine | undefined;
   if (preferWebGPU && typeof navigator !== "undefined" && "gpu" in navigator) {
     try {
       const supported = await WebGPUEngine.IsSupportedAsync;
       if (supported) {
-        const engine = new WebGPUEngine(canvas, { antialias: true, adaptToDeviceRatio: false, stencil: true });
+        const engine = candidate = new WebGPUEngine(canvas, { antialias: false, adaptToDeviceRatio: false, stencil: true });
         await engine.initAsync();
         return { engine, kind: "webgpu" };
       }
     } catch (err) {
+      try { candidate?.dispose(); } catch { /* partially initialized GPU device */ }
       console.warn("[engine] WebGPU init failed, falling back to WebGL2", err);
     }
   }
-  const engine = new Engine(canvas, true, { stencil: true, preserveDrawingBuffer: false, powerPreference: "high-performance" }, false);
+  // FXAA is controlled live by postfx.ts; native MSAA would remain on even with AA disabled.
+  const engine = new Engine(canvas, false, { stencil: true, preserveDrawingBuffer: false, powerPreference: "high-performance" }, false);
   if (engine.webGLVersion < 2) {
+    engine.dispose();
     throw new Error("WebGL2 is required but not available in this browser.");
   }
   return { engine, kind: "webgl2" };

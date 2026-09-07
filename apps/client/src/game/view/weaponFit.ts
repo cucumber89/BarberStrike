@@ -60,6 +60,8 @@ export interface FitInput {
   eject?: PartBox;
   /** Declared length of the weapon in metres (WeaponSpec.length of the procedural model). */
   targetLength: number;
+  /** Every part's box (unscaled frame). Lets a derived ejection port land ON the gun's surface. */
+  parts?: PartBox[];
 }
 
 /**
@@ -98,9 +100,32 @@ export function fitAnchors(input: FitInput): Anchors {
 
   // ---- ejection port: measured when present, otherwise the right of the receiver just behind the
   // midpoint, which is where a case leaves every gun in this pack.
-  const ej: [number, number, number] = input.eject
-    ? centre(input.eject)
-    : [whole.max[0], centre(whole)[1] + (whole.max[1] - centre(whole)[1]) * 0.4, centre(whole)[2] + (whole.max[2] - centre(whole)[2]) * 0.25];
+  //
+  // Measured (drop A): `whole.max[0]` is the widest thing on the gun — a bolt handle, a sling
+  // swivel — so the derived point sat 11–31 mm off the receiver in the air on the MK14, SRSA1 and
+  // RPG. With the parts known, take the right face of whatever part actually spans that (y, z).
+  let ej: [number, number, number];
+  if (input.eject) ej = centre(input.eject);
+  else {
+    const wc = centre(whole);
+    const ey = wc[1] + (whole.max[1] - wc[1]) * 0.4, ez = wc[2] + (whole.max[2] - wc[2]) * 0.25;
+    let ex = -Infinity;
+    for (const p of input.parts ?? []) {
+      if (p.min[1] <= ey && ey <= p.max[1] && p.min[2] <= ez && ez <= p.max[2]) ex = Math.max(ex, p.max[0]);
+    }
+    if (ex !== -Infinity) ej = [ex, ey, ez];
+    else if (input.parts && input.parts.length > 0) {
+      // Nothing spans that (y, z) — the RPG's derived point sits above its tube — so slide onto the
+      // nearest part in the y/z plane and take its right face there.
+      let best = input.parts[0], bd = Infinity;
+      for (const p of input.parts) {
+        const dy = Math.max(0, p.min[1] - ey, ey - p.max[1]), dz = Math.max(0, p.min[2] - ez, ez - p.max[2]);
+        const d = dy * dy + dz * dz;
+        if (d < bd) { bd = d; best = p; }
+      }
+      ej = [best.max[0], Math.min(Math.max(ey, best.min[1]), best.max[1]), Math.min(Math.max(ez, best.min[2]), best.max[2])];
+    } else ej = [whole.max[0], ey, ez];
+  }
 
   return { muzzle: sc(muzzle), eject: sc(ej), aimPoint: sc(aim), length: input.targetLength };
 }
@@ -118,14 +143,19 @@ export function fitAnchors(input: FitInput): Anchors {
  * Returns one of 0, ±π/2, π: models in this pack are axis-aligned, and snapping to a quarter turn
  * avoids introducing a skew that a measured angle would.
  */
-export function guessForward(whole: PartBox, barrel?: PartBox, magazine?: PartBox): number {
+export function guessForward(whole: PartBox, barrel?: PartBox, magazine?: PartBox, sights?: { front?: PartBox; rear?: PartBox }): number {
   const size = sizeOf(whole);
   const axis: 0 | 2 = size[0] > size[2] ? 0 : 2;   // 0 = X, 2 = Z
   const wc = centre(whole);
   let sign = 1;
-  if (barrel) {
-    const d = centre(barrel)[axis] - wc[axis];
-    if (Math.abs(d) > size[axis] * 0.02) sign = d > 0 ? 1 : -1;
+  // Measured (drop A): the RPG is one centred `Tube` with no magazine, so the barrel gave no signal
+  // and the launcher was built facing BACKWARDS — muzzle on the rear cover, front sight at the
+  // back. A front sight is in front of a rear sight by definition, so when the model names both
+  // they are the surest signal there is and go first.
+  const ds = sights?.front && sights?.rear ? centre(sights.front)[axis] - centre(sights.rear)[axis] : 0;
+  if (Math.abs(ds) > size[axis] * 0.02) sign = ds > 0 ? 1 : -1;
+  else if (barrel && Math.abs(centre(barrel)[axis] - wc[axis]) > size[axis] * 0.02) {
+    sign = centre(barrel)[axis] - wc[axis] > 0 ? 1 : -1;
   } else if (magazine) {
     // The magazine lives at the grip end, so the muzzle is the other way.
     const d = centre(magazine)[axis] - wc[axis];
@@ -134,6 +164,45 @@ export function guessForward(whole: PartBox, barrel?: PartBox, magazine?: PartBo
   if (axis === 2) return sign > 0 ? 0 : Math.PI;
   // Babylon's left-handed RotationY maps (1,0,0) to (cos, 0, −sin): −π/2 sends +X onto +Z.
   return sign > 0 ? -Math.PI / 2 : Math.PI / 2;
+}
+
+/** The viewmodel's hand box (`Viewmodel.buildHands`), so a check can ask whether it touches the gun. */
+export const HAND_SIZE: [number, number, number] = [0.058, 0.04, 0.075];
+
+/**
+ * Where the support (left) hand rests, in gun space, from the weapon's length alone: a sidearm is
+ * supported at the grip (the old universal 30 cm offset put the hand beyond a pistol's muzzle);
+ * a long gun keeps its support under the fore-end, about half-way out, never past 36 cm.
+ * Pure so `weaponParts` can check the hand is on the fore-end without a scene.
+ */
+export function supportHandHome(length: number, parts?: PartBox[]): [number, number, number] {
+  if (length <= 0.2) return [-0.03, -0.065, -0.005];
+  let z = Math.min(0.36, length * 0.52);
+  const home: [number, number, number] = [-0.03, -0.035, z];
+  if (!parts || parts.length === 0) return home;
+  // Measured (drop A): `length` is the whole gun, but the hand is measured from the GRIP, which sits
+  // mid-gun on a bullpup or an SMG — 52 % of the MDR's 0.8 m put the hand on its flash hider, and
+  // the MPA's at its muzzle. So go 55 % of the way from the grip to the FRONT of the gun instead.
+  let front = -Infinity;
+  for (const b of parts) front = Math.max(front, b.max[2]);
+  z = Math.min(0.36, front * 0.55);
+  home[2] = z;
+  // Measured (drop A): with the fixed −0.035 the hand box hovered 13–25 mm UNDER every long gun's
+  // fore-end, because the fore-ends of the pack sit at y ≈ 0 while the hand's top was at −0.015.
+  // So read the underside of the fore-end where the hand goes — the lowest part that spans the
+  // hand's depth and straddles the centre line (a bipod leg or a sling swivel off to one side does
+  // not count) — and rest the hand's top 4 mm inside it, which reads as a grasp and stays within
+  // the 5 mm attachment tolerance.
+  const z0 = z - HAND_SIZE[2] / 2, z1 = z + HAND_SIZE[2] / 2;
+  let bottom = Infinity;
+  for (const b of parts) {
+    if (b.max[2] < z0 || b.min[2] > z1) continue;
+    if (b.min[0] > 0 || b.max[0] < 0) continue;
+    bottom = Math.min(bottom, b.min[1]);
+  }
+  if (bottom === Infinity) return home;
+  home[1] = bottom - HAND_SIZE[1] / 2 + 0.004;
+  return home;
 }
 
 /**

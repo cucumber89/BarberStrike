@@ -2,7 +2,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { TargetCamera } from "@babylonjs/core/Cameras/targetCamera";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import {
-  Btn, LEAN, MatchPhase, PLAYER, TAC, WEAPONS, aimDirection, copyBody, createBody, eyeHeight, frozenAt, leanClearance, leanOf, maskInput, simulateBody, sprintActive, tacActive, wrapAngle,
+  Btn, LEAN, MatchPhase, PLAYER, TAC, WEAPONS, aimDirection, copyBody, createBody, dequantVel, eyeHeight, frozenAt, leanClearance, leanOf, maskInput, simulateBody, sprintActive, tacActive, wrapAngle,
   type BodyState, type CollisionWorld, type PlayerInput, type WeaponId,
 } from "@frankibarber/shared";
 import type { InputState } from "../input/InputState";
@@ -167,9 +167,8 @@ export class LocalPlayer {
    * Reconciles with the authoritative state: discards acknowledged inputs; if the server's
    * position for that sequence differs from our prediction, rewinds and replays the rest.
    */
-  reconcile(p: NetPlayer): void {
+  reconcile(p: NetPlayer, ack: number): void {
     if (!this.alive) return;
-    const ack = p.ack;
     while (this.pending.length && this.pending[0].input.seq <= ack) {
       const e = this.pending.shift()!;
       if (e.input.seq === ack) copyBody(e.after, this.serverBody);
@@ -184,12 +183,12 @@ export class LocalPlayer {
     // serverBody. Adopt the server state silently when no input is in flight.
     const b = this.body;
     if (this.pending.length === 0) {
-      b.x = p.x; b.y = p.y; b.z = p.z; b.vx = p.vx; b.vy = p.vy; b.vz = p.vz; b.grounded = p.grounded; b.crouching = p.crouch;
+      b.x = p.x; b.y = p.y; b.z = p.z; b.vx = dequantVel(p.vx); b.vy = dequantVel(p.vy); b.vz = dequantVel(p.vz); b.grounded = p.grounded; b.crouching = p.crouch;
       copyBody(b, sb);
       return;
     }
     this.correctionCount++;
-    b.x = p.x; b.y = p.y; b.z = p.z; b.vx = p.vx; b.vy = p.vy; b.vz = p.vz; b.grounded = p.grounded; b.crouching = p.crouch;
+    b.x = p.x; b.y = p.y; b.z = p.z; b.vx = dequantVel(p.vx); b.vy = dequantVel(p.vy); b.vz = dequantVel(p.vz); b.grounded = p.grounded; b.crouching = p.crouch;
     let prev = this.prevButtonsBefore(0);
     for (const e of this.pending) {
       simulateBody(this.world, b, e.input, WEAPONS[this.weapon].mobility * this.speedScale(sprintActive(e.input.buttons, b.crouching)), prev);

@@ -6,14 +6,14 @@ import {
   RESPAWN_DELAY_MS, SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER,
   isLive, isFrozen, maskInput, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
   BOMB, BOMB_SITES, bombAttackTeam, resetBomb, stepBomb, type BombPlayer,
-  buildCollisionWorld, createBody, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
+  createBody, quantAngle, quantVel, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
   makeRayHit, mulberry32, pickSpawn, sanitizeName, simulateBody, spreadDirection, traceBullet, unpackInput,
   ECONOMY, GRENADES, THROW_INTERVAL_MS, FIRE_DPS, applyBuy, applySell, buyWindowOpen, giveGrenade, takeGrenade, killReward, weaponForSlot,
   primaryOf, isShopItemId, isGrenadeId, createProjectile, stepProjectile, explosionDamage, flashStrength, flashMs, eyeOf,
   rayBox, targetBox, freshWallet, secondaryOf, sprintActive, usesAmmo, isBackstab, MELEE, PERK_EFFECT, PERK_ORDER, noPerks, perkActive,
   perkSpeedScale, splitDamage, isPerkId, isArmorId,
   BTN_MASK, DOM, MODES, isGameMode, leanOf, tacActive, leanEye, inFlagZone, stepFlag, domTick, neutralFlag,
-  CHAT, MARK, MAX_BOTS, BOT_NAMES, botId, isBotLevel, prepareNav, walkable,
+  CHAT, MARK, MAX_BOTS, BOT_NAMES, botId, isBotLevel,
   type BodyState, type CollisionWorld, type DamagedEvent, type FireMessage, type HitEvent, type InputTuple, type KillEvent,
   type MapDef, type PlayerInput, type ShotEvent, type SpawnEvent, type Target, type Team, type WeaponId, type WelcomeMessage,
   type Projectile, type Wallet, type ThrowMessage, type ThrowEvent, type BoomEvent, type FlashedEvent, type MoneyEvent,
@@ -23,6 +23,8 @@ import {
 import { boysClass, isBoysClass, boysHealRate, boysMedicGoal, BOYS_SUPPORT } from "@frankibarber/shared";
 import { FlagState, MatchState, PlayerState } from "../schema";
 import { nextPhase, teamForNewPlayer } from "../match";
+import { sharedCollisionWorld, sharedWalk } from "./sharedWorld";
+import { recordTick } from "../stats";
 import { BotBrain, type BotSenses, type BotView } from "../bots/BotBrain";
 
 interface HistoryEntry { t: number; x: number; y: number; z: number; crouching: boolean }
@@ -31,7 +33,7 @@ interface HistoryEntry { t: number; x: number; y: number; z: number; crouching: 
 const HISTORY_LEN = 30;
 /** Seconds a dropped (non-consented) client may reconnect before its player is removed. */
 const RECONNECT_GRACE_S = 15;
-/** Input `seq` is replicated as uint32 (PlayerState.ack); anything beyond cannot be acknowledged. */
+/** Input `seq` travels back as a uint32 ack (S2C.Ack); anything beyond cannot be acknowledged. */
 const MAX_SEQ = 0xffffffff;
 
 const isInputTuple = (t: unknown): t is InputTuple =>
@@ -54,6 +56,21 @@ class Session {
    * re-plans about once every fifteen seconds.
    */
   planPhase = 0;
+  /**
+   * Last input seq simulated for this player, and the last one told to them (task 5). The ack used
+   * to be a replicated field, i.e. every player's reconciliation number went to every client 20
+   * times a second; now it goes to its owner alone, right before the patch it belongs to
+   * (`onBeforePatch`), so the client pairs it with the same state it always did.
+   */
+  ack = 0;
+  ackSent = -1;
+  /**
+   * Line-of-sight results per enemy id (performance pass, task 2): a full-world raycast per enemy
+   * in the cone per bot per tick was the single largest bot cost (worst case 88 raycasts a tick).
+   * A bot's reaction time is ≥ 150 ms, so a result held for three ticks (50 ms), refreshed on this
+   * bot's own tick of the rotation, changes nothing a player can see.
+   */
+  losCache = new Map<string, { tick: number; ok: boolean }>();
   /** Time bank (ms) the client may spend on inputs; refilled by the server tick. Anti speed-hack. */
   bank = 0;
   lastYaw = 0;
@@ -132,6 +149,9 @@ const DEV_TOOLS = process.env.FB_DEV_TOOLS === "1";
 /** Dev-only bandwidth counter: logs outgoing bytes/s (patches + messages) every 5 s. */
 const NET_STATS = process.env.FB_NET_STATS === "1";
 const pelletDir: [number, number, number] = [0, 0, 0];
+/** Ticks a bot's line-of-sight verdict on an enemy is reused (task 2). */
+const LOS_CACHE_TICKS = 3;
+const NO_HAZARDS: { x: number; y: number; z: number; radius: number }[] = [];
 const worldHit = makeRayHit();
 
 export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string; mode: GameMode; name: string; map: string; bots: number } }> {
@@ -139,8 +159,16 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   override state = new MatchState();
 
   private map: MapDef = NIGHT_DISTRICT;
-  private world: CollisionWorld = buildCollisionWorld(NIGHT_DISTRICT);
+  // Shared across rooms (performance pass, task 1): see sharedWorld.ts.
+  private world: CollisionWorld = sharedCollisionWorld();
   private sessions = new Map<string, Session>();
+  /**
+   * Players with `connected` set, kept as a count (task 6): `updatePhase` asked for it every tick
+   * with an array allocation and a filter over every player. Maintained at the four places the
+   * flag changes; `connectedPlayers` exposes it for tests.
+   */
+  private connectedCount = 0;
+  get connectedPlayers(): number { return this.connectedCount; }
   private accumulator = 0;
   private rand = mulberry32(Date.now() & 0xffffffff);
   private projectiles: Projectile[] = [];
@@ -175,6 +203,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // Drop 5: bots requested at creation (clamped so humans always have room), with a difficulty.
     const wantBots = isFiniteNumber(options?.bots) ? Math.max(0, Math.min(MAX_BOTS, Math.round(options.bots))) : 0;
     this.botCount = Math.min(wantBots, MAX_PLAYERS - 2);
+    // Bots take seats: 12 is the room, not the human count (task 6). Was 12 humans + bots.
+    this.maxClients = MAX_PLAYERS - this.botCount;
     this.botLevel = isBotLevel(options?.botLevel) ? options.botLevel : "normal";
     // Tests and tooling may pin the room's PRNG (spawn picks, pellets, bot aim); never in production.
     if ((DEV_TOOLS || process.env.NODE_ENV === "test") && isFiniteNumber(options?.seed)) this.rand = mulberry32(options.seed >>> 0);
@@ -300,8 +330,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private addBot(n: number): void {
     if (!this.walk) {
-      this.walk = walkable(this.map);
-      prepareNav(this.walk); // index now, at room creation, not inside the first tick that plans
+      this.walk = sharedWalk(); // built and warmed once per process, not per room (task 1)
       this.roamPoints = [...this.map.spawns, ...(this.map.arenaSpawns ?? []), ...this.map.flags, ...this.map.stations].map(p => ({ x: p.x, y: p.y, z: p.z }));
     }
     const id = botId(n);
@@ -313,7 +342,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.team = this.teams ? teamForNewPlayer(Array.from(this.state.players.values()).map((q) => q.team as Team)) : 0;
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
-    this.state.players.set(id, p);
+    this.state.players.set(id, p); this.connectedCount++;
     const s = new Session();
     s.planPhase = n % MAX_BOTS;
     s.brain = new BotBrain(this.botLevel, this.walk, this.rand);
@@ -336,9 +365,17 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       now,
       me: { id: p.id, team: p.team, x: s.body.x, y: s.body.y, z: s.body.z, crouching: s.body.crouching, grounded: s.body.grounded, ammo: s.ammo[w.id], magazine: w.magazine, reserve: s.reserve[w.id], weapon: w.id, fireIntervalMs: fireIntervalMs(w) },
       enemies,
-      los: (ax, ay, az, bx, by, bz) => !this.losBlocked(ax, ay, az, bx, by, bz) && !smokeBlocks(this.smokes, now, ax, ay, az, bx, by, bz),
+      los: (ax, ay, az, bx, by, bz, id) => {
+        const c = id ? s.losCache.get(id) : undefined;
+        // Fresh enough and not this bot's refresh tick: reuse. Bots refresh on different ticks.
+        if (c && this.navTick - c.tick < LOS_CACHE_TICKS && (this.navTick + s.planPhase) % LOS_CACHE_TICKS !== 0) return c.ok;
+        const ok = !this.losBlocked(ax, ay, az, bx, by, bz) && !smokeBlocks(this.smokes, now, ax, ay, az, bx, by, bz);
+        if (id) s.losCache.set(id, { tick: this.navTick, ok });
+        return ok;
+      },
       blinded: now < s.blindedUntil,
-      hazards: this.fires.filter(f => f.until > now && Math.hypot(p.x - f.x, p.z - f.z) < f.radius + 3
+      // No fire on the map (the usual case) means no filter, no allocation.
+      hazards: this.fires.length === 0 ? NO_HAZARDS : this.fires.filter(f => f.until > now && Math.hypot(p.x - f.x, p.z - f.z) < f.radius + 3
         && !this.losBlocked(p.x, p.y + 1, p.z, f.x, f.y + 0.3, f.z)),
       flags: (this.mode === "dom" || this.mode === "boys") ? this.flagSims.map((f, i) => ({ x: this.map.flags[i].x, y: this.map.flags[i].y, z: this.map.flags[i].z, owner: f.owner, contested: this.state.flags[i]?.contested ?? false })) : [],
       roamPoints: this.roamPoints,
@@ -352,6 +389,20 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (s.inputs.length < MAX_INPUT_QUEUE) s.inputs.push(d.input);
     if (d.reload && !p.reloading) this.reloadFor(p, s);
     if (d.fire && isLive(this.state.phase as MatchPhase)) this.fireCore(undefined, p, s, { seq: 0, weapon: w.id, o: d.fire.o, d: d.fire.d, t: now });
+  }
+
+  /**
+   * Right before each state patch: each human gets their own ack, and only when it moved. Sent on
+   * the same socket ahead of the patch, so it arrives first and the client reconciles the patch
+   * against exactly the input the server had simulated when it encoded that state (task 5).
+   */
+  override onBeforePatch(): void {
+    for (const client of this.clients) {
+      const s = this.sessions.get(client.sessionId);
+      if (!s || s.ack === s.ackSent) continue;
+      s.ackSent = s.ack;
+      client.send(S2C.Ack, s.ack);
+    }
   }
 
   private onPing(client: Client, msg: unknown): void {
@@ -399,7 +450,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.team = this.teams ? teamForNewPlayer(Array.from(this.state.players.values()).map((q) => q.team as Team)) : 0;
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
-    this.state.players.set(client.sessionId, p);
+    this.state.players.set(client.sessionId, p); this.connectedCount++;
 
     const s = new Session();
     s.ready = options?.deferSpawn !== true;
@@ -422,14 +473,14 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   override async onLeave(client: Client, code?: number): Promise<void> {
     const p = this.state.players.get(client.sessionId);
     if (!p) return;
-    p.connected = false;
+    p.connected = false; this.connectedCount--;
     this.updatePhase(); // a countdown aborts immediately when the room drops below minPlayers
     const consented = code === 1000 || code === 4000;
     if (!consented) {
       try {
         await this.allowReconnection(client, RECONNECT_GRACE_S);
         const back = this.state.players.get(client.sessionId);
-        if (back) back.connected = true;
+        if (back) { back.connected = true; this.connectedCount++; }
         return;
       } catch {
         // timed out or room disposing
@@ -441,6 +492,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private removePlayer(id: string): void {
     const s = this.sessions.get(id);
     if (s) { s.history.length = 0; s.inputs.length = 0; }
+    const gone = this.state.players.get(id);
+    if (gone?.connected) this.connectedCount--;
     this.state.players.delete(id);
     this.sessions.delete(id);
   }
@@ -790,7 +843,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     s.lean = 0; s.tac = false; p.lean = 0; p.tac = false;
     for (const w of WEAPON_ORDER) { s.ammo[w] = WEAPONS[w].magazine; s.reserve[w] = WEAPONS[w].reserve; }
     s.reloadEndsAt = 0; s.equipEndsAt = this.now() + 200; s.spread = 0;
-    p.x = sp.x; p.y = sp.y; p.z = sp.z; p.yaw = sp.yaw; p.pitch = 0;
+    p.x = sp.x; p.y = sp.y; p.z = sp.z; p.yaw = quantAngle(sp.yaw); p.pitch = 0;
     if (this.mode === "boys") {
       if (p.boysClass !== p.nextClass) {
         p.boysClass = p.nextClass;
@@ -827,8 +880,14 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   // ---------------------------------------------------------------- match flow
 
+  private readyPlayerCount(): number {
+    let count = this.connectedCount;
+    for (const p of this.state.players.values()) if (p.connected && !this.sessions.get(p.id)?.ready) count--;
+    return count;
+  }
+
   private maybeStartCountdown(): void {
-    const connected = Array.from(this.state.players.values()).filter((p) => p.connected && this.sessions.get(p.id)?.ready).length;
+    const connected = this.readyPlayerCount();
     if (this.state.phase === MatchPhase.Waiting && connected >= MATCH.minPlayers) {
       this.state.phase = MatchPhase.Countdown;
       this.state.phaseEndsAt = this.now() + MATCH.countdownMs;
@@ -1034,7 +1093,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private updatePhase(): void {
     const st = this.state;
     const now = this.now();
-    const connected = Array.from(st.players.values()).filter((p) => p.connected && this.sessions.get(p.id)?.ready).length;
+    const connected = this.readyPlayerCount();
     if (this.mode === "bomb" && connected > 0 && (st.phase === MatchPhase.Playing || st.phase === MatchPhase.Prep)) {
       if (now >= st.matchEndsAt) this.endMatch();
       else if (st.phase === MatchPhase.Prep && now >= st.phaseEndsAt) {
@@ -1060,6 +1119,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   // ---------------------------------------------------------------- simulation
 
   private tick(deltaMs: number): void {
+    const t0 = performance.now();
     this.accumulator += Math.min(deltaMs, 250);
     let steps = 0;
     while (this.accumulator >= TICK_MS && steps < 8) {
@@ -1070,12 +1130,14 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (steps === 8) this.accumulator = 0;
     this.state.t = this.now();
     this.updatePhase();
+    if (steps > 0) recordTick(performance.now() - t0); // for /health (task 6)
     if (NET_STATS) this.logNetStats(this.state.t);
   }
 
   private step(): void {
     const now = this.now();
     this.navTick++;
+    const botsThink = isLive(this.state.phase as MatchPhase) && this.clients.length > 0;
     for (const [id, p] of this.state.players) {
       const s = this.sessions.get(id);
       if (!s) continue;
@@ -1110,7 +1172,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       }
 
       // Drop 5: a bot decides here, then its input goes through the same queue as a human's.
-      if (s.brain) this.stepBot(p, s, now);
+      // Not on the result screen or in a round break (its shots would be refused anyway, after the
+      // raycasts and the planning had been paid for), and not for nobody: a room without a human
+      // has no one to play for (task 2).
+      if (s.brain && botsThink) this.stepBot(p, s, now);
       // Movement: spend the time bank on queued inputs.
       s.bank = Math.min(s.bank + TICK_MS, 120);
       const mobility = WEAPONS[p.weapon as WeaponId].mobility * (this.mode === "boys" ? boysClass(p.boysClass).speed : 1);
@@ -1127,21 +1192,23 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         simulateBody(this.world, s.body, inp, mobility * perkSpeedScale(perks, now, sprintActive(inp.buttons, s.body.crouching)), s.prevButtons);
         s.prevButtons = inp.buttons;
         s.lastYaw = inp.yaw; s.lastPitch = inp.pitch;
-        p.ack = inp.seq;
+        s.ack = inp.seq;
         processed++;
       }
       // Idle body still needs gravity (e.g. floor removed / spawn on ledge).
       if (processed === 0 && !s.body.grounded) {
-        simulateBody(this.world, s.body, { seq: p.ack, dt: TICK_MS, buttons: s.prevButtons & ~Btn.Jump, yaw: s.lastYaw, pitch: s.lastPitch }, mobility, s.prevButtons);
+        simulateBody(this.world, s.body, { seq: s.ack, dt: TICK_MS, buttons: s.prevButtons & ~Btn.Jump, yaw: s.lastYaw, pitch: s.lastPitch }, mobility, s.prevButtons);
       }
 
       const b = s.body;
       if (b.y < this.map.killY) { this.fallDeath(p, s); continue; }
 
       p.x = b.x; p.y = b.y; p.z = b.z;
-      p.vx = b.vx; p.vy = b.vy; p.vz = b.vz;
+      p.vx = quantVel(b.vx); p.vy = quantVel(b.vy); p.vz = quantVel(b.vz);
       p.grounded = b.grounded; p.crouch = b.crouching;
-      p.yaw = s.lastYaw; p.pitch = s.lastPitch;
+      const qy = quantAngle(s.lastYaw), qp = quantAngle(s.lastPitch);
+      if (p.yaw !== qy) p.yaw = qy;
+      if (p.pitch !== qp) p.pitch = qp;
       // Drop 4: lean / tac from the last simulated buttons, for origin checks and the remote pose.
       s.lean = leanOf(s.prevButtons, b.crouching);
       s.tac = tacActive(s.prevButtons, b);

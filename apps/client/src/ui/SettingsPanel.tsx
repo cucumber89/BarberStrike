@@ -1,4 +1,4 @@
-import { PRESETS, type QualityPreset, type Settings } from "../settings";
+import { applyQualityPreset, isCustomGraphics, type QualityPreset, type Settings } from "../settings";
 
 interface Props { settings: Settings; onChange: (s: Settings) => void }
 
@@ -37,10 +37,13 @@ export function SettingsPanel({ settings, onChange }: Props) {
         <span>Quality preset</span>
         <div className="segmented">
           {(["low", "medium", "high", "ultra"] as QualityPreset[]).map((p) => (
-            <button key={p} type="button" className={gr.preset === p ? "active" : ""} onClick={() => set({ graphics: { ...PRESETS[p], renderer: gr.renderer } })}>{p.toUpperCase()}</button>
+            <button key={p} type="button" className={gr.preset === p ? "active" : ""} onClick={() => set({ graphics: applyQualityPreset(gr, p) })}>{p.toUpperCase()}</button>
           ))}
         </div>
       </label>
+      <p className="muted small">{isCustomGraphics(gr) ? "CUSTOM · individual graphics settings" : "Quality preset active"}</p>
+      <Slider label="Brightness" value={gr.brightness} min={.75} max={1.5} step={.05} onChange={v => set({ graphics: { ...gr, brightness: v } })} format={v => `${Math.round(v * 100)}%`} />
+      <label className="field"><span>Dynamic resolution target</span><div className="segmented">{([60, 90, 120] as const).map(fps => <button key={fps} type="button" className={gr.targetFps === fps ? "active" : ""} onClick={() => set({ graphics: { ...gr, targetFps: fps } })}>{fps} FPS</button>)}</div></label>
       <Slider label="Render scale" value={gr.renderScale} min={0.5} max={1} step={0.05} onChange={(v) => set({ graphics: { ...gr, renderScale: v } })} format={(v) => `${Math.round(v * 100)}%`} />
       <label className="field">
         <span>Shadows</span>
@@ -62,7 +65,7 @@ export function SettingsPanel({ settings, onChange }: Props) {
       <Slider label="Effects" value={a.effects} min={0} max={1} step={0.05} onChange={(v) => set({ audio: { ...a, effects: v } })} format={(v) => `${Math.round(v * 100)}%`} />
       <Slider label="Music" value={a.music} min={0} max={1} step={0.05} onChange={(v) => set({ audio: { ...a, music: v } })} format={(v) => `${Math.round(v * 100)}%`} />
       <Slider label="Interface" value={a.ui} min={0} max={1} step={0.05} onChange={(v) => set({ audio: { ...a, ui: v } })} format={(v) => `${Math.round(v * 100)}%`} />
-      <p className="muted small">Graphics changes other than render scale and FOV apply on the next match.</p>
+      <p className="muted small">Brightness, shadows, effects and resolution apply immediately. Renderer and extra scenery apply on the next match.</p>
 
       <h3>CREDITS</h3>
       <Credits />

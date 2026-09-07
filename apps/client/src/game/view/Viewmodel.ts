@@ -11,6 +11,8 @@ import type { LocalPlayer } from "../player/LocalPlayer";
 import { buildWeaponModel, createWeaponMaterials, forEachMesh, type WeaponMaterials, type WeaponModel } from "./weaponMeshes";
 import type { WeaponModelLibrary } from "./weaponModels";
 import { beveledBox } from "./geometry";
+import { centre, sizeOf } from "./weaponFit";
+import { handParts, type HandSide } from "./handSpec";
 
 /** Gap between background weapon upgrades: enough frames for the game to stay responsive. */
 const UPGRADE_GAP_MS = 400;
@@ -51,90 +53,106 @@ const ramp = (t: number, a: number, b: number) => Math.max(0, Math.min(1, (t - a
  * Per-weapon reload timelines. Each is a function of normalised progress, so a weapon's
  * `reloadMs` stretches the same choreography; the shapes were tuned so the loud beats (mag out,
  * mag seat, bolt/slide/pump) line up with the audio module's reload cues.
+ *
+ * Staging (art review, three rounds): the hip pose sits 26 cm under the lens at 36 cm depth, so a
+ * reload that LOWERS the gun and drops the mag straight down pushes the mag and the left hand out
+ * of the bottom of a 16:9 frame — the mid-frame read as "the idle pose, tilted". Every timeline now
+ * LIFTS the gun (`y` +0.03…+0.06) and pulls it toward the screen centre (`x` negative) while the
+ * mag is out, with a strong negative cant (`rz`): in camera space +X is right and the gun is held
+ * right of the eye, so a negative roll turns the underside — magwell, loading gate, the revolver's
+ * swung-out cylinder — toward the lens and sends the dropped mag sideways across the frame instead
+ * of down out of it. `handL` peaks are held at 0.55…0.7 so the reach stays a visible reach (the
+ * hand travels 12 cm down and up to 28 cm toward the lens per unit). Only amplitudes and directions
+ * changed: every t-range below (mag out/in, action cycles, seat slams) is what the audio cues on.
  */
 export function reloadFrame(weapon: WeaponId, t: number, shells = 6): ReloadFrame {
   const f: ReloadFrame = { y: 0, rx: 0, rz: 0, x: 0, mag: 0, action: 0, handL: 0 };
   switch (weapon) {
     case "pistol": {
-      // Tilt in, mag drops, new mag slams, slide is released at the end.
+      // Bring the gun up and in, cant it so the magwell faces the eye, mag drops across the
+      // frame, new mag slams, slide is released at the end.
       const tilt = bump(t, 0.05, 0.9);
-      f.y = -0.04 * tilt; f.rx = 0.25 * tilt; f.rz = -0.55 * tilt; f.x = -0.02 * tilt;
+      f.y = 0.05 * tilt; f.rx = 0.2 * tilt; f.rz = -1.0 * tilt; f.x = -0.06 * tilt;
       f.mag = t < 0.15 ? 0 : t < 0.35 ? smooth(ramp(t, 0.15, 0.35)) : t < 0.55 ? 1 : 1 - smooth(ramp(t, 0.55, 0.75));
       f.action = t < 0.8 ? 1 : 1 - smooth(ramp(t, 0.8, 0.9)); // slide locked back until the release
-      f.handL = bump(t, 0.1, 0.85);
+      f.handL = 0.55 * bump(t, 0.1, 0.85);
       break;
     }
     case "smg":
     case "rifle": {
-      // Cant the gun over, rock the mag out, seat the new one, tug the charging handle.
+      // Lift and cant the gun over, rock the mag out sideways, seat the new one, tug the charging handle.
       const tilt = bump(t, 0.05, 0.92);
-      f.y = -0.06 * tilt; f.rx = 0.3 * tilt; f.rz = -0.45 * tilt; f.x = -0.03 * tilt;
+      f.y = 0.05 * tilt; f.rx = 0.22 * tilt; f.rz = -0.85 * tilt; f.x = -0.06 * tilt;
       f.mag = t < 0.12 ? 0 : t < 0.38 ? smooth(ramp(t, 0.12, 0.38)) : t < 0.52 ? 1 : 1 - smooth(ramp(t, 0.52, 0.78));
       const seat = bump(t, 0.72, 0.82);
       f.y -= 0.02 * seat; // the slam
       f.action = bump(t, 0.84, 0.98);
-      f.handL = t < 0.84 ? bump(t, 0.08, 0.84) : bump(t, 0.84, 0.98) * 0.6;
+      f.handL = t < 0.84 ? 0.7 * bump(t, 0.08, 0.84) : bump(t, 0.84, 0.98) * 0.45;
       break;
     }
     case "shotgun": {
-      // Shell by shell: the gun rolls to show the loading port; the hand pumps once at the end.
+      // Shell by shell: the gun comes up and rolls so the loading gate on the underside faces the
+      // eye, the hand reaches to it once per shell; the hand pumps once at the end.
       const roll = bump(t, 0.04, 0.9);
-      f.y = -0.05 * roll; f.rx = 0.2 * roll; f.rz = 0.7 * roll; f.x = 0.02 * roll;
+      f.y = 0.04 * roll; f.rx = 0.15 * roll; f.rz = -0.8 * roll; f.x = -0.05 * roll;
       const per = 0.82 / shells;
       const i = Math.min(shells - 1, Math.floor(ramp(t, 0.06, 0.88) * shells));
       const local = (t - 0.06 - i * per) / per;
-      f.handL = t < 0.06 || t > 0.88 ? 0 : 0.5 + 0.5 * Math.sin(Math.max(0, Math.min(1, local)) * Math.PI);
+      f.handL = t < 0.06 || t > 0.88 ? 0 : 0.3 + 0.35 * Math.sin(Math.max(0, Math.min(1, local)) * Math.PI);
       f.y -= 0.012 * bump(local, 0.4, 0.7);
       f.action = bump(t, 0.9, 1.0);
       break;
     }
     case "dmr":
     case "sniper": {
-      // Mag swap, then the bolt: back (chamber) and forward.
+      // Mag swap with the gun raised and canted, then the bolt: back (chamber) and forward.
       const tilt = bump(t, 0.05, 0.9);
-      f.y = -0.05 * tilt; f.rx = 0.28 * tilt; f.rz = -0.4 * tilt; f.x = -0.03 * tilt;
+      f.y = 0.05 * tilt; f.rx = 0.22 * tilt; f.rz = -0.85 * tilt; f.x = -0.06 * tilt;
       f.mag = t < 0.1 ? 0 : t < 0.35 ? smooth(ramp(t, 0.1, 0.35)) : t < 0.48 ? 1 : 1 - smooth(ramp(t, 0.48, 0.7));
       f.action = t < 0.74 ? 0 : t < 0.84 ? smooth(ramp(t, 0.74, 0.84)) : 1 - smooth(ramp(t, 0.84, 0.96));
-      f.handL = t < 0.72 ? bump(t, 0.06, 0.72) : bump(t, 0.72, 0.98) * 0.7;
+      f.handL = t < 0.72 ? 0.7 * bump(t, 0.06, 0.72) : bump(t, 0.72, 0.98) * 0.5;
       break;
     }
     case "revolver": {
-      // Swing out, dump the brass, feed one by one, snap shut (roll the gun to show the cylinder).
+      // Swing out, dump the brass, feed one by one, snap shut. The gun comes up and rolls hard so
+      // the cylinder side (the left) turns up toward the eye.
       const roll = bump(t, 0.04, 0.92);
-      f.y = -0.04 * roll; f.rx = 0.3 * roll; f.rz = -0.9 * roll; f.x = -0.03 * roll;
+      f.y = 0.05 * roll; f.rx = 0.25 * roll; f.rz = -1.1 * roll; f.x = -0.06 * roll;
       const per = 0.5 / shells;
       const i = Math.min(shells - 1, Math.floor(ramp(t, 0.3, 0.8) * shells));
       const local = (t - 0.3 - i * per) / per;
-      f.handL = t < 0.12 ? 0 : t < 0.3 ? smooth(ramp(t, 0.12, 0.3)) : t < 0.8 ? 0.6 + 0.4 * Math.sin(Math.max(0, Math.min(1, local)) * Math.PI) : 1 - smooth(ramp(t, 0.8, 0.95));
+      f.handL = t < 0.12 ? 0 : t < 0.3 ? 0.45 * smooth(ramp(t, 0.12, 0.3)) : t < 0.8 ? 0.45 + 0.3 * Math.sin(Math.max(0, Math.min(1, local)) * Math.PI) : 0.45 * (1 - smooth(ramp(t, 0.8, 0.95)));
       f.y -= 0.01 * bump(t, 0.9, 0.98); // the snap shut
       break;
     }
     case "smg2": {
       // Like the SMG but faster hands: mag out early, in by the middle, a quick charge.
       const tilt = bump(t, 0.04, 0.9);
-      f.y = -0.05 * tilt; f.rx = 0.28 * tilt; f.rz = -0.5 * tilt; f.x = -0.03 * tilt;
+      f.y = 0.05 * tilt; f.rx = 0.22 * tilt; f.rz = -0.9 * tilt; f.x = -0.06 * tilt;
       f.mag = t < 0.08 ? 0 : t < 0.3 ? smooth(ramp(t, 0.08, 0.3)) : t < 0.42 ? 1 : 1 - smooth(ramp(t, 0.42, 0.66));
       f.y -= 0.02 * bump(t, 0.62, 0.72);
       f.action = bump(t, 0.78, 0.94);
-      f.handL = t < 0.78 ? bump(t, 0.06, 0.78) : bump(t, 0.78, 0.94) * 0.6;
+      f.handL = t < 0.78 ? 0.7 * bump(t, 0.06, 0.78) : bump(t, 0.78, 0.94) * 0.45;
       break;
     }
     case "lmg": {
-      // Feed cover up, belt box off, new box on, belt laid in, cover slammed, charge.
+      // Feed cover up, belt box off, new box on, belt laid in, cover slammed, charge. Lifted and
+      // rolled so the box side and the open cover both face the eye.
       const tilt = bump(t, 0.03, 0.95);
-      f.y = -0.07 * tilt; f.rx = 0.35 * tilt; f.rz = -0.3 * tilt; f.x = -0.04 * tilt;
+      f.y = 0.04 * tilt; f.rx = 0.3 * tilt; f.rz = -0.6 * tilt; f.x = -0.06 * tilt;
       f.action = t < 0.08 ? 0 : t < 0.18 ? smooth(ramp(t, 0.08, 0.18)) : t < 0.74 ? 1 : 1 - smooth(ramp(t, 0.74, 0.82));
       f.mag = t < 0.18 ? 0 : t < 0.36 ? smooth(ramp(t, 0.18, 0.36)) : t < 0.5 ? 1 : 1 - smooth(ramp(t, 0.5, 0.68));
       f.y -= 0.02 * bump(t, 0.78, 0.84);
-      f.handL = t < 0.86 ? bump(t, 0.05, 0.86) : bump(t, 0.86, 0.98) * 0.6;
+      f.handL = t < 0.86 ? 0.7 * bump(t, 0.05, 0.86) : bump(t, 0.86, 0.98) * 0.45;
       break;
     }
     case "launcher": {
-      // Break open (the pump node tips the barrel), shell out, shell in, snap shut.
+      // Break open (the pump node tips the barrel), shell out, shell in, snap shut — raised and
+      // canted so the open breech is in view.
       const tilt = bump(t, 0.05, 0.9);
-      f.y = -0.05 * tilt; f.rx = 0.2 * tilt; f.rz = -0.5 * tilt; f.x = -0.02 * tilt;
+      f.y = 0.04 * tilt; f.rx = 0.15 * tilt; f.rz = -0.8 * tilt; f.x = -0.05 * tilt;
       f.action = t < 0.1 ? 0 : t < 0.25 ? smooth(ramp(t, 0.1, 0.25)) : t < 0.7 ? 1 : 1 - smooth(ramp(t, 0.7, 0.85));
-      f.handL = bump(t, 0.2, 0.8);
+      f.handL = 0.6 * bump(t, 0.2, 0.8);
       f.y -= 0.015 * bump(t, 0.84, 0.92);
       break;
     }
@@ -363,28 +381,44 @@ export class Viewmodel {
     if (id === this.current) this.setWeapon(id, false);
   }
 
+  /**
+   * Gloved hands from `handSpec.ts`: a palm (HAND_SIZE, centred on the pivot — what the support-hand
+   * check measures), fingers, a thumb and a forearm hung from a wrist joint on the palm. One node
+   * under the pivot carries the pose rotation for the WHOLE hand, so the parts turn together and
+   * the reload / inspect poses no longer pull them apart (art review: "a pile of loose blocks").
+   */
   private buildHands(): void {
-    const mk = (name: string, x: number, y: number, z: number, rx: number, ry: number, rz: number): TransformNode => {
+    const mk = (name: string, side: HandSide, x: number, y: number, z: number, rx: number, ry: number, rz: number): TransformNode => {
       const pivot = new TransformNode(`${name}_pivot`, this.scene);
       pivot.parent = this.gunPivot;
       pivot.position.set(x, y, z);
-      const hand = beveledBox(name, 0.058, 0.04, 0.075, this.scene);
-      hand.rotation.set(rx, ry, rz);
-      hand.material = this.handMat;
-      hand.renderingGroupId = VIEWMODEL_GROUP;
-      hand.isPickable = false;
+      const hand = new TransformNode(name, this.scene);
       hand.parent = pivot;
-      const arm = beveledBox(`${name}_arm`, 0.062, 0.058, 0.24, this.scene);
-      arm.position.set(x > 0 ? 0.02 : -0.01, -0.06, -0.15);
-      arm.rotation.set(-0.45 + rx * 0.3, ry * 0.5, rz);
-      arm.material = this.handMat;
-      arm.renderingGroupId = VIEWMODEL_GROUP;
-      arm.isPickable = false;
-      arm.parent = pivot;
+      hand.rotation.set(rx, ry, rz);
+      for (const part of handParts(side)) {
+        const c = centre(part.box);
+        const mesh = beveledBox(`${name}_${part.name}`, ...sizeOf(part.box), this.scene);
+        mesh.material = this.handMat;
+        mesh.renderingGroupId = VIEWMODEL_GROUP;
+        mesh.isPickable = false;
+        if (part.joint) {
+          // The joint node sits AT the wrist and carries the rotation; the mesh hangs off it by the
+          // offset from the wrist to its centre, so its near end stays on the palm at any angle.
+          const joint = new TransformNode(`${name}_${part.name}_joint`, this.scene);
+          joint.parent = hand;
+          joint.position.set(...part.joint.at);
+          joint.rotation.set(...part.joint.rotation);
+          mesh.parent = joint;
+          mesh.position.set(c[0] - part.joint.at[0], c[1] - part.joint.at[1], c[2] - part.joint.at[2]);
+        } else {
+          mesh.parent = hand;
+          mesh.position.set(...c);
+        }
+      }
       return pivot;
     };
-    mk("vm_hand_r", 0.0, -0.06, -0.02, 0.25, 0, 0.15);
-    this.handL = mk("vm_hand_l", -0.035, -0.005, 0.3, 0.15, 0.35, -0.5);
+    mk("vm_hand_r", "right", 0.0, -0.06, -0.02, 0.25, 0, 0.15);
+    this.handL = mk("vm_hand_l", "left", -0.035, -0.005, 0.3, 0.15, 0.35, -0.5);
     this.handLHome.copyFrom(this.handL.position);
   }
 
@@ -394,9 +428,9 @@ export class Viewmodel {
   setWeapon(id: WeaponId, animate = true): void {
     // A sidearm is supported at the grip; the old universal 30 cm offset put the left
     // hand beyond its muzzle. Long weapons keep their support under the fore-end.
-    const length = this.models.get(id)!.length;
-    this.handLHome.set(-0.03, length <= 0.2 ? -0.065 : -0.035,
-      length <= 0.2 ? -0.005 : Math.min(0.36, length * 0.52));
+    // Measured against the gun's own parts (`supportHandHome`), so `pnpm check:weapons` can prove
+    // the hand touches the fore-end instead of hovering under it.
+    this.handLHome.set(...this.models.get(id)!.support);
     // Pull this gun's upgrade forward: you are about to look at it.
     if (this.modelLib && !this.upgraded.has(id)) void this.upgradeWeapon(id);
     for (const [wid, m] of this.models) m.root.setEnabled(wid === id);
@@ -492,7 +526,11 @@ export class Viewmodel {
     // ADS: put the weapon's aim point (front sight / scope axis) exactly on the camera axis at
     // `adsZ` in front of the lens — solved, not eyeballed, so every weapon lines up.
     const [ax, ay, az] = model.aimPoint;
-    const adsZ = longGun ? 0.5 : 0.36;
+    // Measured (drop A, vm-fit.mjs): a fixed 0.5 m put the shotgun's BEAD half a metre out and so
+    // its receiver and pump inside the eye (gun box z −0.57…0.52 in camera space, the pump filling
+    // the frame). The aim point must sit at least 15 cm ahead of the grip's eye position, so a gun
+    // sighted at its muzzle is held out far enough to look OVER the receiver.
+    const adsZ = Math.max(longGun ? 0.5 : 0.36, az + 0.15);
     const adsX = -ax, adsY = -ay, adsRootZ = adsZ - az;
     tx = tx + (adsX - tx) * ads; ty = ty + (adsY - ty) * ads; tz = tz + (adsRootZ - tz) * ads;
     trx *= 1 - ads; try_ *= 1 - ads; trz *= 1 - ads;

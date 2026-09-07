@@ -241,8 +241,8 @@ test.describe("two clients", () => {
     // Kill feed on both, deaths/kills in scoreboard.
     await expect.poll(async () => (await hud(a)).killFeed.length, { timeout: 5000 }).toBeGreaterThan(0);
     await expect.poll(async () => (await hud(b)).killFeed.length, { timeout: 5000 }).toBeGreaterThan(0);
-    const rowsB = (await hud(b)).players;
-    expect(rowsB.find((r) => r.id === idA)?.deaths).toBe(1);
+    // Kill events can arrive before the next replicated scoreboard patch.
+    await expect.poll(async () => (await hud(b)).players.find((r) => r.id === idA)?.deaths, { timeout: 5000 }).toBe(1);
     await expect(a.getByTestId("death")).toBeVisible();
 
     // Only the casualty returns. The survivor and match clock carry on uninterrupted.
@@ -305,11 +305,16 @@ test.describe("two clients", () => {
       await p.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().myId !== "", null, { timeout: 30_000 });
     }
     await expect.poll(async () => (await hud(a)).phase, { timeout: 20_000 }).toBe("playing");
+    // At a $ BUY counter the shop is open by rule, however long the second page took to load: the
+    // 15 s post-spawn window MEASURED expired once while B was still compiling shaders (25 s).
+    const station = await a.evaluate(() => window.__fb.game.mapDefinition.stations[0]);
+    await a.evaluate((st) => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x: st.x, y: st.y, z: st.z }), station);
+    await expect.poll(async () => (await hud(a)).nearStation, { timeout: 10_000 }).toBe(true);
     await fakeLock(a);
     await a.mouse.move(320, 180);
     await waitForFrames(a, 5);
 
-    // Wallet: start money, pistol only, spawn window open.
+    // Wallet: start money, pistol only, the counter keeps the window open.
     const h0 = await hud(a);
     expect(h0.money).toBe(2000);
     expect(h0.owned).toEqual(["pistol"]);
@@ -333,6 +338,10 @@ test.describe("two clients", () => {
     await expect(a.getByTestId("shop")).toBeHidden();
     await expect.poll(async () => (await hud(a)).shopOpen).toBe(false);
     await fakeLock(a);
+    // Back out into the open yard for the grenades: a flash lobbed at the feet behind a shop counter
+    // is a flash nobody sees (the white-out needs line of sight from the burst).
+    await a.evaluate(() => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x: 0, y: 0, z: 30 }));
+    await expect.poll(async () => Math.abs((await pos(a)).z - 30), { timeout: 10_000 }).toBeLessThan(0.3);
 
     // Cook a frag: G held shows the cook ring, the count drops when it leaves the hand, the server booms it.
     await a.evaluate(() => { window.__fb.game.localPlayer.pitch = -0.4; }); // lob it up and away

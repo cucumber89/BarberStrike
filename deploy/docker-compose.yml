@@ -10,8 +10,9 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
       args:
-        # Wypalane w build klienta: adres, pod który poleci WebSocket. Musi być wss://TWOJA_DOMENA
-        # bez portu — inaczej klient dobija się do :2567, a tam z zewnątrz nikogo nie ma.
+        # Opcjonalne nadpisanie adresu WebSocketu. Bez niego klient łączy się z originem, z którego
+        # załadował stronę (apps/client/src/game/net/serverUrl.ts), co za Caddy na 443 jest właśnie
+        # tym adresem. Zostaje ustawione jawnie, żeby błędna domena była widoczna tu, nie w konsoli.
         VITE_SERVER_URL: "wss://${DOMAIN}"
     restart: unless-stopped
     environment:
