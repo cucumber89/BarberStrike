@@ -14,13 +14,28 @@ test.describe("menu 2.1", () => {
     await expect(page.getByTestId("server-line")).toContainText("ONLINE", { timeout: 15_000 });
   });
 
+  test("a /r/<room> link (Drop D) asks for a nickname only; CHANGE opens the full lobby", async ({ page }) => {
+    await page.goto("/r/late-shift?mode=gungame");
+    await expect(page.getByTestId("link-join")).toBeVisible();
+    await expect(page.getByTestId("link-room")).toHaveText("late-shift");
+    await expect(page.getByTestId("link-mode")).toHaveText("GUN");
+    await expect(page.getByTestId("input-room")).toHaveCount(0);
+    await expect(page.getByTestId("mode-picker")).toHaveCount(0);
+    await expect(page.getByTestId("btn-quickplay")).toBeDisabled();
+    await page.getByTestId("input-name").fill("Franki");
+    await expect(page.getByTestId("btn-quickplay")).toBeEnabled();
+    await page.getByTestId("btn-link-edit").click();
+    await expect(page.getByTestId("input-room")).toHaveValue("late-shift");
+    await expect(page.getByTestId("mode-gungame")).toHaveAttribute("aria-checked", "true");
+  });
+
   test("an invite link prefills the lobby; the lobby makes one back", async ({ page }) => {
     await page.goto("/?room=late-shift&mode=dom");
     await expect(page.getByTestId("input-room")).toHaveValue("late-shift");
     await expect(page.getByTestId("mode-dom")).toHaveAttribute("aria-checked", "true");
     await page.getByTestId("btn-invite").click();
     const link = await page.getByTestId("invite-link").locator("input").inputValue();
-    expect(link).toContain("room=late-shift");
+    expect(link).toContain("/r/late-shift");
     expect(link).toContain("mode=dom");
     await page.getByTestId("btn-suggest-room").click();
     await expect(page.getByTestId("input-room")).toHaveValue(/^[a-z]+-[a-z]+-\d\d$/);

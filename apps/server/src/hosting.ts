@@ -91,6 +91,25 @@ export function serveClient(dir: string): RequestHandler[] {
   return [precompressed, plain];
 }
 
+/**
+ * The single-page fallback: any GET that is not the API (`/health`, `/rooms`) and was not a file
+ * gets `index.html`, so a shared link — `/r/<room>` (Drop D, join by link) — opens the game with
+ * the path intact for the client to read. Mounted AFTER `serveClient`, so a real asset still wins,
+ * and never for the JSON routes: a page where the client expected JSON is a failure this project
+ * has already paid for once.
+ */
+export function spaFallback(dir: string): RequestHandler {
+  return (req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+    if (/^\/(health|rooms)\/?$/.test(req.path)) return next();
+    // A file that is not there is a 404 the loader can act on, not a page it would try to run as
+    // a script. Only `/r/<room>` may carry a dot (a room called "late.shift").
+    if (!req.path.startsWith("/r/") && path.extname(req.path)) return next();
+    res.setHeader("Cache-Control", cacheControlFor("/index.html"));
+    res.sendFile(path.join(dir, "index.html"), (err) => { if (err) next(err); });
+  };
+}
+
 /** Where the built client lives, relative to this file in both `src` (tsx) and `dist` (node). */
 export function clientDir(): string | null {
   const here = path.dirname(fileURLToPath(import.meta.url));

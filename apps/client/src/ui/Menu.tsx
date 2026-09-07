@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BOT_LEVELS, BOT_PRESETS, GAME_VERSION, MAX_BOTS, MAX_NAME_LENGTH, MODES, MODE_ORDER, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { BOT_LEVELS, BOT_PRESETS, GAME_VERSION, MAX_BOTS, MAX_NAME_LENGTH, MODES, MODE_ORDER, isGameMode, type BotLevel, type GameMode } from "@frankibarber/shared";
 import { Connection, defaultServerUrl, type RoomListing } from "../game/net/Connection";
 import { loadProfile, type Profile } from "../game/progression/profile";
 import { uiSound } from "../game/audio";
@@ -49,8 +49,11 @@ const store = {
  * (invite) — and every panel is one step deep with the same BACK.
  */
 export function Menu({ settings, onSettings, connecting, error, onPlay }: Props) {
-  const invite = useMemo(() => parseInvite(typeof location !== "undefined" ? location.search : ""), []);
+  const invite = useMemo(() => parseInvite(typeof location !== "undefined" ? location.search : "", typeof location !== "undefined" ? location.pathname : ""), []);
   const [panel, setPanelRaw] = useState<Panel>(() => (invite.room || invite.join ? "lobby" : "main"));
+  // Drop D, join by link: `/r/<room>` was sent by a friend, so the lobby asks for a nickname and
+  // nothing else — the room and mode are the link's. CHANGE opens the full lobby.
+  const [linkJoin, setLinkJoin] = useState(invite.viaLink && invite.room.length > 0);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("gameplay");
   const setPanel = useCallback((p: Panel) => { uiSound(p === "main" ? "back" : "open"); setPanelRaw(p); }, []);
   const [mobile] = useState(() => touchOnly());
@@ -60,7 +63,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   const [gameMode, setGameMode] = useState<GameMode>(() => {
     if (invite.mode) return invite.mode;
     const m = store.get("fb_mode");
-    return m === "ffa" || m === "dom" || m === "bomb" ? m : "tdm";
+    return isGameMode(m) ? m : "tdm";
   });
   const pickMode = (m: GameMode) => { uiSound("click"); setGameMode(m); store.set("fb_mode", m); };
   const [botCount, setBotCount] = useState(() => Math.max(0, Math.min(MAX_BOTS, Number(store.get("fb_bots") ?? 0) || 0)));
@@ -119,7 +122,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   };
   const play = (mode: "auto" | "create") => {
     uiSound("click");
-    store.set("fb_room", roomName.trim());
+    if (!linkJoin) store.set("fb_room", roomName.trim()); // a friend's room is not your default next time
     onPlay(commitName(), roomName.trim(), mode, undefined, gameMode, bots);
   };
   const link = typeof location !== "undefined" ? inviteLink(location.href, roomName, gameMode) : "";
@@ -166,7 +169,31 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
           </div>
         )}
 
-        {panel === "lobby" && (
+        {panel === "lobby" && linkJoin && (
+          <section className="panel lobby" data-testid="link-join">
+            <div className="link-join">
+              <div className="link-join-room">
+                <span>YOU WERE INVITED TO</span>
+                <b data-testid="link-room">{roomName}</b>
+                <span className={`room-mode m-${gameMode}`} data-testid="link-mode" title={MODES[gameMode].name}>{MODES[gameMode].short}</span>
+                <button type="button" className="link" onClick={() => { uiSound("click"); setLinkJoin(false); }} data-testid="btn-link-edit">CHANGE</button>
+              </div>
+              <div className="muted mode-blurb">{MODES[gameMode].blurb}</div>
+              <label className="field">
+                <span>NICKNAME</span>
+                <input value={name} maxLength={MAX_NAME_LENGTH} onChange={(e) => setName(e.target.value)} placeholder="2–16 characters" autoFocus data-testid="input-name" onKeyDown={(e) => { if (e.key === "Enter" && nameOk && !connecting) play("auto"); }} />
+              </label>
+              <div className="row">
+                <button className="menu-btn primary" disabled={!nameOk || connecting} onClick={() => play("auto")} data-testid="btn-quickplay">
+                  {connecting ? "CONNECTING…" : "JOIN"}
+                </button>
+              </div>
+              {!nameOk && <small className="muted">Enter a nickname of at least two characters to join.</small>}
+            </div>
+          </section>
+        )}
+
+        {panel === "lobby" && !linkJoin && (
           <section className="panel lobby">
             <div className="lobby-grid">
               <div>

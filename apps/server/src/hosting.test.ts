@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hostBanner, lanAddresses } from "./hosting";
+import { hostBanner, lanAddresses, spaFallback } from "./hosting";
 
 /**
  * Player-hosted games (2.0). What is testable here is the thing the host READS OUT to the room —
@@ -59,7 +59,10 @@ describe("precompressed client", () => {
     fs.writeFileSync(path.join(dir, "assets", "app-abc.js.gz"), zlib.gzipSync(js));
     fs.writeFileSync(path.join(dir, "assets", "plain-def.js"), js); // no siblings
     fs.writeFileSync(path.join(dir, "index.html"), "<!doctype html><title>x</title>");
-    const app = express(); app.use(serveClient(dir));
+    const app = express();
+    app.get("/health", (_req, res) => { res.json({ ok: true }); });
+    app.use(serveClient(dir));
+    app.use(spaFallback(dir));
     const server = http.createServer(app);
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
     const port = (server.address() as { port: number }).port;
@@ -98,6 +101,21 @@ describe("precompressed client", () => {
       const index = await get(`${base}/`, "br");
       expect(index.status).toBe(200); expect(index.headers["cache-control"]).toBe("no-cache");
       expect(index.body.toString()).toContain("<title>");
+    });
+  });
+  it("a shared link /r/<room> lands on the page (Drop D), the API routes stay JSON, and a missing asset is not a page", async () => {
+    await withServer(async (base) => {
+      const link = await get(`${base}/r/late-shift?mode=gungame`, "br");
+      expect(link.status).toBe(200);
+      expect(link.headers["content-type"]).toMatch(/text\/html/);
+      expect(link.headers["cache-control"]).toBe("no-cache");
+      expect(link.body.toString()).toContain("<title>");
+      const health = await get(`${base}/health`, "br");
+      expect(health.headers["content-type"]).toMatch(/json/);
+      // `/rooms` is not mounted in this harness: the fallback must still refuse to answer for it.
+      expect((await get(`${base}/rooms`, "br")).status).toBe(404);
+      // A hashed asset that is gone is a 404 the loader can act on, not an HTML page it would try to run.
+      expect((await get(`${base}/assets/gone-123.js`, "br")).status).toBe(404);
     });
   });
 });
