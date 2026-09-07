@@ -432,25 +432,28 @@ export class Character {
     const oneHand = slot === 2 ? 1 : 0, melee = slot === 3 ? 1 : 0;
     const swingR = melee * this.kick;
     // Tactical sprint: the gun comes up across the chest, muzzle high — readable from across the map.
-    this.gunHand.rotation.x = aim * 0.5 - this.kick * 0.12 + 0.45 * sprint + 0.55 * tacB + armSwing * 0.5 + fl * 0.2 + 0.6 * throwing + 0.25 * melee - 0.9 * swingR;
-    this.gunHand.rotation.y = -0.08 + armSwing * 0.3 - 0.3 * throwing + 0.12 * oneHand - 0.4 * swingR;
+    // Low-ready (art pass): the receiver sits beside the torso's right edge at chest height, a hair
+    // nose-down; the bore must stay within 5° of facing (hand-pose oracle), so the tilt is small.
+    this.gunHand.rotation.x = 0.02 + aim * 0.5 - this.kick * 0.12 + 0.45 * sprint + 0.55 * tacB + armSwing * 0.5 + fl * 0.2 + 0.6 * throwing + 0.25 * melee - 0.9 * swingR;
+    this.gunHand.rotation.y = -0.06 + armSwing * 0.3 - 0.3 * throwing + 0.12 * oneHand - 0.4 * swingR;
     this.gunHand.rotation.z = -0.35 * swingR;
-    this.gunHand.position.z = 0.16 - this.kick * 0.05 - 0.08 * throwing + 0.05 * oneHand + 0.08 * swingR;
-    this.gunHand.position.x = 0.16 + 0.04 * oneHand + 0.02 * melee;
-    this.gunHand.position.y = 0.36 + 0.02 * oneHand - 0.08 * melee;
-    // Throw: the right arm goes back over the shoulder, then whips forward past horizontal.
-    this.armR.rotation.x = -1.15 - aim * 0.25 - this.kick * 0.2 + idleSway + 0.35 * sprint - 0.35 * tacB + armSwing + fl * 0.25 - 1.6 * thr + 0.9 * thrSwing
+    this.gunHand.position.z = 0.10 - this.kick * 0.05 - 0.08 * throwing + 0.05 * oneHand + 0.08 * swingR;
+    this.gunHand.position.x = 0.14 + 0.04 * oneHand + 0.02 * melee;
+    this.gunHand.position.y = 0.33 + 0.02 * oneHand - 0.08 * melee;
+    // Right arm: upper arm hangs by the ribs (elbow just behind the shoulder line), forearm folded
+    // up to the grip. Throw: the arm goes back over the shoulder, then whips forward past horizontal.
+    this.armR.rotation.x = 0.1 - aim * 0.25 - this.kick * 0.2 + idleSway + 0.35 * sprint - 0.35 * tacB + armSwing + fl * 0.25 - 1.6 * thr + 0.9 * thrSwing
       - 0.25 * oneHand + 0.35 * melee - 0.9 * swingR;
-    this.armR.rotation.y = -0.35 - 0.3 * thr + 0.15 * oneHand - 0.5 * swingR;
-    this.forearmR.rotation.x = -0.5 + this.kick * 0.15 + 0.2 * sprint - 1.2 * thr + 0.3 * thrSwing + 0.3 * oneHand - 0.2 * melee - 0.5 * swingR;
+    this.armR.rotation.y = -0.8 - 0.3 * thr + 0.15 * oneHand - 0.5 * swingR;
+    this.forearmR.rotation.x = -2.0 + this.kick * 0.15 + 0.2 * sprint - 1.2 * thr + 0.3 * thrSwing + 0.3 * oneHand - 0.2 * melee - 0.5 * swingR;
     this.torso.rotation.y += -0.25 * thr + 0.2 * thrSwing - 0.3 * swingR;
     this.torso.rotation.x += 0.15 * thrSwing + 0.1 * swingR;
     const rl = Math.sin(this.reloadPhase * Math.PI);
     // Left arm: on the handguard for long guns; hanging half-bent for a sidearm; guarding for the clippers.
     const off = Math.max(oneHand, melee);
-    this.armL.rotation.x = (-1.3 - aim * 0.25 + idleSway + 1.0 * rl + 0.2 * sprint + armSwing * 0.8 + fl * 0.25) * (1 - off) + (-0.45 + idleSway + 1.0 * rl - 0.3 * melee) * off;
-    this.armL.rotation.y = (0.75 - 0.5 * rl) * (1 - off) + 0.15 * off;
-    this.forearmL.rotation.x = (-0.75 + 0.6 * rl + 0.2 * sprint) * (1 - off) + (-0.9 + 0.6 * rl) * off;
+    this.armL.rotation.x = (-1.0 - aim * 0.25 + idleSway + 1.0 * rl + 0.2 * sprint + armSwing * 0.8 + fl * 0.25) * (1 - off) + (-0.45 + idleSway + 1.0 * rl - 0.3 * melee) * off;
+    this.armL.rotation.y = (0.85 - 0.5 * rl) * (1 - off) + 0.15 * off;
+    this.forearmL.rotation.x = (-0.55 + 0.6 * rl + 0.2 * sprint) * (1 - off) + (-0.9 + 0.6 * rl) * off;
   }
 
   setEnabled(v: boolean): void { this.root.setEnabled(v); }
