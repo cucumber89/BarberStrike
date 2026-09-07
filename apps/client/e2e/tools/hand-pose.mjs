@@ -10,6 +10,9 @@
  * Ideal: bore within ~20° of facing, muzzle roughly at chest height, about half a metre in front.
  */
 import { chromium } from "@playwright/test";
+import { mkdirSync, writeFileSync } from "node:fs";
+const OUT = process.env.OUT ?? "e2e/out/weapons";
+const WEAPONS = process.env.WEAPONS ? process.env.WEAPONS.split(",") : ["pistol", "revolver", "smg", "smg2", "rifle", "lmg", "shotgun", "dmr", "sniper", "launcher", "clippers"];
 const SET = JSON.stringify({ graphics: { preset: "medium", renderer: "webgl2", renderScale: 1, shadows: "off", postProcessing: false, effects: 0.3, antialiasing: false, importedModels: true } });
 const b = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
 const ctx = await b.newContext({ viewport: { width: 800, height: 450 } });
@@ -23,40 +26,42 @@ await p.getByTestId("bots-range").evaluate((el) => { const s = Object.getOwnProp
 await p.getByTestId("btn-quickplay").click();
 await p.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().loadStage === "ready", null, { timeout: 90000 });
 await p.waitForTimeout(9000);
+const results = [];
+for (const WEAPON of WEAPONS) {
 // Put a gun we have a model for in every bot's hands, and face them all the same way, so the
 // numbers below are about the hand pose and not about who happens to be holding what.
-await p.evaluate(() => {
+await p.evaluate((WEAPON) => {
   for (const r of window.__fb.game.remotes.values()) {
     r.yaw = 0;
     r.character.root.rotation.y = 0;
-    r.character.update({ speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "rifle", moveDir: 0 }, 16);
+    r.character.update({ speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: WEAPON, moveDir: 0 }, 16);
   }
-});
-await p.waitForTimeout(4000);
+}, WEAPON);
+await p.waitForTimeout(1500);
 // Settle everyone into the same idle pose before measuring: a bot mid-stride or mid-death has its
 // arm somewhere else entirely, and that is the animation working, not the hand pose being wrong.
-await p.evaluate(() => {
+const rows = await p.evaluate((WEAPON) => {
   const s = window.__fb.game.currentScene ?? window.__fb.game.scene;
   for (let i = 0; i < 90; i++) {
     for (const r of window.__fb.game.remotes.values()) {
       r.yaw = 0; r.character.root.rotation.y = 0;
       r.character.revive();
-      r.character.update({ speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "rifle", moveDir: 0 }, 16);
+      r.character.update({ speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: WEAPON, moveDir: 0 }, 16);
     }
     s.render();
   }
-});
-
-console.log(JSON.stringify(await p.evaluate(() => {
+  // Measure NOW, in the same task: a game-loop frame in between would re-pose every bot from its
+  // live snapshot (aiming down, sprinting, dying) and the numbers would be about that, not the pose.
   const g = window.__fb.game;
-  const s = g.currentScene ?? g.scene;
-  s.render();
   const am = s.getActiveMeshes();
   const active = new Set(am.data.slice(0, am.length));
   const out = [];
   for (const r of g.remotes.values()) {
     const ch = r.character;
-    const hand = ch.handNode;
+    r.weapon = WEAPON;
+    // A skinned CharacterModel exposes its wrist as `handNode`; the procedural Character hangs the
+    // gun off `gunHand` under the torso (Character.ts). Measure whichever this build uses.
+    const hand = ch.handNode ?? ch.gunHand;
     if (!hand) { out.push({ id: r.id, note: "no hand node" }); continue; }
     hand.computeWorldMatrix(true);
     const gun = hand.getChildren().find((n) => /^tp_/.test(n.name) && n.isEnabled());
@@ -104,5 +109,12 @@ console.log(JSON.stringify(await p.evaluate(() => {
     });
   }
   return out;
-}), null, 1));
+}, WEAPON);
+results.push(...rows.map((r) => ({ weapon: WEAPON, ...r })));
+}
 await b.close();
+mkdirSync(OUT, { recursive: true });
+writeFileSync(`${OUT}/hand-pose.json`, JSON.stringify(results, null, 1));
+const bad = results.filter((r) => r.note || r.boreVsFacingDeg > 5);
+console.log(`hand-pose: ${results.length} measurements, ${bad.length} over 5° or missing (acceptance: bore within 5° of facing)`);
+for (const r of results) console.log(String(r.weapon).padEnd(9), r.id, r.note ?? `bore ${r.boreVsFacingDeg}° pitch ${r.borePitchDeg}° muzzle h ${r.muzzleHeight} fwd ${r.muzzleForward} side ${r.muzzleSide} meshes ${r.gunMeshes}/${r.gunActive}`);

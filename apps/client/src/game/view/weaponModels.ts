@@ -152,6 +152,7 @@ export class WeaponModelLibrary {
       root,
       muzzle: anchor("muzzle", src.anchors.muzzle),
       eject: anchor("eject", src.anchors.eject),
+      aim: anchor("aim", src.anchors.aimPoint),
       magazine,
       action,
       actionKind: src.actionKind,
