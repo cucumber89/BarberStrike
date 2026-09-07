@@ -173,6 +173,7 @@ const chargingHandle = (x: number, y: number, z: number): Part => B(0.03, 0.012,
 const slingLoop = (x: number, y: number, z: number): Part => B(0.006, 0.014, 0.014, x, y, z, "steel");
 
 /** Distinct silhouettes; aim points / muzzles / lengths are the measured ones. */
+/** Convention: `parts[0]` of every spec is the receiver / frame / body — `pnpm check:weapons` judges attachment against it. */
 const SPECS: Record<WeaponId, Spec> = {
   pistol: {
     parts: [
@@ -187,7 +188,7 @@ const SPECS: Record<WeaponId, Spec> = {
       C(0.014, 0.032, 0, -0.025, -0.025, "brass", "x"),
       B(0.033, 0.048, 0.022, 0, -0.044, -0.025, "tan"),
     ],
-    muzzle: [0, 0.05, 0.19], eject: [0.02, 0.06, 0.03],
+    muzzle: [0, 0.05, 0.18], eject: [0.02, 0.06, 0.03],
     magazine: [B(0.022, 0.08, 0.03, 0, 0, 0, "polymer"), B(0.024, 0.006, 0.032, 0, -0.042, 0, "rubber")], magazinePos: [0, -0.05, -0.02], length: 0.2,
     action: {
       kind: "slide", parts: [
@@ -230,36 +231,57 @@ const SPECS: Record<WeaponId, Spec> = {
       C(0.018, 0.09, 0, 0.055, 0.4, "steel"),                          // barrel
       ...muzzleDevice(0.44, 0.022, 0.03, 2),
       ...grip(0, -0.04, -0.02, 0.03, 0.09, 0.045),
-      B(0.03, 0.05, 0.16, 0, 0.03, -0.18, "polymer"),                  // folded stock
+      B(0.03, 0.05, 0.19, 0, 0.03, -0.165, "polymer"),                 // folded stock (butts against the receiver)
       B(0.034, 0.02, 0.02, 0, 0.03, -0.27, "rubber"),                  // stock pad
       ...frontSight(0.102, 0.2, 0.082),
       ...rearSight(0.098, -0.02, 0.082),
       ejectionPort(0.026, 0.05, 0.1),
       chargingHandle(-0.032, 0.06, 0.0),
       ...triggerGuard(-0.005, 0.03, 0.05),
-      slingLoop(-0.026, 0.02, -0.1),
+      slingLoop(-0.018, 0.02, -0.1),                                   // on the stock's flank
     ],
     muzzle: [0, 0.055, 0.45], eject: [0.03, 0.06, 0.1],
     magazine: [B(0.026, 0.16, 0.05, 0, 0, 0, "polymer"), B(0.028, 0.006, 0.052, 0, -0.082, 0, "rubber")], magazinePos: [0, -0.08, 0.12], length: 0.45,
     aimPoint: [0, 0.102, 0.2],
   },
   smg2: {
+    // VZ-9 Trim: the OTHER SMG. Round-topped tube receiver, slotted slim handguard, suppressor can,
+    // skeleton stock and a curved stick mag — nothing shares a silhouette with the blocky `smg`.
     parts: [
-      B(0.046, 0.06, 0.26, 0, 0.035, 0.06),                            // stubby receiver
-      ...rail(-0.04, 0.16, 0.068, 0.02),
-      C(0.016, 0.08, 0, 0.05, 0.23, "steel"),                          // short barrel
-      C(0.024, 0.03, 0, 0.05, 0.25, "steel"),                          // thread protector
-      ...grip(0, -0.04, -0.02, 0.03, 0.09, 0.045),
-      B(0.012, 0.03, 0.2, 0, 0.02, -0.16, "steel"),                    // wire stock bar
-      B(0.03, 0.03, 0.012, 0, 0.02, -0.26, "steel"),                   // wire stock foot
-      ...frontSight(0.092, 0.16, 0.07),
-      ...rearSight(0.088, -0.02, 0.07),
+      B(0.044, 0.06, 0.18, 0, 0.03, 0.02),                             // short receiver
+      C(0.04, 0.16, 0, 0.05, 0.02),                                    // rounded upper tube
+      ...rail(-0.06, 0.22, 0.07, 0.018),                               // full-length top rail
+      B(0.036, 0.044, 0.12, 0, 0.044, 0.16, "polymer"),                // slim handguard
+      ...Array.from({ length: 5 }, (_, i) => B(0.038, 0.016, 0.004, 0, 0.044, 0.125 + i * 0.02, "metal")), // handguard slots
+      C(0.014, 0.08, 0, 0.05, 0.24, "steel"),                          // short barrel
+      C(0.03, 0.06, 0, 0.05, 0.25, "polymer"),                         // suppressor can
+      C(0.034, 0.008, 0, 0.05, 0.224, "steel"),                        // can collar
+      C(0.026, 0.006, 0, 0.05, 0.278, "steel"),                        // can end cap
+      ...grip(0, -0.04, -0.02, 0.028, 0.085, 0.04),
+      B(0.03, 0.036, 0.024, 0, 0.032, -0.082, "steel"),                // stock hinge block
+      B(0.006, 0.006, 0.17, -0.012, 0.045, -0.177, "steel"),           // skeleton stock rod L
+      B(0.006, 0.006, 0.17, 0.012, 0.045, -0.177, "steel"),            // skeleton stock rod R
+      B(0.006, 0.006, 0.17, 0, 0.02, -0.177, "steel"),                 // skeleton stock lower rod
+      B(0.03, 0.055, 0.01, 0, 0.032, -0.265, "polymer"),               // butt plate
+      ...frontSight(0.092, 0.16, 0.074),
+      // Micro optic block on the rear rail: open-topped window frame so the front post stays visible in ADS.
+      B(0.022, 0.014, 0.03, 0, 0.081, -0.01, "polymer"),               // optic body
+      B(0.022, 0.004, 0.006, 0, 0.086, -0.005),                        // window sill
+      B(0.004, 0.024, 0.006, -0.011, 0.096, -0.005),                   // window frame L
+      B(0.004, 0.024, 0.006, 0.011, 0.096, -0.005),                    // window frame R
+      C(0.008, 0.006, 0.014, 0.08, -0.015, "brass", "x"),              // brightness knob
       ejectionPort(0.024, 0.045, 0.08),
-      B(0.03, 0.012, 0.012, -0.03, 0.05, 0.02, "steel"),               // side charging handle
-      ...triggerGuard(-0.005, 0.03, 0.05),
+      B(0.028, 0.012, 0.012, -0.026, 0.045, 0.02, "steel"),            // side charging handle
+      ...triggerGuard(-0.005, 0.02, 0.03),
+      slingLoop(-0.024, 0.02, -0.05),
     ],
     muzzle: [0, 0.05, 0.28], eject: [0.03, 0.05, 0.08],
-    magazine: [B(0.024, 0.13, 0.04, 0, 0, 0, "polymer"), B(0.026, 0.006, 0.042, 0, -0.067, 0, "rubber")], magazinePos: [0, -0.07, 0.06], length: 0.3,
+    magazine: [
+      B(0.024, 0.08, 0.038, 0, 0.03, 0, "polymer"),                                  // straight upper section
+      B(0.024, 0.09, 0.038, 0, -0.048, 0.0133, "polymer", { rx: -0.3 }),             // curved lower section
+      B(0.026, 0.006, 0.04, 0, -0.0939, 0.0275, "rubber", { rx: -0.3 }),             // baseplate
+      B(0.026, 0.004, 0.04, 0, -0.005, 0, "metal"),                                  // seam band
+    ], magazinePos: [0, -0.07, 0.06], length: 0.3,
     aimPoint: [0, 0.092, 0.16],
   },
   rifle: {
@@ -275,7 +297,7 @@ const SPECS: Record<WeaponId, Spec> = {
       ...grip(0, -0.06, 0.0, 0.034, 0.1, 0.05),
       B(0.04, 0.06, 0.24, 0, 0.03, -0.24, "tan"),                      // stock
       B(0.044, 0.07, 0.02, 0, 0.03, -0.36, "rubber"),                  // butt pad
-      B(0.02, 0.02, 0.1, 0, 0.005, -0.2, "polymer"),                   // buffer tube
+      B(0.02, 0.02, 0.2, 0, 0.005, -0.15, "polymer"),                  // buffer tube (receiver to stock)
       ...frontSight(0.117, 0.55, 0.076),
       ...rearSight(0.115, 0.05, 0.089),
       ejectionPort(0.026, 0.06, 0.2),
@@ -342,39 +364,50 @@ const SPECS: Record<WeaponId, Spec> = {
     aimPoint: [0, 0.094, 0.68],
   },
   dmr: {
+    // M-1 Clean Line: a semi-auto marksman rifle, not the bolt sniper. One-piece walnut stock with a
+    // wrist and raised comb, ventilated upper handguard, gas cylinder under the barrel, a slotted
+    // flash hider, a compact low scope in rings on a short rail, and a box mag hanging in the open.
     parts: [
       B(0.048, 0.07, 0.4, 0, 0.04, 0.15),                              // receiver
-      ...rail(-0.06, 0.32, 0.078, 0.022),
-      B(0.046, 0.06, 0.34, 0, 0.0, 0.42, "tan"),                       // long forend
-      ...Array.from({ length: 6 }, (_, i) => B(0.048, 0.005, 0.014, 0, 0.02, 0.3 + i * 0.045, "metal")), // forend slots
-      C(0.018, 0.34, 0, 0.055, 0.75, "steel"),                         // barrel
-      ...muzzleDevice(0.94, 0.03, 0.06, 3),
-      ...grip(0, -0.06, -0.01, 0.034, 0.1, 0.05),
-      B(0.044, 0.08, 0.3, 0, 0.02, -0.27, "tan"),                      // stock
-      B(0.04, 0.03, 0.12, 0, 0.075, -0.3, "polymer"),                  // cheek riser
-      B(0.048, 0.09, 0.02, 0, 0.02, -0.42, "rubber"),                  // butt pad
-      B(0.03, 0.03, 0.06, 0, -0.03, -0.38, "polymer"),                 // stock foot
-      ...scope(0.12, 0.11, 0.2, 0.036, 0.046, 0.078),
+      ...rail(-0.02, 0.24, 0.078, 0.022),                              // short scope rail
+      B(0.05, 0.02, 0.08, 0, 0.0, 0.2, "metal"),                       // magwell
+      B(0.036, 0.05, 0.24, 0, 0.0, -0.03, "wood"),                     // stock wrist, running under the receiver
+      B(0.046, 0.055, 0.28, 0, 0.005, 0.4, "wood"),                    // walnut forend
+      B(0.042, 0.016, 0.24, 0, 0.04, 0.44, "polymer"),                 // upper handguard
+      ...Array.from({ length: 5 }, (_, i) => B(0.044, 0.004, 0.012, 0, 0.042, 0.35 + i * 0.045, "metal")), // handguard vents
+      C(0.017, 0.4, 0, 0.055, 0.72, "steel"),                          // barrel
+      C(0.02, 0.12, 0, 0.032, 0.59, "steel"),                          // gas cylinder
+      B(0.016, 0.008, 0.02, 0, 0.068, 0.905),                          // front sight base
+      B(0.004, 0.014, 0.006, 0, 0.079, 0.905, "steel"),                // front sight blade
+      C(0.024, 0.06, 0, 0.055, 0.94, "steel"),                         // flash hider
+      B(0.026, 0.003, 0.04, 0, 0.055, 0.95, "polymer"),                // flash hider side slots
+      B(0.003, 0.026, 0.04, 0, 0.055, 0.95, "polymer"),                // flash hider top/bottom slots
+      ...grip(0, -0.05, -0.01, 0.034, 0.1, 0.05, "wood"),
+      B(0.044, 0.08, 0.3, 0, 0.015, -0.27, "wood"),                    // stock
+      B(0.038, 0.026, 0.16, 0, 0.066, -0.26, "wood"),                  // raised comb
+      B(0.04, 0.006, 0.1, 0, 0.081, -0.27, "rubber"),                  // cheek pad
+      B(0.048, 0.09, 0.02, 0, 0.015, -0.42, "rubber"),                 // butt pad
+      ...scope(0.11, 0.11, 0.16, 0.03, 0.038, 0.078),
       ejectionPort(0.025, 0.06, 0.2),
-      ...triggerGuard(-0.02, 0.05, 0.05),
+      ...triggerGuard(-0.015, 0.05, 0.05),
       slingLoop(-0.024, 0.0, -0.36), slingLoop(0.024, -0.02, 0.5),
     ],
     muzzle: [0, 0.055, 0.97], eject: [0.03, 0.06, 0.2],
-    magazine: [B(0.03, 0.12, 0.07, 0, 0, 0, "polymer"), B(0.032, 0.006, 0.072, 0, -0.062, 0, "rubber")], magazinePos: [0, -0.08, 0.2], length: 0.97,
-    action: { kind: "bolt", parts: [C(0.014, 0.05, 0.04, 0.06, 0.1, "steel"), B(0.018, 0.018, 0.018, 0.065, 0.045, 0.1, "steel")] },
+    magazine: [B(0.03, 0.15, 0.07, 0, 0.015, 0, "polymer"), B(0.032, 0.006, 0.072, 0, -0.063, 0, "rubber"), B(0.031, 0.004, 0.06, 0, -0.03, 0, "metal")], magazinePos: [0, -0.08, 0.2], length: 0.97,
+    action: { kind: "bolt", parts: [C(0.014, 0.05, 0.028, 0.06, 0.1, "steel"), B(0.016, 0.022, 0.02, 0.04, 0.052, 0.1, "steel")] },
     aimPoint: [0, 0.11, 0.12],
   },
   sniper: {
     parts: [
-      B(0.046, 0.065, 0.42, 0, 0.04, 0.16),                            // receiver
+      B(0.046, 0.075, 0.42, 0, 0.035, 0.16),                           // receiver (reaches down to the grip top)
       ...rail(-0.08, 0.34, 0.075, 0.022),
       B(0.044, 0.06, 0.42, 0, -0.005, 0.44, "tan"),                    // long stock forend
       ...Array.from({ length: 5 }, (_, i) => B(0.046, 0.004, 0.024, 0, 0.02, 0.32 + i * 0.06, "metal")),
-      C(0.017, 0.5, 0, 0.055, 0.85, "steel"),                          // long barrel
+      C(0.017, 0.73, 0, 0.055, 0.735, "steel"),                        // long barrel, free-floated from the receiver
       ...Array.from({ length: 8 }, (_, i) => C(0.022, 0.012, 0, 0.055, 0.66 + i * 0.05, "metal")), // fluting rings
       ...muzzleDevice(1.12, 0.034, 0.08, 4),
-      ...grip(0, -0.06, -0.01, 0.034, 0.1, 0.05),
-      B(0.044, 0.09, 0.32, 0, 0.015, -0.28, "tan"),                    // stock
+      ...grip(0, -0.05, -0.01, 0.034, 0.1, 0.05),
+      B(0.044, 0.09, 0.39, 0, 0.015, -0.245, "tan"),                   // stock (butts against the receiver)
       B(0.044, 0.05, 0.1, 0, 0.075, -0.32, "polymer"),                 // cheek riser
       B(0.048, 0.1, 0.02, 0, 0.015, -0.45, "rubber"),                  // butt pad
       B(0.03, 0.04, 0.05, 0, -0.045, -0.4, "polymer"),                 // monopod
@@ -385,7 +418,7 @@ const SPECS: Record<WeaponId, Spec> = {
     ],
     muzzle: [0, 0.055, 1.16], eject: [0.03, 0.06, 0.2],
     magazine: [B(0.028, 0.1, 0.08, 0, 0, 0, "polymer"), B(0.03, 0.006, 0.082, 0, -0.052, 0, "rubber")], magazinePos: [0, -0.07, 0.2], length: 1.16,
-    action: { kind: "bolt", parts: [C(0.014, 0.05, 0.04, 0.06, 0.1, "steel"), B(0.02, 0.02, 0.02, 0.07, 0.045, 0.1, "steel")] },
+    action: { kind: "bolt", parts: [C(0.014, 0.05, 0.03, 0.06, 0.1, "steel"), B(0.02, 0.02, 0.02, 0.045, 0.045, 0.1, "steel")] },
     aimPoint: [0, 0.115, 0.12],
   },
   launcher: {
@@ -395,15 +428,15 @@ const SPECS: Record<WeaponId, Spec> = {
       ...Array.from({ length: 3 }, (_, i) => C(0.074, 0.008, 0, 0.05, 0.16 + i * 0.1, "steel")), // tube bands
       B(0.05, 0.07, 0.16, 0, 0.03, 0.02, "polymer"),                   // receiver block
       ...grip(0, -0.06, -0.01, 0.034, 0.1, 0.05),
-      B(0.04, 0.06, 0.22, 0, 0.025, -0.2, "tan"),                      // stock
+      B(0.04, 0.06, 0.25, 0, 0.025, -0.185, "tan"),                    // stock (butts against the receiver block)
       B(0.044, 0.07, 0.02, 0, 0.025, -0.31, "rubber"),                 // butt pad
-      B(0.03, 0.03, 0.08, 0, -0.02, 0.24, "rubber"),                   // fore grip
-      B(0.03, 0.05, 0.03, 0, 0.11, 0.05, "steel"),                     // ladder sight
+      B(0.03, 0.05, 0.08, 0, -0.01, 0.24, "rubber"),                   // fore grip (reaches up to the tube)
+      B(0.03, 0.07, 0.03, 0, 0.1, 0.05, "steel"),                      // ladder sight (stands on the receiver block)
       B(0.03, 0.004, 0.03, 0, 0.135, 0.05, "steel"),                   // ladder top
       ...Array.from({ length: 3 }, (_, i) => B(0.032, 0.003, 0.004, 0, 0.095 + i * 0.012, 0.05, "brass")), // ladder rungs
       ...triggerGuard(-0.02, 0.04, 0.05),
     ],
-    muzzle: [0, 0.05, 0.5], eject: [0.03, 0.05, 0.06],
+    muzzle: [0, 0.05, 0.49], eject: [0.03, 0.05, 0.06],
     magazine: null, magazinePos: [0, 0, 0], length: 0.5,
     // The break-open latch travels on reload.
     action: { kind: "pump", parts: [B(0.02, 0.03, 0.06, 0.036, 0.05, 0.1, "brass")] },
