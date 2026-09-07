@@ -2,6 +2,47 @@
 
 Compact shared state. Read `ARCHITECTURE.md` first. Keep this file short.
 
+## Performance pass (2026-09-07) — one core for the simulation, fewer bytes for the first load
+Handoff brief: `OPTIMIZATION_PROMPT` (owner's audit). Budget guard: `apps/server/src/rooms/tickCost.test.ts`
+(8 normal bots + 1 human, 600 ticks). Baseline on this machine: **mean 0.62 ms/tick, peak 10–13 ms**;
+after the pass **0.53–0.62 ms** (run-to-run noise on this box is ±0.05; the peak is harness jitter,
+see the test's own notes). The per-tick mean was never the problem — the measurable wins are room
+creation (235 → 2 ms), FFA bot cost (−27 %), first-load bytes (−71 %) and snapshot bandwidth (−41 %).
+Nothing observable in play changed: no weapon, movement, bot-aim or hit-registration value moved.
+- [x] **Task 1 — shared world and walk grid** (`rooms/sharedWorld.ts`): `walkable()` + `prepareNav()`
+      and `buildCollisionWorld()` once per process. MEASURED: a room used to pay 235 ms for its own
+      grid + index; now first room 170 ms, second 2 ms (`sharedWorld.test.ts`). Nothing writes to
+      either structure after construction; `findPath`'s scratch is module-level on one thread.
+- [x] **Task 2 — bot CPU**: bots think only while `isLive(phase)` AND a human is in the room; a
+      line-of-sight verdict per (bot, enemy) is kept for 3 ticks (`Session.losCache`, refreshed on
+      the bot's own tick of the rotation); no hazard filter when no fire burns. MEASURED (600 ticks,
+      8 bots): FFA with everyone in view 0.63 → 0.46 ms; TDM 0.52 → 0.48. Where the tick goes: 0.05
+      ms with no bots, 0.26 ms with 8 bots whose `think` is stubbed, 0.48 with them thinking. The
+      optional 30 Hz thinking was NOT done: the mean is far under 1 ms.
+- [x] **Task 3 — delivery** (`apps/client/scripts/precompress.mjs`, `hosting.ts: serveClient /
+      cacheControlFor`): `.br` + `.gz` siblings written at build, served as-is with
+      `Content-Encoding`; one `Cache-Control` per response (assets a year immutable, models a month,
+      index never, rest an hour); Caddy keeps `encode` for JSON only, no header directives. MEASURED:
+      main bundle 2645 kB → 565 kB br (713 gz); whole client 12.2 MB → 3.55 MB br. No barrel imports
+      of `@babylonjs/core` exist — the 2.6 MB is the deep-imported engine itself.
+- [x] **Task 4 — same-origin socket**: already landed in `net/serverUrl.ts` (2.2.1); deploy notes
+      corrected (`VITE_SERVER_URL` is an override, not what makes the game connect).
+- [x] **Task 5 — snapshot trim** (two-sided): `ack` is no longer replicated to everyone — each human
+      gets `S2C.Ack` in `onBeforePatch`, on the same socket ahead of the patch it belongs to, only
+      when it moved; `yaw`/`pitch` int16 in 0.1 mrad, `vx/vy/vz` int16 cm/s (`quantAngle/quantVel`
+      and their inverses in shared `types.ts`, used by `TdmRoom`, `RemotePlayer.fill` and
+      `LocalPlayer.reconcile`). MEASURED (`netBytes.test.ts`, 10 moving bodies, one client): 5.8 →
+      3.4 kB/s (−41 %). Verified through the real handlers (ack message asserted) and the two-browser
+      suite (the slide test counts reconciliation corrections).
+- [x] **Task 6 — cleanups**: `connectedCount` maintained at join / bot add / drop / reconnect / removal
+      (asserted through a drop → reconnect → expire sequence) instead of an array + filter per tick;
+      `maxClients = MAX_PLAYERS − botCount` (was 12 humans + bots); `/health.tick` = worst and mean
+      simulation tick over the last minute across rooms (`stats.ts`). Input batching NOT done: 720
+      decodes/s is not where the tick goes (0.05 ms/tick with no bots) and it would add 16 ms latency.
+- [x] **Task 7 — broadphase**: `buildCollisionWorld(NIGHT_DISTRICT).boxes.length` = **371**. NOT done:
+      the tick mean is 0.5 ms with eight bots, a quarter of the ~2 ms the brief set as the threshold;
+      a uniform grid would be the largest change in the set for nothing measurable at this load.
+
 ## 2.2 (2026-09-06) — Bomb Plant the classic way, rebuilt sites, relief materials, a lived-in district
 - [x] **Bomb rules** (`shared/bomb.ts`, pure, tested): `resetBomb` hands the charge to a RANDOM living
       attacker (`rand` injected, the room passes its seeded RNG); `dropBomb` (C2S `dropbomb`, key
