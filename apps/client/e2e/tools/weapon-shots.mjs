@@ -77,7 +77,8 @@ for (const id of TP_ONLY ? [] : WEAPONS) {
     // Inspect refuses to start while a reload runs, so wait for the HUD to drop RELOADING rather
     // than for a guessed duration (six inspect frames were the idle pose because of that guess).
     await page.waitForFunction(() => !window.__fb.hud.get().reloading, null, { timeout: 8000 }).catch(() => {});
-    await page.waitForTimeout(400);
+    // The viewmodel's own reload timeline outlives the HUD flag by a few frames at 10 fps.
+    await page.waitForTimeout(1500); await frames(4);
   }
 
   await page.keyboard.press("KeyF");

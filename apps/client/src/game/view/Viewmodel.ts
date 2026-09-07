@@ -11,7 +11,8 @@ import type { LocalPlayer } from "../player/LocalPlayer";
 import { buildWeaponModel, createWeaponMaterials, forEachMesh, type WeaponMaterials, type WeaponModel } from "./weaponMeshes";
 import type { WeaponModelLibrary } from "./weaponModels";
 import { beveledBox } from "./geometry";
-import { HAND_SIZE } from "./weaponFit";
+import { centre, sizeOf } from "./weaponFit";
+import { handParts, type HandSide } from "./handSpec";
 
 /** Gap between background weapon upgrades: enough frames for the game to stay responsive. */
 const UPGRADE_GAP_MS = 400;
@@ -364,28 +365,44 @@ export class Viewmodel {
     if (id === this.current) this.setWeapon(id, false);
   }
 
+  /**
+   * Gloved hands from `handSpec.ts`: a palm (HAND_SIZE, centred on the pivot — what the support-hand
+   * check measures), fingers, a thumb and a forearm hung from a wrist joint on the palm. One node
+   * under the pivot carries the pose rotation for the WHOLE hand, so the parts turn together and
+   * the reload / inspect poses no longer pull them apart (art review: "a pile of loose blocks").
+   */
   private buildHands(): void {
-    const mk = (name: string, x: number, y: number, z: number, rx: number, ry: number, rz: number): TransformNode => {
+    const mk = (name: string, side: HandSide, x: number, y: number, z: number, rx: number, ry: number, rz: number): TransformNode => {
       const pivot = new TransformNode(`${name}_pivot`, this.scene);
       pivot.parent = this.gunPivot;
       pivot.position.set(x, y, z);
-      const hand = beveledBox(name, ...HAND_SIZE, this.scene);
-      hand.rotation.set(rx, ry, rz);
-      hand.material = this.handMat;
-      hand.renderingGroupId = VIEWMODEL_GROUP;
-      hand.isPickable = false;
+      const hand = new TransformNode(name, this.scene);
       hand.parent = pivot;
-      const arm = beveledBox(`${name}_arm`, 0.062, 0.058, 0.24, this.scene);
-      arm.position.set(x > 0 ? 0.02 : -0.01, -0.06, -0.15);
-      arm.rotation.set(-0.45 + rx * 0.3, ry * 0.5, rz);
-      arm.material = this.handMat;
-      arm.renderingGroupId = VIEWMODEL_GROUP;
-      arm.isPickable = false;
-      arm.parent = pivot;
+      hand.rotation.set(rx, ry, rz);
+      for (const part of handParts(side)) {
+        const c = centre(part.box);
+        const mesh = beveledBox(`${name}_${part.name}`, ...sizeOf(part.box), this.scene);
+        mesh.material = this.handMat;
+        mesh.renderingGroupId = VIEWMODEL_GROUP;
+        mesh.isPickable = false;
+        if (part.joint) {
+          // The joint node sits AT the wrist and carries the rotation; the mesh hangs off it by the
+          // offset from the wrist to its centre, so its near end stays on the palm at any angle.
+          const joint = new TransformNode(`${name}_${part.name}_joint`, this.scene);
+          joint.parent = hand;
+          joint.position.set(...part.joint.at);
+          joint.rotation.set(...part.joint.rotation);
+          mesh.parent = joint;
+          mesh.position.set(c[0] - part.joint.at[0], c[1] - part.joint.at[1], c[2] - part.joint.at[2]);
+        } else {
+          mesh.parent = hand;
+          mesh.position.set(...c);
+        }
+      }
       return pivot;
     };
-    mk("vm_hand_r", 0.0, -0.06, -0.02, 0.25, 0, 0.15);
-    this.handL = mk("vm_hand_l", -0.035, -0.005, 0.3, 0.15, 0.35, -0.5);
+    mk("vm_hand_r", "right", 0.0, -0.06, -0.02, 0.25, 0, 0.15);
+    this.handL = mk("vm_hand_l", "left", -0.035, -0.005, 0.3, 0.15, 0.35, -0.5);
     this.handLHome.copyFrom(this.handL.position);
   }
 
