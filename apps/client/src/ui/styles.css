@@ -551,3 +551,18 @@ button { font-family: inherit; }
 .pause-card .tabs { position: sticky; top: 0; background: var(--bg); z-index: 1; }
 .pause-invite { display: flex; flex-direction: column; gap: 4px; }
 .pause-invite small { font-size: 10px; letter-spacing: 0.18em; color: var(--tx-3); }
+
+/* Drop D — join by link: the lobby a friend's /r/<room> link opens asks for a nickname and nothing else. */
+.link-join { max-width: 440px; display: flex; flex-direction: column; gap: 10px; }
+.link-join-room { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; letter-spacing: 0.2em; color: var(--tx-2); }
+.link-join-room b { font-family: var(--font-mono); font-size: 18px; letter-spacing: 0.05em; color: var(--tx); }
+.link-join-room .link { margin-left: auto; font-size: 11px; letter-spacing: 0.2em; }
+.link-join .mode-blurb { margin-bottom: 6px; }
+
+/* Drop D: mode badges for Gun Game and Ostrzyżeni (next to .m-ffa / .m-dom above). */
+.room-mode.m-gungame { color: var(--purple); } .room-mode.m-ostrzyzeni { color: var(--team1); }
+/* Drop D: the Gun Game ladder in the top bar — rung, the gun it hands you, and the next one. */
+.ffa-score.ladder .tscore { min-width: 64px; }
+.ffa-score .ladder-gun { display: flex; flex-direction: column; line-height: 1.1; font-family: var(--font-ui); }
+.ffa-score .ladder-gun b { font-size: 12px; letter-spacing: .08em; color: var(--tx); white-space: nowrap; }
+.ffa-score .ladder-gun small { font-size: 10px; letter-spacing: .12em; color: var(--tx-2); white-space: nowrap; }

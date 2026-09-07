@@ -1,4 +1,4 @@
-import { BOMB, ECONOMY, MATCH, MAX_PLAYERS, MODES, MODE_ORDER, RESPAWN_DELAY_MS } from "@frankibarber/shared";
+import { BOMB, ECONOMY, GUN_GAME, MATCH, MAX_PLAYERS, MODES, MODE_ORDER, OSTRZYZENI, RESPAWN_DELAY_MS, WEAPONS } from "@frankibarber/shared";
 import { BINDABLE_ACTIONS, keyLabel, resolveBindings, type Settings } from "../settings";
 
 /**
@@ -13,7 +13,7 @@ export function HowToPlay({ settings, onControls }: { settings: Settings; onCont
     <div className="howto" data-testid="howto">
       <section>
         <h3>THE NIGHT</h3>
-        <p>Night District after closing time. {MATCH.minPlayers}–{MAX_PLAYERS} players, one map, four modes. A continuous match (TDM, FFA, Domination) is {MATCH.durationMs / 60000} minutes or the score limit, whichever comes first, then a {MATCH.endedMs / 1000} s result screen and a rematch in the same room. You respawn on your own {(RESPAWN_DELAY_MS / 1000).toFixed(1)} s after a death, sooner with a fresh fade.</p>
+        <p>Night District after closing time. {MATCH.minPlayers}–{MAX_PLAYERS} players, one map, {MODE_ORDER.length} modes. A continuous match (TDM, FFA, Domination) is {MATCH.durationMs / 60000} minutes or the score limit, whichever comes first, then a {MATCH.endedMs / 1000} s result screen and a rematch in the same room. You respawn on your own {(RESPAWN_DELAY_MS / 1000).toFixed(1)} s after a death, sooner with a fresh fade.</p>
         <div className="howto-modes">
           {MODE_ORDER.map((m) => <div key={m} className="howto-mode"><b>{MODES[m].short}</b><span>{MODES[m].name}</span><small>{MODES[m].blurb}</small></div>)}
         </div>
@@ -21,6 +21,11 @@ export function HowToPlay({ settings, onControls }: { settings: Settings; onCont
       <section>
         <h3>BOMB PLANT</h3>
         <p>Rounds, one life each, like the classics. One attacker gets the charge at random (a pack on their back); <b>{key("dropBomb")}</b> drops it for a teammate, and whoever dies drops it where they fall. Carry it into the painted zone of site <b>A</b> or <b>B</b>, stand still and hold <b>{key("objective")}</b> for {BOMB.plantMs / 1000} s — it plants where you stand, so pick a corner. The charge beeps faster as the {BOMB.fuseMs / 1000} s fuse runs down and the blast is real: certain death within {BOMB.blastLethal} m, a hit out to {BOMB.blastRadius} m, either side. Defenders hold the same key next to the charge for {BOMB.defuseMs / 1000} s, or {BOMB.defuseKitMs / 1000} s with a <b>defuse kit</b> (${BOMB.kitPrice}, in the shop, lost on death). A {BOMB.buyMs / 1000} s buy phase opens every round on a frozen spawn, the shop is closed afterwards, and money carries between rounds: a round win pays more than a loss, losing streaks pay a growing consolation, and death costs the gear you bought. First to {BOMB.wins} rounds, sides swap after {BOMB.halfRounds}. Dying means waiting for the next round.</p>
+      </section>
+      <section>
+        <h3>GUN GAME &amp; OSTRZYŻENI</h3>
+        <p><b>Gun Game</b>: no shop, no money — every kill hands you the next gun and you are back on your feet {GUN_GAME.respawnMs / 1000} s after a death. The ladder, in order: {GUN_GAME.ladder.map((id) => WEAPONS[id].name).join(" → ")}. Everyone carries the clippers all match: a clippers kill shaves a rung off the victim, but it only moves you up when the clippers are your rung. First through all {GUN_GAME.ladder.length} wins.</p>
+        <p><b>Ostrzyżeni</b>: {OSTRZYZENI.rounds} rounds of {OSTRZYZENI.roundMs / 1000} s. One random player starts each round shaved — clippers only, faster on their feet, a bare head everyone can see. Survivors get ${OSTRZYZENI.roundMoney.toLocaleString("en-US")} and {OSTRZYZENI.prepMs / 1000} s to buy at the start of the round; a clippers kill shaves you onto the hunters' side. Survive the clock and the survivors take the round; when nobody unshaved is left, the shaved side does. The top score takes the night, because everyone plays both sides.</p>
       </section>
       <section>
         <h3>MONEY</h3>

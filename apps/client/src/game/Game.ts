@@ -542,7 +542,7 @@ export class Game {
     rows.sort((a, b) => b.score - a.score || b.kills - a.kills);
     const near = this.nearStation();
     const windowLeft = me ? buyWindowLeft({ now: this.conn.serverNow(), spawnedAt: me.spawnedAt ?? 0, phase: s.phase, alive: me.alive, nearStation: near,
-      bombBuying: s.mode === "bomb" ? s.phase === MatchPhase.Prep && s.bomb.stage === "buy" : undefined, releaseAt: s.phaseEndsAt }) : 0;
+      bombBuying: s.mode === "bomb" ? s.phase === MatchPhase.Prep && s.bomb.stage === "buy" : undefined, releaseAt: s.phaseEndsAt, mode: (s.mode ?? "tdm") as GameMode }) : 0;
     const cur = hud.get();
     const scope = this.local.scopeState();
     // Drop 4: flags (Domination) and which zone we stand in.
@@ -608,7 +608,7 @@ export class Game {
     if (!me || !me.alive) return;
     const state = this.conn.state;
     const left = buyWindowLeft({ now: this.conn.serverNow(), spawnedAt: me.spawnedAt ?? 0, phase: state.phase, alive: me.alive, nearStation: this.nearStation(),
-      bombBuying: state.mode === "bomb" ? state.phase === MatchPhase.Prep && state.bomb.stage === "buy" : undefined, releaseAt: state.phaseEndsAt });
+      bombBuying: state.mode === "bomb" ? state.phase === MatchPhase.Prep && state.bomb.stage === "buy" : undefined, releaseAt: state.phaseEndsAt, mode: (state.mode ?? "tdm") as GameMode });
     if (left <= 0) { hud.set({ shopResult: { ok: false, item: "", reason: "closed", at: performance.now() } }); return; }
     this.setShopOpen(true);
   }

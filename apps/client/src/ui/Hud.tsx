@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { BOMB, GAME_VERSION, GRENADES, MATCH, MODES, MatchPhase, PERKS, PERK_ORDER, TEAM_NAMES, WEAPONS, BADGES, killerName, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
+import { BOMB, GAME_VERSION, GRENADES, GUN_GAME, MATCH, MODES, MatchPhase, PERKS, PERK_ORDER, TEAM_NAMES, WEAPONS, BADGES, killerName, ladderDone, ladderWeapon, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import type { MatchReward } from "../game/progression/profile";
 import { CROSSHAIR_COLORS, keyLabel, resolveBindings, type Settings } from "../settings";
@@ -147,6 +147,16 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
   const leader = h.players.find((r) => r.id !== h.myId) ?? null;
   const myKills = meRow?.kills ?? 0;
   const leading = !leader || myKills >= leader.kills;
+  // Drop D: Gun Game replicates the ladder rung as `score` (0..11; 11 = finished). The top bar shows
+  // the rung, the gun it hands you and the next one, against the leader's rung instead of kills.
+  const gunGame = h.mode === "gungame";
+  const noShop = MODES[h.mode].shop === "none";
+  const myRung = meRow?.score ?? 0;
+  const leaderRung = leader?.score ?? 0;
+  const rungLabel = (rung: number) => `${Math.min(GUN_GAME.ladder.length, rung + 1)}/${GUN_GAME.ladder.length}`;
+  const rungGun = WEAPONS[ladderWeapon(myRung)].name;
+  const nextGun = myRung + 1 < GUN_GAME.ladder.length ? WEAPONS[ladderWeapon(myRung + 1)].name : null;
+  const ladderLeading = !leader || myRung >= leaderRung;
   const here = h.inFlag >= 0 ? h.flags[h.inFlag] : null;
   const captureText = here
     ? here.contested ? `CONTESTED · ${here.id}`
@@ -156,6 +166,8 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
     : "";
   const noticeAge = h.flagNotice ? now - h.flagNotice.at : Infinity;
   const winnerFfa = h.winnerId === "" ? "DRAW" : h.winnerId === h.myId ? "VICTORY" : "DEFEAT";
+  // Drop D: the result names a side or a player by the mode's `winner`, not by whether it has teams.
+  const teamWinner = MODES[h.mode].winner === "team";
 
   return (
     <div className={`hud ${lowHealth ? "low-health" : ""}`} data-testid="hud" style={{ zoom: ui.hudScale }}>
@@ -203,7 +215,10 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
       <div className="top-bar" data-mode={h.mode}>
         {teams
           ? <div className={`team-score t0 ${h.myTeam === 0 ? "mine" : ""}`}><span className="tname">{TEAM_NAMES[0]}</span><span className="tscore" data-testid="score-a">{h.scoreA}</span></div>
-          : <div className="ffa-score mine"><span className="tname">YOU</span><span className="tscore" data-testid="score-a">{myKills}</span></div>}
+          : gunGame
+            ? <div className="ffa-score mine ladder"><span className="tname">GUN</span><span className="tscore" data-testid="ladder">{rungLabel(myRung)}</span>
+                <span className="ladder-gun" data-testid="ladder-gun">{ladderDone(myRung) ? <b>LADDER DONE</b> : <><b>{rungGun}</b>{nextGun && <small>NEXT: {nextGun}</small>}</>}</span></div>
+            : <div className="ffa-score mine"><span className="tname">YOU</span><span className="tscore" data-testid="score-a">{myKills}</span></div>}
         <div className="timer" data-testid="timer">
           {h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep ? fmtTime(matchLeft)
             : h.phase === MatchPhase.Countdown ? "STARTING"
@@ -211,7 +226,9 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
         </div>
         {teams
           ? <div className={`team-score t1 ${h.myTeam === 1 ? "mine" : ""}`}><span className="tscore" data-testid="score-b">{h.scoreB}</span><span className="tname">{TEAM_NAMES[1]}</span></div>
-          : <div className={`ffa-score ${leading ? "" : "lead"}`}><span className="tscore" data-testid="score-b">{leader?.kills ?? 0}</span><span className="tname">{leader?.name ?? "NOBODY"}</span></div>}
+          : gunGame
+            ? <div className={`ffa-score ${ladderLeading ? "" : "lead"}`}><span className="tscore" data-testid="score-b">{leader ? rungLabel(leaderRung) : "–"}</span><span className="tname">{leader?.name ?? "NOBODY"}</span></div>
+            : <div className={`ffa-score ${leading ? "" : "lead"}`}><span className="tscore" data-testid="score-b">{leader?.kills ?? 0}</span><span className="tname">{leader?.name ?? "NOBODY"}</span></div>}
       </div>
       {/* Domination (drop 4): A / B / C with owner colour, capture bar, contested pulse */}
       {h.mode === "dom" && h.flags.length > 0 && (
@@ -275,7 +292,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
       )}
 
       {/* Wallet + buy prompt (drop 2) */}
-      {h.connected && (
+      {h.connected && !noShop && (
         <div className="wallet" data-testid="wallet">
           <div className={`wallet-money ${h.money >= 8000 ? "rich" : ""}`} data-testid="money">{money(h.money)}</div>
           {h.alive && !h.shopOpen && h.buyWindowLeft > 0 && (
@@ -290,7 +307,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
           <div key={t.key} className={`money-toast ${t.delta < 0 ? "neg" : ""}`}>{t.delta > 0 ? "+" : ""}{money(t.delta)}<span className="why">{REASON_SHORT[t.reason] ?? t.reason.toUpperCase()}</span></div>
         ))}
       </div>
-      {shopHint && <div className="shop-closed-hint" data-testid="shop-closed">SHOP CLOSED · REACH A $ BUY COUNTER</div>}
+      {shopHint && <div className="shop-closed-hint" data-testid="shop-closed">{noShop ? `NO SHOP IN ${MODES[h.mode].name} · KILLS HAND OUT THE GUNS` : "SHOP CLOSED · REACH A $ BUY COUNTER"}</div>}
 
       {/* Bottom-right: weapon + ammo, grenade slots above */}
       {h.connected && (
@@ -338,9 +355,9 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
       {/* Match end */}
       {h.phase === MatchPhase.Ended && (
         <div className="result" data-testid="result">
-          <div className={`result-title ${(teams ? winnerTeam : winnerFfa).toLowerCase()}`}>{teams ? winnerTeam : winnerFfa}</div>
+          <div className={`result-title ${(teamWinner ? winnerTeam : winnerFfa).toLowerCase()}`}>{teamWinner ? winnerTeam : winnerFfa}</div>
           <div className="result-score">
-            {teams ? <>{TEAM_NAMES[0]} {h.scoreA} — {h.scoreB} {TEAM_NAMES[1]}</> : h.winnerName ? <><b>{h.winnerName}</b> TAKES THE NIGHT</> : "NOBODY TAKES THE NIGHT"}
+            {teamWinner ? <>{TEAM_NAMES[0]} {h.scoreA} — {h.scoreB} {TEAM_NAMES[1]}</> : h.winnerName ? <><b>{h.winnerName}</b> TAKES THE NIGHT</> : "NOBODY TAKES THE NIGHT"}
           </div>
           {h.reward && <MatchSummary reward={h.reward} />}
           <Scoreboard rows={h.players} myId={h.myId} mode={h.mode} />
@@ -405,12 +422,13 @@ function ScoreTr({ r, myId }: { r: ReturnType<typeof useHud>["players"][number];
 
 function Scoreboard({ rows, myId, mode }: { rows: ReturnType<typeof useHud>["players"]; myId: string; mode: GameMode }) {
   if (!MODES[mode].teams) {
-    // FFA (drop 4): one table, most kills first.
-    const sorted = [...rows].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+    // FFA (drop 4): one table, most kills first. Gun Game (drop D): highest rung first, the score column is the rung.
+    const gun = mode === "gungame";
+    const sorted = [...rows].sort((a, b) => (gun ? b.score - a.score || b.kills - a.kills : b.kills - a.kills || a.deaths - b.deaths));
     return (
       <div className="scoreboard">
         <table className="sb-team ffa">
-          <thead><tr><th className="sb-name">{MODES[mode].name}</th><th>K</th><th>D</th><th>A</th><th>$</th><th>SCORE</th><th>PING</th></tr></thead>
+          <thead><tr><th className="sb-name">{MODES[mode].name}</th><th>K</th><th>D</th><th>A</th><th>$</th><th>{gun ? "RUNG" : "SCORE"}</th><th>PING</th></tr></thead>
           <tbody>
             {sorted.map((r) => <ScoreTr key={r.id} r={r} myId={myId} />)}
           </tbody>

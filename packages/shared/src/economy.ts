@@ -1,7 +1,8 @@
 import { BOMB } from "./bomb";
 import { GRENADES, isGrenadeId, type GrenadeId, type GrenadeSlot } from "./grenades";
 import { ARMOR, PERKS, PERK_ARMED_MS, isArmorId, isPerkId, noPerks, perkActive, type ArmorId, type PerkId, type PerkTimes } from "./perks";
-import { MatchPhase } from "./types";
+import { MODES } from "./modes";
+import { MatchPhase, type GameMode } from "./types";
 import { FREE_SIDEARM, MELEE_WEAPON, WEAPONS, isWeaponId, type WeaponId } from "./weapons";
 
 /**
@@ -79,7 +80,15 @@ export interface BuyContext {
    * open then precisely so it can be used, and at 5 s of freeze that is a fifth of a 25 s perk.
    */
   releaseAt?: number;
+  /**
+   * Drop D: the mode decides who may buy at all (`MODES[mode].shop`). Optional so the older call
+   * sites keep their meaning; without it the window follows the rules above, as before.
+   */
+  mode?: GameMode;
 }
+
+/** Drop D: a mode with no economy (Gun Game) has no window to open — not at a station, not in warm-up. */
+const shopless = (ctx: BuyContext): boolean => ctx.mode !== undefined && MODES[ctx.mode].shop === "none";
 
 /**
  * The shop is open during warm-up, in the frozen preparation window between waves, for a while
@@ -90,7 +99,7 @@ export interface BuyContext {
  * moment the countdown tells you to prepare.
  */
 export function buyWindowOpen(ctx: BuyContext): boolean {
-  if (!ctx.alive) return false;
+  if (!ctx.alive || shopless(ctx)) return false;
   if (ctx.bombBuying !== undefined && ctx.phase !== MatchPhase.Waiting && ctx.phase !== MatchPhase.Countdown) return ctx.bombBuying;
   if (ctx.phase === MatchPhase.Waiting || ctx.phase === MatchPhase.Countdown || ctx.phase === MatchPhase.Prep) return true;
   return ctx.now - ctx.spawnedAt < ECONOMY.buyWindowMs || ctx.nearStation;
@@ -98,7 +107,7 @@ export function buyWindowOpen(ctx: BuyContext): boolean {
 
 /** Ms of buy window left after a spawn (0 when closed; Infinity in warm-up / at a station). */
 export function buyWindowLeft(ctx: BuyContext): number {
-  if (!ctx.alive) return 0;
+  if (!ctx.alive || shopless(ctx)) return 0;
   if (ctx.bombBuying !== undefined && ctx.phase !== MatchPhase.Waiting && ctx.phase !== MatchPhase.Countdown) return ctx.bombBuying ? Math.max(0, (ctx.releaseAt ?? ctx.now) - ctx.now) : 0;
   if (ctx.phase === MatchPhase.Waiting || ctx.phase === MatchPhase.Countdown || ctx.phase === MatchPhase.Prep || ctx.nearStation) return Infinity;
   return Math.max(0, ECONOMY.buyWindowMs - (ctx.now - ctx.spawnedAt));

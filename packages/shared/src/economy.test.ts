@@ -15,6 +15,19 @@ describe("buy window", () => {
     expect(buyWindowLeft(open({ now: 4000 }))).toBe(ECONOMY.buyWindowMs - 4000);
     expect(buyWindowLeft(open({ now: 50_000, nearStation: true }))).toBe(Infinity);
   });
+
+  it("never opens in a mode without a shop (Gun Game), not even in warm-up or at a station", () => {
+    expect(buyWindowOpen(open({ mode: "gungame" }))).toBe(false);
+    expect(buyWindowOpen(open({ mode: "gungame", now: 50_000, nearStation: true }))).toBe(false);
+    expect(buyWindowOpen(open({ mode: "gungame", now: 50_000, phase: MatchPhase.Waiting }))).toBe(false);
+    expect(buyWindowLeft(open({ mode: "gungame" }))).toBe(0);
+    expect(buyWindowLeft(open({ mode: "gungame", now: 50_000, nearStation: true }))).toBe(0);
+    // Modes with a shop are untouched by the field; Ostrzyżeni keeps the plain window for now.
+    expect(buyWindowOpen(open({ mode: "ffa" }))).toBe(true);
+    expect(buyWindowLeft(open({ mode: "tdm", now: 4000 }))).toBe(ECONOMY.buyWindowMs - 4000);
+    expect(buyWindowOpen(open({ mode: "ostrzyzeni" }))).toBe(true);
+    expect(canBuy(freshWallet(), "smg", open({ mode: "gungame" }))).toEqual({ ok: false, reason: "closed" });
+  });
 });
 
 describe("buying weapons", () => {
