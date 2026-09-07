@@ -11,6 +11,7 @@ function detonate(p: Projectile) {
 it("passes actual flash blindness to a bot without a browser connection", async () => {
   h = await RoomHarness.create({ room: "flash-bot", bots: 1 });
   const bot = [...h.state.players.values()][0];
+  await h.join("Human"); // bots only think for someone (task 2)
   await h.place(bot.id, { x: -21, y: 0, z: 21, yaw: 0, team: 0 });
   const spy = vi.spyOn(BotBrain.prototype, "think");
   detonate(createProjectile(101, "flash", bot.id, [-21, 1.5, 22], [0, 0, 0]));
@@ -21,6 +22,7 @@ it("passes actual flash blindness to a bot without a browser connection", async 
 it("blocks the bot's server sight through active smoke and restores it on expiry", async () => {
   h = await RoomHarness.create({ room: "smoke-bot", bots: 1 });
   const bot = [...h.state.players.values()][0];
+  await h.join("Human");
   const spy = vi.spyOn(BotBrain.prototype, "think");
   detonate(createProjectile(102, "smoke", bot.id, [-21, 0, 21], [0, 0, 0]));
   await h.advance(1000);

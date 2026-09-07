@@ -52,6 +52,13 @@ class Session {
    * re-plans about once every fifteen seconds.
    */
   planPhase = 0;
+  /**
+   * Line-of-sight results per enemy id (performance pass, task 2): a full-world raycast per enemy
+   * in the cone per bot per tick was the single largest bot cost (worst case 88 raycasts a tick).
+   * A bot's reaction time is ≥ 150 ms, so a result held for three ticks (50 ms), refreshed on this
+   * bot's own tick of the rotation, changes nothing a player can see.
+   */
+  losCache = new Map<string, { tick: number; ok: boolean }>();
   /** Time bank (ms) the client may spend on inputs; refilled by the server tick. Anti speed-hack. */
   bank = 0;
   lastYaw = 0;
@@ -130,6 +137,9 @@ const DEV_TOOLS = process.env.FB_DEV_TOOLS === "1";
 /** Dev-only bandwidth counter: logs outgoing bytes/s (patches + messages) every 5 s. */
 const NET_STATS = process.env.FB_NET_STATS === "1";
 const pelletDir: [number, number, number] = [0, 0, 0];
+/** Ticks a bot's line-of-sight verdict on an enemy is reused (task 2). */
+const LOS_CACHE_TICKS = 3;
+const NO_HAZARDS: { x: number; y: number; z: number; radius: number }[] = [];
 const worldHit = makeRayHit();
 
 export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string; mode: GameMode; name: string; map: string; bots: number } }> {
@@ -327,9 +337,17 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       now,
       me: { id: p.id, team: p.team, x: s.body.x, y: s.body.y, z: s.body.z, crouching: s.body.crouching, grounded: s.body.grounded, ammo: s.ammo[w.id], magazine: w.magazine, reserve: s.reserve[w.id], weapon: w.id, fireIntervalMs: fireIntervalMs(w) },
       enemies,
-      los: (ax, ay, az, bx, by, bz) => !this.losBlocked(ax, ay, az, bx, by, bz) && !smokeBlocks(this.smokes, now, ax, ay, az, bx, by, bz),
+      los: (ax, ay, az, bx, by, bz, id) => {
+        const c = id ? s.losCache.get(id) : undefined;
+        // Fresh enough and not this bot's refresh tick: reuse. Bots refresh on different ticks.
+        if (c && this.navTick - c.tick < LOS_CACHE_TICKS && (this.navTick + s.planPhase) % LOS_CACHE_TICKS !== 0) return c.ok;
+        const ok = !this.losBlocked(ax, ay, az, bx, by, bz) && !smokeBlocks(this.smokes, now, ax, ay, az, bx, by, bz);
+        if (id) s.losCache.set(id, { tick: this.navTick, ok });
+        return ok;
+      },
       blinded: now < s.blindedUntil,
-      hazards: this.fires.filter(f => f.until > now && Math.hypot(p.x - f.x, p.z - f.z) < f.radius + 3
+      // No fire on the map (the usual case) means no filter, no allocation.
+      hazards: this.fires.length === 0 ? NO_HAZARDS : this.fires.filter(f => f.until > now && Math.hypot(p.x - f.x, p.z - f.z) < f.radius + 3
         && !this.losBlocked(p.x, p.y + 1, p.z, f.x, f.y + 0.3, f.z)),
       flags: this.mode === "dom" ? this.flagSims.map((f, i) => ({ x: this.map.flags[i].x, y: this.map.flags[i].y, z: this.map.flags[i].z, owner: f.owner, contested: this.state.flags[i]?.contested ?? false })) : [],
       roamPoints: this.roamPoints,
@@ -1042,6 +1060,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private step(): void {
     const now = this.now();
     this.navTick++;
+    const botsThink = isLive(this.state.phase as MatchPhase) && this.clients.length > 0;
     for (const [id, p] of this.state.players) {
       const s = this.sessions.get(id);
       if (!s) continue;
@@ -1076,7 +1095,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       }
 
       // Drop 5: a bot decides here, then its input goes through the same queue as a human's.
-      if (s.brain) this.stepBot(p, s, now);
+      // Not on the result screen or in a round break (its shots would be refused anyway, after the
+      // raycasts and the planning had been paid for), and not for nobody: a room without a human
+      // has no one to play for (task 2).
+      if (s.brain && botsThink) this.stepBot(p, s, now);
       // Movement: spend the time bank on queued inputs.
       s.bank = Math.min(s.bank + TICK_MS, 120);
       const mobility = WEAPONS[p.weapon as WeaponId].mobility;

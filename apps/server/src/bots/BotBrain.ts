@@ -48,7 +48,8 @@ export interface BotSenses {
   /** Alive players the bot may shoot (the room applies the team rule). */
   enemies: BotView[];
   /** Line of sight between two world points (no players in the way is not required). */
-  los(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean;
+  /** Line of sight; `id` names the enemy so the room may reuse a recent verdict (task 2). */
+  los(ax: number, ay: number, az: number, bx: number, by: number, bz: number, id?: string): boolean;
   /** Domination flags (empty in other modes). */
   flags: { x: number; y: number; z: number; owner: number; contested: boolean }[];
   /** Places worth walking to when there is nothing else to do. */
@@ -200,7 +201,7 @@ export class BotBrain {
       const priority = d * (e.id === this.target ? 0.72 : 1);
       if (d > p.sightRange || priority >= bestPriority) continue;
       const cy = e.y + (e.crouching ? 0.7 : 1.1);
-      if (!s.los(me.x, eyeY, me.z, e.x, cy, e.z)) continue;
+      if (!s.los(me.x, eyeY, me.z, e.x, cy, e.z, e.id)) continue;
       seen = e; seenD = d; bestPriority = priority;
     }
     if (seen) {
