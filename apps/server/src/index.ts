@@ -7,6 +7,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { GAME_VERSION, MAX_PLAYERS } from "@frankibarber/shared";
 import { TdmRoom } from "./rooms/TdmRoom";
 import { cacheControlFor, clientDir, hostBanner, serveClient } from "./hosting";
+import { tickStats } from "./stats";
 
 const PORT = Number(process.env.PORT ?? 2567);
 const origins = (process.env.CORS_ORIGIN ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -22,7 +23,9 @@ app.get("/health", async (_req, res) => {
     rooms = list.length;
     players = list.reduce((n, r) => n + r.clients, 0);
   } catch { /* counts are informational */ }
-  res.json({ ok: true, game: "BARBERSTRIKE", version: GAME_VERSION, maxPlayers: MAX_PLAYERS, uptime: process.uptime(), players, rooms });
+  // `tick` (task 6): worst and mean simulation tick over the last minute, across rooms — the one
+  // number that says whether the core the simulation runs on is keeping up. Watch it with curl.
+  res.json({ ok: true, game: "BARBERSTRIKE", version: GAME_VERSION, maxPlayers: MAX_PLAYERS, uptime: process.uptime(), players, rooms, tick: tickStats() });
 });
 
 // Room browser for the lobby: public, unlocked TDM rooms with their metadata.

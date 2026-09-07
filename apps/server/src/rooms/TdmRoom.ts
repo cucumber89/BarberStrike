@@ -22,6 +22,7 @@ import {
 import { FlagState, MatchState, PlayerState } from "../schema";
 import { nextPhase, teamForNewPlayer } from "../match";
 import { sharedCollisionWorld, sharedWalk } from "./sharedWorld";
+import { recordTick } from "../stats";
 import { BotBrain, type BotSenses, type BotView } from "../bots/BotBrain";
 
 interface HistoryEntry { t: number; x: number; y: number; z: number; crouching: boolean }
@@ -158,6 +159,13 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   // Shared across rooms (performance pass, task 1): see sharedWorld.ts.
   private world: CollisionWorld = sharedCollisionWorld();
   private sessions = new Map<string, Session>();
+  /**
+   * Players with `connected` set, kept as a count (task 6): `updatePhase` asked for it every tick
+   * with an array allocation and a filter over every player. Maintained at the four places the
+   * flag changes; `connectedPlayers` exposes it for tests.
+   */
+  private connectedCount = 0;
+  get connectedPlayers(): number { return this.connectedCount; }
   private accumulator = 0;
   private rand = mulberry32(Date.now() & 0xffffffff);
   private projectiles: Projectile[] = [];
@@ -192,6 +200,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // Drop 5: bots requested at creation (clamped so humans always have room), with a difficulty.
     const wantBots = isFiniteNumber(options?.bots) ? Math.max(0, Math.min(MAX_BOTS, Math.round(options.bots))) : 0;
     this.botCount = Math.min(wantBots, MAX_PLAYERS - 2);
+    // Bots take seats: 12 is the room, not the human count (task 6). Was 12 humans + bots.
+    this.maxClients = MAX_PLAYERS - this.botCount;
     this.botLevel = isBotLevel(options?.botLevel) ? options.botLevel : "normal";
     // Tests and tooling may pin the room's PRNG (spawn picks, pellets, bot aim); never in production.
     if ((DEV_TOOLS || process.env.NODE_ENV === "test") && isFiniteNumber(options?.seed)) this.rand = mulberry32(options.seed >>> 0);
@@ -322,7 +332,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.team = this.teams ? teamForNewPlayer(Array.from(this.state.players.values()).map((q) => q.team as Team)) : 0;
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
-    this.state.players.set(id, p);
+    this.state.players.set(id, p); this.connectedCount++;
     const s = new Session();
     s.planPhase = n % MAX_BOTS;
     s.brain = new BotBrain(this.botLevel, this.walk, this.rand);
@@ -429,7 +439,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.team = this.teams ? teamForNewPlayer(Array.from(this.state.players.values()).map((q) => q.team as Team)) : 0;
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
-    this.state.players.set(client.sessionId, p);
+    this.state.players.set(client.sessionId, p); this.connectedCount++;
 
     const s = new Session();
     this.sessions.set(client.sessionId, s);
@@ -451,14 +461,14 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   override async onLeave(client: Client, code?: number): Promise<void> {
     const p = this.state.players.get(client.sessionId);
     if (!p) return;
-    p.connected = false;
+    p.connected = false; this.connectedCount--;
     this.updatePhase(); // a countdown aborts immediately when the room drops below minPlayers
     const consented = code === 1000 || code === 4000;
     if (!consented) {
       try {
         await this.allowReconnection(client, RECONNECT_GRACE_S);
         const back = this.state.players.get(client.sessionId);
-        if (back) back.connected = true;
+        if (back) { back.connected = true; this.connectedCount++; }
         return;
       } catch {
         // timed out or room disposing
@@ -470,6 +480,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private removePlayer(id: string): void {
     const s = this.sessions.get(id);
     if (s) { s.history.length = 0; s.inputs.length = 0; }
+    const gone = this.state.players.get(id);
+    if (gone?.connected) this.connectedCount--;
     this.state.players.delete(id);
     this.sessions.delete(id);
   }
@@ -847,7 +859,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   // ---------------------------------------------------------------- match flow
 
   private maybeStartCountdown(): void {
-    const connected = Array.from(this.state.players.values()).filter((p) => p.connected).length;
+    const connected = this.connectedCount;
     if (this.state.phase === MatchPhase.Waiting && connected >= MATCH.minPlayers) {
       this.state.phase = MatchPhase.Countdown;
       this.state.phaseEndsAt = this.now() + MATCH.countdownMs;
@@ -1040,7 +1052,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private updatePhase(): void {
     const st = this.state;
     const now = this.now();
-    const connected = Array.from(st.players.values()).filter((p) => p.connected).length;
+    const connected = this.connectedCount;
     if (this.mode === "bomb" && connected > 0 && (st.phase === MatchPhase.Playing || st.phase === MatchPhase.Prep)) {
       if (now >= st.matchEndsAt) this.endMatch();
       else if (st.phase === MatchPhase.Prep && now >= st.phaseEndsAt) {
@@ -1066,6 +1078,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   // ---------------------------------------------------------------- simulation
 
   private tick(deltaMs: number): void {
+    const t0 = performance.now();
     this.accumulator += Math.min(deltaMs, 250);
     let steps = 0;
     while (this.accumulator >= TICK_MS && steps < 8) {
@@ -1076,6 +1089,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (steps === 8) this.accumulator = 0;
     this.state.t = this.now();
     this.updatePhase();
+    if (steps > 0) recordTick(performance.now() - t0); // for /health (task 6)
     if (NET_STATS) this.logNetStats(this.state.t);
   }
 

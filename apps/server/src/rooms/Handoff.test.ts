@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Btn, C2S, S2C, DOM, MATCH, aimDirection, packInput, type PlayerInput } from "@frankibarber/shared";
+import { Btn, C2S, S2C, DOM, MATCH, MAX_PLAYERS, aimDirection, packInput, type PlayerInput } from "@frankibarber/shared";
 import { RoomHarness, type FakeClient } from "./testHarness";
 
 /** Codex handoff P1 (network fairness): shot direction vs the named input, Fire packet cap, ghosts and flags. */
@@ -96,5 +96,23 @@ describe("dropped players", () => {
     await h.advance(DOM.captureMs + 200);
     expect(h.state.flags[0].owner).toBe(1);
     expect(Btn.Fire).toBeGreaterThan(0);
+  });
+  it("counts connected players without walking the map every tick (task 6)", async () => {
+    h = await RoomHarness.create({ room: "count", mode: "tdm", bots: 2 });
+    const room = h.room as unknown as { connectedPlayers: number; maxClients: number };
+    expect(room.connectedPlayers, "two bots").toBe(2);
+    expect(room.maxClients, "bots take seats").toBe(MAX_PLAYERS - 2);
+    const a = await h.join("Alpha"); await h.join("Bravo");
+    expect(room.connectedPlayers).toBe(4);
+    a.drop(1006);
+    await h.advance(200);
+    expect(room.connectedPlayers, "a dropped player is a ghost, not a connection").toBe(3);
+    const back = await h.reconnect(a);
+    await h.advance(50);
+    expect(room.connectedPlayers, "reconnected").toBe(4);
+    back.drop(1006);
+    await h.advance(16_000); // past the 15 s reconnection grace: removed for good
+    expect(h.state.players.has(back.sessionId), "gone for good after the grace").toBe(false);
+    expect(room.connectedPlayers).toBe(3);
   });
 });
