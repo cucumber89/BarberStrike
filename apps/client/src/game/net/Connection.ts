@@ -23,6 +23,8 @@ export interface NetPlayer {
   assists: number; bot: boolean;
   /** Bomb Plant (2.2): defuse kit carried. */
   kit: boolean;
+  /** Drop D: a visibly shaved head (Ostrzyżeni's shaved side; Drop E's shave). */
+  shaved: boolean;
 }
 
 /** Drop 4: a Domination flag as replicated. */

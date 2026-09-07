@@ -3,10 +3,14 @@ import type { GrenadeId } from "./grenades";
 
 export type Team = 0 | 1;
 
-/** Drop 4: game modes. TDM and Domination are team modes; FFA puts everyone on team 0 with no friendly checks. */
-export type GameMode = "tdm" | "ffa" | "dom" | "bomb";
-export const GAME_MODES: readonly GameMode[] = ["tdm", "ffa", "dom", "bomb"] as const;
-export const isGameMode = (v: unknown): v is GameMode => v === "tdm" || v === "ffa" || v === "dom" || v === "bomb";
+/**
+ * Drop 4: game modes. TDM and Domination are team modes; FFA puts everyone on team 0 with no
+ * friendly checks. Drop D: Gun Game (FFA on a weapon ladder) and Ostrzyżeni (infection: sides
+ * are survivors / shaved, reusing the team plumbing).
+ */
+export type GameMode = "tdm" | "ffa" | "dom" | "bomb" | "gungame" | "ostrzyzeni";
+export const GAME_MODES: readonly GameMode[] = ["tdm", "ffa", "dom", "bomb", "gungame", "ostrzyzeni"] as const;
+export const isGameMode = (v: unknown): v is GameMode => typeof v === "string" && (GAME_MODES as readonly string[]).includes(v);
 
 export enum MatchPhase {
   Waiting = "waiting",
