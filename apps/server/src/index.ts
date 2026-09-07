@@ -6,7 +6,7 @@ import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { GAME_VERSION, MAX_PLAYERS } from "@frankibarber/shared";
 import { TdmRoom } from "./rooms/TdmRoom";
-import { clientDir, hostBanner } from "./hosting";
+import { cacheControlFor, clientDir, hostBanner, serveClient } from "./hosting";
 
 const PORT = Number(process.env.PORT ?? 2567);
 const origins = (process.env.CORS_ORIGIN ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -45,8 +45,12 @@ app.get("/rooms", async (_req, res) => {
  */
 const CLIENT_DIR = clientDir();
 if (CLIENT_DIR) {
-  app.use(express.static(CLIENT_DIR, { index: "index.html", maxAge: "1h" }));
-  app.get(/^\/(?!health$|rooms$).*/, (_req, res) => { res.sendFile(path.join(CLIENT_DIR, "index.html")); });
+  // Precompressed assets and one Cache-Control per response (performance pass, task 3): see hosting.ts.
+  app.use(serveClient(CLIENT_DIR));
+  app.get(/^\/(?!health$|rooms$).*/, (_req, res) => {
+    res.setHeader("Cache-Control", cacheControlFor("/index.html"));
+    res.sendFile(path.join(CLIENT_DIR, "index.html"));
+  });
 }
 
 const httpServer = http.createServer(app);
