@@ -182,7 +182,11 @@ export function checkAnchors(input: AnchorInput, parts: NamedBox[], receiver: Na
     const hb: PartBox = { min: [h.centre[0] - h.size[0] / 2, h.centre[1] - h.size[1] / 2, h.centre[2] - h.size[2] / 2], max: [h.centre[0] + h.size[0] / 2, h.centre[1] + h.size[1] / 2, h.centre[2] + h.size[2] / 2] };
     let gap = Infinity, name = "—";
     for (const p of parts) { const g = boxGap(hb, p.box); if (g < gap) { gap = g; name = p.name; } }
-    out.push({ anchor: "supportHand", point: h.centre, expected: name, gap, ok: gap <= tol, note: "left hand box touches the gun" });
+    // Touching is not enough: a hand on the flash hider touches the gun. Its front must stay a
+    // hand's width (3 cm) behind the muzzle.
+    const clearance = input.muzzle[2] - hb.max[2];
+    const clear = clearance >= 0.03;
+    out.push({ anchor: "supportHand", point: h.centre, expected: name, gap, ok: gap <= tol && clear, note: clear ? "left hand box touches the gun, clear of the muzzle" : `left hand ${(clearance * 1000).toFixed(0)} mm from the muzzle` });
   }
   return out;
 }

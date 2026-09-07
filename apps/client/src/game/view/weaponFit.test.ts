@@ -203,12 +203,23 @@ describe("supportHandHome (drop A)", () => {
     const bipodLeg = box(0.03, -0.2, 0.2, 0.04, 0.0, 0.3);         // lower, but off to the right
     const stock = box(-0.02, -0.05, -0.4, 0.02, 0.05, -0.1);       // lower, but behind the hand
     const home = supportHandHome(0.5, [foreEnd, bipodLeg, stock]);
-    expect(home[2]).toBe(0.26);
+    expect(home[2]).toBeCloseTo(0.45 * 0.55, 9);                     // 55 % of the way to the front
     expect(home[1]).toBeCloseTo(0.01 - HAND_SIZE[1] / 2 + 0.004, 9);
     expect(home[1] + HAND_SIZE[1] / 2).toBeCloseTo(0.014, 9);      // hand top 4 mm inside
   });
   it("falls back to the fixed height when nothing spans the hand", () => {
-    expect(supportHandHome(0.5, [box(-0.02, 0, -0.3, 0.02, 0.05, 0.1)])).toEqual([-0.03, -0.035, 0.26]);
+    // The only part is off to the right of the centre line, so nothing carries the hand.
+    const home = supportHandHome(0.5, [box(0.03, 0, -0.3, 0.05, 0.05, 0.1)]);
+    expect(home[1]).toBe(-0.035);
+    expect(home[2]).toBeCloseTo(0.1 * 0.55, 9);
+  });
+  it("measures from the grip to the FRONT, so a bullpup's hand stays off its flash hider", () => {
+    // MDR-like: declared 0.8 m, but the grip is mid-gun and the muzzle only 0.374 ahead of it.
+    const shell = box(-0.03, -0.02, -0.3, 0.03, 0.06, 0.3);
+    const hider = box(-0.012, 0.02, 0.3, 0.012, 0.044, 0.374);
+    const home = supportHandHome(0.8, [shell, hider]);
+    expect(home[2] + HAND_SIZE[2] / 2).toBeLessThan(0.3);            // hand front behind the hider
+    expect(supportHandHome(0.8)[2]).toBe(0.36);                      // the blind rule would not be
   });
 });
 

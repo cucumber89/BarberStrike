@@ -177,9 +177,16 @@ export const HAND_SIZE: [number, number, number] = [0.058, 0.04, 0.075];
  */
 export function supportHandHome(length: number, parts?: PartBox[]): [number, number, number] {
   if (length <= 0.2) return [-0.03, -0.065, -0.005];
-  const z = Math.min(0.36, length * 0.52);
+  let z = Math.min(0.36, length * 0.52);
   const home: [number, number, number] = [-0.03, -0.035, z];
-  if (!parts) return home;
+  if (!parts || parts.length === 0) return home;
+  // Measured (drop A): `length` is the whole gun, but the hand is measured from the GRIP, which sits
+  // mid-gun on a bullpup or an SMG — 52 % of the MDR's 0.8 m put the hand on its flash hider, and
+  // the MPA's at its muzzle. So go 55 % of the way from the grip to the FRONT of the gun instead.
+  let front = -Infinity;
+  for (const b of parts) front = Math.max(front, b.max[2]);
+  z = Math.min(0.36, front * 0.55);
+  home[2] = z;
   // Measured (drop A): with the fixed −0.035 the hand box hovered 13–25 mm UNDER every long gun's
   // fore-end, because the fore-ends of the pack sit at y ≈ 0 while the hand's top was at −0.015.
   // So read the underside of the fore-end where the hand goes — the lowest part that spans the

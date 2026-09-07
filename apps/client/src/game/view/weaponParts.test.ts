@@ -90,6 +90,17 @@ describe("checkAnchors", () => {
     expect(checks.find((c) => c.anchor === "magazine")?.gap).toBeCloseTo(0.01, 9);
   });
 
+  it("fails a hand that touches the gun but sits at the muzzle", () => {
+    const checks = checkAnchors({
+      gripOrigin: [0, 0, 0], muzzle: [0, 0.028, 0.45], aimPoint: [0, 0.06, 0.025],
+      supportHand: { centre: [-0.03, 0.028, 0.43], size: [0.058, 0.04, 0.075] }, grip: [grip], barrel: [barrel], sights: [front, rear],
+    }, parts, receiver);
+    const hand = checks.find((c) => c.anchor === "supportHand")!;
+    expect(hand.gap).toBe(0);
+    expect(hand.ok).toBe(false);
+    expect(hand.note).toMatch(/from the muzzle/);
+  });
+
   it("falls back to 'anywhere on the gun' when the rig named no part, and says so", () => {
     const checks = checkAnchors({ gripOrigin: [0, 0, 0], muzzle: [0, 0.028, 0.45], aimPoint: [0, 0.05, 0.1] }, parts, receiver);
     expect(checks.every((c) => c.ok)).toBe(true);
