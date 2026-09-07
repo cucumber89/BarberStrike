@@ -173,9 +173,14 @@ export function checkAnchors(input: AnchorInput, parts: NamedBox[], receiver: Na
       : onParts("eject", input.eject, undefined, parts, tol, "no ejection port named"));
   }
   if (input.magazine && input.magazine.length > 0 && receiver) {
+    // Seated = touching the well it lives in: the receiver on a rifle, the grip on a pistol, the
+    // magwell block on a DMR. So the nearest STATIC part decides, and is named.
     const mag = unionBox(input.magazine.map((m) => m.box));
-    const gap = boxGap(mag, receiver.box);
-    out.push({ anchor: "magazine", point: centre(mag), expected: receiver.name, gap, ok: gap <= tol, note: "magazine box seated against the receiver" });
+    const magNames = new Set(input.magazine.map((m) => m.name));
+    let gap = Infinity, on = receiver.name;
+    for (const p of parts) { if (magNames.has(p.name)) continue; const g = boxGap(mag, p.box); if (g < gap) { gap = g; on = p.name; } }
+    if (gap === Infinity) { gap = boxGap(mag, receiver.box); on = receiver.name; }
+    out.push({ anchor: "magazine", point: centre(mag), expected: on, gap, ok: gap <= tol, note: "magazine box seated in its well" });
   }
   if (input.supportHand) {
     const h = input.supportHand;
