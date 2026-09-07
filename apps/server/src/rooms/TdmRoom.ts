@@ -13,6 +13,7 @@ import {
   perkSpeedScale, splitDamage, isPerkId, isArmorId,
   BTN_MASK, DOM, MODES, isGameMode, leanOf, tacActive, leanEye, inFlagZone, stepFlag, domTick, neutralFlag,
   CHAT, MARK, MAX_BOTS, BOT_NAMES, botId, isBotLevel,
+  GUN_GAME, MELEE_WEAPON, ladderAfterKill, ladderDone, ladderWeapon,
   type BodyState, type CollisionWorld, type DamagedEvent, type FireMessage, type HitEvent, type InputTuple, type KillEvent,
   type MapDef, type PlayerInput, type ShotEvent, type SpawnEvent, type Target, type Team, type WeaponId, type WelcomeMessage,
   type Projectile, type Wallet, type ThrowMessage, type ThrowEvent, type BoomEvent, type FlashedEvent, type MoneyEvent,
@@ -106,6 +107,9 @@ class Session {
   lean: -1 | 0 | 1 = 0;
   tac = false;
   eye: [number, number, number] = [0, 0, 0];
+  // ---- drop D: Gun Game. The rung is private; it is replicated as `PlayerState.score` (in this
+  // mode the score IS the rung), so the HUD and the scoreboard need no new field.
+  rung = 0;
   // ---- drop 5: chat / mark rate limits; the brain for a bot session.
   lastChatAt = -Infinity;
   lastMarkAt = -Infinity;
@@ -188,6 +192,17 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   /** Team modes (TDM, Domination) keep friendly fire off and score per team; FFA does neither. */
   private get teams(): boolean { return MODES[this.mode].teams; }
+  /** Drop D: Gun Game — the loadout is the ladder rung, kills move rungs, nothing is for sale. */
+  private get ladder(): boolean { return this.mode === "gungame"; }
+  /** Drop D: a mode without an economy pays nobody and sells nothing. */
+  private get noShop(): boolean { return MODES[this.mode].shop === "none"; }
+  /**
+   * How long a casualty waits. Gun Game has its own short timer (a party mode: no waves, no shop to
+   * spend the wait in) and no perks, so the fade never applies there.
+   */
+  private respawnDelay(fade = false): number {
+    return this.ladder ? GUN_GAME.respawnMs : RESPAWN_DELAY_MS - (fade ? PERK_EFFECT.fadeRespawnMs : 0);
+  }
 
   override onCreate(options: TdmJoinOptions): void {
     this.state.mapId = this.map.id;
@@ -532,6 +547,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // Slots are 1 = primary (owned), 2 = sidearm; anything not owned is refused (drop 2).
     const id = weaponForSlot(this.walletOf(p), slot);
     if (!id || id === p.weapon) return;
+    // Drop D: the free sidearm fallback of slot 2 would let a rifle rung carry the pistol as well;
+    // on the ladder only the rung weapon and the clippers are in the hands.
+    if (this.ladder && id !== ladderWeapon(s.rung) && id !== MELEE_WEAPON) return;
     p.weapon = id;
     p.reloading = false;
     s.reloadEndsAt = 0;
@@ -764,7 +782,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // A fresh fade (drop 3) is spent here: quicker respawn and a longer shield on the next spawn.
     const fade = perkActive(this.perksOf(victim), "fade", this.now());
     if (fade) { victim.perks.set("fade", 0); vs.fadeShield = true; }
-    vs.respawnAt = this.now() + RESPAWN_DELAY_MS - (fade ? PERK_EFFECT.fadeRespawnMs : 0);
+    vs.respawnAt = this.now() + this.respawnDelay(fade);
     vs.lastKilledBy = attacker.id;
     vs.inputs.length = 0;
     // A corpse must not be rewound into by late shots: drop its lag-comp history.
@@ -773,9 +791,29 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     const counts = this.state.phase === MatchPhase.Playing;
     if (counts) {
       attacker.kills += 1;
-      attacker.score += headshot ? 150 : 100;
+      // Drop D: on the ladder `score` is the rung, written below; points would corrupt it.
+      if (!this.ladder) attacker.score += headshot ? 150 : 100;
       // Drop 4: only TDM scores the team on a kill (Domination scores flags, FFA scores the player).
       if (this.mode === "tdm") { if (attacker.team === 0) this.state.scoreA += 1; else this.state.scoreB += 1; }
+    }
+    // Drop D: move both players on the ladder. The killer is re-armed on the spot (they are alive
+    // and the client follows a server weapon change); the victim's rung shows at their respawn,
+    // which reads it. Both scores are the rungs, so the scoreboard is right before anyone spawns.
+    let finished = false;
+    const ks = this.sessions.get(attacker.id);
+    if (this.ladder && counts && ks) {
+      const after = ladderAfterKill(ks.rung, vs.rung, weapon);
+      vs.rung = after.victim; victim.score = vs.rung;
+      if (after.killer !== ks.rung) {
+        ks.rung = after.killer;
+        finished = ladderDone(ks.rung);
+        if (attacker.alive && !finished) {
+          this.handLadderWeapon(attacker, ks);
+          attacker.reloading = false; ks.reloadEndsAt = 0; ks.spread = 0;
+          ks.equipEndsAt = this.now() + WEAPONS[attacker.weapon as WeaponId].equipMs;
+        }
+      }
+      attacker.score = ks.rung;
     }
     const ev: KillEvent = {
       killer: attacker.id, killerName: attacker.name, killerTeam: attacker.team as Team,
@@ -789,13 +827,31 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     for (const [id, e] of vs.damagedBy) {
       if (id === attacker.id || now - e.at > ECONOMY.assistWindowMs || e.amount < ECONOMY.assistMinDamage) continue;
       const helper = this.state.players.get(id);
-      if (helper && (!this.teams || helper.team === attacker.team)) { this.pay(helper, ECONOMY.assistReward, "assist"); if (counts) { helper.assists += 1; helper.score += 50; } }
+      if (helper && (!this.teams || helper.team === attacker.team)) { this.pay(helper, ECONOMY.assistReward, "assist"); if (counts) { helper.assists += 1; if (!this.ladder) helper.score += 50; } }
     }
     vs.damagedBy.clear();
     if (!counts) return;
+    // Drop D: the ladder ends on the last rung's kill, never on a kill count — a clippers kill from
+    // a low rung is a kill that moved nobody up. `endMatch` names the top rung, i.e. the finisher.
+    if (finished) { this.endMatch(); return; }
     const limit = MODES[this.mode].scoreLimit;
     if (this.mode === "tdm" && (this.state.scoreA >= limit || this.state.scoreB >= limit)) this.endMatch();
     else if (this.mode === "ffa" && attacker.kills >= limit) this.endMatch();
+  }
+
+  /**
+   * Drop D: the whole loadout of a rung. No money, no grenades, no plates, no perks — the rung
+   * weapon alone in `owned` (the clippers are always in slot 3, so the last rung owns nothing), a
+   * full magazine and reserve, and `score` = rung for the HUD. Called at spawn and on the kill that
+   * moved the killer up; the caller decides whether an equip animation is due.
+   */
+  private handLadderWeapon(p: PlayerState, s: Session): void {
+    const w = ladderWeapon(s.rung);
+    this.writeWallet(p, { ...freshWallet(), money: 0, owned: w === MELEE_WEAPON ? [] : [w] });
+    s.ammo[w] = WEAPONS[w].magazine; s.reserve[w] = WEAPONS[w].reserve;
+    p.weapon = w;
+    p.score = s.rung;
+    this.syncAmmo(p, s);
   }
 
   // ---------------------------------------------------------------- spawning
@@ -822,7 +878,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         this.world.raycast(ax, ay, az, dx / l, dy / l, dz / l, l, worldHit);
         return !worldHit.hit;
       },
-    }, this.mode === "ffa" || this.mode === "tdm");
+    }, !this.teams || this.mode === "tdm"); // no sides (FFA, Gun Game): the whole pool
     const b = s.body;
     b.x = sp.x; b.y = sp.y; b.z = sp.z; b.vx = b.vy = b.vz = 0; b.grounded = true; b.crouching = false;
     s.inputs.length = 0;
@@ -835,6 +891,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.health = PLAYER.maxHealth; p.alive = true; p.reloading = false;
     const wallet = this.walletOf(p);
     p.weapon = primaryOf(wallet) ?? secondaryOf(wallet);
+    if (this.ladder) this.handLadderWeapon(p, s);
     // A shield granted inside the frozen preparation window would be spent standing still, before
     // the fighting resumed — so it starts counting from the RELEASE. Here rather than at the one
     // call site that respawns a wave, because joining and reconnecting land in prep too and every
@@ -851,6 +908,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // Drop 5: a bot shops in its spawn window like anyone else — a primary it can afford.
     if (s.brain) {
       s.brain.onSpawn(sp.yaw);
+      if (this.noShop) return; // drop D: nothing to shop for
       const item = s.brain.pickBuy(p.money, Array.from(p.owned));
       if (item) this.buyItem(p, s, item);
     }
@@ -881,6 +939,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.nextDomTickAt = this.now() + DOM.tickMs;
     for (const [id, p] of this.state.players) {
       p.kills = 0; p.deaths = 0; p.score = 0; p.assists = 0;
+      const s = this.sessions.get(id);
+      if (s) s.rung = 0; // drop D: everyone starts the ladder on the first rung
       this.writeWallet(p, freshWallet());
       this.clientOf(id)?.send(S2C.Money, { delta: 0, reason: "reset", total: p.money } satisfies MoneyEvent);
       if (this.mode === "bomb") p.money = BOMB.startMoney;
@@ -991,9 +1051,12 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (this.teams) {
       this.state.winner = this.state.scoreA === this.state.scoreB ? -1 : this.state.scoreA > this.state.scoreB ? 0 : 1;
     } else {
-      // FFA: most kills, then score; a dead heat is a draw.
+      // FFA: most kills, then score; a dead heat is a draw. Gun Game (drop D): the score is the
+      // rung, so the highest rung wins when the clock runs out — kills only break a tie.
       this.state.winner = -1;
-      const rows = Array.from(this.state.players.values()).sort((a, b) => b.kills - a.kills || b.score - a.score);
+      const byRung = this.ladder;
+      const rows = Array.from(this.state.players.values()).sort((a, b) =>
+        byRung ? b.score - a.score || b.kills - a.kills : b.kills - a.kills || b.score - a.score);
       const top = rows[0];
       const tied = rows.length > 1 && rows[1].kills === top?.kills && rows[1].score === top?.score;
       this.state.winnerId = top && !tied ? top.id : "";
@@ -1212,7 +1275,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   }
 
   private pay(p: PlayerState, delta: number, reason: MoneyEvent["reason"]): void {
-    if (delta === 0) return;
+    if (delta === 0 || this.noShop) return; // drop D: no economy, the wallet stays at 0
     p.money = Math.max(0, Math.min(ECONOMY.maxMoney, p.money + delta));
     this.clientOf(p.id)?.send(S2C.Money, { delta, reason, total: p.money } satisfies MoneyEvent);
   }
@@ -1240,6 +1303,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (!s || !p || this.rateLimited(s, "other")) return;
     const item = isRecord(msg) ? msg.item : msg;
     if (!isShopItemId(item)) { client.send(S2C.Shop, { ok: false, item: String(item), reason: "unknown" } satisfies ShopResult); return; }
+    if (this.noShop) { client.send(S2C.Shop, { ok: false, item, reason: "no-shop" } satisfies ShopResult); return; }
     const w = this.walletOf(p);
     const ctx = this.buyContext(p, s);
     if (sell) {
@@ -1259,6 +1323,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   /** The purchase itself (humans via `onBuy`, bots at spawn): rules, wallet, equip, money event. */
   private buyItem(p: PlayerState, s: Session, item: ShopItemId): ShopResult {
+    if (this.noShop) return { ok: false, item, reason: "no-shop" }; // drop D: bots included
     if (this.mode === "bomb" && (isPerkId(item) || item === "launcher")) return { ok: false, item, reason: "closed" };
     if (this.mode !== "bomb" && item === KIT_ITEM) return { ok: false, item, reason: "closed" };
     const w = this.walletOf(p);
@@ -1460,7 +1525,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (p.health > 0) return;
     p.alive = false; p.reloading = false; p.armor = 0;
     if (this.mode === "bomb") { this.writeWallet(p, { ...freshWallet(), money: p.money }); p.kit = false; }
-    s.respawnAt = this.now() + RESPAWN_DELAY_MS;
+    s.respawnAt = this.now() + this.respawnDelay();
     s.inputs.length = 0; s.history.length = 0;
     p.deaths += 1;
     this.broadcast(S2C.Kill, {
@@ -1471,7 +1536,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private fallDeath(p: PlayerState, s: Session): void {
     p.alive = false; p.health = 0;
-    s.respawnAt = this.now() + RESPAWN_DELAY_MS;
+    s.respawnAt = this.now() + this.respawnDelay();
     s.inputs.length = 0;
     s.history.length = 0;
     p.deaths += 1;
