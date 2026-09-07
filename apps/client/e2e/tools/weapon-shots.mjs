@@ -77,8 +77,9 @@ for (const id of TP_ONLY ? [] : WEAPONS) {
     // Inspect refuses to start while a reload runs, so wait for the HUD to drop RELOADING rather
     // than for a guessed duration (six inspect frames were the idle pose because of that guess).
     await page.waitForFunction(() => !window.__fb.hud.get().reloading, null, { timeout: 8000 }).catch(() => {});
-    // The viewmodel's own reload timeline outlives the HUD flag by a few frames at 10 fps.
-    await page.waitForTimeout(1500); await frames(4);
+    // The viewmodel's own reload timeline outlives the HUD flag, and a shell-by-shell reload
+    // toggles the flag between shells; at 10 fps the only robust wait is longer than any reload.
+    await page.waitForTimeout(5000); await frames(4);
   }
 
   await page.keyboard.press("KeyF");
@@ -141,6 +142,9 @@ for (const id of WEAPONS) {
   if (!(await alive())) break;
   // Facing us for the hands and the silhouette; in profile for the bore and the fore-end.
   await page.screenshot({ path: `${OUT}/${id}/${tag}.png` });
+  // The bot shoots at our server position; a kill between the check and the shutter leaves the
+  // death overlay in the frame. Re-check and let the attempt loop take it again.
+  if (!(await alive())) break;
   if (tag === "tp_side") shot = true;
   }
   }
