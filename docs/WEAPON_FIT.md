@@ -109,6 +109,21 @@ round 4 was an empty street, which is why that round could not judge the hold at
 is now chosen by casting sixteen rays through the game's own `CollisionWorld` and keeping the
 longest clear line.
 
+### Review verdicts
+
+- **Round 5** (the last full pass): reload mid-frames are genuine on every weapon — the pistol's
+  magazine detached, the rifle's and VZ-9's tilted clear, the LMG's belt box unseated, the shotgun's
+  shell at the port, the launcher's round at the breech. The launcher's ladder sight is aligned and
+  the sniper's scope overlay correct. Round 4's two harness rejections are gone.
+- **Still open after round 5**, with what each belongs to:
+  - the first-person **support arm crosses through the fore-end** on every long gun — the forearm
+    approaches the handguard through the gun body instead of from below, so no hand reads on the
+    grip. This is the last geometry item of Drop A's "hands on the grip and fore-end" and it needs
+    its own pose loop (Deferred);
+  - the **DMR's opaque lens and missing scope overlay** — Drop B owns whether the DMR is a scoped
+    weapon at all;
+  - `pistol/tp_idle` was captured empty once more; the other 21 third-person frames show the bot.
+
 ## Open items
 
 - **The glTF weapon import path is retired but not yet deleted.** `Game.ts:164` has emptied the
