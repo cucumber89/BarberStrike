@@ -6,7 +6,7 @@ test-results
 playwright-report
 
 # Screenshots from the capture tools (e2e/tools/*.mjs) — regenerate, do not commit.
-apps/client/e2e/out
+**/e2e/out/
 
 # Scratch probes written by review/analysis runs; the real tools and tests have descriptive
 # names, so a leading underscore anywhere means "throwaway, do not commit". Two of these
