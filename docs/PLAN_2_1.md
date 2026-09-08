@@ -216,6 +216,8 @@ Nick + password or Discord OAuth, server-side profile (skins, haircuts, XP), wee
 | 2026-09-07 | A | claude/new-session-o0hcng | Slice 2, in a browser: `vm-fit.mjs` now buys all 11 weapons, projects each gun's new `aim` node in ADS (mean over one breath) and counts near-plane-cut vertices; `hand-pose.mjs` measures every weapon on the procedural `gunHand`; `weapon-shots.mjs` shoots idle/ADS/reload/inspect + third-person front and profile. Found and fixed: the shotgun's ADS put its receiver around the eye and its pump through the near plane (ADS distance rule, aim point ≥ 15 cm ahead). Art review round 1 (54 images): 2 harness faults (empty third-person frames, reloads not started — both fixed), plus hands-as-blocks, DMR lens disc, identical smg/smg2 and dmr/sniper silhouettes → Deferred. Round 2 review pending at the time of this row. Found: the running game never uses the imported glTF guns/characters (`Game.ts:164`) → proposal in Decisions. | docs/WEAPON_FIT.md (vm-fit, hand-pose tables); apps/client/e2e/out/weapons/{vm-fit.md,hand-pose.json,<id>/*.png} (regenerate) | typecheck ✓ test ✓ (435) build ✓ check:weapons ✓ e2e — | in progress |
 | 2026-09-07 | A | claude/new-session-o0hcng | Slice 3 (owner: "improve the procedural guns"): first-person hands rebuilt as a pure spec (palm, fingers, thumb, forearm jointed at the wrist) judged by the same attachment rule as the guns (`handSpec.test.ts`); smg2 and dmr given their own silhouettes with aim/muzzle/length untouched; `check:weapons` now judges every PROCEDURAL spec (parts[0] = receiver, magazine seats in its well) — which exposed five specs that had hidden behind glTFs (pistol, smg, rifle, sniper, launcher: detached stocks, loose parts, muzzles past the barrel), all re-seated. Re-measured: 19/19 parts, ADS aim worst 0.09 px mean, 0 near-plane cuts, bores ≤ 4.6°. Code review: nothing breaks (one judgment note on the seating rule, accepted). Art review round 3: hands and silhouettes pass; rejects left are Drop B / animation / character-pose items, all Deferred. | docs/WEAPON_FIT.md; apps/client/e2e/out/weapons/ (regenerate) | typecheck ✓ test ✓ (454) build ✓ check:weapons ✓ (19/19) e2e — | in progress |
 
+| 2026-09-08 | D | drop/d-modes | Whole drop in one session. **Join by link**: the invite link is now `<origin>/r/<room>?mode=…`; the client reads the room off the path (`roomFromPath`), the lobby a link opens asks for a nickname and nothing else (CHANGE opens the full one), the SPA fallback moved into `hosting.ts` as `spaFallback` so it is testable, and `hostcheck.mjs` proves the path from outside (11/11 checks). **Gun Game**: the 11-rung ladder is data in `shared/modes.ts`; the rung replicates as `PlayerState.score` (no new field), a rung-weapon kill re-arms the killer on the spot, a clippers kill sets the victim back one, only the last rung ends the match, no economy, 3 s respawn, FFA spawn pool. **Ostrzyżeni**: rounds on the Prep/Playing machine, sides are the teams (survivors 0 / shaved 1), one random chaser per round with clippers + the energy perk + a bare head (`PlayerState.shaved`, the one field the plan names), a clippers kill converts, survivors who are not converted stay down until the round ends, five rounds, the result names the top score. **Bots** play both (`BotSenses.mode`/`shaved`): Gun Game needs no branch, a chaser closes and swings, a survivor gives ground. Reviewer (separate agent) found six things, all fixed — chiefly the profile recording the OPPOSITE of the result screen in Ostrzyżeni. | apps/client/e2e/out/d/{hostcheck.md,gungame/*.png,ostrzyzeni/*.png}; docs/PLAYTEST_TEMPLATE.md; regenerate with `hostcheck.mjs`, `shaved-shots.mjs`, `infection-shots.mjs` | typecheck ✓ test ✓ (510: shared 153, client 217, server 140) build ✓ check:weapons ✓ (19/19) e2e ✓ (18/18; the pre-existing smoke test flakes under load, passes alone) | review |
+
 Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 
 ## Decisions log (append-only)
@@ -251,7 +253,52 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
   point put its receiver around the camera and its pump through the near plane. Changes only the
   shotgun and the LMG; the sight alignment (±1 px) is unchanged. (lead)
 
+- 2026-09-08 — Drop D: the invite link changed shape, from `?room=&mode=` on the front page to
+  `/r/<room>?mode=`. A path survives being pasted into a chat app where a query string reads like a
+  tracking link and gets trimmed; the old query is still parsed, so links already shared keep
+  working. The mode stays in the query because the matchmaker needs it (`filterBy(["room","mode"])`)
+  and it is not part of the room's identity. (lead)
+- 2026-09-08 — Drop D: **no new schema field beyond the one the plan names.** Gun Game's rung rides
+  on `PlayerState.score` (in that mode the score IS the rung, which is also what the scoreboard
+  should show), and Ostrzyżeni's round counter reuses `bomb.round`, the only replicated round
+  number. `shaved` is the single addition, and it replicates like a skin id would — written on
+  conversion and at round start, never per tick. (lead, L6)
+- 2026-09-08 — Drop D: the clippers advance a Gun Game killer only from the clippers rung. A free
+  rung on top of the victim's setback would make the clippers strictly better than every rung
+  weapon and nobody would climb the ladder; the reward for the humiliation is the setback. (lead)
+- 2026-09-08 — Drop D: Ostrzyżeni's sides are the existing teams (survivors 0, shaved 1) rather than
+  a new concept, so friendly fire, spawn pools, the bot enemy filter and the HUD's team bar work
+  untouched. The consequence is that everyone changes side during a match, so the result screen
+  names a player (`ModeDef.winner`), not a team. (lead)
+- 2026-09-08 — **OWNER DECISION WANTED.** As the plan specifies it (clippers + speed perk, nothing
+  else) a lone Ostrzyżony essentially cannot convert anyone against competent armed opponents.
+  MEASURED, in the running game with four bots: the chaser navigates to its prey correctly
+  (58 m → 0.9 m repeatedly) and converts within ~1.8 s once it is inside reach (room test), but in
+  three separate 60 s live rounds it converted NOBODY — it is shot on the approach. Options, none
+  of which this session took because they move damage/TTK or add a rule the plan does not name:
+  (a) leave it and let the playtest judge it with humans, who miss more than bots do; (b) give the
+  shaved side more health or damage resistance; (c) start each round with two chasers in a full
+  room; (d) shorten the round so the survivors' win is less of a default. (lead → owner)
+
 ## Deferred (things noticed, deliberately not done)
+
+- Drop D: a TDM player can spawn on an ARENA spawn point, because `pickSpawn` is called with the
+  whole pool for TDM (`this.mode === "ffa" || this.mode === "tdm"` on main, unchanged in meaning
+  here). `TdmRoom.test.ts`'s join test asserts the spawn belongs to the player's team, so it fails
+  roughly one run in five. Pre-existing, not this drop's — but it is a real flake in the suite:
+  either the pool or the assertion is wrong, and somebody should decide which.
+- Drop D: survivors can re-buy at a `$` station in the middle of an Ostrzyżeni round, not only in
+  the buy window at its start. That is the economy's existing station rule applied to a new mode
+  rather than anything new; tighten it if a playtest says the shop is being used as a bolt-hole.
+- Drop D: the Ostrzyżony is shaved IN PLACE at the start of a round, so they begin standing among
+  the people they are about to chase. It reads as the joke the mode is (one of you is the barber),
+  but if it plays badly, spawning them apart is a small change in `beginInfectionRound`.
+- Drop D: a room where every player but one disconnects mid-Ostrzyżeni-round burns its remaining
+  rounds as prep + break with nobody to play them; the match ends normally. Not worth a rule until
+  somebody sees it happen.
+- Drop D / E: `Character.ts` now has a `bareHead` mesh and a merged, toggled `cap`. Drop E's shave
+  should set the same `shaved` flag rather than adding a second head variant, and a real haircut
+  set will want the cap and hair separated again.
 
 - Server perf pass (shared nav grid, bot LOS cache, compression, snapshot trimming) — separate
   brief `OPTIMIZATION_PROMPT.md`; runs on its own branch, does not block any drop above.
