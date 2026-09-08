@@ -106,24 +106,27 @@ await page.evaluate(() => { const c = document.querySelector("canvas"); Object.d
 await page.waitForFunction(() => window.__fb.game.remotes.size > 0, null, { timeout: 30000 });
 await page.waitForTimeout(3000);
 // Face open ground: the bot is posed 2.2 m ahead of the camera, and a spawn that faces a wall put
-// it inside the wall (round 4: "no bot in frame"). Try eight headings, keep the one with the
-// longest clear line of sight.
+// it inside the wall (art review round 4: "no bot in frame"). Try eight headings and keep the one
+// with the longest clear line, using the game's OWN collision world — `pickWithRay` needs Babylon's
+// Ray, whose side-effect import the game bundle does not carry.
 await page.evaluate(() => {
-  const g = window.__fb.game; const lp = g.localPlayer; const s = g.currentScene ?? g.scene;
+  const g = window.__fb.game; const lp = g.localPlayer; const w = g.world;
+  const hit = { hit: false, t: Infinity, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0 };
+  const eye = lp.camera.globalPosition ?? lp.camera.position;
   let best = lp.yaw, bestD = -1;
-  for (let i = 0; i < 8; i++) {
-    lp.yaw = (i * Math.PI) / 4; lp.pitch = 0;
-    lp.camera.computeWorldMatrix(true);
-    const ray = lp.camera.getForwardRay(12);
-    const hit = s.pickWithRay(ray, (m) => m.isEnabled() && m.isVisible && !/^vm_|^tp_|nameplate/i.test(m.name));
-    const d = hit?.hit ? hit.distance : 12;
-    if (d > bestD) { bestD = d; best = lp.yaw; }
+  for (let i = 0; i < 16; i++) {
+    const yaw = (i * Math.PI) / 8;
+    const r = w.raycast(eye.x, eye.y, eye.z, Math.sin(yaw), 0, Math.cos(yaw), 12, hit);
+    const d = r.hit ? r.t : 12;
+    if (d > bestD) { bestD = d; best = yaw; }
   }
   lp.yaw = best; lp.pitch = 0.05;
+  console.log(`[shots] heading ${(best * 180 / Math.PI).toFixed(0)}deg, ${bestD.toFixed(1)} m clear`);
 });
-// The bot is hostile and will kill us; a dead camera shows the death screen, not the gun. So: only
-// shoot while alive, and after a death wait for the respawn (and for the bot to lose us) first.
-const alive = () => page.evaluate(() => window.__fb.hud.get().alive !== false && (window.__fb.hud.get().hp ?? window.__fb.hud.get().health ?? 1) > 0);
+
+// The bot is hostile and will kill us; a dead camera shows the death screen, not the gun. So only
+// shoot while alive, and after a death wait for the respawn first.
+const alive = () => page.evaluate(() => window.__fb.hud.get().alive !== false && (window.__fb.hud.get().health ?? 1) > 0);
 for (const id of WEAPONS) {
   mkdirSync(`${OUT}/${id}`, { recursive: true });
   let shot = false;

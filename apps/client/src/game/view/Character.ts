@@ -438,7 +438,10 @@ export class Character {
     this.gunHand.rotation.y = -0.06 + armSwing * 0.3 - 0.3 * throwing + 0.12 * oneHand - 0.4 * swingR;
     this.gunHand.rotation.z = -0.35 * swingR;
     this.gunHand.position.z = 0.10 - this.kick * 0.05 - 0.08 * throwing + 0.05 * oneHand + 0.08 * swingR;
-    this.gunHand.position.x = 0.14 + 0.04 * oneHand + 0.02 * melee;
+    // Out at the vest's right face (half-width 0.22), not on the chest centre: the receiver runs
+    // BACK from the grip, so a hold tucked inside the torso buries it — measured, the SMG's rear
+    // sat 6 cm inside the vest at x 0.14.
+    this.gunHand.position.x = 0.21 + 0.04 * oneHand + 0.02 * melee;
     this.gunHand.position.y = 0.33 + 0.02 * oneHand - 0.08 * melee;
     // Right arm: upper arm hangs by the ribs (elbow just behind the shoulder line), forearm folded
     // up to the grip. Throw: the arm goes back over the shoulder, then whips forward past horizontal.
