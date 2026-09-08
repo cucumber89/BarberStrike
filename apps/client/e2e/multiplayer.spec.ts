@@ -713,4 +713,98 @@ test.describe("two clients", () => {
     expect(errors, errors.join("\n")).toEqual([]);
     await ctx.close();
   });
+
+  /**
+   * Drop D acceptance: two clients, one WHOLE Gun Game — every rung of the ladder climbed by
+   * killing, ending on the clippers.
+   *
+   * Why it is written as eleven scripted kills rather than a fight: the ladder's claim is that a
+   * kill with the rung weapon hands you the NEXT one, all the way to the end, and that only the
+   * last rung ends the match. That is eleven distinct server transitions, and the only way to see
+   * all of them is to make them happen in order. The shooting itself (spread, recoil, hit
+   * registration) is covered by the combat test above; here each kill is delivered from point
+   * blank so the weapon in hand is the only variable.
+   */
+  test("gun game: two clients, the whole ladder to the end", async ({ browser }) => {
+    test.setTimeout(900_000);
+    const LADDER = ["pistol", "revolver", "smg", "smg2", "shotgun", "rifle", "lmg", "dmr", "sniper", "launcher", "clippers"];
+    const room = `${ROOM}-gg`;
+    const ca = await browser.newContext(ctxOpts);
+    const cb = await browser.newContext(ctxOpts);
+    try {
+      for (const c of [ca, cb]) {
+        await c.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), LOW_SETTINGS);
+        await c.addInitScript(() => { localStorage.setItem("fb_mode", "gungame"); localStorage.setItem("fb_bots", "0"); });
+      }
+      const a = await ca.newPage(), b = await cb.newPage();
+      await joinRoom(a, "LADDER", room);
+      await joinRoom(b, "TARGET", room);
+      await fakeLock(a); await fakeLock(b);
+      await expect.poll(async () => (await hud(a)).mode, { timeout: 10_000 }).toBe("gungame");
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 60_000 }).toBe("playing");
+      const idA = (await hud(a)).myId, idB = (await hud(b)).myId;
+
+      // The shop never opens in this mode, and nobody has a penny to spend in it.
+      expect((await hud(a)).buyWindowLeft).toBe(0);
+      expect((await hud(a)).money).toBe(0);
+      await expect(a.getByTestId("ladder")).toHaveText(`1/${LADDER.length}`);
+      expect((await hud(a)).weapon).toBe("pistol");
+
+      const teleport = (p: Page, x: number, y: number, z: number) =>
+        p.evaluate(([x, y, z]) => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x, y, z }), [x, y, z]);
+      const bodyOf = (p: Page, id: string) => p.evaluate((pid) => {
+        const st = (window.__fb.game as unknown as { conn: { state: { players: { get(id: string): { x: number; y: number; z: number; alive: boolean } } } } }).conn.state.players.get(pid);
+        return { x: st.x, y: st.y, z: st.z, alive: st.alive };
+      }, id);
+      const rowOf = async (p: Page, id: string) => (await hud(p)).players.find((r) => r.id === id);
+
+      for (let rung = 0; rung < LADDER.length; rung++) {
+        const weapon = LADDER[rung];
+        await expect.poll(async () => (await hud(a)).weapon, { timeout: 20_000, message: `rung ${rung}: A should hold ${weapon}` }).toBe(weapon);
+        await expect(a.getByTestId("ladder")).toHaveText(`${rung + 1}/${LADDER.length}`);
+        // B must be up and reachable before the kill: only the casualty waits out the 3 s timer.
+        await expect.poll(async () => (await bodyOf(a, idB)).alive, { timeout: 20_000, message: `rung ${rung}: B should be alive` }).toBe(true);
+        // The launcher is the one rung that hurts its own user at point blank; take that one from
+        // across the room and aim at the feet so the shell lands rather than sailing past.
+        const reach = weapon === "launcher" ? 9 : weapon === "clippers" ? 1.2 : 2.5;
+        let killed = false;
+        for (let attempt = 0; attempt < 8 && !killed; attempt++) {
+          const t = await bodyOf(a, idB);
+          if (!t.alive) break;
+          const ang = attempt * Math.PI / 4;
+          await teleport(a, t.x + Math.sin(ang) * reach, t.y, t.z + Math.cos(ang) * reach);
+          await a.waitForTimeout(350);
+          await waitForFrames(a, 2);
+          for (let shot = 0; shot < 14 && !killed; shot++) {
+            await lookAt(a, t.x, t.z, t.y + (weapon === "launcher" ? 0.2 : 1.1));
+            // Semi-autos need distinct clicks; the automatics are happy with a short hold.
+            await a.mouse.down(); await waitForFrames(a, 2); await a.mouse.up(); await waitForFrames(a, 1);
+            killed = !(await bodyOf(a, idB)).alive;
+            const ha = await hud(a);
+            if (!killed && ha.ammo === 0 && !ha.reloading) { await a.keyboard.press("KeyR"); await a.waitForTimeout(2600); }
+          }
+        }
+        expect(killed, `rung ${rung} (${weapon}): A should have killed B`).toBe(true);
+        // The kill moved A up the ladder and left B where they were: the setback rule only fires
+        // for a clippers kill, and B is on the first rung throughout.
+        const expected = rung + 1;
+        await expect.poll(async () => (await rowOf(a, idA))?.score, { timeout: 15_000, message: `rung ${rung}: A's rung after the kill` }).toBe(expected);
+        expect((await rowOf(a, idB))?.score, "B never climbs").toBe(0);
+        if (rung === 4) await a.screenshot({ path: "e2e/out/d/gungame/mid-ladder.png" });
+      }
+
+      // The clippers kill finished the ladder: the match ends and the result names A.
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 20_000 }).toBe("ended");
+      await expect(a.getByTestId("ladder")).toHaveText(`${LADDER.length}/${LADDER.length}`);
+      await expect(a.getByTestId("ladder-gun")).toContainText("LADDER DONE");
+      expect((await hud(a)).winnerName).toBe("LADDER");
+      expect((await hud(b)).winnerName).toBe("LADDER");
+      await expect(a.getByTestId("result")).toBeVisible();
+      await a.screenshot({ path: "e2e/out/d/gungame/result.png" });
+      // Still no economy, after eleven kills.
+      expect((await hud(a)).money).toBe(0);
+    } finally {
+      await ca.close(); await cb.close();
+    }
+  });
 });
