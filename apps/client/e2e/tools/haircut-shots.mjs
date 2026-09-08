@@ -12,7 +12,13 @@
  *   fp_<id>_4m.png / fp_<id>_8m.png   the head at gameplay distance, through the camera
  *   tp_<id>_front.png / tp_<id>_side.png   the character close up, front and profile
  *
- * Shot at 1920x1080 because that is what the acceptance asks the reviewer to judge at.
+ * RESOLUTION. The acceptance asks whether a bad haircut reads at 1080p; these are shot at 1280x720,
+ * which is the HARDER test rather than a weaker one — fewer pixels on the same head is less to read
+ * a clipper track from, so a cut that reads here reads at 1080p. The reason is measured, not
+ * preferred: this container has no GPU, ANGLE falls back to SwiftShader, and at 1920x1080 the
+ * render loop failed to advance FOUR FRAMES IN SIXTY SECONDS, so a 38-frame set never finished.
+ * Judging the fine texture of a head at 1080p on real hardware is still the owner's to do, exactly
+ * as the sniper scope is in Drop B.
  *
  * Needs the dev servers up (`pnpm dev`, or the built-client single-port path in README-drop-d.md),
  * and one bot to stand in as the subject. SwiftShader runs at ~10 fps, so every wait is generous.
@@ -40,7 +46,7 @@ const browser = await chromium.launch({
   executablePath: process.env.PW_CHROMIUM || "/opt/pw-browsers/chromium",
   args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-webgl", "--disable-gpu-sandbox"],
 });
-const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
 await ctx.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), SET);
 const page = await ctx.newPage();
 page.on("pageerror", (e) => log(`PAGEERROR ${e.message}`));
@@ -100,6 +106,23 @@ const FP_SET = new Set(CATALOG.filter((id) => id.includes("#")).concat(["cap", "
 
 const alive = () => page.evaluate(() => window.__fb.hud.get().alive !== false && (window.__fb.hud.get().health ?? 1) > 0);
 
+/** What the client thinks is going on — printed whenever the subject is missing, never guessed at. */
+const diagnose = () => page.evaluate(() => {
+  const g = window.__fb.game, h = window.__fb.hud.get();
+  return { remotes: g.remotes.size, players: g.conn?.state?.players?.size ?? -1, phase: h.phase, connected: h.connected, myId: h.myId };
+});
+
+/**
+ * Waits for a subject to exist. The first version of this tool assumed the one `waitForFunction`
+ * before the loop was enough; under a loaded box the page can be starved long enough to lose the
+ * room, and every pose after that reported "no bot to pose" with nothing to explain it.
+ */
+async function subject() {
+  const ok = await page.waitForFunction(() => window.__fb.game.remotes.size > 0, null, { timeout: 45000 }).then(() => true).catch(() => false);
+  if (!ok) log(`no subject: ${JSON.stringify(await diagnose())}`);
+  return ok;
+}
+
 /**
  * Stands the bot at `dist` metres ahead, wearing `haircut`, and holds that pose EVERY frame — the
  * remote's own interpolation would otherwise put it back where the server says it is before the
@@ -124,10 +147,10 @@ const pose = (haircut, dist, turn, pitch) => page.evaluate(([haircut, dist, turn
   };
   if (window.__cutsPose) s.onBeforeRenderObservable.remove(window.__cutsPose);
   window.__cutsPose = s.onBeforeRenderObservable.add(hold);
-  // Two renders, not thirty: the observable re-applies the pose on the game's OWN loop, and
-  // `frames()` below is what waits for it. Thirty synchronous 1920x1080 SwiftShader renders per
-  // pose is minutes of wall clock for a picture the render loop was going to draw regardless.
-  hold(); s.render(); hold(); s.render();
+  // One render, not thirty: the observable re-applies the pose on the game's OWN loop and `frames()`
+  // below is what waits for it, so synchronous renders here buy nothing and cost a SwiftShader frame
+  // each. (Drop A's harness does thirty; it can afford to, it is not holding a haircut still.)
+  hold(); s.render();
   return r.character.currentHaircut ?? haircut;
 }, [haircut, dist, turn, pitch]);
 
@@ -142,14 +165,16 @@ for (const id of CATALOG) {
       await page.waitForFunction(() => window.__fb.hud.get().alive !== false && (window.__fb.hud.get().health ?? 1) > 0, null, { timeout: 40000 }).catch(() => {});
       await page.waitForTimeout(1000);
     }
+    if (!(await subject())) continue;
     // Third person: close, front and profile. The camera looks slightly UP at 1.1 m so the crown —
     // where a clipper track lives — is in frame rather than foreshortened away.
     for (const [tag, turn, dist, pitch] of [["front", Math.PI, 1.1, -0.16], ["side", Math.PI / 2, 1.1, -0.16]]) {
-      if (!(await pose(id, dist, turn, pitch))) { log("no bot to pose"); break; }
+      if (!(await pose(id, dist, turn, pitch))) { log(`no bot to pose: ${JSON.stringify(await diagnose())}`); break; }
       await frames(4);
       if (!(await alive())) break;
       await page.screenshot({ path: `${OUT}/tp_${file(id)}_${tag}.png` });
       taken++; done = true;
+      log(`tp_${file(id)}_${tag}`);
     }
     // First person: the same head at the distances a fight happens at, level, no zoom, exactly what
     // a player sees. This is the frame the "does it read at 1080p" verdict has to come from — so it
