@@ -165,12 +165,19 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   // Escape releases pointer lock (browser) → show pause overlay; clicking resume re-locks.
   // The shop and the chat box release / hold the lock on purpose, so they never count as a pause.
   useEffect(() => {
+    // A DORMANT hud is the one mounted behind the loading screen from READY on (App.tsx), and
+    // nobody has entered the match yet: it is connected and it has no pointer, which is exactly
+    // the shape of "the player pressed Escape", so it armed the pause card 300 ms into the ready
+    // screen. Invisible (`.hud.dormant`), but real: `startup.spec.ts` asserts no pause card there
+    // and was passing only by beating that timer to the assertion. The gate is the same one the
+    // keyboard effect above already has — a hud that is not on screen decides nothing.
+    if (dormant) return;
     if (!h.pointerLocked && h.connected && h.phase !== MatchPhase.Ended && !h.shopOpen && !h.chatOpen) {
       const timer = window.setTimeout(() => setPaused(true), 300);
       return () => window.clearTimeout(timer);
     }
     if (h.pointerLocked || h.shopOpen || h.chatOpen) setPaused(false);
-  }, [h.pointerLocked, h.connected, h.phase, h.shopOpen, h.chatOpen]);
+  }, [dormant, h.pointerLocked, h.connected, h.phase, h.shopOpen, h.chatOpen]);
 
   const w = WEAPONS[h.weapon as WeaponId];
   const timeLeft = h.phaseEndsAt ? h.phaseEndsAt - h.serverNow : 0;

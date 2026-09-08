@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BOYS_CLASSES, BOYS, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MODES, MODE_ORDER, isGameMode, type BotLevel, type GameMode } from "@frankibarber/shared";
 import { equipHaircut, equippedHaircut, ownedCuts } from "../game/progression/profile";
 import { copyText, inviteLink, isMapId, mapChoices, parseInvite } from "./invite";
 import { Connection, defaultServerUrl, type RoomListing } from "../game/net/Connection";
 import type { Settings } from "../settings";
 import { SettingsPanel } from "./SettingsPanel";
+import { MODE_ART, NAV_ART, mapArt } from "./menuArt";
+import "./menu.css";
 
 interface Props {
   settings: Settings;
@@ -15,19 +17,33 @@ interface Props {
   onPlay: (name: string, roomName: string, mode: "auto" | "create" | "join", roomId: string | undefined, gameMode: GameMode, bots: { count: number; level: BotLevel }, mapId: string) => void;
 }
 
-const CONTROLS: [string, string][] = [
-  ["W A S D", "Move"], ["Mouse", "Aim"], ["LMB", "Fire"], ["RMB", "Aim down sights"], ["Shift", "Sprint · hold breath (scope)"],
-  ["Shift ×2", "Tactical sprint (faster, on a budget)"], ["Q / E", "Lean left / right"], ["Space", "Jump"], ["Ctrl / C", "Crouch"],
-  ["R", "Reload"], ["1 / 2 / Wheel", "Primary / sidearm"], ["3 / V", "Clippers"], ["X", "Last weapon"], ["G", "Lethal (hold to cook a frag)"],
-  ["4", "Tactical grenade"], ["T (hold)", "Plant / defuse bomb · stand still"], ["B", "Buy menu"], ["F", "Inspect weapon"], ["Tab", "Scoreboard"],
-  ["Enter / Y", "Chat (all / team)"], ["MMB", "Mark a spot · spot an enemy"], ["Esc", "Release mouse / pause"],
+const CONTROLS: [string, string, string][] = [
+  ["W A S D", "Move", "move"], ["Mouse", "Aim", "move"], ["Shift", "Sprint · hold breath (scope)", "move"],
+  ["Shift ×2", "Tactical sprint (faster, on a budget)", "move"], ["Space", "Jump", "move"], ["Ctrl / C", "Crouch", "move"],
+  ["Q / E", "Lean left / right", "move"],
+  ["LMB", "Fire", "fight"], ["RMB", "Aim down sights", "fight"], ["R", "Reload", "fight"],
+  ["1 / 2 / Wheel", "Primary / sidearm", "fight"], ["3 / V", "Clippers", "fight"], ["X", "Last weapon", "fight"],
+  ["G", "Lethal (hold to cook a frag)", "fight"], ["4", "Tactical grenade", "fight"], ["F", "Inspect weapon", "fight"],
+  ["B", "Buy menu", "team"], ["T (hold)", "Plant / defuse bomb · stand still", "team"], ["Tab", "Scoreboard", "team"],
+  ["Enter / Y", "Chat (all / team)", "team"], ["MMB", "Mark a spot · spot an enemy", "team"], ["Esc", "Release mouse / pause", "team"],
 ];
+const CONTROL_GROUPS: [string, string][] = [["move", "MOVEMENT"], ["fight", "COMBAT"], ["team", "TEAM & MATCH"]];
 
 type Panel = "main" | "lobby" | "settings" | "controls";
 
 /** Touch-only devices (phones/tablets) cannot play: no pointer lock, no keyboard. */
 const touchOnly = (): boolean =>
   typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(pointer: fine)").matches;
+
+/** How the mode reads on its card, in two words: who is on your side, and what ends the match. */
+const modeTag = (m: GameMode): string => `${MODES[m].teams ? "TEAMS" : "SOLO"} · TO ${MODES[m].scoreLimit}`;
+
+/** The map's real footprint, from its own bounds — a picker that says "34 × 18 m" says something. */
+const mapSize = (id: string): string => {
+  const b = MAPS[id]?.bounds;
+  if (!b) return "";
+  return `${Math.round(b.maxX - b.minX)} × ${Math.round(b.maxZ - b.minZ)} m`;
+};
 
 export function Menu({ settings, onSettings, connecting, error, onPlay }: Props) {
   // Drop D, join by link: what `/r/<room>?mode=…` asks for, read once at load.
@@ -67,23 +83,47 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   const bots = { count: botCount, level: botLevel };
   const [rooms, setRooms] = useState<RoomListing[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const nickRef = useRef<HTMLInputElement>(null);
   const nameOk = name.trim().length >= 2;
 
+  /**
+   * The room list is polled on the TITLE screen too, not only in the lobby: "is anyone playing?"
+   * is the first question a player has, and the old menu made you press PLAY and scroll to the
+   * bottom of a column to answer it. One request every three seconds, same as before.
+   */
+  const refresh = useCallback(async (): Promise<void> => {
+    setRefreshing(true);
+    try {
+      const list = await Connection.listRooms(defaultServerUrl());
+      setRooms(list); setListError(null);
+    } catch {
+      setListError("Server unreachable");
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (panel !== "lobby") return;
+    if (panel !== "lobby" && panel !== "main") return;
     let alive = true;
-    const refresh = async () => {
-      try {
-        const list = await Connection.listRooms(defaultServerUrl());
-        if (alive) { setRooms(list); setListError(null); }
-      } catch {
-        if (alive) setListError("Server unreachable.");
-      }
-    };
-    void refresh();
-    const id = window.setInterval(refresh, 3000);
+    const tick = () => { if (alive) void refresh(); };
+    tick();
+    const id = window.setInterval(tick, 3000);
     return () => { alive = false; window.clearInterval(id); };
-  }, [panel]);
+  }, [panel, refresh]);
+
+  /** Joinable first, then the fullest — you want the room where the match is already happening. */
+  const listed = useMemo(() => {
+    if (!rooms) return null;
+    return [...rooms].sort((a, b) => {
+      const openA = a.clients < a.maxClients ? 0 : 1, openB = b.clients < b.maxClients ? 0 : 1;
+      return openA - openB || b.clients - a.clients;
+    });
+  }, [rooms]);
+  /** Three states, not two: the first request has not come back yet, and that is not "offline". */
+  const netState = listError ? "off" : rooms ? "on" : "";
+  const playersOnline = rooms?.reduce((n, r) => n + r.clients, 0) ?? 0;
 
   const commitName = () => {
     const n = name.trim().slice(0, MAX_NAME_LENGTH);
@@ -91,186 +131,368 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
     return n;
   };
   const play = (mode: "auto" | "create") => onPlay(commitName(), roomName.trim(), mode, undefined, gameMode, bots, mapId);
+  /**
+   * A greyed-out match list is the wrong answer to "you have not typed a nickname yet": it makes
+   * the half of the lobby a player came for look broken. The rows stay live and send the click to
+   * the field that is actually missing.
+   */
+  const joinRoom = (r: RoomListing) => {
+    if (!nameOk) { nickRef.current?.focus(); nickRef.current?.select(); return; }
+    onPlay(commitName(), "", "join", r.roomId, r.metadata?.mode ?? "tdm", bots, mapId);
+  };
   /** The address to send a friend: this page, the room in the path, the mode and the map in the query. */
   const link = typeof location !== "undefined" ? inviteLink(location.href, roomName, gameMode, mapId) : "";
 
+  const status = (
+    <div className={`mm-status ${netState}`} data-testid="server-status">
+      <span className="mm-dot" />
+      {rooms && !listError
+        ? <span>{rooms.length === 0 ? "NO OPEN MATCHES" : `${rooms.length} ${rooms.length === 1 ? "MATCH" : "MATCHES"}`} · {playersOnline} {playersOnline === 1 ? "PLAYER" : "PLAYERS"}</span>
+        : <span>{listError ?? "CONTACTING SERVER…"}</span>}
+    </div>
+  );
+
+  /** One match, as the server browser and the title screen's live panel both draw it. */
+  const roomLine = (r: RoomListing) => {
+    const mode = r.metadata?.mode ?? "tdm";
+    return (
+      <>
+        <span className={`srv-mode m-${mode}`}>{MODES[mode].short}</span>
+        <span className="srv-main">
+          <b className="srv-name">{r.metadata?.name || r.roomId}</b>
+          {/* The listing may name the map by id (Drop G) or by name; show what the map calls itself. */}
+          <span className="srv-meta">
+            {MAPS[r.metadata?.map ?? ""]?.name ?? r.metadata?.map ?? MAPS[DEFAULT_MAP_ID].name}
+            {(r.metadata?.bots ?? 0) > 0 && ` · ${r.metadata?.bots} ${r.metadata?.bots === 1 ? "bot" : "bots"}`}
+          </span>
+        </span>
+        <span className="srv-count">
+          <b>{r.clients}<i>/</i>{r.maxClients}</b>
+          <span className="srv-bar"><i style={{ width: `${Math.round((r.clients / Math.max(1, r.maxClients)) * 100)}%` }} /></span>
+        </span>
+      </>
+    );
+  };
+
+  /** What the list has to say when it has no rooms to show — looking, empty, or unreachable. */
+  const emptyList = (short: boolean) => {
+    if (listError) return <div className="srv-empty err">{listError}.{short ? "" : " The list refreshes by itself once it is back."}</div>;
+    if (listed === null) return <div className="srv-empty">Looking for matches…</div>;
+    if (listed.length === 0) {
+      return (
+        <div className="srv-empty">
+          <b>No open matches.</b>
+          <span>{short ? "Press PLAY and start one." : "Start one with QUICK PLAY, or name a room below and send a friend the link."}</span>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const nickField = (autoFocus: boolean) => (
+    <label className="mm-field nick">
+      <span>NICKNAME</span>
+      <input
+        ref={nickRef} value={name} maxLength={MAX_NAME_LENGTH} onChange={(e) => setName(e.target.value)}
+        placeholder="2–16 characters" autoFocus={autoFocus} data-testid="input-name"
+        onKeyDown={(e) => { if (e.key === "Enter" && nameOk && !connecting) play("auto"); }}
+      />
+    </label>
+  );
+
   return (
     <div className="menu" data-testid="menu">
-      <div className="menu-inner">
-        <header className="brand">
-          <div className="wordmark">BARBERSTRIKE</div>
-          <div className="subtitle">AFTER HOURS</div>
-        </header>
+      <div className="mm-bg" aria-hidden="true" />
 
-        {error && <div className="notice error" role="alert">{error}</div>}
+      {panel === "main" && (
+        <div className="mm-title">
+          <div className="mm-title-grid">
+            <div className="mm-title-left">
+              <header className="mm-hero">
+                <div className="mm-pole" aria-hidden="true" />
+                <div>
+                  <h1 className="wordmark">BARBERSTRIKE</h1>
+                  <div className="subtitle">AFTER HOURS</div>
+                  <p className="mm-tagline">The district is closed. The chairs are empty. Nobody is here for a haircut.</p>
+                </div>
+              </header>
 
-        {mobile && (
-          <div className="notice" data-testid="mobile-notice">
-            BARBERSTRIKE is a desktop game — it needs a mouse and keyboard. Open it on a computer in Chrome or Chromium.
+              {error && <div className="mm-notice error" role="alert">{error}</div>}
+              {mobile && (
+                <div className="mm-notice" data-testid="mobile-notice">
+                  BARBERSTRIKE is a desktop game — it needs a mouse and keyboard. Open it on a computer in Chrome or Chromium.
+                </div>
+              )}
+
+              {!mobile && (
+                <nav className="mm-nav">
+                  <button className="mm-nav-btn primary" onClick={() => setPanel("lobby")} data-testid="btn-play">
+                    <i className="mm-nav-no">01</i><span className="mm-nav-art"><NAV_ART.play /></span>
+                    <b>PLAY</b><em>Pick a mode, pick a match</em><span className="mm-nav-go">▸</span>
+                  </button>
+                  <button className="mm-nav-btn" onClick={() => setPanel("settings")} data-testid="btn-settings">
+                    <i className="mm-nav-no">02</i><span className="mm-nav-art"><NAV_ART.settings /></span>
+                    <b>SETTINGS</b><em>Crosshair, graphics, audio, keys</em><span className="mm-nav-go">▸</span>
+                  </button>
+                  <button className="mm-nav-btn" onClick={() => setPanel("controls")} data-testid="btn-controls">
+                    <i className="mm-nav-no">03</i><span className="mm-nav-art"><NAV_ART.controls /></span>
+                    <b>CONTROLS</b><em>Every key on one card</em><span className="mm-nav-go">▸</span>
+                  </button>
+                </nav>
+              )}
+            </div>
+
+            {/* "Is anyone playing?" is the first question, so it is answered on the front page and
+                not four clicks in. Read-only here — joining needs a nickname, which the lobby asks
+                for — so the panel's job is to say what is running and hand you to the browser. */}
+            <aside className="mm-live" data-testid="live-matches">
+              <div className="srv-head">
+                <h2 className="lb-h">LIVE MATCHES</h2>
+                <button type="button" className={`srv-refresh ${refreshing ? "busy" : ""}`} onClick={() => void refresh()} title="Refresh the list">⟳</button>
+              </div>
+              <div className="mm-live-list">
+                {emptyList(true)}
+                {listed?.slice(0, 4).map((r) => (
+                  <div className="srv-row static" key={r.roomId}>{roomLine(r)}</div>
+                ))}
+              </div>
+              {!mobile && listed && listed.length > 0 && (
+                <button type="button" className="mm-link" onClick={() => setPanel("lobby")}>
+                  {listed.length > 4 ? `ALL ${listed.length} MATCHES ▸` : "OPEN THE MATCH LIST ▸"}
+                </button>
+              )}
+            </aside>
           </div>
-        )}
 
-        {panel === "main" && !mobile && (
-          <nav className="menu-list">
-            <button className="menu-btn primary" onClick={() => setPanel("lobby")} data-testid="btn-play">PLAY</button>
-            <button className="menu-btn" onClick={() => setPanel("settings")}>SETTINGS</button>
-            <button className="menu-btn" onClick={() => setPanel("controls")}>CONTROLS</button>
-          </nav>
-        )}
+          <footer className="mm-title-foot">
+            {status}
+            <span className="mm-version" data-testid="version">v{GAME_VERSION}</span>
+          </footer>
+        </div>
+      )}
 
-        {panel === "lobby" && linkJoin && (
-          <section className="panel lobby" data-testid="link-join">
-            <div className="link-join">
-              <div className="link-join-room">
-                <span>YOU WERE INVITED TO</span>
-                <b data-testid="link-room">{roomName}</b>
-                <span className={`room-mode m-${gameMode}`} data-testid="link-mode" title={MODES[gameMode].name}>{MODES[gameMode].short}</span>
-                <button type="button" className="link" onClick={() => setLinkJoin(false)} data-testid="btn-link-edit">CHANGE</button>
-              </div>
-              <div className="muted mode-blurb">{MODES[gameMode].blurb} · <span data-testid="link-map">{MAPS[mapId].name}</span></div>
-              <label className="field">
-                <span>NICKNAME</span>
-                <input value={name} maxLength={MAX_NAME_LENGTH} onChange={(e) => setName(e.target.value)} placeholder="2–16 characters" autoFocus data-testid="input-name" onKeyDown={(e) => { if (e.key === "Enter" && nameOk && !connecting) play("auto"); }} />
-              </label>
-              <div className="row">
-                <button className="menu-btn primary" disabled={!nameOk || connecting} onClick={() => play("auto")} data-testid="btn-quickplay">
-                  {connecting ? "CONNECTING…" : "JOIN"}
-                </button>
-              </div>
-              {!nameOk && <small className="muted">Enter a nickname of at least two characters to join.</small>}
-            </div>
-          </section>
-        )}
+      {panel !== "main" && (
+        <div className="mm-shell">
+          <header className="mm-bar">
+            <button className="mm-back" onClick={() => setPanel("main")} data-testid="btn-back">◂ BACK</button>
+            <div className="mm-bar-brand"><b>BARBERSTRIKE</b><span>{panel === "lobby" ? "LOBBY" : panel === "settings" ? "SETTINGS" : "CONTROLS"}</span></div>
+            {panel === "lobby" ? status : <span className="mm-version">v{GAME_VERSION}</span>}
+          </header>
 
-        {panel === "lobby" && !linkJoin && (
-          <section className="panel lobby">
-            <h2>LOBBY</h2>
-            <label className="field">
-              <span>NICKNAME</span>
-              <input value={name} maxLength={MAX_NAME_LENGTH} onChange={(e) => setName(e.target.value)} placeholder="2–16 characters" autoFocus data-testid="input-name" />
-            </label>
-            <label className="field">
-              <span>ROOM NAME <em className="muted">optional · the code your friends type</em></span>
-              <div className="row tight">
-                <input value={roomName} maxLength={24} onChange={(e) => setRoomName(e.target.value)} placeholder="e.g. late-shift" data-testid="input-room" />
-                <button type="button" className={`menu-btn small ${showInvite ? "" : "ghost"}`} onClick={() => setShowInvite((v) => !v)} data-testid="btn-invite">INVITE</button>
-              </div>
-            </label>
-            {/* Drop D: the link that opens straight into this room. Joining by one is useless if
-                nobody can make one, so the lobby that creates the room is where it lives. */}
-            {showInvite && (
-              <div className="invite-box" data-testid="invite-box">
-                <div className="copy-row">
-                  <input readOnly value={link} data-testid="invite-link" onFocus={(e) => e.currentTarget.select()} />
-                  <button type="button" className="menu-btn small" onClick={() => { void copyText(link).then((ok) => { setCopied(ok); window.setTimeout(() => setCopied(false), 1500); }); }}>{copied ? "COPIED" : "COPY"}</button>
+          {error && <div className="mm-notice error" role="alert">{error}</div>}
+
+          {panel === "lobby" && linkJoin && (
+            <section className="mm-content link-join" data-testid="link-join">
+              <div className="lj-card">
+                <div className="lj-head">
+                  <span className="lj-eyebrow">YOU WERE INVITED TO</span>
+                  <b data-testid="link-room">{roomName}</b>
+                  <button type="button" className="mm-link" onClick={() => setLinkJoin(false)} data-testid="btn-link-edit">CHANGE</button>
                 </div>
-                <small className="muted">Whoever opens this lands in your room, and is only asked for a nickname.</small>
+                <div className="lj-meta">
+                  <span className={`srv-mode m-${gameMode}`} data-testid="link-mode" title={MODES[gameMode].name}>{MODES[gameMode].short}</span>
+                  <span className="lj-map" data-testid="link-map">{MAPS[mapId].name}</span>
+                </div>
+                <p className="mm-blurb">{MODES[gameMode].blurb}</p>
+                {nickField(true)}
+                <button className="mm-btn primary big" disabled={!nameOk || connecting} onClick={() => play("auto")} data-testid="btn-quickplay">
+                  {connecting ? "CONNECTING…" : "JOIN MATCH"}
+                </button>
+                {!nameOk && <small className="mm-hint">Enter a nickname of at least two characters to join.</small>}
               </div>
-            )}
-            <div className="field">
-              <span>MODE</span>
-              <div className="seg" role="radiogroup" data-testid="mode-picker">
-                {MODE_ORDER.map((m) => (
-                  <button key={m} role="radio" aria-checked={gameMode === m} className={`seg-btn ${gameMode === m ? "on" : ""}`} onClick={() => pickMode(m)} data-testid={`mode-${m}`} title={MODES[m].blurb}>
-                    <b>{MODES[m].short}</b><span>{MODES[m].name}</span>
-                  </button>
-                ))}
-              </div>
-              <div className="muted mode-blurb" data-testid="mode-blurb">{MODES[gameMode].blurb}</div>
-            </div>
-            {/* Drop G: the second map. Same picker as the mode above it — the room plays the one
-                chosen here, and the invite link carries it so a friend lands on the same one. */}
-            <div className="field">
-              <span>MAP</span>
-              <div className="seg" role="radiogroup" data-testid="map-picker">
-                {maps.map((m) => (
-                  <button key={m.id} role="radio" aria-checked={mapId === m.id} className={`seg-btn ${mapId === m.id ? "on" : ""}`} onClick={() => pickMap(m.id)} data-testid={`map-${m.id}`} title={m.name}>
-                    <b>{m.name}</b>
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Drop E: haircuts. Locked ones are SHOWN, with what earns them — a cosmetic nobody
-                knows exists is not a reward, and L1 means seeing one you have not earned costs you
-                nothing in a fight. */}
-            <div className="field">
-              <span>FRYZURA <em data-testid="haircut-count">{owned.size}/{HAIRCUTS.length}</em></span>
-              <div className="cut-grid" data-testid="haircut-picker">
-                {HAIRCUTS.map((h) => {
-                  const have = owned.has(h.id);
-                  return (
-                    <button
-                      key={h.id} type="button" disabled={!have}
-                      className={`cut ${haircut === h.id ? "on" : ""} ${have ? "" : "locked"}`}
-                      aria-pressed={haircut === h.id} data-testid={`haircut-${h.id}`}
-                      onClick={() => pickHaircut(h.id)} title={have ? h.name : `Zablokowane — ${h.requirement}`}
-                    >
-                      <b>{h.name}</b><span>{have ? "\u00a0" : h.requirement}</span>
+            </section>
+          )}
+
+          {panel === "lobby" && !linkJoin && (
+            <>
+              <section className="mm-content lobby-grid">
+                {/* ---------------------------------------------------------------- match setup */}
+                <div className="lb-setup">
+                  <div className="lb-block wide">
+                    <h2 className="lb-h">GAME MODE</h2>
+                    <div className="mode-grid" role="radiogroup" aria-label="Game mode" data-testid="mode-picker">
+                      {MODE_ORDER.map((m) => {
+                        const Art = MODE_ART[m];
+                        return (
+                          <button
+                            key={m} role="radio" aria-checked={gameMode === m} className={`mode-card ${gameMode === m ? "on" : ""}`}
+                            onClick={() => pickMode(m)} data-testid={`mode-${m}`} title={MODES[m].blurb}
+                          >
+                            <span className="mode-art"><Art /></span>
+                            <b>{MODES[m].name}</b>
+                            <span className="mode-tag">{modeTag(m)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="mm-blurb" data-testid="mode-blurb">{MODES[gameMode].blurb}</p>
+                  </div>
+
+                  {gameMode === "boys" && (
+                    <div className="lb-block wide">
+                      <h2 className="lb-h">CLASS</h2>
+                      <div className="boys-grid">
+                        {BOYS_CLASSES.map((id) => (
+                          <button key={id} className={`boys-class ${boysClass === id ? "on" : ""}`} aria-pressed={boysClass === id} onClick={() => pickClass(id)}>
+                            <b>{id} · {BOYS[id].name}</b>
+                            <span>{BOYS[id].blurb}</span>
+                            <small>Free: {WEAPONS[BOYS[id].starter].name} + pistol</small>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="lb-block">
+                    <h2 className="lb-h">MAP</h2>
+                    <div className="map-grid" role="radiogroup" aria-label="Map" data-testid="map-picker">
+                      {maps.map((m) => {
+                        const Plan = mapArt(m.id);
+                        return (
+                          <button
+                            key={m.id} role="radio" aria-checked={mapId === m.id} className={`map-card ${mapId === m.id ? "on" : ""}`}
+                            onClick={() => pickMap(m.id)} data-testid={`map-${m.id}`} title={m.name}
+                          >
+                            <span className="map-plan"><Plan /></span>
+                            <b>{m.name}</b>
+                            <span className="map-size">{mapSize(m.id)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="lb-block">
+                    <h2 className="lb-h">BOTS <em data-testid="bots-count">{botCount === 0 ? "none" : `${botCount} · ${BOT_PRESETS[botLevel].name}`}</em></h2>
+                    <div className="bots-row">
+                      <input type="range" min={0} max={MAX_BOTS} step={1} value={botCount} onChange={(e) => pickBots(Number(e.target.value), botLevel)} data-testid="bots-range" aria-label="Bots" />
+                      <b className="bots-num">{botCount}</b>
+                    </div>
+                    <div className="seg" role="radiogroup" aria-label="Bot level">
+                      {BOT_LEVELS.map((l) => (
+                        <button key={l} role="radio" aria-checked={botLevel === l} className={`seg-btn ${botLevel === l ? "on" : ""}`} disabled={botCount === 0} onClick={() => pickBots(botCount, l)} data-testid={`bots-${l}`}>
+                          {BOT_PRESETS[l].name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Drop E: haircuts. Locked ones are SHOWN, with what earns them — a cosmetic
+                      nobody knows exists is not a reward, and L1 means seeing one you have not
+                      earned costs you nothing in a fight. */}
+                  <div className="lb-block wide">
+                    <h2 className="lb-h">HAIRCUT <em data-testid="haircut-count">{owned.size}/{HAIRCUTS.length}</em></h2>
+                    <div className="cut-grid" data-testid="haircut-picker">
+                      {HAIRCUTS.map((h) => {
+                        const have = owned.has(h.id);
+                        return (
+                          <button
+                            key={h.id} type="button" disabled={!have}
+                            className={`cut ${haircut === h.id ? "on" : ""} ${have ? "" : "locked"}`}
+                            aria-pressed={haircut === h.id} data-testid={`haircut-${h.id}`}
+                            onClick={() => pickHaircut(h.id)} title={have ? h.name : `Zablokowane — ${h.requirement}`}
+                          >
+                            <b>{h.name}</b><span>{have ? " " : h.requirement}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ------------------------------------------------------------- server browser */}
+                <div className="lb-servers">
+                  <div className="srv-head">
+                    <h2 className="lb-h">OPEN MATCHES</h2>
+                    <button type="button" className={`srv-refresh ${refreshing ? "busy" : ""}`} onClick={() => void refresh()} data-testid="btn-refresh" title="Refresh the list">
+                      ⟳ REFRESH
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-            {gameMode === "boys" && <div className="boys-grid">{BOYS_CLASSES.map(id => <button key={id} className={`boys-class ${boysClass === id ? "on" : ""}`} aria-pressed={boysClass === id} onClick={() => pickClass(id)}><b>{id} · {BOYS[id].name}</b><span>{BOYS[id].blurb}</span><small>Free: {WEAPONS[BOYS[id].starter].name} + pistol</small></button>)}</div>}
-            <div className="field bots-field">
-              <span>BOTS <em data-testid="bots-count">{botCount === 0 ? "none" : `${botCount} · ${BOT_PRESETS[botLevel].name}`}</em></span>
-              <div className="bots-row">
-                <input type="range" min={0} max={MAX_BOTS} step={1} value={botCount} onChange={(e) => pickBots(Number(e.target.value), botLevel)} data-testid="bots-range" aria-label="Bots" />
-                <div className="seg small" role="radiogroup">
-                  {BOT_LEVELS.map((l) => (
-                    <button key={l} role="radio" aria-checked={botLevel === l} className={`seg-btn ${botLevel === l ? "on" : ""}`} onClick={() => pickBots(botCount, l)} data-testid={`bots-${l}`}><b>{BOT_PRESETS[l].name}</b></button>
-                  ))}
+                  </div>
+
+                  <div className="srv-list" data-testid="room-list">
+                    {emptyList(false)}
+                    {listed?.map((r) => {
+                      const full = r.clients >= r.maxClients;
+                      return (
+                        <button
+                          key={r.roomId} className={`srv-row ${full ? "full" : ""}`} data-testid={`room-${r.roomId}`}
+                          disabled={connecting || full} onClick={() => joinRoom(r)}
+                          title={full ? "This match is full" : !nameOk ? "Enter a nickname first" : `Join ${r.metadata?.name || r.roomId}`}
+                        >
+                          {roomLine(r)}
+                          <span className="srv-go">{full ? "FULL" : "JOIN ▸"}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Drop D: the link that opens straight into this room. Joining by one is useless
+                      if nobody can make one, so the lobby that creates the room is where it lives. */}
+                  <div className="srv-private">
+                    <h2 className="lb-h">PRIVATE ROOM</h2>
+                    <div className="row tight">
+                      <input value={roomName} maxLength={24} onChange={(e) => setRoomName(e.target.value)} placeholder="room code · e.g. late-shift" data-testid="input-room" aria-label="Room name" />
+                      <button type="button" className={`mm-btn small ${showInvite ? "on" : ""}`} onClick={() => setShowInvite((v) => !v)} data-testid="btn-invite">INVITE</button>
+                    </div>
+                    {showInvite ? (
+                      <div className="invite-box" data-testid="invite-box">
+                        <div className="row tight">
+                          <input readOnly value={link} data-testid="invite-link" onFocus={(e) => e.currentTarget.select()} />
+                          <button type="button" className="mm-btn small" onClick={() => { void copyText(link).then((ok) => { setCopied(ok); window.setTimeout(() => setCopied(false), 1500); }); }}>{copied ? "COPIED" : "COPY"}</button>
+                        </div>
+                        <small className="mm-hint">Whoever opens this lands in your room, and is only asked for a nickname.</small>
+                      </div>
+                    ) : (
+                      <small className="mm-hint">Optional. Friends who type the same code land in the same match.</small>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="row">
-              <button className="menu-btn primary" disabled={!nameOk || connecting} onClick={() => play("auto")} data-testid="btn-quickplay">
-                {connecting ? "CONNECTING…" : "QUICK PLAY"}
-              </button>
-              <button className="menu-btn" disabled={!nameOk || connecting} onClick={() => play("create")} data-testid="btn-create">
-                CREATE MATCH
-              </button>
-            </div>
-            <div className="rooms">
-              <div className="rooms-head"><span>OPEN MATCHES</span>{listError && <span className="muted">{listError}</span>}</div>
-              {rooms && rooms.length === 0 && <div className="muted">No open matches. Create one.</div>}
-              {rooms?.map((r) => (
-                <button key={r.roomId} className="room-row" disabled={!nameOk || connecting || r.clients >= r.maxClients} onClick={() => onPlay(commitName(), "", "join", r.roomId, r.metadata?.mode ?? "tdm", bots, mapId)}>
-                  <span className={`room-mode m-${r.metadata?.mode ?? "tdm"}`}>{MODES[r.metadata?.mode ?? "tdm"].short}</span>
-                  <span className="room-name">{r.metadata?.name || r.roomId}{(r.metadata?.bots ?? 0) > 0 && <span className="room-bots"> · {r.metadata?.bots} bots</span>}</span>
-                  {/* The listing may name the map by id (Drop G) or by name; show what the map calls itself. */}
-                  <span className="room-map">{MAPS[r.metadata?.map ?? ""]?.name ?? r.metadata?.map ?? MAPS[DEFAULT_MAP_ID].name}</span>
-                  <span className="room-count">{r.clients}/{r.maxClients}</span>
-                </button>
-              ))}
-            </div>
-            <button className="link" onClick={() => setPanel("main")}>← BACK</button>
-          </section>
-        )}
+              </section>
 
-        {panel === "settings" && (
-          <section className="panel">
-            <h2>SETTINGS</h2>
-            <SettingsPanel settings={settings} onChange={onSettings} />
-            <button className="link" onClick={() => setPanel("main")}>← BACK</button>
-          </section>
-        )}
+              {/* --------------------------------------------------------------------- launch */}
+              <footer className="lb-launch">
+                {nickField(true)}
+                <div className="lb-launch-read">
+                  <span className="lb-launch-mode">{MODES[gameMode].name}</span>
+                  <span className="lb-launch-sub">{MAPS[mapId].name} · {botCount === 0 ? "no bots" : `${botCount} bots · ${BOT_PRESETS[botLevel].name}`}</span>
+                </div>
+                <div className="lb-launch-btns">
+                  <button className="mm-btn primary big" disabled={!nameOk || connecting} onClick={() => play("auto")} data-testid="btn-quickplay">
+                    {connecting ? "CONNECTING…" : "QUICK PLAY ▸"}
+                  </button>
+                  <button className="mm-btn big" disabled={!nameOk || connecting} onClick={() => play("create")} data-testid="btn-create">
+                    CREATE MATCH
+                  </button>
+                </div>
+                {!nameOk && <small className="mm-hint launch-hint">A nickname of at least two characters is all that is missing.</small>}
+              </footer>
+            </>
+          )}
 
-        {panel === "controls" && (
-          <section className="panel controls">
-            <h2>CONTROLS</h2>
-            <table>
-              <tbody>
-                {CONTROLS.map(([k, v]) => (
-                  <tr key={k}><td className="key">{k}</td><td>{v}</td></tr>
+          {panel === "settings" && (
+            <section className="mm-content">
+              {/* `panel` is what gives the settings panel's own <h3> headings their style — the
+                  pause card renders the same component, so the class stays on the wrapper. */}
+              <div className="mm-card panel"><SettingsPanel settings={settings} onChange={onSettings} /></div>
+            </section>
+          )}
+
+          {panel === "controls" && (
+            <section className="mm-content">
+              <div className="mm-card keys-grid">
+                {CONTROL_GROUPS.map(([group, label]) => (
+                  <div className="keys-col" key={group}>
+                    <h2 className="lb-h">{label}</h2>
+                    {CONTROLS.filter(([, , g]) => g === group).map(([k, v]) => (
+                      <div className="keys-row" key={k}><kbd>{k}</kbd><span>{v}</span></div>
+                    ))}
+                  </div>
                 ))}
-              </tbody>
-            </table>
-            <button className="link" onClick={() => setPanel("main")}>← BACK</button>
-          </section>
-        )}
-      </div>
-      <footer className="menu-foot"><span data-testid="version">v{GAME_VERSION}</span> · Desktop only · Chrome / Chromium recommended</footer>
+              </div>
+            </section>
+          )}
+        </div>
+      )}
     </div>
   );
 }

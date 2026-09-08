@@ -30,17 +30,13 @@ button { font-family: inherit; }
 .game-canvas-host { position: absolute; inset: 0; z-index: 0; }
 .game-canvas { position: absolute; inset: 0; width: 100%; height: 100%; outline: none; display: block; touch-action: none; }
 
-/* ---------- Menu ---------- */
-.menu { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background:
-  radial-gradient(1200px 600px at 20% 0%, rgba(122, 92, 201, 0.10), transparent 60%),
-  radial-gradient(900px 500px at 90% 100%, rgba(217, 164, 65, 0.08), transparent 60%),
-  var(--bg); }
-.menu-inner { width: min(560px, 92vw); }
-.brand { margin-bottom: 40px; }
+/* ---------- Menu ----------
+   The menu's own layout lives in `menu.css` (2.6), which `Menu.tsx` imports. What stays here is
+   what the HUD shares with it: the wordmark, the buttons, the fields the settings panel is built
+   from, and the panel headings — all of which the pause card renders too. */
 .wordmark { font-family: var(--font-display); font-size: clamp(48px, 9vw, 96px); letter-spacing: 0.06em; line-height: 0.9; color: var(--tx); }
 .wordmark.small { font-size: 28px; margin-bottom: 20px; }
 .subtitle { font-family: var(--font-display); font-size: clamp(18px, 3vw, 28px); letter-spacing: 0.4em; color: var(--brass); margin-top: 8px; }
-.menu-list { display: flex; flex-direction: column; gap: 10px; }
 .menu-btn { display: block; width: 100%; padding: 14px 18px; background: var(--bg-2); border: 1px solid var(--line); color: var(--tx); font-family: var(--font-display); font-size: 22px; letter-spacing: 0.18em; text-align: left; cursor: pointer; transition: background 120ms, border-color 120ms, transform 80ms; }
 .menu-btn:hover:not(:disabled) { background: var(--bg-3); border-color: var(--tx-3); }
 .menu-btn:active:not(:disabled) { transform: translateY(1px); }
@@ -63,32 +59,8 @@ button { font-family: inherit; }
 .segmented { display: flex; gap: 4px; }
 .segmented button { flex: 1; padding: 8px; background: var(--bg-2); border: 1px solid var(--line); color: var(--tx-2); font-family: var(--font-display); letter-spacing: 0.15em; font-size: 14px; cursor: pointer; }
 .segmented button.active { border-color: var(--brass); color: var(--brass); }
-.row { display: flex; gap: 10px; }
-.rooms { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
-.rooms-head { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: 0.2em; color: var(--tx-2); margin-bottom: 8px; }
-.room-row { display: grid; grid-template-columns: 1fr auto auto; gap: 14px; width: 100%; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--line); color: var(--tx); text-align: left; cursor: pointer; margin-bottom: 6px; }
-.room-row:hover:not(:disabled) { border-color: var(--tx-3); }
-.room-row:disabled { opacity: 0.4; cursor: default; }
-.room-map { color: var(--tx-3); font-size: 12px; }
-.room-count { font-family: var(--font-mono); color: var(--brass); }
 .muted { color: var(--tx-3); font-size: 13px; }
 .muted.small { font-size: 11px; margin-top: 12px; }
-.notice { padding: 10px 14px; border: 1px solid var(--line); margin-bottom: 14px; font-size: 14px; }
-.notice.error { border-color: var(--red); color: #f0a49a; }
-.controls table { width: 100%; border-collapse: collapse; }
-.controls td { padding: 8px 6px; border-bottom: 1px solid var(--line); font-size: 14px; }
-.controls td.key { font-family: var(--font-mono); color: var(--brass); width: 140px; }
-.menu-foot {
-  /* This belongs to the flex flow, rather than floating over a scrollable
-     menu. A fixed/absolute footer hides entries in the Controls table on
-     short displays. */
-  flex: 0 0 auto;
-  margin: 0 0 18px;
-  font-size: 11px;
-  letter-spacing: 0.15em;
-  color: var(--tx-3);
-  text-align: center;
-}
 .settings { max-height: 60vh; overflow: auto; padding-right: 6px; }
 
 /* ---------- HUD ---------- */
@@ -411,17 +383,8 @@ button { font-family: inherit; }
 .scope.ring .scope-reticle .hz { left: -12vw; width: 24vw; }
 .shop-glyph { margin-right: 8px; }
 
-/* ---- drop 4: modes (lobby), Domination flags, capture state, tactical sprint meter ---- */
-.seg { display: flex; gap: 6px; }
-.seg-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 6px; background: rgba(255,255,255,.04); border: 1px solid var(--line); color: var(--tx-2); cursor: pointer; font-family: inherit; }
-.seg-btn b { font-family: var(--font-display); font-size: 18px; letter-spacing: .15em; color: var(--tx); font-weight: normal; }
-.seg-btn span { font-size: 9px; letter-spacing: .2em; }
-.seg-btn.on { border-color: var(--brass); background: rgba(217,164,65,.12); color: var(--tx); }
-.seg-btn.on b { color: var(--brass); }
-.mode-blurb { font-size: 11px; margin-top: 6px; letter-spacing: .08em; }
-.room-mode { font-family: var(--font-mono); font-size: 10px; letter-spacing: .15em; padding: 2px 6px; border: 1px solid var(--line); margin-right: 8px; color: var(--tx-2); }
-.room-mode.m-ffa { color: var(--red); } .room-mode.m-dom { color: var(--brass); }
-
+/* ---- drop 4: Domination flags, capture state, tactical sprint meter (the lobby's own mode
+   picker moved to menu.css in 2.6) ---- */
 .ffa-score { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); }
 .ffa-score .tname { font-size: 12px; letter-spacing: .25em; color: var(--tx-2); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ffa-score .tscore { font-size: 30px; min-width: 44px; text-align: center; padding: 2px 8px; background: rgba(10,10,12,.7); border-bottom: 2px solid var(--line); }
@@ -451,19 +414,8 @@ button { font-family: inherit; }
 .sb-team.ffa th.sb-name { color: var(--red); }
 .result-score b { color: var(--brass); font-weight: normal; }
 .kf-name.ffa { color: var(--tx); }
-/* Lobby height (drop 4): the mode picker made the lobby taller than a short viewport. Centre with
-   auto margins instead of justify-content so an overflowing menu scrolls rather than clipping its top. */
-.menu { justify-content: flex-start; overflow-y: auto; }
-.menu-inner { margin: auto 0; padding: 24px 0 20px; }
-.seg-btn { padding: 5px 6px; }
-.seg-btn b { font-size: 16px; }
 
-/* ---- drop 5: lobby bots, chat, minimap + compass, scoreboard v2 ---- */
-.bots-row { display: flex; align-items: center; gap: 10px; }
-.bots-row input[type="range"] { flex: 1; }
-.seg.small .seg-btn { padding: 4px 6px; } .seg.small .seg-btn b { font-size: 12px; }
-.room-bots { color: var(--tx-2); font-size: 11px; }
-
+/* ---- drop 5: chat, minimap + compass, scoreboard v2 (the lobby's bots row is in menu.css) ---- */
 .chat { position: absolute; left: 26px; bottom: 120px; width: 380px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
 .chat-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .chat-lines li { display: flex; gap: 8px; align-items: baseline; padding: 3px 8px; background: rgba(10,10,12,.55); font-size: 13px; animation: slide-in 160ms ease-out; max-width: 100%; }
@@ -490,10 +442,6 @@ button { font-family: inherit; }
 .credits a { color: var(--accent, #e0a83a); text-decoration: underline; }
 .credits strong { color: #cfd3da; font-weight: 600; }
 
-.boys-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(175px,1fr)); gap:8px; margin:10px 0; }
-.boys-class { text-align:left; background:#171d23; color:#ddd; border:1px solid #46505a; padding:12px; cursor:pointer; display:flex; flex-direction:column; gap:8px; }
-.boys-class.on { border-color:#efbe67; background:#302a20; }
-.boys-class span,.boys-class small { font-size:12px; line-height:1.45; }
 .boys-status { position:absolute; left:50%; top:112px; transform:translateX(-50%); padding:6px 12px; background:#111c; color:#efbe67; font-size:12px; white-space:nowrap; }
 
 /* Clear entry flow and high-contrast essentials. */
@@ -521,7 +469,7 @@ button { font-family: inherit; }
 .health-bar { width:120px; height:8px; }
 .boys-status { top:auto; left:26px; bottom:195px; transform:none; max-width:300px; white-space:normal; border-radius:6px; }
 .shop-sub { letter-spacing:.04em; line-height:1.5; color:#c4ccd6; }
-.boys-class:focus-visible,button:focus-visible { outline:2px solid #f4cf8e; outline-offset:3px; }
+button:focus-visible { outline:2px solid #f4cf8e; outline-offset:3px; }
 @media(max-width:900px) {
   .team-score .tname { display:none; }
   .top-bar { top:12px; padding:4px; }
@@ -633,15 +581,6 @@ button { font-family: inherit; }
 .keycap:hover { border-color: var(--brass); }
 .keycap.capturing { border-color: var(--brass); background: var(--brass); color: #141008; }
 
-/* Drop D — join by link: the lobby a friend's /r/<room> link opens asks for a nickname and nothing else. */
-.link-join { max-width: 440px; display: flex; flex-direction: column; gap: 10px; }
-.link-join-room { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; letter-spacing: 0.2em; color: var(--tx-2); }
-.link-join-room b { font-family: var(--font-mono); font-size: 18px; letter-spacing: 0.05em; color: var(--tx); }
-.link-join-room .link { margin-left: auto; font-size: 11px; letter-spacing: 0.2em; }
-.link-join .mode-blurb { margin-bottom: 6px; }
-
-/* Drop D: mode badges for Gun Game and Ostrzyżeni (next to .m-ffa / .m-dom above). */
-.room-mode.m-gungame { color: var(--purple); } .room-mode.m-ostrzyzeni { color: var(--team1); }
 /* Drop D: the Gun Game ladder in the top bar — rung, the gun it hands you, and the next one. */
 .ffa-score.ladder .tscore { min-width: 64px; }
 .ffa-score .ladder-gun { display: flex; flex-direction: column; line-height: 1.1; font-family: var(--font-ui); }
@@ -753,17 +692,4 @@ td.sb-shaved.none { opacity: 0.4; }
 .summary-award b { font-size: 12px; letter-spacing: 0.08em; }
 .summary-award span { font-size: 11px; color: #cbbfae; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .summary-badge.cut { border-color: rgba(230, 185, 128, 0.45); }
-
-/* Drop E: the wardrobe in the lobby. Locked cuts stay visible with what earns them — a cosmetic
-   nobody knows exists is not a reward, and showing it costs nothing when it is only a look. */
-.cut-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.cut {
-  display: flex; flex-direction: column; gap: 2px; padding: 7px 8px; min-width: 0;
-  background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #d8d2c8; text-align: left; cursor: pointer;
-}
-.cut b { font-size: 11px; letter-spacing: 0.06em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cut span { font-size: 10px; color: #8d857a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cut:hover:not(:disabled) { border-color: rgba(230, 185, 128, 0.5); }
-.cut.on { border-color: #e6b980; background: rgba(230, 185, 128, 0.12); color: #e6b980; }
-.cut.locked { opacity: 0.45; cursor: default; }
+/* The lobby's wardrobe picker itself lives in `menu.css` (2.6). */
