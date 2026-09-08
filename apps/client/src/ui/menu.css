@@ -1,0 +1,350 @@
+/* ==========================================================================================
+   BARBERSTRIKE — the front end of the game (2.6)
+
+   The report was that the menu is neither pretty nor obvious, and that the servers are hard to
+   see. Both were true, and both had the same cause: EVERYTHING lived in one 560 px column, in DOM
+   order — nickname, room, invite, six three-letter mode chips, maps, nine haircuts, bots, the
+   buttons, and only then the list of open matches, below the fold on a 1080p screen. A column
+   cannot say what matters, because every row in it is the same width and the same weight.
+
+   The rules here are the whole design:
+     SHAPE   the lobby is three zones, not a list — setup on the left, the SERVER BROWSER as a
+             full-height column of its own on the right, and one launch bar pinned at the bottom.
+             Each zone scrolls inside itself, so the page never does and the servers never leave
+             the screen.
+     RANK    what you choose is a card with a picture (mode, map, match); what you tune is a row
+             (bots, nickname); what you read is a line (blurb, hint).
+     STATE   selection is unmistakable: brass border, brass ink, a brass corner tab. Nothing is
+             selected "by being slightly lighter".
+     ANSWER  the first question a player has is "is anyone playing?", so the answer — live match
+             and player counts — is on the TITLE screen, before you press anything.
+   ========================================================================================== */
+
+.menu {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--bg); color: var(--tx); font-family: var(--font-ui);
+  --mm-edge: clamp(18px, 3.4vw, 52px);
+  --mm-plate: linear-gradient(180deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, .014));
+}
+
+/* The room the menu sits in: barber stripes drifting across two practical lights, under a
+   vignette. Purely decorative and never clickable; the drift stops for reduced motion. */
+.mm-bg {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    repeating-linear-gradient(118deg, rgba(255, 255, 255, .03) 0 2px, transparent 2px 24px),
+    radial-gradient(1100px 620px at 16% -10%, rgba(122, 92, 201, .18), transparent 62%),
+    radial-gradient(900px 540px at 90% 110%, rgba(217, 164, 65, .14), transparent 60%);
+  background-size: 200px 200px, auto, auto;
+  animation: mm-drift 40s linear infinite;
+}
+.mm-bg::after { content: ""; position: absolute; inset: 0; background: radial-gradient(130% 95% at 50% 42%, transparent 40%, rgba(0, 0, 0, .74)); }
+@keyframes mm-drift { to { background-position: 200px 200px, 0 0, 0 0; } }
+
+/* ---------------------------------------------------------------------- the title screen */
+
+.mm-title {
+  position: relative; flex: 1 1 auto; min-height: 0; overflow: auto;
+  display: flex; flex-direction: column; justify-content: center; gap: clamp(18px, 3.6vh, 38px);
+  padding: clamp(20px, 4vh, 56px) var(--mm-edge);
+}
+/* Hero and nav on the left, what is running on the right. The title screen used to be a column
+   against half a screen of nothing, and the thing the empty half is now spending itself on is the
+   question a player opens the game with. */
+.mm-title-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(268px, 350px); gap: clamp(20px, 4vw, 56px); align-items: center; }
+.mm-title-left { display: flex; flex-direction: column; gap: clamp(16px, 3vh, 32px); min-width: 0; }
+.mm-hero { display: flex; align-items: stretch; gap: clamp(16px, 2vw, 26px); }
+/* The pole. One object says what the game is before a word is read. */
+.mm-pole {
+  flex: 0 0 9px; min-height: 96px; border-radius: 5px;
+  background: repeating-linear-gradient(180deg, var(--brass) 0 12px, #efe9df 12px 24px, #9c3b34 24px 36px);
+  background-size: 100% 36px;
+  box-shadow: 0 0 26px rgba(217, 164, 65, .32), inset 0 0 6px rgba(0, 0, 0, .45);
+  animation: mm-pole 3.2s linear infinite;
+}
+@keyframes mm-pole { to { background-position: 0 36px; } }
+.mm-hero .wordmark { margin: 0; font-weight: normal; }
+.mm-tagline { margin: 12px 0 0; max-width: 48ch; font-size: 14px; line-height: 1.55; color: var(--tx-2); }
+
+.mm-nav { display: flex; flex-direction: column; gap: 9px; width: min(660px, 100%); }
+.mm-nav-btn {
+  position: relative; display: grid; gap: 1px 16px; align-items: center; cursor: pointer; text-align: left;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-areas: "no art name go" "no art sub go";
+  padding: 13px 18px; color: var(--tx);
+  background: var(--mm-plate); border: 1px solid var(--line); border-left: 3px solid transparent;
+  transition: background 140ms, border-color 140ms, transform 110ms;
+}
+.mm-nav-btn:hover { background: linear-gradient(90deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, .02)); border-left-color: var(--brass); transform: translateX(3px); }
+.mm-nav-btn b { grid-area: name; font-family: var(--font-display); font-size: clamp(22px, 2.6vw, 30px); letter-spacing: .16em; font-weight: normal; line-height: 1.05; }
+.mm-nav-btn em { grid-area: sub; font-style: normal; font-size: 11px; letter-spacing: .12em; color: var(--tx-3); }
+.mm-nav-no { grid-area: no; font-family: var(--font-mono); font-size: 11px; color: var(--tx-3); }
+.mm-nav-art { grid-area: art; width: 26px; height: 26px; color: var(--tx-2); display: block; }
+.mm-nav-art svg { width: 100%; height: 100%; }
+.mm-nav-go { grid-area: go; font-size: 16px; color: var(--tx-3); }
+.mm-nav-btn:hover .mm-nav-go, .mm-nav-btn:hover .mm-nav-art { color: var(--brass); }
+.mm-nav-btn.primary { background: linear-gradient(90deg, rgba(217, 164, 65, .18), rgba(217, 164, 65, .04)); border-color: rgba(217, 164, 65, .45); border-left-color: var(--brass); }
+.mm-nav-btn.primary b, .mm-nav-btn.primary .mm-nav-art, .mm-nav-btn.primary .mm-nav-go { color: var(--brass); }
+.mm-nav-btn.primary:hover { background: linear-gradient(90deg, rgba(217, 164, 65, .28), rgba(217, 164, 65, .07)); }
+
+/* The live panel: the same rows the browser draws, read-only, four at most. */
+.mm-live { display: grid; gap: 9px; align-content: start; padding: 14px 15px 13px; background: var(--mm-plate); border: 1px solid var(--line); border-top: 2px solid rgba(217, 164, 65, .55); }
+.mm-live .srv-head { margin-bottom: 1px; }
+.mm-live .srv-refresh { padding: 4px 8px; font-size: 12px; line-height: 1; }
+.mm-live-list { display: grid; gap: 6px; }
+.mm-live .mm-link { justify-self: start; padding: 2px; font-size: 12px; }
+.srv-row.static { cursor: default; border-left-color: rgba(217, 164, 65, .45); }
+
+.mm-title-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.mm-version { font-family: var(--font-mono); font-size: 11px; letter-spacing: .16em; color: var(--tx-3); }
+
+/* Is anyone playing? Answered before the player presses anything. */
+.mm-status {
+  display: inline-flex; align-items: center; gap: 9px; white-space: nowrap;
+  padding: 6px 13px; border: 1px solid var(--line); border-radius: 999px; background: rgba(10, 10, 12, .6);
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .16em; color: var(--tx-2);
+}
+.mm-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--tx-3); }
+.mm-status.on { border-color: rgba(125, 255, 154, .28); }
+.mm-status.on .mm-dot { background: #7dff9a; animation: mm-ping 2.6s ease-out infinite; }
+.mm-status.off { border-color: rgba(217, 74, 58, .45); color: #f0a49a; }
+.mm-status.off .mm-dot { background: var(--red); }
+@keyframes mm-ping { 0% { box-shadow: 0 0 0 0 rgba(125, 255, 154, .5); } 70%, 100% { box-shadow: 0 0 0 7px rgba(125, 255, 154, 0); } }
+
+/* -------------------------------------------------------- the shell: lobby / settings / keys */
+
+.mm-shell { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 0 var(--mm-edge); }
+.mm-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 18px; padding: 15px 0 13px; border-bottom: 1px solid var(--line); }
+.mm-back { background: none; border: 1px solid var(--line); color: var(--tx-2); font-family: var(--font-display); font-size: 13px; letter-spacing: .18em; padding: 7px 12px; cursor: pointer; }
+.mm-back:hover { color: var(--brass); border-color: var(--brass); }
+.mm-bar-brand { display: flex; align-items: baseline; gap: 12px; margin-right: auto; min-width: 0; }
+.mm-bar-brand b { font-family: var(--font-display); font-size: 22px; letter-spacing: .18em; font-weight: normal; }
+.mm-bar-brand span { font-family: var(--font-mono); font-size: 11px; letter-spacing: .24em; color: var(--brass); }
+.mm-content { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px 0 22px; }
+
+/* ------------------------------------------------------------------------- shared furniture */
+
+.mm-btn {
+  padding: 11px 18px; background: var(--bg-2); border: 1px solid var(--line); color: var(--tx);
+  font-family: var(--font-display); font-size: 17px; letter-spacing: .16em; cursor: pointer;
+  transition: background 120ms, border-color 120ms, transform 80ms;
+}
+.mm-btn:hover:not(:disabled) { background: var(--bg-3); border-color: var(--tx-3); }
+.mm-btn:active:not(:disabled) { transform: translateY(1px); }
+.mm-btn:disabled { opacity: .38; cursor: default; }
+.mm-btn.primary { background: linear-gradient(180deg, #e9ba58, var(--brass)); border-color: #eec070; color: #191206; box-shadow: 0 6px 20px rgba(217, 164, 65, .2); }
+.mm-btn.primary:hover:not(:disabled) { background: linear-gradient(180deg, #f3c96e, #dfae4c); border-color: #f3c96e; }
+.mm-btn.big { font-size: 20px; padding: 13px 26px; }
+.mm-btn.small { font-size: 12px; padding: 8px 13px; letter-spacing: .14em; }
+.mm-btn.on { border-color: var(--brass); color: var(--brass); }
+.mm-link { background: none; border: none; color: var(--tx-2); font-family: var(--font-display); font-size: 13px; letter-spacing: .16em; cursor: pointer; padding: 4px 2px; }
+.mm-link:hover { color: var(--brass); }
+
+.mm-field { display: grid; gap: 5px; min-width: 0; }
+.mm-field > span { font-family: var(--font-mono); font-size: 10px; letter-spacing: .2em; color: var(--tx-3); }
+.mm-field input, .row.tight input {
+  padding: 10px 12px; min-width: 0; background: rgba(0, 0, 0, .34); border: 1px solid var(--line);
+  color: var(--tx); font-family: inherit; font-size: 14px; outline: none;
+}
+.mm-field input:focus, .row.tight input:focus { border-color: var(--brass); box-shadow: 0 0 0 1px rgba(217, 164, 65, .3); }
+.row.tight { display: flex; gap: 8px; }
+.row.tight input { flex: 1 1 auto; }
+
+.mm-notice { margin: 12px 0 0; padding: 10px 14px; font-size: 13px; line-height: 1.45; color: var(--tx-2); background: rgba(217, 164, 65, .07); border: 1px solid var(--line); border-left: 3px solid var(--brass); }
+.mm-notice.error { color: #f0a49a; background: rgba(217, 74, 58, .09); border-left-color: var(--red); }
+.mm-hint { font-size: 11px; line-height: 1.45; color: var(--tx-3); }
+.mm-blurb { margin: 10px 0 0; font-size: 12px; line-height: 1.5; letter-spacing: .03em; color: var(--tx-2); }
+
+/* ------------------------------------------------------------------------------- the lobby */
+
+.mm-content.lobby-grid {
+  display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(330px, .85fr);
+  gap: 20px; overflow: hidden; align-items: stretch;
+}
+.lb-setup { min-height: 0; overflow: auto; padding-right: 6px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-content: start; }
+.lb-block { min-width: 0; padding: 12px 14px 14px; background: var(--mm-plate); border: 1px solid var(--line); }
+.lb-block.wide { grid-column: 1 / -1; }
+.lb-h { display: flex; align-items: center; gap: 10px; margin: 0 0 9px; font-family: var(--font-display); font-size: 14px; font-weight: normal; letter-spacing: .26em; color: var(--tx-2); }
+.lb-h em { font-style: normal; font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: var(--brass); }
+.lb-h::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--line); }
+
+/* Mode: six cards with a picture, not six three-letter boxes. */
+.mode-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.mode-card {
+  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "art name" "art tag"; gap: 1px 10px; align-items: center;
+  padding: 10px 12px; text-align: left; cursor: pointer; color: var(--tx);
+  background: var(--bg-2); border: 1px solid var(--line); transition: background 120ms, border-color 120ms;
+}
+.mode-card:hover { background: var(--bg-3); border-color: var(--tx-3); }
+.mode-art { grid-area: art; width: 26px; height: 26px; color: #8e8e99; }
+.mode-art svg { width: 100%; height: 100%; }
+.mode-card b { grid-area: name; font-family: var(--font-display); font-size: 15px; letter-spacing: .1em; font-weight: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mode-tag { grid-area: tag; font-family: var(--font-mono); font-size: 9px; letter-spacing: .14em; color: var(--tx-3); }
+.mode-card.on { border-color: var(--brass); background: linear-gradient(180deg, rgba(217, 164, 65, .17), rgba(217, 164, 65, .045)); }
+.mode-card.on b, .mode-card.on .mode-art { color: var(--brass); }
+.mode-card.on .mode-tag { color: #d9bd8a; }
+/* The corner tab: selection you can see from across the room. */
+.mode-card.on::after, .map-card.on::after { content: ""; position: absolute; top: 0; right: 0; width: 13px; height: 13px; background: var(--brass); clip-path: polygon(100% 0, 100% 100%, 0 0); }
+
+/* Map: the footprint, its name, and how big it actually is. */
+.map-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.map-card { position: relative; display: grid; gap: 3px; padding: 9px 11px 10px; text-align: left; cursor: pointer; color: var(--tx); background: var(--bg-2); border: 1px solid var(--line); transition: background 120ms, border-color 120ms; }
+.map-card:hover { background: var(--bg-3); border-color: var(--tx-3); }
+.map-plan { display: block; height: 34px; color: var(--tx-3); }
+.map-plan svg { width: 100%; height: 100%; }
+.map-card b { font-family: var(--font-display); font-size: 15px; letter-spacing: .09em; font-weight: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.map-size { font-family: var(--font-mono); font-size: 9px; letter-spacing: .12em; color: var(--tx-3); }
+.map-card.on { border-color: var(--brass); background: linear-gradient(180deg, rgba(217, 164, 65, .17), rgba(217, 164, 65, .045)); }
+.map-card.on b, .map-card.on .map-plan { color: var(--brass); }
+
+/* Bots: how many, then how good — the second question is meaningless at zero, so it is disabled. */
+.bots-row { display: flex; align-items: center; gap: 12px; margin-bottom: 9px; }
+.bots-row input[type="range"] { flex: 1 1 auto; min-width: 0; accent-color: var(--brass); }
+.bots-num { font-family: var(--font-display); font-size: 22px; line-height: 1; min-width: 24px; text-align: right; color: var(--brass); font-weight: normal; }
+.seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.seg-btn { padding: 7px 4px; background: var(--bg-2); border: 1px solid var(--line); color: var(--tx-2); font-family: var(--font-display); font-size: 13px; letter-spacing: .12em; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.seg-btn:hover:not(:disabled) { border-color: var(--tx-3); color: var(--tx); }
+.seg-btn.on { border-color: var(--brass); color: var(--brass); background: rgba(217, 164, 65, .12); }
+.seg-btn:disabled { opacity: .35; cursor: default; }
+
+/* The wardrobe (Drop E). Locked cuts stay visible with what earns them. */
+.cut-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
+.cut { display: grid; gap: 1px; padding: 7px 9px; min-width: 0; text-align: left; cursor: pointer; color: #d8d2c8; background: var(--bg-2); border: 1px solid var(--line); }
+.cut b { font-family: var(--font-display); font-size: 13px; letter-spacing: .08em; font-weight: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cut span { font-size: 9px; letter-spacing: .04em; color: var(--tx-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cut:hover:not(:disabled) { border-color: rgba(230, 185, 128, .5); }
+.cut.on { border-color: #e6b980; background: rgba(230, 185, 128, .13); color: #e6b980; }
+.cut.locked { opacity: .42; cursor: default; }
+
+/* The Boys: five roles, each with what it hands you for free. */
+.boys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(172px, 1fr)); gap: 8px; }
+.boys-class { display: grid; gap: 4px; padding: 10px 12px; text-align: left; cursor: pointer; color: var(--tx-2); background: var(--bg-2); border: 1px solid var(--line); }
+.boys-class b { font-family: var(--font-display); font-size: 15px; letter-spacing: .09em; font-weight: normal; color: var(--tx); }
+.boys-class span, .boys-class small { font-size: 11px; line-height: 1.4; }
+.boys-class small { color: var(--tx-3); }
+.boys-class:hover { border-color: var(--tx-3); }
+.boys-class.on { border-color: var(--brass); background: rgba(217, 164, 65, .12); }
+.boys-class.on b { color: var(--brass); }
+
+/* ------------------------------------------------------------------- the server browser */
+/* Its own column, its own scroll, its own header. It is the half of the lobby a player who came
+   to join a friend actually needs, and it used to be four rows at the bottom of a scroll. */
+
+.lb-servers { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px; }
+.srv-head { display: flex; align-items: center; gap: 10px; }
+.srv-head .lb-h { flex: 1 1 auto; margin: 0; }
+.srv-refresh { flex: 0 0 auto; padding: 5px 10px; background: none; border: 1px solid var(--line); color: var(--tx-3); font-family: var(--font-mono); font-size: 10px; letter-spacing: .16em; cursor: pointer; }
+.srv-refresh:hover { color: var(--brass); border-color: var(--brass); }
+.srv-refresh.busy { opacity: .5; }
+.srv-list { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 7px; padding-right: 4px; }
+.srv-row {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 12px;
+  padding: 9px 12px; text-align: left; cursor: pointer; color: var(--tx);
+  background: var(--mm-plate); border: 1px solid var(--line); border-left: 3px solid var(--line);
+  transition: background 120ms, border-color 120ms;
+}
+.srv-row:hover:not(:disabled) { border-color: var(--brass); background: rgba(217, 164, 65, .1); }
+.srv-row:disabled { opacity: .45; cursor: default; }
+.srv-mode { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; padding: 4px 7px; border: 1px solid currentColor; color: var(--tx-2); }
+.srv-mode.m-tdm { color: var(--brass); } .srv-mode.m-dom { color: #7fd8a0; } .srv-mode.m-bomb { color: #ff9070; }
+.srv-mode.m-boys { color: #8fd3ff; } .srv-mode.m-gungame { color: #a78ce0; } .srv-mode.m-ostrzyzeni { color: #e08ca0; }
+.srv-mode.m-ffa { color: var(--red); }
+.srv-main { min-width: 0; display: grid; gap: 1px; }
+.srv-name { font-family: var(--font-display); font-size: 17px; letter-spacing: .07em; font-weight: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srv-meta { font-size: 11px; color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srv-count { display: grid; gap: 4px; justify-items: end; }
+.srv-count b { font-family: var(--font-mono); font-size: 14px; font-weight: normal; font-variant-numeric: tabular-nums; }
+.srv-count i { font-style: normal; color: var(--tx-3); margin: 0 2px; }
+.srv-bar { display: block; width: 52px; height: 4px; background: rgba(255, 255, 255, .12); }
+.srv-bar i { display: block; height: 100%; background: var(--brass); }
+.srv-row.full .srv-bar i { background: var(--red); }
+.srv-go { font-family: var(--font-display); font-size: 13px; letter-spacing: .14em; color: var(--tx-3); white-space: nowrap; }
+.srv-row:hover:not(:disabled) .srv-go { color: var(--brass); }
+.srv-row.full .srv-go { color: #f0a49a; }
+.srv-empty { display: grid; gap: 6px; padding: 20px 16px; text-align: center; font-size: 12px; line-height: 1.5; color: var(--tx-3); border: 1px dashed var(--line); }
+.srv-empty b { font-family: var(--font-display); font-size: 16px; letter-spacing: .14em; font-weight: normal; color: var(--tx-2); }
+.srv-empty.err { color: #f0a49a; border-color: rgba(217, 74, 58, .45); }
+.srv-private { padding: 11px 13px 12px; background: var(--mm-plate); border: 1px solid var(--line); }
+.srv-private .lb-h { margin-bottom: 8px; }
+.srv-private .mm-hint { display: block; margin-top: 7px; }
+.invite-box { margin-top: 8px; }
+.invite-box input { font-family: var(--font-mono); font-size: 11px; }
+
+/* ------------------------------------------------------------------------- the launch bar */
+/* One place where the match starts, always on screen, saying what is about to be launched. */
+
+.lb-launch {
+  flex: 0 0 auto; display: grid; grid-template-columns: minmax(170px, 230px) minmax(0, 1fr) auto;
+  align-items: center; gap: 18px; padding: 13px 0 16px; border-top: 1px solid var(--line);
+}
+.lb-launch-read { display: grid; gap: 2px; min-width: 0; }
+.lb-launch-mode { font-family: var(--font-display); font-size: 19px; letter-spacing: .14em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-launch-sub { font-size: 11px; letter-spacing: .08em; color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-launch-btns { display: flex; gap: 10px; }
+.launch-hint { grid-column: 1 / -1; margin-top: -6px; }
+
+/* --------------------------------------------------------------------- join by link (Drop D) */
+
+.mm-content.link-join { display: flex; align-items: center; justify-content: center; }
+.lj-card { width: min(460px, 100%); display: grid; gap: 12px; padding: 24px; background: rgba(14, 14, 18, .9); border: 1px solid var(--line); border-top: 2px solid var(--brass); }
+.lj-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lj-eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: .2em; color: var(--tx-3); }
+.lj-head b { font-family: var(--font-mono); font-size: 19px; color: var(--tx); }
+.lj-head .mm-link { margin-left: auto; }
+.lj-meta { display: flex; align-items: center; gap: 10px; }
+.lj-map { font-size: 12px; letter-spacing: .06em; color: var(--tx-2); }
+.lj-card .mm-blurb { margin: 0; }
+
+/* ------------------------------------------------------------------- settings and controls */
+
+.mm-card { width: min(900px, 100%); margin: 0 auto; padding: 18px 22px 22px; background: rgba(14, 14, 18, .86); border: 1px solid var(--line); border-top: 2px solid rgba(217, 164, 65, .5); }
+/* The shell scrolls now, so the panel does not need its own 60vh window (the pause card still does). */
+.mm-card .settings { max-height: none; overflow: visible; padding-right: 0; }
+.keys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px 26px; align-content: start; }
+.keys-col { min-width: 0; }
+.keys-col .lb-h { font-size: 16px; margin-bottom: 6px; }
+.keys-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, .06); font-size: 12.5px; color: var(--tx-2); }
+.keys-row kbd { flex: 0 0 auto; min-width: 78px; text-align: center; padding: 4px 7px; background: var(--bg-3); border: 1px solid var(--line); border-bottom-width: 2px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .04em; color: var(--brass); }
+
+/* --------------------------------------------------------------------------- fitting rules */
+
+/* Interface scaling is what actually squeezes this: browser zoom SHRINKS the CSS viewport, so a
+   1280×720 screen at 125 % reports 1024×576. MEASURED (`menu-fit.mjs`): folding to one column
+   there puts the server rows below the fold, which is the exact fault this redesign is about — so
+   the two columns are held to 900 px and it is the server column's width that gives first. */
+@media (max-width: 1180px) {
+  .mm-content.lobby-grid { grid-template-columns: minmax(0, 1.4fr) minmax(288px, .8fr); gap: 14px; }
+  .mode-card b { font-size: 14px; }
+  .srv-row { gap: 9px; padding: 8px 10px; }
+  .srv-name { font-size: 16px; }
+}
+/* One column below this: the browser can no longer hold two comfortable ones, and a squeezed
+   server list is worse than one under the setup. The whole content area scrolls instead. */
+@media (max-width: 900px) {
+  .mm-content.lobby-grid { grid-template-columns: minmax(0, 1fr); overflow: auto; }
+  .lb-setup, .srv-list { overflow: visible; min-height: 0; }
+  .lb-servers { grid-template-rows: auto auto auto; }
+}
+@media (max-width: 860px) {
+  .mm-title-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 780px) {
+  .lb-setup { grid-template-columns: 1fr; }
+  .mode-grid { grid-template-columns: 1fr 1fr; }
+  .lb-launch { grid-template-columns: 1fr; gap: 12px; }
+  .lb-launch-btns .mm-btn { flex: 1 1 auto; }
+}
+/* Short displays: the hero and the paddings give way before anything a player has to click. */
+@media (max-height: 700px) {
+  .mm-title { gap: 16px; }
+  .mm-tagline { display: none; }
+  .mm-nav-btn { padding: 9px 16px; }
+  .mm-content { padding: 12px 0 16px; }
+  .lb-launch { padding: 10px 0 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mm-bg, .mm-pole, .mm-status.on .mm-dot { animation: none; }
+  .mm-nav-btn:hover { transform: none; }
+}
