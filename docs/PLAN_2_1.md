@@ -218,6 +218,9 @@ Nick + password or Discord OAuth, server-side profile (skins, haircuts, XP), wee
 | 2026-09-07 | B | drop/b-weapon-feel | Slice 1, docs only: `docs/WEAPON_MATRIX.md` written from three recon passes (client handling `LocalPlayer` / `WeaponController` / `Viewmodel`, audio voice table `sfx.ts:31-44`, VFX `Effects.ts` / `Tracers.ts` / `view/index.ts` / `Hud.tsx`). Found: of the six axes only recoil, ADS and the audio voice are per-weapon today; sprint-out (150 ms), sway, flash, tracer and casing are one global value for all eleven, shake is a three-way ternary, and the ADS sensitivity ignores `adsZoom`. The sniper already hides the viewmodel and has breath hold; it does not scale sensitivity or un-scope on sprint. Matrix proposes bold per-row targets, six named rules (R1 zoom-sens, B1 bipod, C1 pellet ring, S1 bolt kicks out of scope, S2 sprint un-scopes, M1 clippers hum) and four decisions D-B1–D-B4 for the owner. No code touched. STOPPED for sign-off as the plan requires. | docs/WEAPON_MATRIX.md | typecheck — test — build — (no code changed) | blocked: owner sign-off on WEAPON_MATRIX.md |
 
 Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
+| 2026-09-08 | I (new) | claude/game-feedback-improvements-6mqx41 | **Owner's player-feedback brief, all nine points.** Controls: `browserKeys.ts` decides per keydown+modifiers whether the game owns a key (Ctrl+D bookmarking mid-round was preventDefault on the *Ctrl* press, not the chord); text fields keep their keystrokes (typing a nickname with "b" opened the shop); `buttons()` gated on pointer lock (the pause menu did not pause); `immersion.ts` = fullscreen + Keyboard Lock + pointer from the Play click, with a stated retry. Floor at A/B diagnosed as THREE causes: 5 coplanar top-face pairs (132 m² + 144 m² on the slabs carrying A and B — yard paving now laid AROUND the buildings), the site plate being an 80 m² double-sided lit alpha quad sampling one texture three times and never frozen, and no collision broadphase at all (uniform 4 m XZ grid + DDA: overlaps 43→6.5 ms/60k, hitscan 82→40 ms/40k). Shop rebuilt as three aisles in a fixed head/body/foot frame — measured PASS at 7 viewports incl. browser zoom, 21 items, nothing cut, nothing scrolled. Team switching built end to end (shared rules, server decides, wallet/gear survive, deferred to next round in bomb). WebGL2 is the default; automatic quality = device probe + 1 s median measurement + a director with long hysteresis that stops climbing after two reversals. Marcovia kit (colours only, geometry identical part-for-part by test). Living arena: 3 removal-only tactical plans voted by the attackers in the buy window, applied at the freeze edge, reverted next round. First-run hints. | apps/client/e2e/out/ui/{shop-fit.md,shop-*.png,plan-vote.png}; apps/client/e2e/out/kits/*.png; `pnpm test` prints the broadphase numbers; regenerate fit with `node apps/client/e2e/tools/ui-fit.mjs --url <dev>` | typecheck ✓ test ✓ (565: shared 184, client 256, server 125) build ✓ check:weapons ✓ (19/19) e2e — (not run: needs two live servers + a browser pair) | review |
+
+Status vocabulary reminder: this row is `review` because the full e2e path was not run here.
 
 ## Decisions log (append-only)
 
@@ -262,6 +265,28 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
   schema field; D-B2 the DMR becomes `scoped` with a lighter ring overlay and no breath hold;
   D-B3 while scoped Shift holds breath when still and un-scopes + sprints when moving; D-B4 the
   signature threshold (0.25 normalised) is frozen after the first real run. (lead)
+
+- 2026-09-08 — **New drop I, "player-facing"**, opened for the owner's feedback brief. It is not
+  drops A–H: those are weapons, skins, modes, the shave, roles, a map and accounts, and none of
+  them covers controls, the shop, team switching, the renderer or a new mechanic. Recorded as its
+  own drop rather than smuggled into B. (lead)
+- 2026-09-08 — Drop I: WebGL2 is the DEFAULT renderer and WebGPU became the opt-in, reversing the
+  previous "auto". The owner asked for WebGL2 from launch with nothing to switch on, and the
+  codebase already carried a retry for WebGPU initialising and then failing inside scene setup —
+  so the path that always works is the one players get. (owner's brief; lead)
+- 2026-09-08 — Drop I: the collision world is now PER ROOM (the walk grid stays shared). A
+  tactical plan takes a wall out of one room's world, and a shared world would take it out of
+  every other match on the process. Measured 0.08 ms and ~376 pointers per room against the
+  179 ms walk grid. `sharedWorld.test.ts` pins both halves. (lead)
+- 2026-09-08 — Drop I: tactical plans are REMOVAL-ONLY. Adding geometry can close a player inside
+  it and makes the bots' pre-baked walk grid actively wrong rather than merely incomplete;
+  removing leaves the grid a subset of what is walkable. This is the constraint that makes the
+  mechanic safe without touching server authority or re-baking nav. (lead)
+- 2026-09-08 — Drop I: the Marcovia colours (white / yellow / green) come from three independent
+  search results that agree — marki.pl, marki.net.pl and the club's own site — because the network
+  proxy in this environment refuses all three hosts, so none could be opened and the crest was
+  never seen. The kit is therefore INSPIRED BY the colours and is deliberately not a reproduction
+  of the badge. Using the real crest needs the artwork and a licence decision: owner's call. (lead)
 
 ## Deferred (things noticed, deliberately not done)
 
@@ -324,3 +349,29 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 - Drop B: the ADS blend is a framerate-dependent lerp (`LocalPlayer.ts:243`), so `adsMs` is not
   the measured 0.1 → 0.9 time; `weapon-signature.mjs` measures the real time and the matrix quotes
   `adsMs` as intent. Making the blend exact is a one-line change to do with the tool in hand.
+
+- Drop I: **leave-and-rejoin still resets the wallet** (`TdmRoom.ts` onJoin calls `writeWallet(p,
+  freshWallet())`). Team SWITCHING can no longer be used for it — that is tested — but the rejoin
+  hole is older and closing it needs a stable player identity (nick+token, or the accounts of drop
+  H). Not guessed at here.
+- Drop I: a report that a 0.5 m crate at site B triggers a pathological step-up path did NOT
+  reproduce: measured 3.0 `overlaps()` calls per tick at every obstacle height from 0.35 m to
+  1.1 m, the same as walking free. No map geometry was changed on that basis. If site B still
+  hitches after this drop, that is the next thing to measure on a real GPU.
+- Drop I: only the ATTACKING team votes on a tactical plan. Sides swap at halftime so it evens
+  out over a match, but a defender never gets the choice within a half. Worth a playtest verdict
+  before adding a second, defence-side plan slot.
+- Drop I: plans cannot ADD geometry (see the locked decision), so the brief's "raise cover"
+  example is not implemented — the three plans open a route, open a crossing and deny a vantage
+  point. Adding cover needs the bots' walk grid rebuilt per plan variant, which is a real piece of
+  work and belongs in its own slice.
+- Drop I: the e2e suite was NOT run (it needs two live servers and a browser pair). Everything
+  claimed here comes from unit tests, the headless fit/kit tools, and screenshots. The full path
+  (launch → fullscreen → team → buy → round → switch → next round) has not been walked end to end
+  on a real GPU by a human.
+- Drop I: `ui-fit.mjs` and `team-kit.mjs` need a dev server running and use the container's
+  preinstalled Chromium via `PW_CHROMIUM` because the repo's pinned Playwright wants a browser
+  build that is not installed here. On a machine with `npx playwright install` done, they work
+  unchanged.
+- Drop I: the shop's smallest text is 9 px (the `×2` / `WORN` state tags). Legible at 100 %, tight
+  at 125 % browser zoom. Worth raising to 10 px if a playtester mentions it.

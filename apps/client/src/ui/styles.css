@@ -337,6 +337,9 @@ button { font-family: inherit; }
 /* Three aisles are held down to 900 px, well past 125 % zoom on a 1280 screen (1024 px). Folding
    to two columns is what actually breaks the fit — it makes one column carry two aisles — so it is
    the LAST resort, not the first. */
+/* Below three comfortable columns the refund figure goes before the button does: a clipped
+   "SELL $1," helps nobody, and the amount is still on the button's tooltip and in the price cell. */
+@media (max-width: 1150px) { .shop-sell-amount { display: none; } .shop-row-main { min-width: 60px; } }
 @media (max-width: 900px) { .shop-body { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 640px) { .shop-body { grid-template-columns: 1fr; } .shop-keyhelp { display: none; } }
 /* When the screen is short, the stats line is the first thing to go: a truncated "DMG 33 · RPM…"

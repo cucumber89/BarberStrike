@@ -24,8 +24,13 @@ const state = {
 
 const api = { buy: (i: ShopItemId) => console.log("buy", i), sell: (i: string) => console.log("sell", i), close: () => console.log("close") };
 
+const q = new URLSearchParams(location.search);
 /** `?panel=plan` renders the living-arena vote instead of the shop. */
-const which = new URLSearchParams(location.search).get("panel");
+const which = q.get("panel");
+/** `?mode=tdm` is the WORST case for fit: 21 items rather than bomb's 17 (perks, and the launcher). */
+const shopState = q.get("mode") === "tdm"
+  ? ({ ...state, mode: "tdm", bomb: null, nearStation: true } as unknown as HudState)
+  : state;
 const planState = {
   ...state,
   myTeam: 1,
@@ -37,7 +42,7 @@ createRoot(document.getElementById("root")!).render(
   <div className="app" style={{ background: "#0b0b0d" }}>
     {which === "plan"
       ? <PlanPanel h={planState} onVote={(id) => console.log("vote", id)} />
-      : <Shop h={state} api={api as never} now={100000} />}
+      : <Shop h={shopState} api={api as never} now={100000} />}
   </div>,
 );
 void PLANS;

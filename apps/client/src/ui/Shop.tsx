@@ -154,7 +154,14 @@ export function Shop({ h, api, now }: Props) {
           : undefined,
         label: carried ? "OWNED" : v.ok ? (swapping && v.refund > 0 ? "SWAP" : "BUY") : v.reason === "money" ? "TOO POOR" : "—",
         onBuy: () => api.buy(id),
-        extra: sellable ? <button className="shop-btn ghost" onClick={click(() => api.sell(id))} data-testid={`sell-${id}`}>SELL {money(Math.round(WEAPON_PRICES[id] * ECONOMY.sellRatio))}</button> : undefined,
+        // The refund is in its own span so a narrow column can drop it and keep the button whole;
+        // at 1024 px (a 1280 screen at 125 % zoom) the full "SELL $1,820" was being clipped.
+        extra: sellable
+          ? <button className="shop-btn ghost" onClick={click(() => api.sell(id))} data-testid={`sell-${id}`}
+              title={`Sell for ${money(Math.round(WEAPON_PRICES[id] * ECONOMY.sellRatio))}`}>
+              SELL<span className="shop-sell-amount"> {money(Math.round(WEAPON_PRICES[id] * ECONOMY.sellRatio))}</span>
+            </button>
+          : undefined,
       });
   };
 

@@ -24,6 +24,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = resolve(HERE, "../out/ui");
 const arg = (name, dflt) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : dflt; };
 const BASE = arg("--url", "http://localhost:5173");
+// TDM is the worst case for fit: 21 items against bomb mode's 17.
+const MODE = arg("--mode", "tdm");
 
 const SIZES = [
   // The three the brief names.
@@ -49,7 +51,7 @@ let bad = 0;
 
 for (const size of SIZES) {
   const page = await browser.newPage({ viewport: { width: size.width, height: size.height } });
-  await page.goto(`${BASE}/ui-fit.html`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/ui-fit.html?mode=${MODE}`, { waitUntil: "networkidle" });
   await page.waitForSelector(".shop-card");
   await page.waitForTimeout(250);
 
@@ -101,7 +103,7 @@ for (const size of SIZES) {
 await browser.close();
 
 const md = [
-  "# Buy menu fit\n",
+  `# Buy menu fit (${MODE} — ${MODE === "tdm" ? "the worst case, 21 items" : "17 items"})\n`,
   "Measured with `node apps/client/e2e/tools/ui-fit.mjs` against the real component. `body need` /",
   "`body have` are the aisle content height and the space it is given: need ≤ have means no scroll.\n",
   "| viewport | verdict | card overflows | body scrolls | cut off screen | controls off screen | smallest text | items | body need / have |",
