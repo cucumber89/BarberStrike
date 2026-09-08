@@ -75,6 +75,10 @@ export const installView: GameModule = (ctx) => {
   /** A case owed by a hand-worked action, and the size it should come out at (0 = nothing pending). */
   let ejectAt = 0;
   let ejectScale = 1;
+  /** Shots this module has presented, for `weapon-signature.mjs` to measure cadence against. */
+  let shotCount = 0;
+  /** The recoil the last shot put on the view, sampled at the shot rather than a frame later. */
+  let lastKick = { pitch: 0, yaw: 0 };
 
   const offs = [
     ctx.events.on("matchPhase", e => { if (e.phase === MatchPhase.Prep || e.phase === MatchPhase.Ended || e.phase === MatchPhase.Playing) grenades.reset(); }),
@@ -83,6 +87,8 @@ export const installView: GameModule = (ctx) => {
       // Axis 6 of the matrix, from the feel table: how much violence the shot puts on the screen.
       // Every number that used to be one value for all eleven weapons — flash size, shake, tracer
       // width, whether a case comes out at all — is now the weapon's own.
+      shotCount++;
+      lastKick = ctx.local.recoilOffset; // sampled here, where the kick has just been applied
       const feel = feelOf(s.weapon);
       const kind = WEAPONS[s.weapon].kind;
       if (kind === "melee") return;                       // the swing is the whole show
@@ -197,8 +203,17 @@ export const installView: GameModule = (ctx) => {
     }),
   ];
 
+  // Harness hook for the e2e tools, the same shape the audio module uses (`__fbAudio`):
+  // `weapon-signature.mjs` reads the viewmodel's sway and counts shots through it.
+  (window as unknown as { __fbView?: unknown }).__fbView = {
+    viewmodel,
+    get shots(): number { return shotCount; },
+    get lastKick(): { pitch: number; yaw: number } { return lastKick; },
+  };
+
   return () => {
     hud.set({ smokeOpacity: 0 });
+    delete (window as unknown as { __fbView?: unknown }).__fbView;
     for (const off of offs) off();
     tracers.dispose();
     viewmodel.dispose();

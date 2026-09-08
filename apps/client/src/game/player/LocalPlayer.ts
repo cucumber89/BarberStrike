@@ -107,6 +107,13 @@ export class LocalPlayer {
   /** 0 = hip, 1 = fully aimed. Presentation modules use it for the viewmodel pose. */
   get aimBlend(): number { return this.adsBlend; }
 
+  /**
+   * The uncountered recoil currently on the view (radians). Read by `weapon-signature.mjs` at the
+   * instant of a shot: sampling the camera a frame later measures the renderer, not the weapon —
+   * a pistol's kick is most of the way home before the next frame is drawn under SwiftShader.
+   */
+  get recoilOffset(): { pitch: number; yaw: number } { return { pitch: this.recoilPitch, yaw: this.recoilYaw }; }
+
   /** Applies mouse look. Called once per frame before simulation. */
   private applyLook(): void {
     const m = { dx: 0, dy: 0 };
