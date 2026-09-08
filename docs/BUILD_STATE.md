@@ -2,6 +2,14 @@
 
 Compact shared state. Read `ARCHITECTURE.md` first. Keep this file short.
 
+## Current integration — The Boys and simplified UI (2026-09-07)
+The Boys replaces FFA in the menu; five classes, team control points, class shops and support healing.
+Entry waits for scene readiness and an explicit ENTER MATCH; 30-second buy windows, including Bomb.
+The simplified UI, movement without sliding and simplified Bomb rules from the local branch remain current;
+older feature entries below are historical. Main's weapon art/feel, map materials, graphics settings fixes,
+shared collision/navigation caches, compact snapshots, health statistics and precompressed hosting are retained.
+See `THE_BOYS.md` for current mode rules.
+
 ## Performance pass (2026-09-07) — one core for the simulation, fewer bytes for the first load
 Handoff brief: `OPTIMIZATION_PROMPT` (owner's audit). Budget guard: `apps/server/src/rooms/tickCost.test.ts`
 (8 normal bots + 1 human, 600 ticks). Baseline on this machine: **mean 0.62 ms/tick, peak 10–13 ms**;

@@ -78,14 +78,8 @@ for (const map of Object.values(MAPS)) {
     it("mounts wall props on a wall and stands posts on the ground (nothing floats)", () => {
       // Playtest 1.0: "signs float around the map". Wall-mounted kinds must touch a solid within
       // a few cm of the anchor; floor-standing kinds must have ground right under the anchor.
-      const WALL = new Set(["sign", "board", "poster", "graffiti", "neon", "sticker", "vent", "ac_unit", "mirror", "shelf",
-        // 2.2 dressing: boards, frames and banners hang on a wall; stencils are painted on a container or shed face.
-        "menu_board", "wall_clock", "pinboard", "tool_board", "calendar", "certificate", "fuse_box", "banner", "stencil"]);
-      // Floor-standing dressing includes counter-top items (their anchor is the counter top, which is a solid too).
-      const FLOOR = new Set(["trash", "crate", "dumpster", "pole", "barber_chair", "wheel",
-        "cafe_table", "coffee_machine", "cups", "napkins", "plant", "tyre_stack", "jack", "oil_cans", "shelf_rack", "coat_rack",
-        "magazines", "cash_tray", "jars", "broom", "laundry_basket", "mop_bucket", "cone", "puddle", "litter", "a_frame",
-        "bicycle", "chalk", "pallet_sacks", "tarp_heap", "fire_barrel", "hazard_tape"]);
+      const WALL = new Set(["sign", "board", "poster", "graffiti", "neon", "sticker", "vent", "ac_unit", "mirror", "shelf"]);
+      const FLOOR = new Set(["trash", "crate", "dumpster", "pole", "barber_chair", "wheel"]);
       const floating: string[] = [];
       for (const p of map.props) {
         if (p.kind === "neon" && p.variant === "station") continue; // buy-station holograms float by design

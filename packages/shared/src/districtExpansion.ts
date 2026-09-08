@@ -5,9 +5,22 @@ import type { Solid, MaterialTag, PropHint, LightHint, SpawnPoint } from "./map"
 export function expandDistrict(solids: Solid[], props: PropHint[], lights: LightHint[]): SpawnPoint[] {
   const s = (name: string, x: number, y: number, z: number, w: number, h: number, d: number, mat: MaterialTag) =>
     solids.push({ name, box: boxFrom(x, y, z, w, h, d), mat });
+  // The buildings' own floor slabs (see `room`) sit at exactly y = 0, so the yard paving is laid
+  // AROUND them, not under them. Laying one 18 × 67 slab across the whole side put two surfaces on
+  // the same plane over the depot (132 m²) and the cafe (144 m²) — on the very slabs that carry
+  // bomb sites A and B. Coplanar faces cannot be ordered by a depth buffer, so which one wins
+  // flips per pixel and per frame as the camera moves; that crawling shimmer is what the report of
+  // "the floor at A and B lags" describes. `floorAudit.test.ts` gates it.
+  const ground = (side: number, name: string, x: number, z: number, w: number, d: number) =>
+    s(`extension_ground_${side}${name}`, x, -1, z, w, 1, d, "floor_concrete");
   for (const side of [-1, 1]) {
     const x = side < 0 ? -45 : 35;
-    s(`extension_ground_${side}`, x, -1, -22, 18, 1, 67, "floor_concrete");
+    // Footprint of the building on this side (depot at x -43..-32 z 0..12, cafe at x 38..50 z 1..13).
+    const [bx0, bz0, bw, bd] = side < 0 ? [-43, 0, 11, 12] : [38, 1, 12, 12];
+    ground(side, "_s", x, -22, 18, bz0 + 22);
+    ground(side, "_n", x, bz0 + bd, 18, 45 - (bz0 + bd));
+    ground(side, "_w", x, bz0, bx0 - x, bd);
+    ground(side, "_e", bx0 + bw, bz0, x + 18 - (bx0 + bw), bd);
     s(`extension_south_${side}`, x, 0, -22.3, 18, 7, .3, "wall_sand");
     s(`extension_north_${side}`, x, 0, 45, 18, 7, .3, "wall_teal");
     s(`extension_edge_${side}`, side < 0 ? -45.3 : 53, 0, -22, .3, 7, 67, side < 0 ? "wall_sand" : "wall_teal");
@@ -49,36 +62,20 @@ export function expandDistrict(solids: Solid[], props: PropHint[], lights: Light
   // A raised industrial canopy gives A a recognizable silhouette, with supported roof beams.
   s("depot_site_roof", -40, 4.4, 22, 10, .2, 6, "corrugated_red");
   for (const x of [-39.85, -30.3]) for (const z of [22.15, 27.7]) s(`site_pillar_${x}_${z}`, x, 0, z, .2, 4.4, .2, "metal");
-  // Site cover (2.2). The plant zones are 10 × 8 m (see BOMB_SITES): a few pieces INSIDE each zone
-  // give the planter a corner to hide the charge in and the retake something to clear, the centre
-  // and every entrance stay open. Everything outside a zone is lane cover as before.
+  // High cover on the edge of each site; centre and both exits remain clear for plants and retakes.
   for (const [x, z, w, h, d, look, mat] of [
-    // A / DEPOT (x -40..-30, z 20.5..28.5): a container on the west edge, drums in the north-west
-    // corner, a pallet stack on the south edge, a crate on the east side, a low block wall making
-    // a plant nook against the north edge.
-    [-42, 20, 3.5, 2.4, 2, "container", "corrugated_red"], [-39.3, 25.6, 1.3, 1.1, 1.3, "drums", "paint_yellow"],
-    [-35.2, 20.7, 1.8, 0.9, 1.2, "pallets", "wood"], [-32, 26, 2, 1.3, 2, "crate", "wood"],
-    [-38, 27.6, 2.6, 0.9, 0.4, "planter", "concrete_block"],
+    [-42, 20, 3.5, 2.4, 2, "container", "corrugated_red"], [-32, 26, 2, 1.3, 2, "crate", "wood"],
     [-39, 30, 3, 1.1, 1, "planter", "wall_concrete"], [-35, -12, 2, 1.8, 3, "dumpster", "paint_green"],
-    // B / COURTYARD (x 38..48, z 20.5..28.5): a crate on the west edge, a low planter in the
-    // north-west quarter, a bench on the south edge, drums in the north-east corner, a crate
-    // outside to the east. The centre (also Domination's C) stays open.
-    [38, 23, 2.2, 2.2, 2, "crate", "paint_blue"], [40.5, 25.8, 2.4, 0.7, 2.2, "planter", "wall_concrete"],
-    [44.6, 20.7, 1.9, 0.5, 0.5, "crate", "wood"], [45.9, 26.9, 1.3, 1.1, 1.3, "drums", "paint_blue"],
-    [47.6, 27, 2.4, 1.2, 2, "crate", "wood"],
+    [38, 23, 2.2, 2.2, 2, "crate", "paint_blue"], [47, 27, 3, 1.2, 2, "crate", "wood"],
     [43, 32, 3.5, 1.1, 1, "planter", "wall_concrete"], [43, -10, 2, 1.8, 3, "dumpster", "paint_blue"],
     [-42, 36, 4, 2.7, 3, "portacabin", "paint_white"], [47, 37, 4, 2.7, 3, "portacabin", "paint_blue"],
   ] as const) solids.push({ name: `district_cover_${x}_${z}`, box: boxFrom(x, 0, z, w, h, d), look, mat });
   // Gatehouse baffles break the new long lanes without making dead ends.
   for (const [x, z] of [[-39, -3], [-36, 16], [42, -3], [44, 17]]) s(`lane_baffle_${x}`, x, 0, z, 2.8, 1.5, .4, "wall_sand");
-  for (const [x, z, id, title] of [[-35, 24.5, "A", "A / DEPOT"], [43, 24.5, "B", "B / COURTYARD"]] as const) {
-    props.push({ kind: "lamp", x, y: 0, z: z - 6, variant: "post" });
-    lights.push({ kind: "point", x, y: 4.3, z: z - 6, color: "#ffd29d", intensity: 27, range: 14, priority: 6 });
-    // The letter, big, on both walls that face the zone: readable from every approach.
-    props.push({ kind: "sign", x: x < 0 ? -44.97 : 52.97, y: 2.6, z, yaw: x < 0 ? Math.PI / 2 : -Math.PI / 2, text: title, w: 5, h: 1.4 });
-    // Stencilled site letters: on the lane wall facing the site and high on the far wall.
-    props.push({ kind: "stencil", x: x < 0 ? -27.33 : 35.33, y: 2.6, z, yaw: x < 0 ? -Math.PI / 2 : Math.PI / 2, variant: "yellow", text: id, w: 2.8, h: 2.8 });
-    props.push({ kind: "stencil", x: x < 0 ? -44.96 : 52.96, y: 4.8, z: z - 3, yaw: x < 0 ? Math.PI / 2 : -Math.PI / 2, variant: "yellow", text: `SITE ${id}`, w: 4.5, h: 1.4 });
+  for (const [x, z, title] of [[-35, 24, "A / DEPOT"], [43, 24, "B / COURTYARD"]] as const) {
+    props.push({ kind: "lamp", x, y: 0, z: z - 5, variant: "post" });
+    lights.push({ kind: "point", x, y: 4.3, z: z - 5, color: "#ffd29d", intensity: 27, range: 14, priority: 6 });
+    props.push({ kind: "sign", x: x < 0 ? -44.97 : 52.97, y: 2.5, z, yaw: x < 0 ? Math.PI / 2 : -Math.PI / 2, text: title, w: 4.5, h: 1.3 });
   }
   return [
     { x: -40, y: .05, z: -12, yaw: 0, team: 0 }, { x: 49, y: .05, z: -13, yaw: 0, team: 0 },

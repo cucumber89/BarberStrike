@@ -1,0 +1,45 @@
+import { beforeEach, afterEach, expect, it, vi } from "vitest";
+import { C2S, ECONOMY, MATCH, MatchPhase } from "@frankibarber/shared";
+import { RoomHarness } from "./testHarness";
+let h: RoomHarness;
+beforeEach(() => vi.useFakeTimers());
+afterEach(async () => { if (h) await h.dispose(); vi.useRealTimers(); });
+it("does not spawn or start a countdown for clients still loading", async () => {
+  h = await RoomHarness.create({ mode: "boys" });
+  const a = await h.join("Loading", { deferSpawn: true });
+  await h.join("Ready");
+  await h.advance(MATCH.countdownMs + 31000);
+  const p = h.player(a.sessionId);
+  expect(p.alive).toBe(false); expect(p.spawnedAt).toBe(0);
+  expect(h.state.phase).toBe(MatchPhase.Waiting);
+  h.send(a, C2S.Ready);
+  expect(p.alive).toBe(true); expect(p.spawnedAt).toBe(h.now());
+  expect(h.state.phase).toBe(MatchPhase.Countdown);
+  p.health = 20;
+  const spawnedAt = p.spawnedAt;
+  await h.advance(200);
+  h.send(a, C2S.Ready);
+  expect(p.health).toBe(20); expect(p.spawnedAt).toBe(spawnedAt);
+  expect(ECONOMY.buyWindowMs).toBe(30000);
+});
+it("keeps loading players off the map across match starts", async () => {
+  h = await RoomHarness.create({ mode: "boys" });
+  await h.join("A"); await h.join("B");
+  const c = await h.join("Loading", { deferSpawn: true });
+  await h.advance(MATCH.countdownMs + 100);
+  expect(h.state.phase).toBe(MatchPhase.Playing);
+  expect(h.player(c.sessionId).alive).toBe(false);
+  h.send(c, C2S.Ready);
+  expect(h.player(c.sessionId).alive).toBe(true);
+  expect(h.player(c.sessionId).spawnedAt).toBe(h.now());
+});
+it("a bomb late join cannot enter a live round by sending ready", async () => {
+  h = await RoomHarness.create({ mode: "bomb" });
+  await h.join("A"); await h.join("B");
+  await h.until(MatchPhase.Playing);
+  const c = await h.join("Late", { deferSpawn: true });
+  h.send(c, C2S.Ready);
+  expect(h.player(c.sessionId).alive).toBe(false);
+  h.send(c, C2S.Ready);
+  expect(h.player(c.sessionId).alive).toBe(false);
+});

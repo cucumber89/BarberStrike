@@ -3,10 +3,19 @@ import type { GrenadeId } from "./grenades";
 
 export type Team = 0 | 1;
 
-/** Drop 4: game modes. TDM and Domination are team modes; FFA puts everyone on team 0 with no friendly checks. */
-export type GameMode = "tdm" | "ffa" | "dom" | "bomb";
-export const GAME_MODES: readonly GameMode[] = ["tdm", "ffa", "dom", "bomb"] as const;
-export const isGameMode = (v: unknown): v is GameMode => v === "tdm" || v === "ffa" || v === "dom" || v === "bomb";
+/**
+ * Drop 4: game modes. TDM, Domination, Bomb and The Boys are team modes; FFA puts everyone on
+ * team 0 with no friendly checks. Drop D: Gun Game (FFA on a weapon ladder) and Ostrzyżeni
+ * (infection: sides are survivors / shaved, reusing the team plumbing).
+ *
+ * `GAME_MODES` is the lobby's list and FFA is deliberately not in it — The Boys replaced it in the
+ * picker (PR #14) while the mode itself stays playable for rooms that already ask for it, which is
+ * why `isGameMode` still accepts it.
+ */
+export type GameMode = "tdm" | "ffa" | "dom" | "bomb" | "boys" | "gungame" | "ostrzyzeni";
+export const GAME_MODES: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni"] as const;
+export const isGameMode = (v: unknown): v is GameMode =>
+  typeof v === "string" && (v === "ffa" || (GAME_MODES as readonly string[]).includes(v));
 
 export enum MatchPhase {
   Waiting = "waiting",
@@ -90,9 +99,6 @@ export interface BodyState {
   jumpCooldown: number;
   /** Tactical sprint budget left (ms); drains while tac-sprinting, refills otherwise (drop 4). */
   tac: number;
-  /** Slide (2.3): ms of slide left (0 = not sliding) and ms before the next one may start. */
-  slide: number;
-  slideCd: number;
 }
 
 /** Client→server message names. */
@@ -113,12 +119,42 @@ export const C2S = {
   Chat: "chat",
   /** Ping / mark a spot or an enemy for the team: MarkMessage (drop 5). */
   Mark: "mark",
-  /** Bomb Plant (2.2): the carrier lets go of the charge for a teammate (no payload). */
-  DropBomb: "dropbomb",
+  /** Ask to change sides: { team } (2.4). The server decides, and may defer it to the next round. */
+  Team: "team",
+  /** Living arena (2.4): vote for one of the plans on offer this round: { plan }. */
+  Vote: "vote",
 } as const;
 
 /** Drop 5: chat limits (the server enforces them, the client mirrors them in the box). */
 export const CHAT = { maxLen: 120, minIntervalMs: 700, history: 8, showMs: 9000 } as const;
+
+/**
+ * Living arena (2.4). Sent twice a plan round: once when the vote opens (`chosen` 0, `votingEndsAt`
+ * set) and once when it closes with the result.
+ */
+export interface PlanEvent {
+  /** Plan ids on offer this round; empty when this round has no vote. */
+  options: number[];
+  /** Votes per option, same order — shown live so a team can coordinate. */
+  tally: number[];
+  /** 0 while voting; the winning plan id once decided (0 = nobody voted, nothing changes). */
+  chosen: number;
+  /** Server time the vote closes and the change takes effect. */
+  appliesAt: number;
+  /** Which team gets to vote this round. */
+  votingTeam: Team;
+  round: number;
+}
+
+/** What the server says about a team change (2.4). `deferred` means it lands next round. */
+export interface TeamResult {
+  ok: boolean;
+  /** Why not, when `ok` is false: "same" | "mode" | "balance" | "cooldown" | "ended". */
+  reason?: string;
+  /** The team the player is on (refusal) or is going to (acceptance). */
+  team: Team;
+  deferred?: boolean;
+}
 /** Drop 5: mark limits. A "go" mark lives ttlMs; a "spot" (enemy) mark spotTtlMs. */
 export const MARK = { minIntervalMs: 1200, ttlMs: 8000, spotTtlMs: 4500, maxRange: 60 } as const;
 
@@ -151,6 +187,10 @@ export const S2C = {
   Money: "money",
   /** Result of a buy/sell request: ShopResult. */
   Shop: "shop",
+  /** Answer to a team-change request: TeamResult (2.4). */
+  TeamResult: "teamres",
+  /** Living arena (2.4): the round's plan vote opened, or its result: PlanEvent. */
+  Plan: "plan",
   /** Domination: a flag changed hands: FlagEvent (drop 4). */
   Flag: "flag",
   /** Text chat line: ChatEvent (drop 5). */
@@ -216,8 +256,8 @@ export interface KillEvent {
   victim: string;
   victimName: string;
   victimTeam: Team;
-  /** Weapon or grenade that killed (see `killerName()` in economy.ts for display); "c4" is the charge. */
-  weapon: WeaponId | GrenadeId | "c4";
+  /** Weapon or grenade that killed (see `killerName()` in economy.ts for display). */
+  weapon: WeaponId | GrenadeId;
   headshot: boolean;
 }
 
@@ -244,8 +284,7 @@ export interface ThrowEvent {
 
 export interface BoomEvent {
   id: number;
-  /** A grenade kind, or "c4": the planted charge going off (2.3). */
-  kind: GrenadeId | "c4";
+  kind: GrenadeId;
   x: number; y: number; z: number;
   /** Surface normal for stuck knives / resting orientation. */
   nx: number; ny: number; nz: number;

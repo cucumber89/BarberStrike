@@ -8,6 +8,23 @@ const feed = (d: DynamicScale, ms: number, frames: number): number[] => {
 };
 
 describe("DynamicScale", () => {
+  it("recovers at a stable 60 Hz when targeting 60 FPS", () => {
+    const d = new DynamicScale({target:1}); d.setTargetFps(60);
+    feed(d, 40, 200); expect(d.scale).toBeLessThan(1);
+    feed(d, 1000/60, 900); expect(d.scale).toBe(1);
+  });
+  it("can lower resolution again when the first reduction was insufficient", () => {
+    const d = new DynamicScale({target:1});
+    const changes = feed(d, 30, 400);
+    expect(changes.length).toBeGreaterThan(1);
+    expect(d.scale).toBeCloseTo(.6);
+  });
+  it("ignores invalid timings without poisoning the smoother", () => {
+    const d = new DynamicScale({target:1});
+    for (const dt of [NaN, Infinity, -1, 0]) expect(d.update(dt)).toBeNull();
+    expect(Number.isFinite(d.smoothedMs)).toBe(true);
+    expect(feed(d, 16, 200)).toEqual([]);
+  });
   it("starts at the user's target and stays there while frames are fast enough", () => {
     const d = new DynamicScale({ target: 1 });
     expect(d.scale).toBe(1);

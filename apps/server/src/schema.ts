@@ -9,6 +9,8 @@ export class PlayerState extends Schema {
   @type("string") id = "";
   @type("string") name = "";
   @type("uint8") team = 0;
+  @type("uint8") boysClass = 1;
+  @type("uint8") nextClass = 1;
 
   @type("float32") x = 0;
   @type("float32") y = 0;
@@ -51,19 +53,20 @@ export class PlayerState extends Schema {
 
   // ---- drop 3: plate points and active perks (perk id → server time the buff ends).
   @type("uint8") armor = 0;
-  /** Bomb Plant (2.2): a defuse kit is carried until death or halftime. */
-  @type("boolean") kit = false;
   @type({ map: "float64" }) perks = new MapSchema<number>();
 
   // ---- drop 4: lean (-1 / 0 / 1) and tactical sprint, for the third-person pose.
   @type("int8") lean = 0;
   @type("boolean") tac = false;
-  /** Slide (2.3): ms left / cooldown, replicated so the predicting client reconciles the same body. */
-  @type("uint16") slide = 0;
-  @type("uint16") slideCd = 0;
   // ---- drop 5: scoreboard v2 assists; bots are flagged so the HUD can tag them.
   @type("uint16") assists = 0;
   @type("boolean") bot = false;
+  /**
+   * Drop D: a visibly shaved head. Ostrzyżeni sets it on the shaved side for the round; Drop E's
+   * shave will set it for the match. Cosmetic and replicated like a skin would be — it changes on
+   * conversion and at round start, never per tick.
+   */
+  @type("boolean") shaved = false;
 }
 
 /** Domination flag (drop 4). `owner` / `capTeam` are -1 for neutral / nobody. */
@@ -90,8 +93,6 @@ export class BombState extends Schema {
   @type("string") actor = "";
   @type("float32") progress = 0;
   @type("string") result = "";
-  @type("string") droppedBy = "";
-  @type("float64") droppedAt = 0;
 }
 
 export class MatchState extends Schema {
@@ -107,6 +108,12 @@ export class MatchState extends Schema {
    * respawn waves arrived: the HUD's match clock reads this, the wave countdown reads phaseEndsAt.
    */
   @type("float64") matchEndsAt = 0;
+  /**
+   * THE LIVING ARENA: which tactical plan is in force this round (0 = none). One byte, changing at
+   * most once a round, against a 12 kB/s snapshot budget. The plan TABLE lives in shared code on
+   * both ends, so only the index travels — a client can never send geometry.
+   */
+  @type("uint8") planId = 0;
   @type("uint16") scoreA = 0;
   @type("uint16") scoreB = 0;
   @type("int8") winner = -1;

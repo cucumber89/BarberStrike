@@ -1,11 +1,12 @@
 import { useSyncExternalStore } from "react";
-import { MatchPhase, type GameMode, type GrenadeId, type KillEvent, type MoneyEvent, type PerkTimes, type ShopResult, type Team, type WeaponId } from "@frankibarber/shared";
+import { MatchPhase, type GameMode, type GrenadeId, type KillEvent, type MoneyEvent, type PerkTimes, type PlanEvent, type ShopResult, type Team, type TeamResult, type WeaponId } from "@frankibarber/shared";
 import { emptyProfile, type MatchReward, type Profile } from "./progression/profile";
 
 /** Drop 4: a Domination flag for the HUD. */
 export interface HudFlag { id: string; name: string; owner: number; capTeam: number; cap: number; contested: boolean }
 
 export interface ScoreRow {
+  boysClass?: number;
   id: string;
   name: string;
   team: Team;
@@ -19,6 +20,8 @@ export interface ScoreRow {
   assists: number;
   money: number;
   bot: boolean;
+  /** Drop D: on the shaved side (Ostrzyżeni) — the HUD counts the unshaved from these rows. */
+  shaved: boolean;
 }
 
 /** Drop 5: a chat line as shown (server time `at`, local `seen` for the fade). */
@@ -31,6 +34,8 @@ export interface KillFeedEntry extends KillEvent { at: number; key: number }
 export interface HudState {
   smokeOpacity: number;
   bomb: import("@frankibarber/shared").BombData | null;
+  /** Rounds finished in a round mode (Bomb Plant, Ostrzyżeni). 0 outside them. */
+  round: number;
   connected: boolean;
   myId: string;
   myTeam: Team;
@@ -58,6 +63,11 @@ export interface HudState {
   scoreB: number;
   winner: Team | -1;
   players: ScoreRow[];
+  /** Last answer to a team-change request (2.4): what the server decided, and when it was said. */
+  teamResult: (TeamResult & { at: number }) | null;
+  /** Living arena (2.4): the round's plan vote / result, and the plan in force. */
+  plan: (PlanEvent & { at: number }) | null;
+  planId: number;
   killFeed: KillFeedEntry[];
   /** Timestamp (performance.now) of the last confirmed hit, for the hit marker. */
   hitAt: number;
@@ -71,7 +81,7 @@ export interface HudState {
   pointerLocked: boolean;
   serverNow: number;
   spawnProtectedUntil: number;
-  /** Startup progress: "connecting" | "engine" | "map" | "players" | "ready". */
+  /** Startup progress: "connecting" | "engine" | "map" | "players" | "finishing" | "ready". */
   loadStage: string;
   /** Current effective crosshair spread (radians) for a dynamic crosshair. */
   crosshairSpread: number;
@@ -116,12 +126,9 @@ export interface HudState {
   breath: number;
   /** Last hit marker was on a plate. */
   hitArmor: boolean;
-  /** Bomb Plant (2.2): defuse kit carried. */
-  kit: boolean;
   // ---- drop 4: modes, flags, movement
+  boysClass: number; nextClass: number;
   mode: GameMode;
-  /** 2.1: the room's name, for the pause screen's invite link ("" for an unnamed quick-play room). */
-  roomName: string;
   flags: HudFlag[];
   /** Index of the flag we are standing in, -1 otherwise. */
   inFlag: number;
@@ -146,15 +153,15 @@ export const initialHud: HudState = {
   weapon: "pistol", ammo: 0, reserve: 0, reloading: false,
   phase: MatchPhase.Waiting, phaseEndsAt: 0, matchEndsAt: 0, scoreA: 0, scoreB: 0, winner: -1,
   reward: null, profile: emptyProfile(),
-  players: [], killFeed: [],
+  players: [], killFeed: [], teamResult: null, plan: null, planId: 0,
   hitAt: 0, hitKill: false, hitHead: false, damageAt: 0, damageAngle: 0,
   ping: 0, fps: 0, pointerLocked: false, serverNow: 0, spawnProtectedUntil: 0,
   loadStage: "connecting", crosshairSpread: 0, aiming: false, telemetry: {}, reconnecting: false,
   money: 0, owned: ["pistol"], lethal: "", lethalCount: 0, tactical: "", tacticalCount: 0,
   buyWindowLeft: 0, nearStation: false, shopOpen: false, shopResult: null, moneyToasts: [],
   cookingKind: "", cooking: 0, flashStrength: 0, flashUntil: 0, flashAt: 0,
-  armor: 0, perks: { flask: 0, roids: 0, energy: 0, fade: 0 }, armorBrokeAt: 0, scoped: false, breath: 0, hitArmor: false, kit: false,
-  mode: "tdm", roomName: "", smokeOpacity: 0, bomb: null, flags: [], inFlag: -1, winnerId: "", winnerName: "", flagNotice: null, tac: 1, tacOn: false,
+  armor: 0, perks: { flask: 0, roids: 0, energy: 0, fade: 0 }, armorBrokeAt: 0, scoped: false, breath: 0, hitArmor: false,
+  boysClass: 1, nextClass: 1, mode: "tdm", smokeOpacity: 0, bomb: null, round: 0, flags: [], inFlag: -1, winnerId: "", winnerName: "", flagNotice: null, tac: 1, tacOn: false,
   chat: [], chatOpen: null, marks: [],
 };
 
@@ -189,7 +196,7 @@ class HudStore {
     }
   }
 
-  reset(): void { this.set({ ...initialHud, killFeed: [], players: [], moneyToasts: [], chat: [], marks: [] }); }
+  reset(): void { this.set({ ...initialHud, killFeed: [], players: [], teamResult: null, plan: null, planId: 0, moneyToasts: [], chat: [], marks: [] }); }
 
   subscribe = (l: Listener): (() => void) => {
     this.listeners.add(l);

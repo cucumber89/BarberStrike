@@ -16,25 +16,39 @@ export interface CreatedEngine {
 }
 
 /**
- * Creates the rendering engine: WebGPU when available and stable, otherwise WebGL2.
- * `preferWebGPU=false` forces WebGL2 (settings / troubleshooting).
+ * Creates the rendering engine.
+ *
+ * WebGL2 is the DEFAULT and needs no switch flipped: it is what every supported browser has, and
+ * WebGPU can initialise successfully and still fail later inside scene setup on some browser and
+ * driver pairs (App.tsx carries a retry for exactly that). `preferWebGPU` is the opt-in.
+ *
+ * When WebGL2 itself is missing the thrown message is written for a player, not a developer: it
+ * reaches the menu through `humanError`, so it has to say what to do about it.
  */
-export async function createEngine(canvas: HTMLCanvasElement, preferWebGPU = true): Promise<CreatedEngine> {
+export async function createEngine(canvas: HTMLCanvasElement, preferWebGPU = false): Promise<CreatedEngine> {
+  let candidate: WebGPUEngine | undefined;
   if (preferWebGPU && typeof navigator !== "undefined" && "gpu" in navigator) {
     try {
       const supported = await WebGPUEngine.IsSupportedAsync;
       if (supported) {
-        const engine = new WebGPUEngine(canvas, { antialias: true, adaptToDeviceRatio: false, stencil: true });
+        const engine = candidate = new WebGPUEngine(canvas, { antialias: false, adaptToDeviceRatio: false, stencil: true });
         await engine.initAsync();
         return { engine, kind: "webgpu" };
       }
     } catch (err) {
+      try { candidate?.dispose(); } catch { /* partially initialized GPU device */ }
       console.warn("[engine] WebGPU init failed, falling back to WebGL2", err);
     }
   }
-  const engine = new Engine(canvas, true, { stencil: true, preserveDrawingBuffer: false, powerPreference: "high-performance" }, false);
+  // FXAA is controlled live by postfx.ts; native MSAA would remain on even with AA disabled.
+  const engine = new Engine(canvas, false, { stencil: true, preserveDrawingBuffer: false, powerPreference: "high-performance" }, false);
   if (engine.webGLVersion < 2) {
-    throw new Error("WebGL2 is required but not available in this browser.");
+    engine.dispose();
+    throw new Error(
+      "This game needs WebGL2, and this browser did not provide it. " +
+      "A recent Chrome, Edge or Firefox will have it — and if you are already on one, check that " +
+      "hardware acceleration is switched on in the browser's settings.",
+    );
   }
   return { engine, kind: "webgl2" };
 }

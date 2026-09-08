@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="UTF-8"><title>BarberStrike — map review</title><style>html,body,canvas{width:100%;height:100%;margin:0;overflow:hidden;display:block}</style></head><body><canvas id="view"></canvas><script type="module">
+import { Engine } from '@babylonjs/core/Engines/engine';
+import { Scene } from '@babylonjs/core/scene';
+import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { NIGHT_DISTRICT } from '@frankibarber/shared';
+import { buildMap } from './src/game/world/MapBuilder';
+const canvas=document.querySelector('canvas');
+const engine=new Engine(canvas,true);const scene=new Scene(engine);
+const camera=new FreeCamera('review',new Vector3(-6,1.7,-5),scene);camera.minZ=.05;camera.fov=1.2;
+camera.setTarget(new Vector3(2,2,2));camera.attachControl(canvas,true);
+scene.imageProcessingConfiguration.exposure=1.25;
+buildMap(scene,NIGHT_DISTRICT,{shadows:true,shadowMapSize:1024});
+window.review={scene,engine,camera,view(p,t){camera.position.copyFromFloats(...p);camera.setTarget(new Vector3(...t));}};
+engine.runRenderLoop(()=>scene.render());addEventListener('resize',()=>engine.resize());
+</script></body></html>

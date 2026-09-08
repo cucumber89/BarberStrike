@@ -5,8 +5,9 @@ import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { PLAYER, TEAM_COLORS, WEAPONS, type Team, type WeaponId } from "@frankibarber/shared";
+import { PLAYER, WEAPONS, type Team, type WeaponId } from "@frankibarber/shared";
 import { HOLD } from "./characterHold";
+import { TEAM_KITS } from "./teamKit";
 import { buildWeaponModel, createWeaponMaterials, forEachMesh, type WeaponMaterials, type WeaponModel } from "./weaponMeshes";
 import { beveledBox } from "./geometry";
 
@@ -59,10 +60,12 @@ export interface CharacterInput {
   /** Drop 4: lean (-1..1) tilts the torso and head sideways; tac raises the gun across the chest. */
   lean?: number;
   tac?: boolean;
-  /** Bomb Plant (2.2): this player carries the charge — a pack on the back everyone can read. */
-  bomb?: boolean;
-  /** Slide (2.3): leaning back on one leg, the other out front. */
-  slide?: boolean;
+  /**
+   * Drop D: a visibly shaved head — the cap comes off and a stubbled skull shows. Ostrzyżeni's
+   * shaved side wears it for the round; Drop E's shave reuses the same flag. Read in every mode,
+   * and unlike the perk band it stays on a corpse: the shave is the point.
+   */
+  shaved?: boolean;
 }
 
 /** Joint angles exposed for tests/tools (radians). */
@@ -72,7 +75,7 @@ export interface Pose {
   armR: number; armL: number; rootZ: number; rootX: number;
 }
 
-interface SharedMats { skin: PBRMaterial; cloth: PBRMaterial; vest: PBRMaterial; accent: PBRMaterial; boots: PBRMaterial; weapons: WeaponMaterials }
+interface SharedMats { skin: PBRMaterial; cloth: PBRMaterial; vest: PBRMaterial; accent: PBRMaterial; trim: PBRMaterial; boots: PBRMaterial; stubble: PBRMaterial; weapons: WeaponMaterials }
 
 const SHARED = new Map<Scene, Map<Team, SharedMats>>();
 
@@ -91,13 +94,21 @@ function teamMats(scene: Scene, team: Team): SharedMats {
     mat.freeze();
     return mat;
   };
-  const accentHex = TEAM_COLORS[team];
+  // The palette is data (see teamKit.ts), so a side's look is one table edit and cannot become a
+  // geometry change by accident. Roughness/metalness stay per ROLE — a shirt is a shirt whatever
+  // colour it is — which is what keeps the two sides reading as the same game.
+  const kit = TEAM_KITS[team];
   m = {
-    skin: mk("ch_skin", "#c39270", 0.7, 0, "#1b100b"),
-    cloth: mk("ch_cloth", team === 0 ? "#455e70" : "#705044", 0.85, 0, "#10151c"),
-    vest: mk("ch_vest", "#939990", 0.7, 0.05, "#181b19"),
-    accent: mk("ch_accent", accentHex, 0.45, 0.1, accentHex),
-    boots: mk("ch_boots", "#292e35", 0.6, 0, "#090c10"),
+    skin: mk("ch_skin", kit.skin, 0.7, 0, "#1b100b"),
+    cloth: mk("ch_cloth", kit.cloth, 0.85, 0, "#10151c"),
+    vest: mk("ch_vest", kit.vest, 0.7, 0.05, "#181b19"),
+    accent: mk("ch_accent", kit.accent, 0.45, 0.1, kit.accent),
+    trim: mk("ch_trim", kit.trim, 0.55, 0, "#141414"),
+    boots: mk("ch_boots", kit.boots, 0.6, 0, "#090c10"),
+    // Drop D: a freshly clipped scalp — matte, with a grey cast over the kit's skin tone, so a
+    // shaved head reads as "no hair" at gameplay distance rather than as a bald skin tone. Not a
+    // kit colour: a shaved scalp is a scalp whichever side shaved you.
+    stubble: mk("ch_stubble", "#8f7a6c", 0.95, 0, "#120d0b"),
     weapons: createWeaponMaterials(scene),
   };
   byTeam.set(team, m);
@@ -124,7 +135,6 @@ export class Character {
   private blendAir = 0;
   private blendLean = 0;
   private blendTac = 0;
-  private blendSlide = 0;
   private blendRun = 0;
   private deathT = -1;
   private deathDir = 0;       // world yaw the body falls towards
@@ -144,7 +154,10 @@ export class Character {
   private flinchZ = 0;
   private flinchAmt = 0;
   private perkBand: Mesh;
-  private bombPack: Mesh[] = [];
+  /** Drop D: the cap (and its visor) hide when shaved; the bare, stubbled skull shows instead. */
+  private capParts: Mesh[] = [];
+  private cap!: Mesh;
+  private bareHead: Mesh;
 
   constructor(private scene: Scene, team: Team, name: string) {
     const M = teamMats(scene, team);
@@ -170,8 +183,12 @@ export class Character {
     box("shoulderR", this.torso, 0.12, 0.1, 0.22, 0.26, 0.5, 0, M.vest);
     this.head = node("head", this.torso, 0, 0.62, 0);
     box("skull", this.head, 0.22, 0.24, 0.24, 0, 0.12, 0, M.skin);
-    box("cap", this.head, 0.24, 0.07, 0.26, 0, 0.24, 0.01, M.cloth);
-    box("visor", this.head, 0.22, 0.02, 0.1, 0, 0.21, 0.17, M.cloth);
+    this.capParts.push(box("cap", this.head, 0.24, 0.07, 0.26, 0, 0.24, 0.01, M.cloth));
+    this.capParts.push(box("visor", this.head, 0.22, 0.02, 0.1, 0, 0.21, 0.17, M.cloth));
+    // Shaved (drop D): a stubbled skull a hair larger than the skin one so it wins the depth test
+    // where they overlap, reaching up to where the cap's crown used to sit. Hidden until `shaved`.
+    this.bareHead = box("bare_head", this.head, 0.226, 0.25, 0.246, 0, 0.13, 0, M.stubble);
+    this.bareHead.setEnabled(false);
     box("neck", this.head, 0.1, 0.08, 0.1, 0, -0.02, 0, M.skin);
     box("goggle_frame", this.head, 0.238, 0.075, 0.045, 0, 0.155, 0.117, M.boots);
     box("goggle_lens", this.head, 0.198, 0.039, 0.018, 0, 0.16, 0.145, M.accent);
@@ -179,22 +196,17 @@ export class Character {
     box("headset", this.head, 0.04, 0.085, 0.09, 0.125, 0.15, 0, M.boots);
     box("apron", this.torso, 0.31, 0.19, 0.025, 0, 0.035, 0.13, M.vest);
     box("back_team_panel", this.torso, 0.32, 0.17, 0.02, 0, 0.37, -0.145, M.accent);
-    box("chest_team_stripe", this.torso, 0.37, 0.055, 0.02, 0, 0.48, 0.145, M.accent);
+    box("chest_team_stripe", this.torso, 0.37, 0.055, 0.02, 0, 0.48, 0.145, M.trim);
     for (const x of [-0.13, 0, 0.13]) {
       box("ammo_pouch", this.torso, 0.1, 0.13, 0.065, x, 0.24, 0.155, M.boots);
-      box("pouch_buckle", this.torso, 0.028, 0.02, 0.014, x, 0.28, 0.193, M.vest);
+      box("pouch_buckle", this.torso, 0.028, 0.02, 0.014, x, 0.28, 0.193, M.trim);
     }
     this.perkBand = box("perkBand", this.head, 0.25, 0.03, 0.27, 0, 0.215, 0.01, M.accent);
     this.perkBand.setEnabled(false);
-    // The charge on the carrier's back: an olive pack with a red blinking cell, straps over the vest.
-    this.bombPack.push(box("bomb_pack", this.torso, 0.3, 0.34, 0.16, 0, 0.3, -0.23, M.boots));
-    this.bombPack.push(box("bomb_cell", this.torso, 0.1, 0.06, 0.03, 0.06, 0.4, -0.32, M.accent));
-    for (const x of [-0.11, 0.11]) this.bombPack.push(box("bomb_strap", this.torso, 0.04, 0.4, 0.3, x, 0.32, -0.02, M.vest));
-    for (const m of this.bombPack) m.setEnabled(false);
 
     this.armR = node("armR", this.torso, 0.3, 0.48, 0);
     box("upperR", this.armR, 0.11, 0.3, 0.11, 0, -0.15, 0, M.cloth);
-    box("bandR", this.armR, 0.125, 0.06, 0.125, 0, -0.1, 0, M.accent);
+    box("bandR", this.armR, 0.125, 0.06, 0.125, 0, -0.1, 0, M.trim);
     this.forearmR = node("forearmR", this.armR, 0, -0.3, 0);
     box("lowerR", this.forearmR, 0.09, 0.28, 0.09, 0, -0.14, 0, M.skin);
     box("handR", this.forearmR, 0.08, 0.08, 0.1, 0, -0.3, 0.02, M.boots);
@@ -220,17 +232,26 @@ export class Character {
     box("bootL", this.shinL, 0.14, 0.1, 0.26, 0, -0.42, 0.04, M.boots);
     for (const shin of [this.shinL, this.shinR]) box("knee_pad", shin, 0.145, 0.14, 0.065, 0, -0.045, 0.08, M.vest);
 
-    // Merge only within a joint and material, retaining articulation and the toggled perk band.
-    // Added clothing detail therefore does not add a draw call for every pouch or buckle.
+    // Merge only within a joint and material, retaining articulation and the toggled perk band,
+    // bomb pack, cap and bare head. Added clothing detail therefore does not add a draw call for
+    // every pouch or buckle.
     const groups = new Map<TransformNode, Map<PBRMaterial, Mesh[]>>();
     for (const m of this.meshes) {
-      if (m === this.perkBand || this.bombPack.includes(m)) continue;
+      if (m === this.perkBand || m === this.bareHead || this.capParts.includes(m)) continue;
       const parent = m.parent as TransformNode, mat = m.material as PBRMaterial;
       const materials = groups.get(parent) ?? new Map<PBRMaterial, Mesh[]>();
       const meshes = materials.get(mat) ?? []; meshes.push(m);
       materials.set(mat, meshes); groups.set(parent, materials);
     }
-    this.meshes = [this.perkBand, ...this.bombPack];
+    // The cap and its visor are one object as far as the player is concerned — they come off
+    // together — so they are merged into a single toggled mesh rather than kept apart. Excluding
+    // two meshes from the merge instead of one would have cost a draw call per character in EVERY
+    // mode for a flag that is only set in one (code review).
+    const capHead = this.capParts[0].parent as TransformNode;
+    for (const m of this.capParts) { m.parent = null; m.computeWorldMatrix(true); }
+    this.cap = Mesh.MergeMeshes(this.capParts, true, true)!;
+    this.cap.parent = capHead; this.cap.material = M.cloth; this.cap.isPickable = false; this.cap.receiveShadows = true;
+    this.meshes = [this.perkBand, this.bareHead, this.cap];
     for (const [parent, materials] of groups) for (const [mat, meshes] of materials) {
       // Merge in joint-local space; the joint's world transform must not be baked twice.
       for (const m of meshes) { m.parent = null; m.computeWorldMatrix(true); }
@@ -326,8 +347,9 @@ export class Character {
     if (this.fade < 1) { this.fade = Math.min(1, this.fade + dt * 3); for (const m of this.meshes) m.visibility = this.fade; }
     const perked = !!inp.perked && inp.alive;
     if (this.perkBand.isEnabled() !== perked) this.perkBand.setEnabled(perked);
-    const bomb = !!inp.bomb && inp.alive;
-    if (this.bombPack[0] && this.bombPack[0].isEnabled() !== bomb) for (const m of this.bombPack) m.setEnabled(bomb);
+    // Shaved (drop D) is not gated on `alive`: the shaved head stays on the body that fell.
+    const shaved = !!inp.shaved;
+    if (this.bareHead.isEnabled() !== shaved) { this.bareHead.setEnabled(shaved); this.cap.setEnabled(!shaved); }
 
     // ---- Death: buckle (0–0.25) → fall away from the killer with a tumble (0.25–0.8) → settle.
     if (this.deathT >= 0) {
@@ -356,7 +378,6 @@ export class Character {
 
     const k = Math.min(1, dt * 10);
     this.blendCrouch += ((inp.crouch ? 1 : 0) - this.blendCrouch) * k;
-    this.blendSlide += ((inp.slide ? 1 : 0) - this.blendSlide) * Math.min(1, dt * 14);
     this.blendLean += ((inp.lean ?? 0) - this.blendLean) * k;
     this.blendTac += ((inp.tac ? 1 : 0) - this.blendTac) * k;
     const leanB = this.blendLean, tacB = this.blendTac;
@@ -390,14 +411,14 @@ export class Character {
     if (inp.grounded && inp.speed > 0.3) this.phase += dt * freq; else this.phase += dt * 1.5 * this.blendAir;
     const s = Math.sin(this.phase), c = Math.cos(this.phase);
     const run = this.blendRun * (1 - this.blendAir);
-    const cr = this.blendCrouch, sl = this.blendSlide;
+    const cr = this.blendCrouch;
     const idle = (1 - run) * (1 - this.blendAir);
     const shift = Math.sin(this.time * 0.9) * idle;       // slow weight shift
     const breathe = Math.sin(this.time * 1.6) * idle;
 
     // Hips: crouch lowers, running bounces, landing squashes; lean into strafes and turns.
     const bounce = Math.abs(c) * 0.03 * run;
-    this.hips.position.y = 0.95 - 0.38 * cr + bounce - 0.05 * this.blendAir - 0.16 * this.landSquash + 0.006 * shift - 0.1 * sl;
+    this.hips.position.y = 0.95 - 0.38 * cr + bounce - 0.05 * this.blendAir - 0.16 * this.landSquash + 0.006 * shift;
     const strafe = Math.sin(inp.moveDir);
     this.root.rotation.z = -strafe * 0.08 * run + this.turnLean * (0.4 + 0.6 * run) + 0.02 * shift * (1 - run);
     this.root.rotation.x = 0;
@@ -410,18 +431,17 @@ export class Character {
     // Lean (drop 4): the torso tips sideways (negative Z = towards +X = the character's right) and the
     // hips shift a little the other way, so the feet stay planted and the head moves ~0.45 m.
     this.torso.rotation.z = -fl * 0.25 * this.flinchX - 0.42 * leanB;
-    this.torso.rotation.x += 0.12 * tacB - 0.5 * sl;
+    this.torso.rotation.x += 0.12 * tacB;
     this.hips.position.x = -0.05 * leanB;
-    this.head.rotation.x = inp.pitch * 0.45 - 0.2 * cr + fl * 0.5 * this.flinchZ + 0.3 * sl;
+    this.head.rotation.x = inp.pitch * 0.45 - 0.2 * cr + fl * 0.5 * this.flinchZ;
     this.head.rotation.y = fl * 0.55 * this.flinchX;
     this.head.rotation.z = -0.12 * leanB;
     // Legs: alternating swing; airborne = tucked; landing = knees bend.
     const swing = 0.75 * run * (1 + 0.5 * sprint);
-    // Slide: the right leg shoots out straight ahead, the left folds under, the torso lies back.
-    this.legR.rotation.x = s * swing - 0.9 * cr + 0.5 * this.blendAir - 0.4 * this.landSquash - 0.55 * sl;
-    this.legL.rotation.x = -s * swing - 0.9 * cr - 0.2 * this.blendAir - 0.4 * this.landSquash + 0.25 * sl;
-    this.shinR.rotation.x = Math.max(0, -c) * 1.1 * run + 1.0 * cr + 0.6 * this.blendAir + 0.8 * this.landSquash - 0.95 * sl;
-    this.shinL.rotation.x = Math.max(0, c) * 1.1 * run + 1.0 * cr + 0.9 * this.blendAir + 0.8 * this.landSquash + 0.5 * sl;
+    this.legR.rotation.x = s * swing - 0.9 * cr + 0.5 * this.blendAir - 0.4 * this.landSquash;
+    this.legL.rotation.x = -s * swing - 0.9 * cr - 0.2 * this.blendAir - 0.4 * this.landSquash;
+    this.shinR.rotation.x = Math.max(0, -c) * 1.1 * run + 1.0 * cr + 0.6 * this.blendAir + 0.8 * this.landSquash;
+    this.shinL.rotation.x = Math.max(0, c) * 1.1 * run + 1.0 * cr + 0.9 * this.blendAir + 0.8 * this.landSquash;
     // Arms: weapon held two-handed; counter-swing with the stride; kick on fire; reload = left hand down; flinch tightens.
     const aim = inp.pitch;
     const idleSway = Math.sin(this.time * 1.3) * 0.02;

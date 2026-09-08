@@ -1,7 +1,8 @@
-import { BOMB } from "./bomb";
+import { boysAllows, boysClass } from "./boys";
 import { GRENADES, isGrenadeId, type GrenadeId, type GrenadeSlot } from "./grenades";
 import { ARMOR, PERKS, PERK_ARMED_MS, isArmorId, isPerkId, noPerks, perkActive, type ArmorId, type PerkId, type PerkTimes } from "./perks";
-import { MatchPhase } from "./types";
+import { MODES } from "./modes";
+import { MatchPhase, type GameMode } from "./types";
 import { FREE_SIDEARM, MELEE_WEAPON, WEAPONS, isWeaponId, type WeaponId } from "./weapons";
 
 /**
@@ -21,7 +22,7 @@ export const ECONOMY = {
   /** Damage dealt within this window before someone else's kill counts as an assist. */
   assistWindowMs: 8000,
   assistMinDamage: 30,
-  buyWindowMs: 15000,
+  buyWindowMs: 30000,
   stationRadius: 3,
   sellRatio: 0.7,
   lethalMax: 2,
@@ -33,12 +34,9 @@ export const WEAPON_PRICES: Record<WeaponId, number> = {
   pistol: 0, revolver: 600, smg: 1200, smg2: 1300, shotgun: 1400, rifle: 2600, lmg: 2800, dmr: 2900, sniper: 3400, launcher: 3200, clippers: 0,
 };
 
-/** Bomb Plant (2.2): the defuse kit is bought like a plate, by defenders, in the buy phase. */
-export const KIT_ITEM = "kit" as const;
-export type ShopItemId = WeaponId | GrenadeId | PerkId | ArmorId | typeof KIT_ITEM;
-export const isShopItemId = (v: unknown): v is ShopItemId => isWeaponId(v) || (isGrenadeId(v) && GRENADES[v].shop) || isPerkId(v) || isArmorId(v) || v === KIT_ITEM;
+export type ShopItemId = WeaponId | GrenadeId | PerkId | ArmorId;
+export const isShopItemId = (v: unknown): v is ShopItemId => isWeaponId(v) || (isGrenadeId(v) && GRENADES[v].shop) || isPerkId(v) || isArmorId(v);
 export function itemPrice(item: ShopItemId): number {
-  if (item === KIT_ITEM) return BOMB.kitPrice;
   if (isWeaponId(item)) return WEAPON_PRICES[item];
   if (isGrenadeId(item)) return GRENADES[item].price;
   if (isPerkId(item)) return PERKS[item].price;
@@ -58,16 +56,13 @@ export interface Wallet {
   armor: number;
   /** Active perks as `until` timestamps (server clock ms). */
   perks: PerkTimes;
-  /** Bomb Plant (2.2): defuse kit carried. Optional so older wallet literals stay valid. */
-  kit?: boolean;
 }
 
 export const freshWallet = (): Wallet => ({ money: ECONOMY.startMoney, owned: [FREE_SIDEARM], lethal: "", lethalCount: 0, tactical: "", tacticalCount: 0, armor: 0, perks: noPerks() });
 
 export interface BuyContext {
+  boysClass?: number;
   bombBuying?: boolean;
-  /** Bomb Plant: the buyer defends this round (the kit is theirs to buy). */
-  bombDefender?: boolean;
   now: number;
   spawnedAt: number;
   phase: MatchPhase;
@@ -79,7 +74,24 @@ export interface BuyContext {
    * open then precisely so it can be used, and at 5 s of freeze that is a fifth of a 25 s perk.
    */
   releaseAt?: number;
+  /**
+   * Drop D: the mode decides who may buy at all (`MODES[mode].shop`). Optional so the older call
+   * sites keep their meaning; without it the window follows the rules above, as before.
+   */
+  mode?: GameMode;
+  /** Drop D: the buyer is on the shaved side (Ostrzyżeni), whose whole loadout is the clippers. */
+  shaved?: boolean;
 }
+
+/**
+ * Drop D: who has no window to open at all — not at a station, not in warm-up. A mode with no
+ * economy (Gun Game) closes it for everyone; an infection mode closes it for the shaved side only.
+ */
+const shopless = (ctx: BuyContext): boolean => {
+  if (ctx.mode === undefined) return false;
+  const shop = MODES[ctx.mode].shop;
+  return shop === "none" || (shop === "survivors" && !!ctx.shaved);
+};
 
 /**
  * The shop is open during warm-up, in the frozen preparation window between waves, for a while
@@ -90,7 +102,7 @@ export interface BuyContext {
  * moment the countdown tells you to prepare.
  */
 export function buyWindowOpen(ctx: BuyContext): boolean {
-  if (!ctx.alive) return false;
+  if (!ctx.alive || shopless(ctx)) return false;
   if (ctx.bombBuying !== undefined && ctx.phase !== MatchPhase.Waiting && ctx.phase !== MatchPhase.Countdown) return ctx.bombBuying;
   if (ctx.phase === MatchPhase.Waiting || ctx.phase === MatchPhase.Countdown || ctx.phase === MatchPhase.Prep) return true;
   return ctx.now - ctx.spawnedAt < ECONOMY.buyWindowMs || ctx.nearStation;
@@ -98,7 +110,7 @@ export function buyWindowOpen(ctx: BuyContext): boolean {
 
 /** Ms of buy window left after a spawn (0 when closed; Infinity in warm-up / at a station). */
 export function buyWindowLeft(ctx: BuyContext): number {
-  if (!ctx.alive) return 0;
+  if (!ctx.alive || shopless(ctx)) return 0;
   if (ctx.bombBuying !== undefined && ctx.phase !== MatchPhase.Waiting && ctx.phase !== MatchPhase.Countdown) return ctx.bombBuying ? Math.max(0, (ctx.releaseAt ?? ctx.now) - ctx.now) : 0;
   if (ctx.phase === MatchPhase.Waiting || ctx.phase === MatchPhase.Countdown || ctx.phase === MatchPhase.Prep || ctx.nearStation) return Infinity;
   return Math.max(0, ECONOMY.buyWindowMs - (ctx.now - ctx.spawnedAt));
@@ -121,13 +133,15 @@ export const carries = (w: Wallet, id: WeaponId): boolean => carriedWeapons(w).i
 
 /** Checks a purchase without applying it. `refund` = money back for the weapon being replaced. */
 export function canBuy(w: Wallet, item: ShopItemId, ctx: BuyContext): BuyVerdict {
+  if (ctx.boysClass && !boysAllows(ctx.boysClass, item)) return { ok: false, reason: "closed" };
   if (!buyWindowOpen(ctx)) return { ok: false, reason: "closed" };
   const price = itemPrice(item);
   if (isWeaponId(item)) {
     const def = WEAPONS[item];
     if (def.kind === "melee" || carries(w, item)) return { ok: false, reason: "owned" };
     const current = def.slot === 1 ? primaryOf(w) : secondaryOf(w);
-    const refund = current ? Math.round(WEAPON_PRICES[current] * ECONOMY.sellRatio) : 0;
+    if (ctx.boysClass && item === boysClass(ctx.boysClass).starter) return { ok: true, cost: 0, refund: 0 };
+    const refund = current && !(ctx.boysClass && current === boysClass(ctx.boysClass).starter) ? Math.round(WEAPON_PRICES[current] * ECONOMY.sellRatio) : 0;
     if (w.money + refund < price) return { ok: false, reason: "money" };
     return { ok: true, cost: price, refund };
   }
@@ -138,13 +152,6 @@ export function canBuy(w: Wallet, item: ShopItemId, ctx: BuyContext): BuyVerdict
   }
   if (isArmorId(item)) {
     if (w.armor >= ARMOR[item].armor) return { ok: false, reason: "owned" };
-    if (w.money < price) return { ok: false, reason: "money" };
-    return { ok: true, cost: price, refund: 0 };
-  }
-  if (item === KIT_ITEM) {
-    // Bomb Plant only, defenders only: the attackers have nothing to defuse.
-    if (!ctx.bombDefender) return { ok: false, reason: "closed" };
-    if (w.kit) return { ok: false, reason: "owned" };
     if (w.money < price) return { ok: false, reason: "money" };
     return { ok: true, cost: price, refund: 0 };
   }
@@ -174,8 +181,6 @@ export function applyBuy(w: Wallet, item: ShopItemId, ctx: BuyContext): BuyVerdi
     w.perks = { ...w.perks, [item]: def.durationMs > 0 ? from + def.durationMs : from + PERK_ARMED_MS };
   } else if (isArmorId(item)) {
     w.armor = ARMOR[item].armor;
-  } else if (item === KIT_ITEM) {
-    w.kit = true;
   } else {
     const def = GRENADES[item];
     if (def.slot === "lethal") { w.lethal = item; w.lethalCount += 1; } else { w.tactical = item; w.tacticalCount += 1; }
@@ -187,6 +192,8 @@ export type SellVerdict = { ok: true; refund: number } | { ok: false; reason: "c
 
 /** Selling is allowed only while the shop is open (no mid-fight refunds), never for the free gear. */
 export function canSell(w: Wallet, item: WeaponId, ctx: BuyContext): SellVerdict {
+  if (ctx.boysClass && item === boysClass(ctx.boysClass).starter) return { ok: false, reason: "pistol" };
+  if (ctx.boysClass && !boysAllows(ctx.boysClass, item)) return { ok: false, reason: "closed" };
   if (!buyWindowOpen(ctx)) return { ok: false, reason: "closed" };
   if (item === FREE_SIDEARM || item === MELEE_WEAPON) return { ok: false, reason: "pistol" };
   if (!w.owned.includes(item)) return { ok: false, reason: "none" };
@@ -249,7 +256,6 @@ export function weaponForSlot(w: Wallet, slot: number): WeaponId | null {
 
 /** Player-facing name for anything that can kill (weapons and grenades) — for the kill feed. */
 export function killerName(id: string): string {
-  if (id === "c4") return "C4 CHARGE";
   if (isWeaponId(id)) return WEAPONS[id].name;
   if (isGrenadeId(id)) return GRENADES[id].name;
   return id;

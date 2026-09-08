@@ -29,6 +29,15 @@ export interface MapInstance {
   lights: Light[];
   /** Registers a dynamic mesh (character, weapon) as a shadow caster. */
   addCaster(mesh: AbstractMesh): void;
+  /**
+   * Solids named in `opts.toggleable`, kept OUT of the per-material merge so a tactical plan can
+   * switch them off for a round. Merged geometry cannot be hidden a piece at a time, which is the
+   * whole reason they are built separately.
+   */
+  toggles: Map<string, Mesh[]>;
+  /** Show/hide one named solid. Unknown names are ignored — the plan table is the authority. */
+  setSolidVisible(name: string, visible: boolean): void;
+  setShadowQuality(quality: "off" | "medium" | "high"): void;
   dispose(): void;
 }
 
@@ -42,6 +51,8 @@ export interface MapBuildOptions {
   propSources?: Map<string, Mesh>;
   shadows: boolean;
   shadowMapSize: number;
+  /** Solid names a tactical plan may remove; built standalone so they can be toggled. */
+  toggleable?: ReadonlySet<string>;
 }
 
 /**
@@ -83,8 +94,26 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
     byMat.set(key, entry);
   };
 
+  const toggles = new Map<string, Mesh[]>();
   for (const s of map.solids) {
     if (s.invisible) continue;
+    if (s.name && opts.toggleable?.has(s.name)) {
+      // Standalone, unmerged, and NOT a shadow caster: the moon shadow map is rendered once for a
+      // static world (see below), so a mesh that can vanish mid-match must not be baked into it —
+      // its shadow would stay on the ground after the wall it belongs to was taken away.
+      const b = s.box;
+      const m = MeshBuilder.CreateBox(s.name, { width: b.maxX - b.minX, height: b.maxY - b.minY, depth: b.maxZ - b.minZ }, scene);
+      m.position.set((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, (b.minZ + b.maxZ) / 2);
+      applyWorldUVs(m, b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ, b.minX, b.minY, b.minZ);
+      m.material = materials.get(s.mat);
+      m.isPickable = false;
+      m.receiveShadows = true;
+      m.freezeWorldMatrix();
+      const list = toggles.get(s.name) ?? [];
+      list.push(m);
+      toggles.set(s.name, list);
+      continue;
+    }
     if (s.look) {
       // Drop 6: a glTF from the manifest (instanced, async) beats the procedural dressing.
       if (opts.models?.has(s.look)) { void opts.models.place(s); continue; }
@@ -131,15 +160,15 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
   // ---- Lighting
   const lights: Light[] = [];
   const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-  ambient.intensity = 0.4;
-  ambient.diffuse = new Color3(0.42, 0.48, 0.66);
+  ambient.intensity = 0.48;
+  ambient.diffuse = new Color3(0.57, 0.62, 0.72);
   ambient.groundColor = new Color3(0.10, 0.085, 0.09);
   ambient.renderPriority = 100; // must always be among a mesh's lights
   lights.push(ambient);
 
   // Moon: cool, low, from the north-west — the one shadow caster (cheap, covers the whole block).
   const moon = new DirectionalLight("moon", new Vector3(0.45, -1, 0.35).normalize(), scene);
-  moon.diffuse = new Color3(0.55, 0.62, 0.85);
+  moon.diffuse = new Color3(0.64, 0.70, 0.84);
   moon.specular = new Color3(0.2, 0.22, 0.3);
   moon.intensity = 0.55;
   moon.position = new Vector3(-10, 30, -10);
@@ -148,29 +177,39 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
   lights.push(moon);
 
   const shadowGenerators: ShadowGenerator[] = [];
-  if (opts.shadows) {
-    const gen = new ShadowGenerator(opts.shadowMapSize, moon);
-    gen.usePercentageCloserFiltering = true;
-    gen.filteringQuality = opts.shadowMapSize >= 2048 ? ShadowGenerator.QUALITY_MEDIUM : ShadowGenerator.QUALITY_LOW;
-    gen.bias = 0.0025;
-    gen.normalBias = 0.05;
-    gen.darkness = 0.25;
-    // MEASURED (1.0 beta profiling): the shadow pass re-drew 222 static meshes every frame for a
-    // light that never moves — more draw calls than the main pass in most views. The map is static,
-    // so the map is rendered into the shadow map once. Characters do not cast moon shadows (they
-    // are unreadable at night anyway) — see addCaster below.
-    gen.getShadowMap()!.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
-    // Fit the orthographic frustum to the map bounds.
-    const b = map.bounds;
-    moon.orthoLeft = -Math.max(b.maxX - b.minX, b.maxZ - b.minZ) / 2 - 4;
-    moon.orthoRight = -moon.orthoLeft;
-    moon.orthoTop = -moon.orthoLeft;
-    moon.orthoBottom = moon.orthoLeft;
-    moon.autoUpdateExtends = false;
-    moon.position = new Vector3((b.minX + b.maxX) / 2 - 14, 32, (b.minZ + b.maxZ) / 2 - 11);
-    for (const c of casters) gen.addShadowCaster(c, false);
-    shadowGenerators.push(gen);
-  }
+  let shadowQuality = "";
+  const setShadowQuality = (quality: "off" | "medium" | "high") => {
+    if (quality === shadowQuality) return;
+    shadowQuality = quality;
+    for (const g of shadowGenerators) g.dispose();
+    shadowGenerators.length = 0;
+    if (quality !== "off") {
+      const size = quality === "high" ? 2048 : 1024;
+      const gen = new ShadowGenerator(size, moon);
+      gen.usePercentageCloserFiltering = true;
+      gen.filteringQuality = size >= 2048 ? ShadowGenerator.QUALITY_MEDIUM : ShadowGenerator.QUALITY_LOW;
+      gen.bias = 0.0025;
+      gen.normalBias = 0.05;
+      gen.darkness = 0.25;
+      // MEASURED (1.0 beta profiling): the shadow pass re-drew 222 static meshes every frame for a
+      // light that never moves — more draw calls than the main pass in most views. The map is static,
+      // so the map is rendered into the shadow map once. Characters do not cast moon shadows (they
+      // are unreadable at night anyway) — see addCaster below.
+      gen.getShadowMap()!.refreshRate = RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
+      // Fit the orthographic frustum to the map bounds.
+      const b = map.bounds;
+      moon.orthoLeft = -Math.max(b.maxX - b.minX, b.maxZ - b.minZ) / 2 - 4;
+      moon.orthoRight = -moon.orthoLeft;
+      moon.orthoTop = -moon.orthoLeft;
+      moon.orthoBottom = moon.orthoLeft;
+      moon.autoUpdateExtends = false;
+      moon.position = new Vector3((b.minX + b.maxX) / 2 - 14, 32, (b.minZ + b.maxZ) / 2 - 11);
+      for (const c of casters) gen.addShadowCaster(c, false);
+      shadowGenerators.push(gen);
+    }
+    for (const material of scene.materials) material.markDirty(true);
+  };
+  setShadowQuality(opts.shadows ? opts.shadowMapSize >= 2048 ? "high" : "medium" : "off");
 
   for (const l of map.lights) {
     let light: PointLight | SpotLight;
@@ -214,11 +253,15 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
   scene.fogColor = new Color3(0.035, 0.035, 0.05);
 
   return {
-    root, shadowGenerators, materials, lights,
+    root, shadowGenerators, materials, lights, setShadowQuality,
+    toggles,
+    setSolidVisible(name, visible) { for (const m of toggles.get(name) ?? []) m.setEnabled(visible); },
     // The moon shadow map is rendered once (static map only); dynamic casters are accepted for API
     // stability but intentionally not added — see the refreshRate note above.
     addCaster(_mesh) { /* static shadow map */ },
     dispose() {
+      for (const list of toggles.values()) for (const m of list) m.dispose();
+      toggles.clear();
       for (const g of shadowGenerators) g.dispose();
       for (const l of lights) l.dispose();
       for (const m of root) m.dispose();

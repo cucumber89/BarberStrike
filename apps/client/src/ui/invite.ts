@@ -1,4 +1,4 @@
-import type { GameMode } from "@frankibarber/shared";
+import { isGameMode, type GameMode } from "@frankibarber/shared";
 
 /**
  * Invite links (2.1): the room name and mode in the page URL.
@@ -9,28 +9,49 @@ import type { GameMode } from "@frankibarber/shared";
  * from — a tunnel, a hosted deployment, a LAN address — because the origin IS the server.
  */
 
-export interface Invite { room: string; mode: GameMode | null; join: string | null }
+/**
+ * `viaLink` is true when the room came from the address itself — `/r/<room>` (Drop D) — which is
+ * the "I was sent here" case: the lobby then asks for a nickname and nothing else.
+ */
+export interface Invite { room: string; mode: GameMode | null; join: string | null; viaLink: boolean }
 
-const MODES = new Set<GameMode>(["tdm", "ffa", "dom", "bomb"]);
+const ROOM_MAX = 24;
 
-/** What the URL asks for. Unknown or empty parts are simply absent; nothing here throws. */
-export function parseInvite(search: string): Invite {
-  const q = new URLSearchParams(search);
-  const room = (q.get("room") ?? "").trim().slice(0, 24);
-  const mode = q.get("mode");
-  const join = (q.get("join") ?? "").trim();
-  return { room, mode: mode && MODES.has(mode as GameMode) ? (mode as GameMode) : null, join: join || null };
+/** The room a `/r/<room>` path names, or "" for any other path. Percent-encoding is undone; garbage is not. */
+export function roomFromPath(pathname: string): string {
+  const m = /^\/r\/([^/]+)\/?$/.exec(pathname ?? "");
+  if (!m) return "";
+  let seg = m[1];
+  try { seg = decodeURIComponent(seg); } catch { /* a stray %: keep it as typed */ }
+  return seg.trim().slice(0, ROOM_MAX);
 }
 
-/** The link to share for a named room (the mode rides along so the matchmaker lands everyone in the same room). */
+/**
+ * What the URL asks for. The room is the `/r/<room>` path (Drop D, join by link) or the older
+ * `?room=` query; the mode always rides in the query. Unknown or empty parts are simply absent;
+ * nothing here throws.
+ */
+export function parseInvite(search: string, pathname = ""): Invite {
+  const q = new URLSearchParams(search);
+  const fromPath = roomFromPath(pathname);
+  const room = fromPath || (q.get("room") ?? "").trim().slice(0, ROOM_MAX);
+  const mode = q.get("mode");
+  const join = (q.get("join") ?? "").trim();
+  return { room, mode: isGameMode(mode) ? mode : null, join: join || null, viaLink: fromPath.length > 0 };
+}
+
+/**
+ * The link to share for a named room: `<origin>/r/<room>?mode=<mode>` (the mode rides along so the
+ * matchmaker's `filterBy(["room","mode"])` lands everyone in the same room). Without a room it is
+ * the page with only the mode, so quick play still matches anyone.
+ */
 export function inviteLink(base: string, room: string, mode: GameMode): string {
   const url = new URL(base);
   url.search = "";
   url.hash = "";
-  const q = new URLSearchParams();
-  if (room.trim()) q.set("room", room.trim());
-  q.set("mode", mode);
-  url.search = q.toString();
+  const name = room.trim();
+  url.pathname = name ? `/r/${encodeURIComponent(name)}` : "/";
+  url.search = new URLSearchParams({ mode }).toString();
   return url.toString();
 }
 

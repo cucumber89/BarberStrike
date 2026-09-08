@@ -313,24 +313,6 @@ export function footstep(sprint: boolean, crouch: boolean, remote = false): Soun
   };
 }
 
-/** Slide (2.3): cloth and grit dragged over concrete — a long falling swish with a low scrape under it. */
-export function slide(): SoundFn {
-  return (g) => {
-    const t = g.t;
-    const out = pan(g, 0); if (out !== g.out) out.connect(g.out);
-    const sG = gain(g, 0);
-    const f = filter(g, "bandpass", vary(g, 1400, 0.15), 0.7);
-    f.frequency.exponentialRampToValueAtTime(420, t + 0.5);
-    noise(g, "pink", 0.6).connect(f); f.connect(sG); sG.connect(out);
-    env(sG.gain, t, 0.5, 0.02, 0.5, 0.06);
-    const lG = gain(g, 0);
-    const lf = filter(g, "lowpass", 220, 0.9);
-    noise(g, "brown", 0.5).connect(lf); lf.connect(lG); lG.connect(out);
-    env(lG.gain, t, 0.45, 0.01, 0.4);
-    return 0.7;
-  };
-}
-
 export const jump: SoundFn = (g) => {
   swish(g, g.t, 350, 1600, 0.14, 0.17);
   return 0.3;
@@ -503,84 +485,6 @@ export function explosion(distance: number): SoundFn {
     // Debris ticks.
     for (let i = 0; i < 5; i++) click(g, t + 0.12 + i * 0.09 + g.rnd() * 0.05, 1500 + g.rnd() * 1500, 0.1 * near, 0.01);
     return 2.4;
-  };
-}
-
-/**
- * The planted charge (2.3). `urgency` 0..1 over the fuse: the chirp gets a touch higher and sharper;
- * ≥ 2 is the final tone, one long unbroken note before the blast.
- */
-export function bombBeep(urgency: number): SoundFn {
-  return (g) => {
-    const t = g.t;
-    if (urgency >= 2) {
-      const o = osc(g, "square", 2200, 1.15); const f = filter(g, "lowpass", 5200, 0.5); const gg = gain(g, 0);
-      o.connect(f); f.connect(gg); gg.connect(g.out);
-      env(gg.gain, t, 0.35, 0.004, 0.08, 1.02);
-      return 1.2;
-    }
-    const u = Math.max(0, Math.min(1, urgency));
-    const freq = 2000 + 500 * u, len = 0.055 + 0.02 * (1 - u);
-    const o = osc(g, "square", freq, len + 0.05); const f = filter(g, "lowpass", 5200, 0.5); const gg = gain(g, 0);
-    o.connect(f); f.connect(gg); gg.connect(g.out);
-    env(gg.gain, t, 0.3 + 0.15 * u, 0.003, 0.02, len);
-    return len + 0.1;
-  };
-}
-
-/** "Bomb has been planted": three rising keypad tones and a latch. */
-export const bombPlanted: SoundFn = (g) => {
-  const t = g.t;
-  [620, 830, 1040].forEach((f, i) => {
-    const o = osc(g, "square", f, 0.12); const lp = filter(g, "lowpass", 3600, 0.6); const gg = gain(g, 0);
-    o.connect(lp); lp.connect(gg); gg.connect(g.out);
-    env(gg.gain, t + i * 0.11, 0.28, 0.004, 0.03, 0.07);
-  });
-  click(g, t + 0.36, 900, 0.25, 0.02);
-  return 0.6;
-};
-
-/** "Bomb has been defused": two falling tones and the wire snip. */
-export const bombDefused: SoundFn = (g) => {
-  const t = g.t;
-  [1040, 620].forEach((f, i) => {
-    const o = osc(g, "square", f, 0.16); const lp = filter(g, "lowpass", 3600, 0.6); const gg = gain(g, 0);
-    o.connect(lp); lp.connect(gg); gg.connect(g.out);
-    env(gg.gain, t + i * 0.15, 0.26, 0.004, 0.04, 0.1);
-  });
-  click(g, t + 0.34, 2400, 0.3, 0.015);
-  return 0.6;
-};
-
-/** The charge going off (2.3): the frag's shape, three times the weight, a tail that rolls on. */
-export function c4Blast(distance: number): SoundFn {
-  const near = Math.max(0, Math.min(1, 1 - distance / 90));
-  return (g) => {
-    const t = g.t;
-    const sat = saturator(g);
-    const master = gain(g, 0.75 + 0.35 * near);
-    sat.connect(master); master.connect(g.out);
-    send(g, master, 0.6 + 0.3 * (1 - near));
-    // Sub: deeper and much longer than a grenade's.
-    const sub = osc(g, "sine", 95, 1.6);
-    glide(sub.frequency, t, 95, 24, 0.9);
-    const subG = gain(g, 0); sub.connect(subG); subG.connect(sat);
-    env(subG.gain, t, 1.4, 0.002, 1.3);
-    // Crack, then the pressure wave: a second, lower slap a few ms later.
-    const cG = gain(g, 0); const cF = filter(g, "bandpass", 1500, 0.8);
-    noise(g, "white", 0.12).connect(cF); cF.connect(cG); cG.connect(sat);
-    env(cG.gain, t, 1.0 * (0.5 + 0.5 * near), 0.001, 0.08);
-    const pG = gain(g, 0); const pF = filter(g, "lowpass", 900, 0.7);
-    noise(g, "brown", 0.3).connect(pF); pF.connect(pG); pG.connect(sat);
-    env(pG.gain, t + 0.03, 1.1, 0.004, 0.25);
-    // Tail: rolls on for seconds, darkening; longer up close.
-    const tG = gain(g, 0); const tF = filter(g, "lowpass", 2200 * (0.4 + 0.6 * near), 0.5);
-    tF.frequency.setTargetAtTime(150, t + 0.1, 0.9);
-    noise(g, "brown", 4.2).connect(tF); tF.connect(tG); tG.connect(sat);
-    env(tG.gain, t + 0.01, 0.9, 0.01, 2.6 + 1.2 * near);
-    // Debris: a longer rain of it.
-    for (let i = 0; i < 12; i++) click(g, t + 0.2 + i * 0.13 + g.rnd() * 0.08, 900 + g.rnd() * 2200, 0.12 * near, 0.012);
-    return 4.6;
   };
 }
 

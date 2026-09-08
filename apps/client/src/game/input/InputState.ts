@@ -1,4 +1,5 @@
 import { Btn } from "@frankibarber/shared";
+import { boundCodes, isEditableTarget, shouldPreventDefault } from "./browserKeys";
 
 export interface KeyBindings {
   forward: string[];
@@ -24,10 +25,6 @@ export interface KeyBindings {
   /** Lean left / right (drop 4). */
   leanLeft: string[];
   leanRight: string[];
-  /** Bomb Plant: hold to plant / defuse (2.1: rebindable, T by default). */
-  objective: string[];
-  /** Bomb Plant (2.2): let go of the charge for a teammate. */
-  dropBomb: string[];
 }
 
 export const DEFAULT_BINDINGS: KeyBindings = {
@@ -49,8 +46,6 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   inspect: ["KeyF"],
   leanLeft: ["KeyQ"],
   leanRight: ["KeyE"],
-  objective: ["KeyT"],
-  dropBomb: ["KeyH"],
 };
 
 /** Two sprint presses within this window latch the tactical sprint (drop 4). */
@@ -108,11 +103,10 @@ export class InputState {
   chatOpenRequested: "all" | "team" | null = null;
   /** Middle mouse pressed while locked: mark / ping. Drained by the game. */
   markRequested = false;
-  /** Bomb Plant (2.2): the drop key pressed while locked. Drained by the game. */
-  dropBombRequested = false;
 
   private target: HTMLElement | null = null;
   private bindings: KeyBindings = DEFAULT_BINDINGS;
+  private bound = boundCodes(DEFAULT_BINDINGS as unknown as Record<string, string[]>);
   private lastWheelAt = -Infinity;
   private lastSprintDownAt = -Infinity;
   /**
@@ -125,9 +119,16 @@ export class InputState {
   /** 2.1: rebinding. Held keys are released, so a key that changed meaning mid-press cannot stick. */
   setBindings(b: KeyBindings): void {
     this.bindings = b;
+    this.bound = boundCodes(b as unknown as Record<string, string[]>);
     this.keys.clear();
     this.tacLatched = false;
   }
+
+  /**
+   * The game owns the keyboard only while it is actually being played. Outside this, Ctrl+D
+   * bookmarks the page and Tab moves between buttons, exactly as a player expects of a web page.
+   */
+  get ownsKeyboard(): boolean { return this.enabled && this.pointerLocked && !this.typing; }
 
   get currentBindings(): KeyBindings { return this.bindings; }
 
@@ -164,14 +165,31 @@ export class InputState {
   }
 
   requestPointerLock(): void {
-    if (!this.target || this.pointerLocked) return;
+    void this.requestPointerLockAsync();
+  }
+
+  /**
+   * Resolves to whether the pointer actually ended up locked, so the Play button can offer a retry
+   * instead of dropping the player into a game that does not respond to the mouse. Chrome rejects
+   * the request outright for a short while after the user pressed Escape to leave a lock.
+   */
+  async requestPointerLockAsync(): Promise<boolean> {
+    if (!this.target) return false;
+    if (this.pointerLocked) return true;
+    const el = this.target as HTMLElement & { requestPointerLock: (o?: { unadjustedMovement?: boolean }) => Promise<void> | void };
     try {
-      const p = (this.target as HTMLElement & { requestPointerLock: (o?: { unadjustedMovement?: boolean }) => Promise<void> | void })
-        .requestPointerLock({ unadjustedMovement: true });
-      if (p && typeof (p as Promise<void>).catch === "function") (p as Promise<void>).catch(() => this.target?.requestPointerLock());
+      const p = el.requestPointerLock({ unadjustedMovement: true });
+      if (p && typeof (p as Promise<void>).then === "function") await p;
     } catch {
-      this.target.requestPointerLock();
+      // `unadjustedMovement` is not supported everywhere; the plain call is the fallback.
+      try {
+        const p = (el.requestPointerLock as () => Promise<void> | void)();
+        if (p && typeof (p as Promise<void>).then === "function") await p;
+      } catch { return false; }
     }
+    // Some browsers resolve the promise before firing pointerlockchange.
+    if (!this.pointerLocked) this.pointerLocked = document.pointerLockElement === this.target;
+    return this.pointerLocked;
   }
 
   exitPointerLock(): void {
@@ -183,11 +201,15 @@ export class InputState {
     return false;
   }
 
-  get objectiveHeld(): boolean { return this.enabled && this.pointerLocked && !this.typing && this.isDown(this.bindings.objective); }
+  get objectiveHeld(): boolean { return this.enabled && this.pointerLocked && !this.typing && this.keys.has("KeyT"); }
 
   /** Packs the current state into the shared button bitmask. */
   buttons(): number {
-    if (!this.enabled || this.typing) return 0;
+    // No pointer lock means a menu, the pause card or the shop is up. Movement was NOT gated on it
+    // before: only Fire and Aim were, so W held over the pause menu walked the character out of
+    // cover while the player thought the game was stopped. `clearAll()` on lock loss releases keys
+    // held at that instant but cannot stop new presses, so the gate has to be here.
+    if (!this.enabled || this.typing || !this.pointerLocked) return 0;
     const b = this.bindings;
     let m = 0;
     if (this.isDown(b.forward)) m |= Btn.Forward;
@@ -231,7 +253,6 @@ export class InputState {
     this.escapeRequested = false;
     this.chatOpenRequested = null;
     this.markRequested = false;
-    this.dropBombRequested = false;
     this.scoreboardHeld = false;
     this.tacLatched = false;
     this.lastSprintDownAt = -Infinity;
@@ -239,8 +260,14 @@ export class InputState {
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    // A keystroke aimed at a text field is never the game's — chat, the nickname box and the
+    // rebind capture keep Ctrl+A/C/V, Tab and every letter. (Before this guard, typing a nickname
+    // containing "b" toggled the buy menu, and Tab could not move between form fields.)
+    if (isEditableTarget(e.target)) return;
     if (this.typing) return;
-    if (e.code === "Tab") { e.preventDefault(); if (this.enabled) this.scoreboardHeld = true; return; }
+    // Decide the browser's fate for this exact chord before anything else consumes the event.
+    if (shouldPreventDefault(e, this.bound, this.ownsKeyboard)) e.preventDefault();
+    if (e.code === "Tab") { if (this.enabled && this.pointerLocked) this.scoreboardHeld = true; return; }
     if (this.enabled && this.pointerLocked && !e.repeat && (e.code === "Enter" || e.code === "NumpadEnter" || e.code === "KeyY")) {
       this.chatOpenRequested = e.code === "KeyY" ? "team" : "all";
       e.preventDefault();
@@ -251,9 +278,10 @@ export class InputState {
     if (this.bindings.shop.includes(e.code)) { if (!e.repeat) this.shopToggleRequested = true; return; }
     if (!this.enabled) return;
     if (e.code === "Escape") {
-      // Reported once per press and only while locked: the browser releases the lock itself on
-      // Escape, so a repeat or a stray press must not turn into a second exit.
-      if (!e.repeat && this.pointerLocked) this.escapeRequested = true;
+      // Reported once per press. The browser releases the pointer lock itself on Escape, so by the
+      // time this runs `pointerLocked` may already be false — the game still needs to know, because
+      // Escape opens the pause menu. Keyboard lock (fullscreen, Chromium) delivers it here first.
+      if (!e.repeat) this.escapeRequested = true;
       return;
     }
     if (e.repeat) return;
@@ -264,7 +292,6 @@ export class InputState {
     }
     if (b.melee.includes(e.code)) this.slotRequests.push(3);
     if (b.inspect.includes(e.code) && this.pointerLocked) this.inspectRequested = true;
-    if (b.dropBomb.includes(e.code) && this.pointerLocked) this.dropBombRequested = true;
     if (b.reload.includes(e.code)) this.reloadRequested = true;
     if (b.lastWeapon.includes(e.code)) this.lastWeaponRequested = true;
     if (b.lethal.includes(e.code) && this.pointerLocked) this.lethalHeld = true;
@@ -276,12 +303,12 @@ export class InputState {
       this.lastSprintDownAt = now;
     }
     this.keys.add(e.code);
-    if (e.code === "Space" || b.crouch.includes(e.code)) e.preventDefault();
   };
 
   private onKeyUp = (e: KeyboardEvent): void => {
+    if (isEditableTarget(e.target)) return;
     if (this.typing) return;
-    if (e.code === "Tab") { e.preventDefault(); this.scoreboardHeld = false; return; }
+    if (e.code === "Tab") { if (this.ownsKeyboard) e.preventDefault(); this.scoreboardHeld = false; return; }
     if (this.bindings.lethal.includes(e.code) && this.lethalHeld) { this.lethalHeld = false; this.lethalReleased = true; }
     if (this.bindings.sprint.includes(e.code)) this.tacLatched = false;
     this.keys.delete(e.code);

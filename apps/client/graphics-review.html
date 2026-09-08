@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="UTF-8"><link rel="icon" href="data:,"><title>Graphics regression review</title><style>html,body,canvas{width:100%;height:100%;margin:0;display:block;overflow:hidden}</style></head><body><canvas></canvas><script type="module">
+import {Engine} from '@babylonjs/core/Engines/engine';
+import {Scene} from '@babylonjs/core/scene';
+import {FreeCamera} from '@babylonjs/core/Cameras/freeCamera';
+import {Vector3} from '@babylonjs/core/Maths/math.vector';
+import {NIGHT_DISTRICT} from '@frankibarber/shared';
+import {buildMap} from './src/game/world/MapBuilder';
+import {installPostFx} from './src/game/world/postfx';
+import {defaultSettings,PRESETS} from './src/settings';
+import {GameEvents} from './src/game/events';
+const engine=new Engine(document.querySelector('canvas'),false);const scene=new Scene(engine);
+const camera=new FreeCamera('review',new Vector3(2,1.7,1.2),scene);camera.minZ=.05;camera.fov=1.2;camera.setTarget(new Vector3(5,1.7,7));
+const settings=defaultSettings();settings.graphics={...PRESETS.high};const events=new GameEvents();
+const map=buildMap(scene,NIGHT_DISTRICT,{shadows:false,shadowMapSize:1024});
+const dispose=installPostFx({scene,engine,camera,settings,events,mapInstance:map});
+window.graphicsReview={scene,engine,camera,settings,events,map,set(preset,patch={}){settings.graphics={...settings.graphics,...PRESETS[preset],...patch};events.emit('settings',{});},dispose};
+engine.runRenderLoop(()=>scene.render());
+</script></body></html>

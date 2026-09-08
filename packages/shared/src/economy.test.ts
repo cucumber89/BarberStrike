@@ -6,6 +6,12 @@ const open = (over: Partial<BuyContext> = {}): BuyContext => ({ now: 5000, spawn
 const closed = (): BuyContext => open({ now: 50_000 });
 
 describe("buy window", () => {
+  it("gives a full 30 seconds and closes exactly at the deadline", () => {
+    expect(ECONOMY.buyWindowMs).toBe(30000);
+    expect(buyWindowLeft(open({ now: 29999 }))).toBe(1);
+    expect(buyWindowOpen(open({ now: 30000 }))).toBe(false);
+    expect(buyWindowLeft(open({ now: 30000 }))).toBe(0);
+  });
   it("is open after a spawn, closes after buyWindowMs, reopens at a station, always open in warm-up", () => {
     expect(buyWindowOpen(open())).toBe(true);
     expect(buyWindowOpen(open({ now: ECONOMY.buyWindowMs + 1 }))).toBe(false);
@@ -14,6 +20,29 @@ describe("buy window", () => {
     expect(buyWindowOpen(open({ alive: false, phase: MatchPhase.Waiting }))).toBe(false);
     expect(buyWindowLeft(open({ now: 4000 }))).toBe(ECONOMY.buyWindowMs - 4000);
     expect(buyWindowLeft(open({ now: 50_000, nearStation: true }))).toBe(Infinity);
+  });
+
+  it("never opens in a mode without a shop (Gun Game), not even in warm-up or at a station", () => {
+    expect(buyWindowOpen(open({ mode: "gungame" }))).toBe(false);
+    expect(buyWindowOpen(open({ mode: "gungame", now: 50_000, nearStation: true }))).toBe(false);
+    expect(buyWindowOpen(open({ mode: "gungame", now: 50_000, phase: MatchPhase.Waiting }))).toBe(false);
+    expect(buyWindowLeft(open({ mode: "gungame" }))).toBe(0);
+    expect(buyWindowLeft(open({ mode: "gungame", now: 50_000, nearStation: true }))).toBe(0);
+    // Modes with a shop are untouched by the field.
+    expect(buyWindowOpen(open({ mode: "ffa" }))).toBe(true);
+    expect(buyWindowLeft(open({ mode: "tdm", now: 4000 }))).toBe(ECONOMY.buyWindowMs - 4000);
+    expect(canBuy(freshWallet(), "smg", open({ mode: "gungame" }))).toEqual({ ok: false, reason: "closed" });
+  });
+
+  it("in Ostrzyżeni the shop is the survivors' alone — the shaved side has none, anywhere", () => {
+    expect(buyWindowOpen(open({ mode: "ostrzyzeni" }))).toBe(true);
+    expect(buyWindowOpen(open({ mode: "ostrzyzeni", phase: MatchPhase.Prep }))).toBe(true);
+    expect(buyWindowOpen(open({ mode: "ostrzyzeni", shaved: true }))).toBe(false);
+    expect(buyWindowOpen(open({ mode: "ostrzyzeni", shaved: true, phase: MatchPhase.Prep }))).toBe(false);
+    expect(buyWindowOpen(open({ mode: "ostrzyzeni", shaved: true, now: 50_000, nearStation: true }))).toBe(false);
+    expect(buyWindowLeft(open({ mode: "ostrzyzeni", shaved: true, phase: MatchPhase.Prep }))).toBe(0);
+    // The flag is only read where the mode says so: a shaved head in TDM (drop E) still shops.
+    expect(buyWindowOpen(open({ mode: "tdm", shaved: true }))).toBe(true);
   });
 });
 

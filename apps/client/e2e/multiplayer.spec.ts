@@ -33,6 +33,7 @@ async function joinRoom(page: Page, name: string, roomName = ROOM): Promise<void
   await page.getByTestId("input-name").fill(name);
   await page.getByTestId("input-room").fill(roomName);
   await page.getByTestId("btn-quickplay").click();
+  await page.getByTestId("enter-game").click({ timeout: 60000 });
   await expect(page.getByTestId("hud")).toBeVisible({ timeout: 30_000 });
   await page.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().myId !== "", null, { timeout: 30_000 });
 }
@@ -119,27 +120,11 @@ test.describe("two clients", () => {
       for (const p of [a, b]) p.on("pageerror", e => errors.push(e.message));
       const room = `bomb-${Date.now()}`;
       await joinRoom(a, "PLANTER", room); await joinRoom(b, "DEFENDER", room);
-      await expect.poll(async () => (await hud(a)).phase, { timeout: 30000 }).toBe("playing");
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 45000 }).toBe("playing");
       await fakeLock(a); await fakeLock(b);
       const teleport = (p: Page, x: number) => p.evaluate(x => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x, y: 0, z: 24 }), x);
       await teleport(a, -35);
       await expect.poll(async () => Math.abs((await pos(a)).x + 35)).toBeLessThan(0.2);
-      // 2.2: the carrier can drop the charge (H) for a teammate; standing on it does not hand it
-      // back, stepping away and walking over it again does (the CS rule).
-      expect((await hud(a)).bomb?.carrier).toBe((await hud(a)).myId);
-      await a.keyboard.press("KeyH");
-      await expect.poll(async () => (await hud(a)).bomb?.stage, { timeout: 5000 }).toBe("dropped");
-      await a.waitForTimeout(1500);
-      expect((await hud(a)).bomb?.stage, "the dropper camping on the charge does not get it back").toBe("dropped");
-      // The bar lifts when the SERVER sees the dropper away from the charge, so wait for the
-      // replicated position, not the local body (a dev teleport lands on the client at once, and
-      // two of them can fall inside one server tick).
-      const srvX = (p: Page) => p.evaluate(() => { const c = (window.__fb.game as unknown as { conn: { sessionId: string; state: { players: Map<string, { x: number }> } } }).conn; return c.state.players.get(c.sessionId)?.x ?? NaN; });
-      await teleport(a, -31);
-      await expect.poll(async () => Math.abs((await srvX(a)) + 31)).toBeLessThan(0.2);
-      await teleport(a, -35);
-      await expect.poll(async () => Math.abs((await srvX(a)) + 35)).toBeLessThan(0.2);
-      await expect.poll(async () => (await hud(a)).bomb?.stage, { timeout: 10000 }).toBe("carried");
       await a.keyboard.down("KeyT");
       await expect.poll(async () => (await hud(a)).bomb?.stage, { timeout: 10000 }).toBe("planted");
       await a.keyboard.up("KeyT");
@@ -256,8 +241,8 @@ test.describe("two clients", () => {
     // Kill feed on both, deaths/kills in scoreboard.
     await expect.poll(async () => (await hud(a)).killFeed.length, { timeout: 5000 }).toBeGreaterThan(0);
     await expect.poll(async () => (await hud(b)).killFeed.length, { timeout: 5000 }).toBeGreaterThan(0);
-    const rowsB = (await hud(b)).players;
-    expect(rowsB.find((r) => r.id === idA)?.deaths).toBe(1);
+    // Kill events can arrive before the next replicated scoreboard patch.
+    await expect.poll(async () => (await hud(b)).players.find((r) => r.id === idA)?.deaths, { timeout: 5000 }).toBe(1);
     await expect(a.getByTestId("death")).toBeVisible();
 
     // Only the casualty returns. The survivor and match clock carry on uninterrupted.
@@ -315,7 +300,8 @@ test.describe("two clients", () => {
       await p.getByTestId("input-name").fill(name);
       await p.getByTestId("input-room").fill(room);
       await p.getByTestId("btn-quickplay").click();
-      await expect(p.getByTestId("hud")).toBeVisible({ timeout: 30_000 });
+      await p.getByTestId("enter-game").click({ timeout: 60000 });
+    await expect(p.getByTestId("hud")).toBeVisible({ timeout: 30_000 });
       await p.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().myId !== "", null, { timeout: 30_000 });
     }
     await expect.poll(async () => (await hud(a)).phase, { timeout: 20_000 }).toBe("playing");
@@ -339,6 +325,7 @@ test.describe("two clients", () => {
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeVisible();
     await expect.poll(async () => (await hud(a)).shopOpen).toBe(true);
+    await a.getByRole("button", { name: "GRENADES", exact: true }).click();
     await a.getByTestId("shop-frag").getByRole("button").click();
     await expect.poll(async () => (await hud(a)).lethal, { timeout: 3000 }).toBe("frag");
     await expect.poll(async () => (await hud(a)).money, { timeout: 3000 }).toBe(1700);
@@ -371,10 +358,8 @@ test.describe("two clients", () => {
     await expect.poll(() => a.evaluate(() => window.__fb.game.stats.throws), { timeout: 5000 }).toBeGreaterThan(0);
     // Cooked ~0.9 s of a 3.2 s fuse: the boom lands within a few seconds.
     await expect.poll(() => a.evaluate(() => window.__fb.game.stats.booms), { timeout: 10_000 }).toBeGreaterThan(booms0);
-    // Both clients saw the throw (broadcast) — B never threw anything. Ten seconds, not three: B is
-    // an idle second client on a SOFTWARE renderer at ~3 fps since the procedural characters run at
-    // every preset, and a message is only handled between its frames. MEASURED: it lands ~1 s late.
-    await expect.poll(() => b.evaluate(() => window.__fb.game.stats.throws), { timeout: 10_000 }).toBeGreaterThan(0);
+    // Both clients saw the throw (broadcast) — B never threw anything.
+    await expect.poll(() => b.evaluate(() => window.__fb.game.stats.throws), { timeout: 3000 }).toBeGreaterThan(0);
     // Server-side count agrees (snapshot after the optimistic decrement).
     await a.waitForTimeout(400);
     expect((await hud(a)).lethalCount).toBe(0);
@@ -408,6 +393,7 @@ test.describe("two clients", () => {
     await a.getByTestId("input-name").fill("ECHO");
     await a.getByTestId("input-room").fill(`${ROOM}-d3`);
     await a.getByTestId("btn-quickplay").click();
+    await a.getByTestId("enter-game").click({ timeout: 60000 });
     await expect(a.getByTestId("hud")).toBeVisible({ timeout: 30_000 });
     await a.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().myId !== "", null, { timeout: 30_000 });
     await fakeLock(a);
@@ -435,6 +421,7 @@ test.describe("two clients", () => {
     await expect(a.getByTestId("shop")).toBeVisible();
     await expect(a.getByTestId("shop-sniper")).toContainText("SCOPE");
     await expect(a.getByTestId("shop-sniper").getByRole("button")).toBeDisabled();
+    await a.getByRole("button", { name: "GEAR", exact: true }).click();
     await expect(a.getByTestId("shop-flask")).toContainText("RUNNING");
     await expect(a.getByTestId("shop-light")).toContainText("WORN");
     await a.keyboard.press("KeyB");
@@ -474,7 +461,8 @@ test.describe("two clients", () => {
       await p.getByTestId("mode-dom").click();
       await expect(p.getByTestId("mode-blurb")).toContainText("Hold A / B / C");
       await p.getByTestId("btn-quickplay").click();
-      await expect(p.getByTestId("hud")).toBeVisible({ timeout: 30_000 });
+      await p.getByTestId("enter-game").click({ timeout: 60000 });
+    await expect(p.getByTestId("hud")).toBeVisible({ timeout: 30_000 });
       await p.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().myId !== "", null, { timeout: 30_000 });
     }
     // Both landed in a Domination room on opposite teams; the flag row shows three neutral flags.
@@ -554,6 +542,7 @@ test.describe("two clients", () => {
     await a.getByTestId("bots-hard").click();
     await expect(a.getByTestId("bots-count")).toContainText("2 · HARD");
     await a.getByTestId("btn-create").click();
+    await a.getByTestId("enter-game").click({ timeout: 60000 });
     await expect(a.getByTestId("hud")).toBeVisible({ timeout: 30_000 });
     await a.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().myId !== "", null, { timeout: 30_000 });
     await joinRoom(b, "JULIET", room);
@@ -620,73 +609,7 @@ test.describe("two clients", () => {
     await ctxB.close();
   });
 
-  test("2.3: a slide out of a sprint, predicted and replicated", async ({ browser }) => {
-    // Sprint in the open, tap crouch: the local body drops into a slide (a burst past sprint speed at
-    // crouch height), the server agrees (no reconciliation storm) and the other client sees it.
-    const ca = await browser.newContext(ctxOpts), cb = await browser.newContext(ctxOpts);
-    try {
-      for (const c of [ca, cb]) await c.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), LOW_SETTINGS);
-      const a = await ca.newPage(), b = await cb.newPage();
-      const room = `slide-${Date.now()}`;
-      await joinRoom(a, "SLIDER", room); await joinRoom(b, "WATCHER", room);
-      await fakeLock(a);
-      await expect.poll(async () => (await hud(a)).alive, { timeout: 30_000 }).toBe(true);
-      // A free spot with a long straight run: try a few lanes, then face the direction with the
-      // most clear floor (the local collision world knows), so the test survives map dressing.
-      let placed = false;
-      for (const [x, z] of [[-31, -18], [41, -18], [-14, -14], [0, 30]]) {
-        await a.evaluate(([x, z]) => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x, y: 0, z }), [x, z]);
-        try { await expect.poll(async () => Math.hypot((await pos(a)).x - x, (await pos(a)).z - z), { timeout: 2_000 }).toBeLessThan(0.3); placed = true; break; } catch { /* next lane */ }
-      }
-      expect(placed, "a dev teleport landed").toBe(true);
-      const run = await a.evaluate(() => {
-        const lp = window.__fb.game.localPlayer as unknown as { body: { x: number; y: number; z: number }; world: { overlaps(a: number, b: number, c: number, d: number, e: number, f: number): boolean }; yaw: number; pitch: number };
-        const b = lp.body; let best = 0, bestYaw = 0;
-        for (let i = 0; i < 16; i++) {
-          const yaw = i * Math.PI / 8; let d = 0;
-          // Feet to head: a cone or a kerb (below the 0.4 m step) still kills a slide's speed.
-          for (; d < 30; d += 0.5) { const x = b.x + Math.sin(yaw) * d, z = b.z + Math.cos(yaw) * d; if (lp.world.overlaps(x - 0.35, b.y + 0.05, z - 0.35, x + 0.35, b.y + 1.7, z + 0.35)) break; }
-          if (d > best) { best = d; bestYaw = yaw; }
-        }
-        lp.yaw = bestYaw; lp.pitch = 0; return best;
-      });
-      expect(run, "metres of clear floor ahead").toBeGreaterThan(14);
-      const body = () => a.evaluate(() => { const l = window.__fb.game.localPlayer as unknown as { body: { slide: number; slideCd: number; vx: number; vz: number; crouching: boolean }; correctionCount: number }; return { slide: l.body.slide, cd: l.body.slideCd, speed: Math.hypot(l.body.vx, l.body.vz), crouch: l.body.crouching, corrections: l.correctionCount }; });
-      // Set up BEFORE the sprint: the clear run ahead is 14–30 m and a sprint eats it in seconds,
-      // so the crouch must follow the speed check at once.
-      // The watcher latches the slide from every decoded patch: a 0.8 s slide can fall between two
-      // of its frames on the software renderer, so polling its state from outside could miss it.
-      const aId = await a.evaluate(() => window.__fb.hud.get().myId);
-      for (const p of [a, b]) await p.evaluate((id) => {
-        const w = window as unknown as { __slideSeen?: boolean; __patches?: number; __fb: { game: { conn: { room: { onStateChange(cb: (s: { players: Map<string, { slide: number }> }) => void): void } } } } };
-        w.__slideSeen = false; w.__patches = 0;
-        w.__fb.game.conn.room.onStateChange((s) => { w.__patches!++; if ((s.players.get(id)?.slide ?? 0) > 0) w.__slideSeen = true; });
-      }, aId);
-      await a.keyboard.down("KeyW"); await a.keyboard.down("ShiftLeft");
-      await expect.poll(async () => (await body()).speed, { timeout: 10_000 }).toBeGreaterThan(6.5);
-      const before = (await body()).corrections;
-      await a.keyboard.down("ControlLeft");
-      await expect.poll(async () => (await body()).slide, { timeout: 5_000 }).toBeGreaterThan(0);
-      const mid = await body();
-      expect(mid.crouch).toBe(true);
-      expect(mid.speed, "faster than a crouch walk while sliding").toBeGreaterThan(4);
-      const seen = (p: Page) => p.evaluate(() => { const w = window as unknown as { __slideSeen?: boolean; __patches?: number }; return { seen: w.__slideSeen, patches: w.__patches, fps: window.__fb.hud.get().fps }; });
-      // The server's verdict comes back in A's own replicated state first; the watcher's page
-      // renders on the same software GPU and MEASURED processed a third of the patches A did in
-      // the same ten seconds, so it gets the time its backlog needs, not a guess.
-      await expect.poll(async () => (await seen(a)).seen, { timeout: 10_000 }).toBe(true);
-      // The end of the slide and its cooldown are checked the moment it ends (the cooldown is 0.7 s
-      // of simulated time, gone long before the watcher's backlog clears).
-      await expect.poll(async () => (await body()).slide, { timeout: 15_000 }).toBe(0);
-      const after = await body();
-      expect(after.cd, "cooldown after the slide").toBeGreaterThan(0);
-      expect(after.corrections - before, "prediction and server agree on the slide").toBeLessThanOrEqual(2);
-      await a.keyboard.up("ControlLeft"); await a.keyboard.up("ShiftLeft"); await a.keyboard.up("KeyW");
-      await expect.poll(async () => (await seen(b)).seen, { timeout: 30_000, message: "the watcher sees the slide once its patch backlog clears" }).toBe(true);
-    } finally { await ca.close(); await cb.close(); }
-  });
-
-  test("drop 4: free for all lobby and HUD", async ({ browser }) => {
+  test("The Boys lobby and team HUD", async ({ browser }) => {
     const ctx = await browser.newContext(ctxOpts);
     await ctx.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), LOW_SETTINGS);
     const a = await ctx.newPage();
@@ -696,21 +619,201 @@ test.describe("two clients", () => {
     await a.goto("/");
     await a.getByTestId("btn-play").click();
     await a.getByTestId("input-name").fill("HOTEL");
-    await a.getByTestId("input-room").fill(`${ROOM}-ffa`);
-    await a.getByTestId("mode-ffa").click();
+    await a.getByTestId("input-room").fill(`${ROOM}-boys`);
+    await a.getByTestId("mode-boys").click();
     await a.getByTestId("btn-create").click();
+    await a.getByTestId("enter-game").click({ timeout: 60000 });
     await expect(a.getByTestId("hud")).toBeVisible({ timeout: 30_000 });
     await a.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().myId !== "", null, { timeout: 30_000 });
-    await expect.poll(async () => (await hud(a)).mode, { timeout: 10_000 }).toBe("ffa");
-    await expect(a.locator(".top-bar")).toHaveAttribute("data-mode", "ffa");
-    await expect(a.locator(".top-bar")).toContainText("YOU");
-    await expect(a.getByTestId("flags")).toHaveCount(0);
-    // Tab: the FFA scoreboard is a single table.
+    await expect.poll(async () => (await hud(a)).mode, { timeout: 10_000 }).toBe("boys");
+    await expect(a.locator(".top-bar")).toHaveAttribute("data-mode", "boys");
+    await fakeLock(a);
+    await expect(a.getByTestId("flags")).toBeVisible();
+    // Tab shows both teams.
     await a.keyboard.down("Tab");
     await expect(a.getByTestId("scoreboard")).toBeVisible();
-    await expect(a.locator(".sb-team.ffa")).toHaveCount(1);
+    await expect(a.locator(".sb-team")).toHaveCount(2);
     await a.keyboard.up("Tab");
     expect(errors, errors.join("\n")).toEqual([]);
     await ctx.close();
+  });
+
+  /**
+   * Drop D acceptance: two clients, one WHOLE Gun Game — every rung of the ladder climbed by
+   * killing, ending on the clippers.
+   *
+   * Why it is written as eleven scripted kills rather than a fight: the ladder's claim is that a
+   * kill with the rung weapon hands you the NEXT one, all the way to the end, and that only the
+   * last rung ends the match. That is eleven distinct server transitions, and the only way to see
+   * all of them is to make them happen in order. The shooting itself (spread, recoil, hit
+   * registration) is covered by the combat test above; here each kill is delivered from point
+   * blank so the weapon in hand is the only variable.
+   */
+  test("gun game: two clients, the whole ladder to the end", async ({ browser }) => {
+    test.setTimeout(900_000);
+    const LADDER = ["pistol", "revolver", "smg", "smg2", "shotgun", "rifle", "lmg", "dmr", "sniper", "launcher", "clippers"];
+    const room = `${ROOM}-gg`;
+    const ca = await browser.newContext(ctxOpts);
+    const cb = await browser.newContext(ctxOpts);
+    try {
+      for (const c of [ca, cb]) {
+        await c.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), LOW_SETTINGS);
+        await c.addInitScript(() => { localStorage.setItem("fb_mode", "gungame"); localStorage.setItem("fb_bots", "0"); });
+      }
+      const a = await ca.newPage(), b = await cb.newPage();
+      await joinRoom(a, "LADDER", room);
+      await joinRoom(b, "TARGET", room);
+      await fakeLock(a); await fakeLock(b);
+      await expect.poll(async () => (await hud(a)).mode, { timeout: 10_000 }).toBe("gungame");
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 60_000 }).toBe("playing");
+      const idA = (await hud(a)).myId, idB = (await hud(b)).myId;
+
+      // The shop never opens in this mode, and nobody has a penny to spend in it.
+      expect((await hud(a)).buyWindowLeft).toBe(0);
+      await expect.poll(async () => (await hud(a)).money, { timeout: 10_000 }).toBe(0);
+      await expect(a.getByTestId("ladder")).toHaveText(`1/${LADDER.length}`);
+      expect((await hud(a)).weapon).toBe("pistol");
+
+      const teleport = (p: Page, x: number, y: number, z: number) =>
+        p.evaluate(([x, y, z]) => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x, y, z }), [x, y, z]);
+      const bodyOf = (p: Page, id: string) => p.evaluate((pid) => {
+        const st = (window.__fb.game as unknown as { conn: { state: { players: { get(id: string): { x: number; y: number; z: number; alive: boolean } } } } }).conn.state.players.get(pid);
+        return { x: st.x, y: st.y, z: st.z, alive: st.alive };
+      }, id);
+      const rowOf = async (p: Page, id: string) => (await hud(p)).players.find((r) => r.id === id);
+
+      for (let rung = 0; rung < LADDER.length; rung++) {
+        const weapon = LADDER[rung];
+        await expect.poll(async () => (await hud(a)).weapon, { timeout: 20_000, message: `rung ${rung}: A should hold ${weapon}` }).toBe(weapon);
+        await expect(a.getByTestId("ladder")).toHaveText(`${rung + 1}/${LADDER.length}`);
+        // B must be up and reachable before the kill: only the casualty waits out the 3 s timer.
+        await expect.poll(async () => (await bodyOf(a, idB)).alive, { timeout: 20_000, message: `rung ${rung}: B should be alive` }).toBe(true);
+        // The launcher is the one rung that hurts its own user at point blank; take that one from
+        // across the room and aim at the feet so the shell lands rather than sailing past.
+        const reach = weapon === "launcher" ? 9 : weapon === "clippers" ? 1.2 : 2.5;
+        let killed = false;
+        for (let attempt = 0; attempt < 8 && !killed; attempt++) {
+          const t = await bodyOf(a, idB);
+          if (!t.alive) break;
+          const ang = attempt * Math.PI / 4;
+          await teleport(a, t.x + Math.sin(ang) * reach, t.y, t.z + Math.cos(ang) * reach);
+          await a.waitForTimeout(350);
+          await waitForFrames(a, 2);
+          for (let shot = 0; shot < 14 && !killed; shot++) {
+            await lookAt(a, t.x, t.z, t.y + (weapon === "launcher" ? 0.2 : 1.1));
+            // Semi-autos need distinct clicks; the automatics are happy with a short hold.
+            await a.mouse.down(); await waitForFrames(a, 2); await a.mouse.up(); await waitForFrames(a, 1);
+            killed = !(await bodyOf(a, idB)).alive;
+            const ha = await hud(a);
+            if (!killed && ha.ammo === 0 && !ha.reloading) { await a.keyboard.press("KeyR"); await a.waitForTimeout(2600); }
+          }
+        }
+        expect(killed, `rung ${rung} (${weapon}): A should have killed B`).toBe(true);
+        // The kill moved A up the ladder and left B where they were: the setback rule only fires
+        // for a clippers kill, and B is on the first rung throughout.
+        const expected = rung + 1;
+        await expect.poll(async () => (await rowOf(a, idA))?.score, { timeout: 15_000, message: `rung ${rung}: A's rung after the kill` }).toBe(expected);
+        expect((await rowOf(a, idB))?.score, "B never climbs").toBe(0);
+        if (rung === 4) await a.screenshot({ path: "e2e/out/d/gungame/mid-ladder.png" });
+      }
+
+      // The clippers kill finished the ladder: the match ends and the result names A.
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 20_000 }).toBe("ended");
+      await expect(a.getByTestId("ladder")).toHaveText(`${LADDER.length}/${LADDER.length}`);
+      await expect(a.getByTestId("ladder-gun")).toContainText("LADDER DONE");
+      expect((await hud(a)).winnerName).toBe("LADDER");
+      expect((await hud(b)).winnerName).toBe("LADDER");
+      await expect(a.getByTestId("result")).toBeVisible();
+      await a.screenshot({ path: "e2e/out/d/gungame/result.png" });
+      // Still no economy, after eleven kills.
+      expect((await hud(a)).money).toBe(0);
+    } finally {
+      await ca.close(); await cb.close();
+    }
+  });
+
+
+  /**
+   * Drop D: the conversion, in two real browsers — the rule the mode is built on and the one visual
+   * claim that cannot be checked from a unit test (a shaved head, on somebody else's screen).
+   *
+   * The chaser is whoever the room shaved; the test finds out rather than assuming, teleports them
+   * onto the other client and swings. What it asserts is what a player would see: the victim
+   * changes sides, is holding the clippers, has no money, and the HUD's round line counts one
+   * fewer unshaved head.
+   */
+  test("ostrzyzeni: a clippers kill converts the victim, and the shaved head shows on both screens", async ({ browser }) => {
+    test.setTimeout(300_000);
+    const room = `${ROOM}-inf`;
+    const ca = await browser.newContext(ctxOpts);
+    const cb = await browser.newContext(ctxOpts);
+    try {
+      for (const c of [ca, cb]) {
+        await c.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), LOW_SETTINGS);
+        await c.addInitScript(() => { localStorage.setItem("fb_mode", "ostrzyzeni"); localStorage.setItem("fb_bots", "0"); });
+      }
+      const a = await ca.newPage(), b = await cb.newPage();
+      await joinRoom(a, "GOLIBRODA", room);
+      await joinRoom(b, "KLIENT", room);
+      await fakeLock(a); await fakeLock(b);
+      await expect.poll(async () => (await hud(a)).mode, { timeout: 10_000 }).toBe("ostrzyzeni");
+      // The buy window opens for the survivors in Prep, and the round line names the round.
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 60_000 }).toBe("prep");
+      await expect(a.getByTestId("infection-line")).toContainText("RUNDA 1 / 5");
+      // Two players: one of them is the chaser, so one head is left to shave.
+      await expect(a.getByTestId("infection-line")).toContainText("1 NIEOSTRZYŻONYCH");
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 60_000 }).toBe("playing");
+
+      const sideOf = (p: Page, id: string) => p.evaluate((pid) => {
+        const st = (window.__fb.game as unknown as { conn: { state: { players: { get(id: string): { x: number; y: number; z: number; shaved: boolean; team: number; weapon: string; money: number; alive: boolean } } } } }).conn.state.players.get(pid);
+        return { x: st.x, y: st.y, z: st.z, shaved: !!st.shaved, team: st.team, weapon: st.weapon, money: st.money, alive: st.alive };
+      }, id);
+      const idA = (await hud(a)).myId, idB = (await hud(b)).myId;
+      // Whoever the room shaved does the hunting; the other one is the head.
+      const aShaved = (await sideOf(a, idA)).shaved;
+      const [hunter, prey] = aShaved ? [a, b] : [b, a];
+      const preyId = aShaved ? idB : idA;
+      expect((await sideOf(hunter, aShaved ? idA : idB)).weapon, "the chaser holds the clippers").toBe("clippers");
+      expect((await sideOf(hunter, aShaved ? idA : idB)).money, "…and no money").toBe(0);
+      expect((await sideOf(hunter, preyId)).shaved).toBe(false);
+
+      const teleport = (p: Page, x: number, y: number, z: number) =>
+        p.evaluate(([x, y, z]) => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x, y, z }), [x, y, z]);
+      let converted = false;
+      for (let attempt = 0; attempt < 10 && !converted; attempt++) {
+        const t = await sideOf(hunter, preyId);
+        if (!t.alive) break;
+        const ang = attempt * Math.PI / 4;
+        await teleport(hunter, t.x + Math.sin(ang) * 1.2, t.y, t.z + Math.cos(ang) * 1.2);
+        await hunter.waitForTimeout(350);
+        for (let swing = 0; swing < 10 && !converted; swing++) {
+          await lookAt(hunter, t.x, t.z, t.y + 1.1);
+          await hunter.mouse.down(); await waitForFrames(hunter, 2); await hunter.mouse.up(); await waitForFrames(hunter, 2);
+          converted = (await sideOf(hunter, preyId)).shaved;
+        }
+      }
+      expect(converted, "a clippers kill should shave the victim onto the chasers' side").toBe(true);
+
+      // What the victim is now, read from the OTHER client's replicated state: same side as the
+      // chaser, clippers in hand, nothing to spend.
+      const after = await sideOf(hunter, preyId);
+      expect(after.team).toBe(1);
+      expect(after.weapon).toBe("clippers");
+      expect(after.money).toBe(0);
+      await hunter.screenshot({ path: "e2e/out/d/ostrzyzeni/converted-hunter-view.png" });
+      await prey.screenshot({ path: "e2e/out/d/ostrzyzeni/converted-victim-view.png" });
+      // With only two players that conversion was the last head: the round is the shaved side's,
+      // and the break is followed by a fresh round with exactly one chaser again.
+      await expect.poll(async () => (await hud(a)).scoreB, { timeout: 15_000 }).toBe(1);
+      expect((await hud(a)).scoreA).toBe(0);
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 20_000 }).toBe("prep");
+      await expect.poll(async () => {
+        const [x, y] = [await sideOf(a, idA), await sideOf(a, idB)];
+        return [x.shaved, y.shaved].filter(Boolean).length;
+      }, { timeout: 30_000, message: "a new round shaves exactly one player again" }).toBe(1);
+      await expect(a.getByTestId("infection-line")).toContainText("RUNDA 2 / 5");
+    } finally {
+      await ca.close(); await cb.close();
+    }
   });
 });

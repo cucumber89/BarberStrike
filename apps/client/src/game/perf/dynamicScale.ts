@@ -31,6 +31,7 @@ export class DynamicScale {
   private since = 0;     // ms the current condition has persisted
   private cooldown = 0;
   private notch = 0;     // 0 = target, each notch = -10 %
+  private direction = 0;
   private readonly maxNotch: number;
   private readonly opts: Required<DynamicScaleOptions>;
 
@@ -48,20 +49,25 @@ export class DynamicScale {
 
   /** Feed one frame; returns the new scale when it changed, else null. */
   update(frameMs: number): number | null {
+    if (!Number.isFinite(frameMs) || frameMs <= 0) return null;
     const dt = Math.min(100, Math.max(0, frameMs));
     this.ema += (dt - this.ema) * 0.1;
     if (this.cooldown > 0) { this.cooldown -= dt; return null; }
     const slow = this.ema > this.opts.slowMs && this.notch < this.maxNotch;
     const fast = this.ema < this.opts.fastMs && this.notch > 0;
-    if (!slow && !fast) { this.since = 0; return null; }
+    if (!slow && !fast) { this.since = 0; this.direction = 0; return null; }
+    const direction = slow ? -1 : 1;
+    if (direction !== this.direction) this.since = 0;
+    this.direction = direction;
     this.since += dt;
     if (this.since < this.opts.holdMs) return null;
     this.since = 0;
     this.cooldown = this.opts.cooldownMs;
+    const previous = this.scale;
     this.notch = slow
       ? Math.min(this.maxNotch, this.notch + this.notchesFor(this.ema))
       : this.notch - 1;
-    return this.scale;
+    return this.scale === previous ? null : this.scale;
   }
 
   /**
@@ -72,7 +78,7 @@ export class DynamicScale {
    * answer is a scale that is exactly as slow as the thing being escaped from.
    */
   private notchesFor(ms: number): number {
-    const want = Math.sqrt((this.opts.slowMs * 0.85) / ms);
+    const want = (1 - this.notch * .1) * Math.sqrt((this.opts.slowMs * 0.85) / ms);
     return Math.max(1, Math.round((1 - want) / 0.1) - this.notch);
   }
 
@@ -81,6 +87,18 @@ export class DynamicScale {
     this.opts.target = target;
     this.notch = 0;
     this.since = 0;
+    this.direction = 0;
+    this.ema = 16;
+    this.cooldown = this.opts.cooldownMs;
+  }
+
+  setTargetFps(fps: number): void {
+    this.opts.slowMs = 1000 / fps * 1.2;
+    // Recovery must be possible on a vsynced 60 Hz screen. The original 12.5 ms
+    // threshold meant it could never recover from a temporary drop at 60 fps.
+    this.opts.fastMs = 1000 / fps * 1.04;
+    this.since = 0;
+    this.direction = 0;
     this.cooldown = this.opts.cooldownMs;
   }
 }
