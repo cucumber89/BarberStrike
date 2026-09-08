@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { BOMB_SITES, TEAM_COLORS, type MapDef } from "@frankibarber/shared";
+import { sitesOf, TEAM_COLORS, type MapDef } from "@frankibarber/shared";
 import type { RadarSnapshot } from "../game/Game";
 import { hud } from "../game/store";
 import { MINIMAP, bearingTo, compassX, radarOffset, relativeAngle, toMap } from "./minimapGeometry";
@@ -94,7 +94,7 @@ export function Minimap({ radar }: Props) {
       };
       for (const s of map.stations) glyph(s.x, s.z, "$", "#7dd68a", "bold 10px system-ui");
       if (st.mode === "bomb") {
-        for (const s of BOMB_SITES) { dot(s.x, s.z, "#e5ae52", 7, true); glyph(s.x, s.z, s.id, "#e5ae52"); }
+        for (const s of sitesOf(map)) { dot(s.x, s.z, "#e5ae52", 7, true); glyph(s.x, s.z, s.id, "#e5ae52"); }
         const b = st.bomb;
         if (b && (b.stage === "planted" || (b.attackTeam === st.myTeam && b.stage !== "resolved"))) glyph(b.x, b.z, "◆", "#ff7050");
       }
@@ -125,7 +125,7 @@ export function Minimap({ radar }: Props) {
         cc.fillStyle = color; cc.fillText(text, W / 2 + cx, y);
       };
       mark(0, "N", "#fff"); mark(Math.PI / 2, "E", "#bbb"); mark(Math.PI, "S", "#bbb"); mark(-Math.PI / 2, "W", "#bbb");
-      if (st.mode === "bomb") for (const s of BOMB_SITES) mark(bearingTo(r.x, r.z, s.x, s.z), s.id, "#e5ae52");
+      if (st.mode === "bomb") for (const s of sitesOf(r.map)) mark(bearingTo(r.x, r.z, s.x, s.z), s.id, "#e5ae52");
       if ((st.mode === "dom" || st.mode === "boys")) st.flags.forEach((f, i) => { const def = map.flags[i]; if (def) mark(bearingTo(r.x, r.z, def.x, def.z), f.id, f.owner === -1 ? NEUTRAL : TEAM_COLORS[f.owner as 0 | 1]); });
       for (const m of st.marks) mark(bearingTo(r.x, r.z, m.x, m.z), m.kind === "spot" ? "!" : "▼", m.kind === "spot" ? "#ff5a5a" : TEAM_COLORS[m.team]);
       cc.fillStyle = "#fff"; cc.fillRect(W / 2 - 1, 0, 2, 4); cc.fillRect(W / 2 - 1, H - 4, 2, 4);

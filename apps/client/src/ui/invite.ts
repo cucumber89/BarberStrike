@@ -1,4 +1,4 @@
-import { isGameMode, type GameMode } from "@frankibarber/shared";
+import { DEFAULT_MAP_ID, isGameMode, MAP_ORDER, MAPS, type GameMode } from "@frankibarber/shared";
 
 /**
  * Invite links (2.1): the room name and mode in the page URL.
@@ -13,9 +13,17 @@ import { isGameMode, type GameMode } from "@frankibarber/shared";
  * `viaLink` is true when the room came from the address itself — `/r/<room>` (Drop D) — which is
  * the "I was sent here" case: the lobby then asks for a nickname and nothing else.
  */
-export interface Invite { room: string; mode: GameMode | null; join: string | null; viaLink: boolean }
+export interface Invite { room: string; mode: GameMode | null; map: string | null; join: string | null; viaLink: boolean }
 
 const ROOM_MAX = 24;
+
+/** A map id the build actually has. An unknown one is not an error: the lobby falls back to its default. */
+export const isMapId = (id: string | null | undefined): id is string => !!id && Object.hasOwn(MAPS, id);
+
+/** What the lobby's map picker offers, in the shared order, each with the name the map calls itself. */
+export function mapChoices(): { id: string; name: string }[] {
+  return MAP_ORDER.filter(isMapId).map((id) => ({ id, name: MAPS[id].name }));
+}
 
 /** The room a `/r/<room>` path names, or "" for any other path. Percent-encoding is undone; garbage is not. */
 export function roomFromPath(pathname: string): string {
@@ -28,30 +36,32 @@ export function roomFromPath(pathname: string): string {
 
 /**
  * What the URL asks for. The room is the `/r/<room>` path (Drop D, join by link) or the older
- * `?room=` query; the mode always rides in the query. Unknown or empty parts are simply absent;
- * nothing here throws.
+ * `?room=` query; the mode and the map (Drop G) always ride in the query. Unknown or empty parts
+ * are simply absent; nothing here throws.
  */
 export function parseInvite(search: string, pathname = ""): Invite {
   const q = new URLSearchParams(search);
   const fromPath = roomFromPath(pathname);
   const room = fromPath || (q.get("room") ?? "").trim().slice(0, ROOM_MAX);
   const mode = q.get("mode");
+  const map = q.get("map");
   const join = (q.get("join") ?? "").trim();
-  return { room, mode: isGameMode(mode) ? mode : null, join: join || null, viaLink: fromPath.length > 0 };
+  return { room, mode: isGameMode(mode) ? mode : null, map: isMapId(map) ? map : null, join: join || null, viaLink: fromPath.length > 0 };
 }
 
 /**
- * The link to share for a named room: `<origin>/r/<room>?mode=<mode>` (the mode rides along so the
- * matchmaker's `filterBy(["room","mode"])` lands everyone in the same room). Without a room it is
- * the page with only the mode, so quick play still matches anyone.
+ * The link to share for a named room: `<origin>/r/<room>?mode=<mode>&map=<map>` (mode and map ride
+ * along so the matchmaker lands everyone in the same room — two people on one room name but
+ * different maps are two rooms). Without a room it is the page with only those two, so quick play
+ * still matches anyone.
  */
-export function inviteLink(base: string, room: string, mode: GameMode): string {
+export function inviteLink(base: string, room: string, mode: GameMode, map: string = DEFAULT_MAP_ID): string {
   const url = new URL(base);
   url.search = "";
   url.hash = "";
   const name = room.trim();
   url.pathname = name ? `/r/${encodeURIComponent(name)}` : "/";
-  url.search = new URLSearchParams({ mode }).toString();
+  url.search = new URLSearchParams({ mode, map: isMapId(map) ? map : DEFAULT_MAP_ID }).toString();
   return url.toString();
 }
 

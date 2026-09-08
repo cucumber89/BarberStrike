@@ -1,5 +1,5 @@
-import { NIGHT_DISTRICT, type Solid } from "./map";
-import { BOMB, BOMB_SITES } from "./bomb";
+import { NIGHT_DISTRICT, sitesOf, type MapDef, type Solid } from "./map";
+import { BOMB } from "./bomb";
 
 /**
  * Floor audit — the diagnosis behind the report that "the floor at A and B lags".
@@ -75,7 +75,7 @@ export function coplanarTopFaces(solids: readonly Solid[] = NIGHT_DISTRICT.solid
   return out.sort((p, q) => q.area - p.area);
 }
 
-export interface SiteLoad { site: "A" | "B"; name: string; areaM2: number; solids: number; props: number }
+export interface SiteLoad { site: string; name: string; areaM2: number; solids: number; props: number }
 
 /**
  * A plantable site is a CIRCLE of `BOMB.useRadius` around its point (main's #14 replaced the old
@@ -89,8 +89,8 @@ const inside = (x: number, z: number, s: { x: number; z: number }, radius: numbe
   Math.hypot(x - s.x, z - s.z) <= radius;
 
 /** How much geometry sits inside each plant zone — the frame-rate half of the diagnosis. */
-export function siteLoad(map = NIGHT_DISTRICT): SiteLoad[] {
-  return BOMB_SITES.map((s) => ({
+export function siteLoad(map: MapDef = NIGHT_DISTRICT): SiteLoad[] {
+  return sitesOf(map).map((s) => ({
     site: s.id,
     name: s.name,
     areaM2: Math.round(Math.PI * SITE_LOAD_RADIUS * SITE_LOAD_RADIUS),
@@ -100,6 +100,6 @@ export function siteLoad(map = NIGHT_DISTRICT): SiteLoad[] {
 }
 
 /** The bomb site a coplanar pair sits in or beside — a shimmer is seen from well outside the site. */
-export function siteOf(x: number, z: number): "A" | "B" | null {
-  return BOMB_SITES.find((s) => inside(x, z, s, SITE_LOAD_RADIUS + 6))?.id ?? null;
+export function siteOf(x: number, z: number, map: MapDef = NIGHT_DISTRICT): string | null {
+  return sitesOf(map).find((s) => inside(x, z, s, SITE_LOAD_RADIUS + 6))?.id ?? null;
 }

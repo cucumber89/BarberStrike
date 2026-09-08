@@ -15,7 +15,7 @@ import { RenderTargetTexture } from "@babylonjs/core/Materials/Textures/renderTa
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import type { Light } from "@babylonjs/core/Lights/light";
-import type { MapDef, MaterialTag } from "@frankibarber/shared";
+import { NIGHT_DISTRICT, type MapDef, type MaterialTag } from "@frankibarber/shared";
 import { createMaterialLibrary, type MaterialLibrary } from "./materials";
 import { buildProps } from "./props";
 import { dressSolid } from "./dressing";
@@ -43,6 +43,16 @@ export interface MapInstance {
 
 /** Global gain on the map's practical lights (tuned by measurement against the un-tonemapped output). */
 const LIGHT_GAIN = 1.4;
+
+/**
+ * Whether a map gets the district dressing (`architecture.ts` → `streetscape.ts`).
+ *
+ * Both are literal NIGHT_DISTRICT coordinates and NIGHT_DISTRICT solid names — a shop cornice at
+ * x 1.85, facades keyed off `south_facade` — so on any other map they are 206 boxes of street
+ * furniture hanging in mid-air (measured on GÓRA). They are the district's own detail pass, not a
+ * generic one, so the map id is what decides, and NIGHT_DISTRICT keeps every piece of it.
+ */
+export const hasDistrictDressing = (map: MapDef): boolean => map.id === NIGHT_DISTRICT.id;
 
 export interface MapBuildOptions {
   /** Drop 6: optional glTF models per look; a look the library has is not dressed procedurally. */
@@ -134,7 +144,7 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
     }
   }
 
-  buildArchitecture(scene, map, addToZone);
+  if (hasDistrictDressing(map)) buildArchitecture(scene, map, addToZone);
   const root: Mesh[] = [];
   const casters: AbstractMesh[] = [];
   for (const [key, { tag, meshes }] of byMat) {

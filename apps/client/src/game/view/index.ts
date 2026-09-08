@@ -33,7 +33,7 @@ export const installView: GameModule = (ctx) => {
   const grenades = new Grenades(ctx.scene, ctx.world, ctx.serverNow);
   // Drop 4: flag poles / rings only in Domination.
   const flags = (ctx.connection.state.mode === "dom" || ctx.connection.state.mode === "boys") ? new Flags(ctx.scene, ctx.mapDef, () => ctx.connection.state.flags) : null;
-  const bomb = ctx.connection.state.mode === "bomb" ? new BombSites(ctx.scene) : null;
+  const bomb = ctx.connection.state.mode === "bomb" ? new BombSites(ctx.scene, ctx.mapDef) : null;
   // Drop 5: team marks as world billboards.
   const marks = new Marks(ctx.scene, ctx.remotes, () => ({ x: ctx.local.body.x, y: ctx.local.body.y, z: ctx.local.body.z }));
   grenades.setHooks({
