@@ -19,6 +19,15 @@ export function App() {
   const [screen, setScreen] = useState<Screen>({ kind: "menu" });
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const canvasHost = useRef<HTMLDivElement>(null);
+  /**
+   * What goes fullscreen. It has to be the whole app, not the canvas host: a fullscreen element is
+   * promoted to the browser's TOP LAYER, and everything outside it stops being painted and stops
+   * receiving clicks. Fullscreening the canvas alone therefore took the HUD, the buy menu, the
+   * chat, the pause card and the result screen off the screen — MEASURED: a screenshot taken at
+   * an open buy menu showed the barbershop and nothing else, and Playwright reported the canvas
+   * intercepting the click meant for a BUY button.
+   */
+  const appRoot = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
   const attempt = useRef(0);
   const starting = useRef(false);
@@ -114,7 +123,7 @@ export function App() {
     // is what puts Escape and Ctrl+W in the game's hands, only works inside it and only on
     // Chromium, so its failure is normal and silent. The pointer is asked for last; if the browser
     // refuses it, the pause card is already the retry surface and says so.
-    const host = canvasHost.current;
+    const host = appRoot.current;
     if (host && await enterFullscreen(host)) void lockKeyboard();
     void game.requestPointerLockAsync();
     connection.send(C2S.Ready);
@@ -143,7 +152,7 @@ export function App() {
   const radar = useCallback(() => gameRef.current?.radar() ?? null, []);
 
   return (
-    <div className="app">
+    <div className="app" ref={appRoot}>
       {/* The game canvas is created imperatively per start (see freshCanvas); menus overlay this host. */}
       <div ref={canvasHost} className="game-canvas-host" style={{ visibility: screen.kind === "game" || screen.kind === "entering" ? "visible" : "hidden" }} />
       {screen.kind === "game" && (
@@ -152,7 +161,7 @@ export function App() {
           onResume={async () => (await gameRef.current?.requestPointerLockAsync()) ?? false}
           onPause={() => gameRef.current?.releasePointerLock()}
           onFullscreen={async () => {
-            const el = canvasHost.current;
+            const el = appRoot.current;
             if (isFullscreen()) { exitImmersion(); return false; }
             const ok = el ? await enterFullscreen(el) : false;
             if (ok) {

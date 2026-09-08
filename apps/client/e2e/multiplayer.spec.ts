@@ -69,6 +69,13 @@ async function lookAt(page: Page, tx: number, tz: number, ty = 1.4): Promise<voi
 // unit tests on the real .glb files, plus `e2e/tools/assets-check.mjs` against the running game.
 const LOW_SETTINGS = JSON.stringify({ graphics: { preset: "low", renderer: "webgl2", renderScale: 0.5, shadows: "off", postProcessing: false, effects: 0.3, antialiasing: false, importedModels: false } });
 const ctxOpts = { viewport: { width: 640, height: 360 } };
+/**
+ * The buy menu is laid out for 720p — drop I put every aisle on one screen deliberately — so at the
+ * 640×360 the rest of the suite runs at, the grenade and equipment aisles sit below the fold and a
+ * click on them waits for an element that will never come into view. MEASURED: the frag's BUY
+ * button lands at y=524 in a 360-tall window. Tests that open the shop get a window the shop fits.
+ */
+const shopCtxOpts = { viewport: { width: 1280, height: 720 } };
 
 async function waitForFrames(page: Page, n: number): Promise<void> {
   const start = await page.evaluate(() => window.__fb.game.frameCount);
@@ -285,8 +292,8 @@ test.describe("two clients", () => {
   });
 
   test("drop 2: buy menu, wallet, frag cook + throw, flashbang", async ({ browser }) => {
-    const ctxA = await browser.newContext(ctxOpts);
-    const ctxB = await browser.newContext(ctxOpts);
+    const ctxA = await browser.newContext(shopCtxOpts);
+    const ctxB = await browser.newContext(shopCtxOpts);
     for (const c of [ctxA, ctxB]) await c.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), LOW_SETTINGS);
     const a = await ctxA.newPage();
     const b = await ctxB.newPage();
@@ -321,19 +328,29 @@ test.describe("two clients", () => {
     expect(h0.buyWindowLeft).toBeGreaterThan(0);
     await expect(a.getByTestId("buy-prompt")).toBeVisible();
 
+    // At a buy counter, because the spawn window is 30 s since drop I and everything above spends
+    // it: the shop then closes itself and the click below waits for a menu that will not reopen.
+    // A counter is what the game tells a player to find, so the test does that.
+    await a.evaluate(() => {
+      const g = window.__fb.game as unknown as { mapDefinition: { stations: { x: number; y: number; z: number }[] }; conn: { send(t: string, m: unknown): void } };
+      const st = g.mapDefinition.stations[0];
+      g.conn.send("dev:teleport", { x: st.x, y: st.y, z: st.z });
+    });
+    await expect.poll(async () => (await hud(a)).buyWindowLeft, { timeout: 10_000 }).toBe(Infinity);
     // B opens the buy menu (input off, the menu is a real UI), a frag is bought by clicking.
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeVisible();
     await expect.poll(async () => (await hud(a)).shopOpen).toBe(true);
-    await a.getByRole("button", { name: "GRENADES", exact: true }).click();
-    await a.getByTestId("shop-frag").getByRole("button").click();
+    await a.getByTestId("buy-frag").click();
     await expect.poll(async () => (await hud(a)).lethal, { timeout: 3000 }).toBe("frag");
     await expect.poll(async () => (await hud(a)).money, { timeout: 3000 }).toBe(1700);
     await expect(a.getByTestId("shop-result")).toContainText("Bought Frag");
     // A second flash goes in the tactical slot; the shop refuses what cannot be afforded (DMR $2900).
-    await a.getByTestId("shop-flash").getByRole("button").click();
+    await a.getByTestId("buy-flash").click();
     await expect.poll(async () => (await hud(a)).tactical, { timeout: 3000 }).toBe("flash");
-    await expect(a.getByTestId("shop-dmr").getByRole("button")).toBeDisabled();
+    // Every aisle is on one screen now, so the DMR card is right there — and refused, because
+    // $2900 is more than what is left after the frag and the flash.
+    await expect(a.getByTestId("buy-dmr")).toBeDisabled();
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeHidden();
     await expect.poll(async () => (await hud(a)).shopOpen).toBe(false);
@@ -382,7 +399,7 @@ test.describe("two clients", () => {
   });
 
   test("drop 3: sidearm swap, clippers, sniper scope, perks and armour on the HUD", async ({ browser }) => {
-    const ctx = await browser.newContext(ctxOpts);
+    const ctx = await browser.newContext(shopCtxOpts);
     await ctx.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), LOW_SETTINGS);
     const a = await ctx.newPage();
     const errors: string[] = [];
@@ -420,8 +437,8 @@ test.describe("two clients", () => {
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeVisible();
     await expect(a.getByTestId("shop-sniper")).toContainText("SCOPE");
-    await expect(a.getByTestId("shop-sniper").getByRole("button")).toBeDisabled();
-    await a.getByRole("button", { name: "GEAR", exact: true }).click();
+    await expect(a.getByTestId("buy-sniper")).toBeDisabled();
+    // No tab to switch to: the one-screen shop has the equipment aisle up beside the guns.
     await expect(a.getByTestId("shop-flask")).toContainText("RUNNING");
     await expect(a.getByTestId("shop-light")).toContainText("WORN");
     await a.keyboard.press("KeyB");

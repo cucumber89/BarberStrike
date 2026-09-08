@@ -74,12 +74,17 @@ export function unlockKeyboard(): void {
  *
  * Must be called synchronously from a click/keydown handler — awaiting anything before it spends
  * the gesture and every request below will be refused.
+ *
+ * `root` is the element that goes fullscreen, and it has to be the one holding the canvas AND the
+ * UI: a fullscreen element is promoted to the browser's top layer, and everything outside it stops
+ * being painted and stops receiving clicks. Fullscreening the canvas alone takes the whole HUD off
+ * the screen.
  */
 export async function enterImmersion(
-  canvas: HTMLElement,
+  root: HTMLElement,
   requestPointerLock: () => Promise<boolean>,
 ): Promise<ImmersionResult> {
-  const fullscreen = await enterFullscreen(canvas);
+  const fullscreen = await enterFullscreen(root);
   const keyboardLock = fullscreen ? await lockKeyboard() : false;
   const pointerLock = await requestPointerLock();
   const reason = !pointerLock

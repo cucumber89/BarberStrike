@@ -227,6 +227,8 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 | 2026-09-08 | I (new) | claude/game-feedback-improvements-6mqx41 | **Owner's player-feedback brief, all nine points.** Controls: `browserKeys.ts` decides per keydown+modifiers whether the game owns a key (Ctrl+D bookmarking mid-round was preventDefault on the *Ctrl* press, not the chord); text fields keep their keystrokes (typing a nickname with "b" opened the shop); `buttons()` gated on pointer lock (the pause menu did not pause); `immersion.ts` = fullscreen + Keyboard Lock + pointer from the Play click, with a stated retry. Floor at A/B diagnosed as THREE causes: 5 coplanar top-face pairs (132 m² + 144 m² on the slabs carrying A and B — yard paving now laid AROUND the buildings), the site plate being an 80 m² double-sided lit alpha quad sampling one texture three times and never frozen, and no collision broadphase at all (uniform 4 m XZ grid + DDA: overlaps 43→6.5 ms/60k, hitscan 82→40 ms/40k). Shop rebuilt as three aisles in a fixed head/body/foot frame — measured PASS at 7 viewports incl. browser zoom, 21 items, nothing cut, nothing scrolled. Team switching built end to end (shared rules, server decides, wallet/gear survive, deferred to next round in bomb). WebGL2 is the default; automatic quality = device probe + 1 s median measurement + a director with long hysteresis that stops climbing after two reversals. Marcovia kit (colours only, geometry identical part-for-part by test). Living arena: 3 removal-only tactical plans voted by the attackers in the buy window, applied at the freeze edge, reverted next round. First-run hints. | apps/client/e2e/out/ui/{shop-fit.md,shop-*.png,plan-vote.png}; apps/client/e2e/out/kits/*.png; `pnpm test` prints the broadphase numbers; regenerate fit with `node apps/client/e2e/tools/ui-fit.mjs --url <dev>` | typecheck ✓ test ✓ (565: shared 184, client 256, server 125) build ✓ check:weapons ✓ (19/19) e2e — (not run: needs two live servers + a browser pair) | review |
 | 2026-09-08 | I | claude/game-feedback-improvements-6mqx41 (PR #15) | Merged `main` (#14 "The Boys stable UI") into the drop and drove PR #15 to green. #14 is a large strip-down (challenges, mastery, Armoury, HowToPlay, menu cover, invite link, defuse kit, gear art all deleted; shop replaced with a tabbed one carrying five Boys roles; App rebuilt as connect → ready → deploy). Ten conflicts. Resolutions: bomb-site GEOMETRY from #14 (its 4.5 m² label beats the old 80 m² plate at the very problem this drop was fixing) with this drop's freezing/`disableLighting` on top; shop LAYOUT from this drop (the brief is "one screen, no scrolling") with #14's roles, per-role gating, free starter and buy countdown folded in and the role picker as a strip rather than a fourth tab; App flow from #14 outright — its DEPLOY click is a better gesture for fullscreen than before-`connect`. Key rebinding RESTORED against #14's deletion, because this brief names it; crosshair / hudScale / ADS-sensitivity were NOT restored (#14's call, not this brief's). floorAudit updated for #14's circular sites. Then CI: `BotBrain.test.ts` timed out at 5 s — proved not this drop's (no diff under bots/nav; 1786 ms on main vs 1764 ms here) but a 14-second simulation against vitest's default timeout on a runner measured 3.9× slower; raised to 30 s for that block, nothing skipped or weakened, option verified by setting it to 1 ms first. | apps/client/e2e/out/ui/shop-fit.md (re-measured post-merge: 7 viewports × TDM 21 items AND × Boys role strip, all PASS) | typecheck ✓ test ✓ (535: shared 168, client 240, server 127) build ✓ check:weapons ✓ 19/19 CI ✓ (PR #15 green, mergeable clean) e2e — | review |
 
+| 2026-09-08 | D | drop/d-modes (after PR #16 merged) | Owner: *"zrób tak aby zrobić to co miałeś robić i żeby działało w grze wszystko"* — so, the two things that did not work. **(1) Fullscreen was hiding the whole UI.** Drop I's Play-button immersion fullscreens the CANVAS HOST; a fullscreen element is promoted to the browser's top layer and everything outside it stops being painted and stops taking clicks, so from the ENTER MATCH click onwards a player had no HUD, no buy menu, no chat, no pause card and no result screen — in the state the game puts every player into. MEASURED: a screenshot at an open buy menu shows the barbershop and nothing else; `document.fullscreenElement` was `DIV.game-canvas-host`; Playwright reported `<canvas class="game-canvas"> … intercepts pointer events` for a click on a BUY button. Fullscreen now goes on `.app`, which holds the canvas AND the overlays, and `startup.spec.ts` asserts that whatever is fullscreen contains the HUD. **(2) Ostrzyżeni was not a game.** The OWNER DECISION WANTED entry answered as option (b), measured not guessed: a chaser returns ON THE HUNT (nearest spawn ≥ 14 m from a living survivor, where every other rule maximises that distance) and carries `shavedHealth` 220 — no damage change, no armour, no new field, nothing gated. Eight seeded 90 s rounds of five: 9 conversions of 40 with THREE blank rounds → 14–22 of 40 with at most one blank, survivors still usually holding the clock. The HUD health bar now scales to what the player can hold, so a 220 HP chaser does not draw a bar twice its box. Room tests (k) and (l) added. NO playtest evidence is claimed anywhere in this drop: the owner declined to fill `docs/PLAYTEST_TEMPLATE.md`. Also fixed on the way: the stale shop e2e (tab clicks that the one-screen shop replaced with aisles) and a suite that must run at 1280×720 where it opens the shop. | screenshots and numbers quoted in the two Decisions entries of this date; `apps/client/e2e/out/d/**` regenerates per `e2e/tools/README-drop-d.md` | typecheck ✓ test ✓ (584: shared 180, client 249, server 155) build ✓ check:weapons ✓ (19/19) **e2e ✓ 15/15** (7.8 min, freshly started server) | review |
+
 Status vocabulary reminder: these rows are `review` because the full e2e path was not run here.
 
 ## Decisions log (append-only)
@@ -320,6 +322,27 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   (a) leave it and let the playtest judge it with humans, who miss more than bots do; (b) give the
   shaved side more health or damage resistance; (c) start each round with two chasers in a full
   room; (d) shorten the round so the survivors' win is less of a default. (lead → owner)
+- 2026-09-08 — **Owner answered the question above: "zrób tak aby ... żeby działało w grze
+  wszystko."** Read as option (b), and measured rather than guessed. Two levers, both inside L1 and
+  L6 (no new schema field, nothing gated, no damage change, no rate change): an Ostrzyżony comes
+  back ON THE HUNT — the spawn point nearest a living survivor that is still `huntSpawnMinM` (14 m)
+  away, instead of the ordinary rule's farthest — and carries `OSTRZYZENI.shavedHealth` = 220.
+  MEASURED over eight seeded 90 s rounds of five players: 9 conversions out of 40 with THREE blank
+  rounds before, 14–22 out of 40 with at most one blank round after, and the survivors still
+  usually hold the clock (the chaser dies three or four times a round), which is the shape the mode
+  wants. The spread between repeats is wide and 220 vs 255 sat inside it, so this is "the chase
+  lands now", not a tuned number. 220 and not 300 because `PlayerState.health` is a uint8. Bots
+  shoot better than people, so a room of humans is the easier room to hunt in — a human playtest is
+  what should move this next, and the owner has declined to fill `docs/PLAYTEST_TEMPLATE.md`, so no
+  playtest evidence is claimed anywhere in this drop. (lead)
+- 2026-09-08 — **Fullscreen goes on the whole app (`.app`), never on the canvas host.** A fullscreen
+  element is promoted to the browser's top layer, and everything outside it stops being painted and
+  stops receiving clicks — so Drop I's Play-button immersion, which fullscreened the canvas host,
+  took the HUD, the buy menu, the chat, the pause card and the result screen off the screen from
+  ENTER MATCH onwards. MEASURED: a screenshot taken with the buy menu open shows the barbershop and
+  nothing else, and Playwright reported `<canvas class="game-canvas"> intercepts pointer events`
+  for a click meant for a BUY button. `startup.spec.ts` now asserts that whatever is fullscreen
+  contains the HUD (a browser that refuses fullscreen outright stays fine). (lead)
 
 ## Deferred (things noticed, deliberately not done)
 
@@ -464,3 +487,10 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
 - Drop I: `BotBrain.test.ts`'s "bot movement" block now runs with a 30 s timeout because its
   simulations are 14–22 s of ticks against vitest's 5 s default. The real fix, if these ever get
   slower, is to shorten the simulated span rather than raise the number again.
+- Drop D: the e2e suite is sensitive to CPU it does not own, and says nothing useful about why.
+  Two forgotten `node apps/server/dist/index.js` processes from earlier runs (50 and 42 minutes
+  old, each still ticking a room of bots) were enough to fail `bomb plant and defuse` at
+  `enter-game` never appearing within 60 s and `see each other, move, shoot, kill, respawn` at
+  "waiting for 6000 ms of live wave" — neither test touching anything either process did, and both
+  passing on the same tree once the strays were killed. Check for stray servers before believing a
+  red suite. Worth a `pretest` that refuses to run while something else is holding the CPU.

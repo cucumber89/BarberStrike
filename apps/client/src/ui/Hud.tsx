@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { boysClass, BOMB, GAME_VERSION, GRENADES, GUN_GAME, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, TEAM_NAMES, WEAPONS, BADGES, killerName, ladderDone, ladderWeapon, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
+import { boysClass, BOMB, GAME_VERSION, GRENADES, GUN_GAME, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, PLAYER, TEAM_NAMES, WEAPONS, BADGES, killerName, ladderDone, ladderWeapon, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import { pelletRing } from "../game/combat/weaponFeel";
 import { TeamPicker } from "./TeamPicker";
@@ -198,6 +198,11 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   // Drop D: Ostrzyżeni. The sides are the teams, so the only new reads are who is still unshaved
   // (counted from the scoreboard rows the HUD already has) and which side I am on.
   const infection = h.mode === "ostrzyzeni";
+  // The bar is a fraction of what THIS player can hold: a Boys class, an Ostrzyżony's bigger pool,
+  // or the ordinary hundred. Without this a 220 HP chaser draws a bar twice the width of its box.
+  const maxHealth = h.mode === "boys" ? boysClass(h.boysClass).health
+    : infection && !!h.players.find((r) => r.id === h.myId)?.shaved ? OSTRZYZENI.shavedHealth
+    : PLAYER.maxHealth;
   const sideNames = infection ? OSTRZYZENI_SIDES : TEAM_NAMES;
   const meShaved = !!meRow?.shaved;
   const unshavedLeft = infection ? h.players.filter((r) => r.connected && r.alive && !r.shaved).length : 0;
@@ -341,7 +346,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
 
       {/* Bottom-left: health */}
       <div className="health" data-testid="health">
-        <div className="health-bar"><div className="health-fill" style={{ width: `${100 * h.health / (h.mode === "boys" ? boysClass(h.boysClass).health : 100)}%` }} />{h.armor > 0 && <div className="armor-fill" style={{ width: `${h.armor}%` }} />}</div>
+        <div className="health-bar"><div className="health-fill" style={{ width: `${100 * h.health / maxHealth}%` }} />{h.armor > 0 && <div className="armor-fill" style={{ width: `${h.armor}%` }} />}</div>
         <div className="health-num">{h.health}</div>
         {(h.armor > 0 || brokeAge < 900) && <div className={`armor-num ${brokeAge < 900 ? "broke" : ""}`} data-testid="armor">🛡 {brokeAge < 900 && h.armor === 0 ? "BROKEN" : h.armor}</div>}
       </div>

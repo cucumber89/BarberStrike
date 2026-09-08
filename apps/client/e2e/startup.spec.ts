@@ -19,6 +19,16 @@ test("clean entry, deferred spawn, visible buy timer and shop categories", async
   await page.getByTestId("enter-game").click();
   await expect(page.getByTestId("loading")).toHaveCount(0);
   await expect(page.getByTestId("hud")).toBeVisible();
+  // Whatever goes fullscreen has to CONTAIN the UI. A fullscreen element is promoted to the
+  // browser's top layer, and everything outside it stops being painted and stops taking clicks —
+  // when it was the canvas host alone, entering a match left the player with the barbershop and no
+  // HUD, no buy menu, no pause card (MEASURED: a screenshot at an open buy menu showed no UI, and
+  // a click meant for a BUY button was reported as intercepted by the canvas). A browser that
+  // refuses fullscreen is fine and normal; one that grants it around half the app is not.
+  expect(await page.evaluate(() => {
+    const fs = document.fullscreenElement, hud = document.querySelector('[data-testid="hud"]');
+    return fs === null || (!!hud && fs.contains(hud));
+  }), "fullscreen must cover the HUD, not just the canvas").toBe(true);
   // Software browsers may reject real pointer lock; exercise the same event the browser delivers.
   await page.evaluate(() => {
     const canvas = document.querySelector("canvas");
@@ -43,12 +53,16 @@ test("clean entry, deferred spawn, visible buy timer and shop categories", async
   await page.screenshot({ path: info.outputPath("hud.png") });
   await page.evaluate(() => window.__fb.game.setShopOpen(true));
   await expect(page.getByTestId("shop-countdown")).toContainText(/\d+s/);
-  await page.getByRole("button", { name: "GRENADES", exact: true }).click();
+  // The one-screen shop: every aisle is on screen at once, so a grenade and a gun are both
+  // reachable without a click. (This used to click GRENADES and CLASSES tabs, which the
+  // one-screen layout replaced with aisle headings and a role strip.)
+  for (const aisle of ["PRIMARY", "SIDEARM", "GRENADES", "EQUIPMENT"]) {
+    await expect(page.getByText(aisle, { exact: true })).toBeVisible();
+  }
   await expect(page.getByTestId("shop-smoke")).toBeVisible();
-  await expect(page.getByTestId("shop-smg")).toBeHidden();
+  await expect(page.getByTestId("shop-smg")).toBeVisible();
   await page.screenshot({ path: info.outputPath("shop.png") });
-  await page.getByRole("button", { name: "CLASSES", exact: true }).click();
-  await expect(page.getByText("THE BOYS · CHOOSE YOUR ROLE")).toBeVisible();
+  await expect(page.getByTestId("boys-picker")).toBeVisible();
   expect(errors).toEqual([]);
 });
 test("cancelled connection cannot replace the menu with a late game", async ({ page }) => {
