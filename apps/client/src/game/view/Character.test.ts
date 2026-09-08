@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
 import { Scene } from "@babylonjs/core/scene";
+import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
+import { HAIRCUTS, SHAVE_STAGES, encodeHaircut, haircutLook } from "@frankibarber/shared";
 import { Character, type CharacterInput } from "./Character";
 
 /**
@@ -140,5 +142,142 @@ describe("Character animation", () => {
     expect(Math.abs(p.rootX)).toBeLessThan(0.05);
     expect(Math.abs(p.rootZ)).toBeLessThan(0.05);
     expect(c.dying).toBe(false);
+  });
+});
+
+/**
+ * Drop E: the hair is geometry, so it is measured rather than eyeballed — the same rule the repo
+ * applies to weapon attachments and map props ("nothing floats"). Every assertion below is in the
+ * head's local space, which is where the head is built: the skull box spans y 0…0.24, x ±0.11 and
+ * z ±0.12, and the goggle frame's top edge — the thing a fringe must not bury — sits at y 0.1925.
+ */
+const SKULL_TOP = 0.24, SKULL_BOTTOM = 0, SKULL_FRONT = 0.12, GOGGLE_TOP = 0.1925;
+
+const hairMesh = (c: Character) => c.allMeshes.find((m) => m.name === "hair");
+const named = (c: Character, n: string) => c.allMeshes.find((m) => m.name === n)!;
+
+/** Hair vertices in head-local space (the mesh hangs off the head joint, unrotated and unscaled). */
+function hairVerts(c: Character): { x: number; y: number; z: number }[] {
+  const m = hairMesh(c)!;
+  const p = m.getVerticesData(VertexBuffer.PositionKind)!;
+  const out = [];
+  for (let i = 0; i < p.length; i += 3) out.push({ x: p[i] + m.position.x, y: p[i + 1] + m.position.y, z: p[i + 2] + m.position.z });
+  return out;
+}
+
+/**
+ * The x-ranges the hair actually covers above `minY`, as merged intervals over the triangles that
+ * lie entirely above it. Two intervals = a strip of bald scalp between two ridges; the beveled box
+ * has no vertices in its own middle, so counting vertex gaps would prove nothing — this measures
+ * covered surface instead.
+ */
+function xIslands(c: Character, minY: number): [number, number][] {
+  const m = hairMesh(c)!;
+  const p = m.getVerticesData(VertexBuffer.PositionKind)!, idx = m.getIndices()!;
+  const spans: [number, number][] = [];
+  for (let i = 0; i < idx.length; i += 3) {
+    const t = [idx[i], idx[i + 1], idx[i + 2]];
+    if (Math.min(...t.map((v) => p[v * 3 + 1] + m.position.y)) <= minY) continue;
+    const xs = t.map((v) => p[v * 3] + m.position.x);
+    spans.push([Math.min(...xs), Math.max(...xs)]);
+  }
+  spans.sort((a, b) => a[0] - b[0]);
+  const out: [number, number][] = [];
+  for (const s of spans) {
+    const last = out[out.length - 1];
+    if (last && s[0] <= last[1] + 1e-6) last[1] = Math.max(last[1], s[1]);
+    else out.push([s[0], s[1]]);
+  }
+  return out;
+}
+
+describe("Character haircuts", () => {
+  const shaveValues = SHAVE_STAGES.map((_, i) => encodeHaircut("buzz", i + 1));
+
+  it("every haircut and every shave stage builds hair that sits on the skull", () => {
+    for (const value of [...HAIRCUTS.map((h) => h.id), ...shaveValues, encodeHaircut("bowl", 9)]) {
+      const s = scene(), c = new Character(s, 0, `cut_${value}`);
+      expect(() => c.update(input({ haircut: value }), 16)).not.toThrow();
+      const style = haircutLook(value).style;
+      const hasHair = style.crown > 0 || style.sides > 0 || style.fringe > 0 || style.tuft > 0;
+      expect(!!hairMesh(c)).toBe(hasHair);
+      if (!hasHair) { c.dispose(); s.dispose(); continue; }
+      const v = hairVerts(c);
+      const minY = Math.min(...v.map((p) => p.y)), maxY = Math.max(...v.map((p) => p.y));
+      // Touching or overlapping the skull, never hovering over it and never down into the torso.
+      expect(minY).toBeLessThanOrEqual(SKULL_TOP);
+      expect(minY).toBeGreaterThanOrEqual(SKULL_BOTTOM);
+      expect(maxY).toBeGreaterThan(SKULL_TOP);
+      // Anything forward of the skull's face is a fringe, and a fringe clears the goggles.
+      for (const p of v) if (p.z > SKULL_FRONT) expect(p.y).toBeGreaterThan(GOGGLE_TOP);
+      c.dispose(); s.dispose();
+    }
+  });
+
+  it("a clipper track mows a measurable bald strip through the crown", () => {
+    const cut = scene(), mohawk = new Character(cut, 0, "mohawk");
+    mohawk.update(input({ haircut: "mohawk" }), 16);
+    const ridges = xIslands(mohawk, 0.26);
+    expect(ridges.length).toBe(2);
+    const gap = ridges[1][0] - ridges[0][1];
+    expect(gap).toBeCloseTo(haircutLook("mohawk").style.track, 3);   // 0.145 m of bald scalp
+    const whole = scene(), pomp = new Character(whole, 0, "pompadour");
+    pomp.update(input({ haircut: "pompadour" }), 16);
+    const solid = xIslands(pomp, 0.26);
+    expect(solid.length).toBe(1);
+    const covered = (r: [number, number][]) => r.reduce((a, [lo, hi]) => a + hi - lo, 0);
+    expect(covered(ridges)).toBeLessThan(covered(solid) / 2);        // and the silhouette is thinner
+    // RUINA, the worst shave stage: the widest track of all, two slivers of hair left at the edges
+    // and the stray tuft standing in the middle of the mown strip — three islands, not one crown.
+    const worst = new Character(whole, 0, "ruined");
+    worst.update(input({ haircut: encodeHaircut("bowl", 4) }), 16);
+    const ruin = xIslands(worst, SKULL_TOP + 0.005);
+    expect(ruin.length).toBe(3);
+    expect(covered(ruin)).toBeLessThan(0.1);                         // of the crown's 0.222 m
+  });
+
+  it("the cap comes off for a haircut, and a shaved scalp beats both", () => {
+    const s = scene(), c = new Character(s, 0, "capped");
+    c.update(input(), 16);
+    expect(named(c, "cap_merged").isEnabled()).toBe(true);           // default look: the shop cap
+    expect(hairMesh(c)).toBeUndefined();
+    c.update(input({ haircut: "bowl" }), 16);
+    expect(named(c, "cap_merged").isEnabled()).toBe(false);
+    expect(hairMesh(c)!.isEnabled()).toBe(true);
+    c.update(input({ haircut: "bowl", shaved: true }), 16);
+    expect(hairMesh(c)!.isEnabled()).toBe(false);
+    expect(named(c, "bare_head").isEnabled()).toBe(true);
+    expect(named(c, "cap_merged").isEnabled()).toBe(false);
+    c.update(input({ haircut: "bowl" }), 16);                       // and it comes back
+    expect(hairMesh(c)!.isEnabled()).toBe(true);
+    expect(named(c, "bare_head").isEnabled()).toBe(false);
+  });
+
+  it("re-cuts only when the field changes and leaks nothing", () => {
+    const s = scene(), c = new Character(s, 0, "regrow");
+    c.update(input(), 16);
+    const bald = s.meshes.length;
+    c.update(input({ haircut: "pompadour" }), 16);
+    expect(s.meshes.length).toBe(bald + 1);                          // one merged mesh, one draw call
+    for (const v of ["bowl", "mohawk", "bleach", "topknot", ...shaveValues]) c.update(input({ haircut: v }), 16);
+    expect(s.meshes.length).toBe(bald + 1);
+    run(c, input({ haircut: "curtains" }), 60);                      // a minute of frames, no rebuild
+    expect(s.meshes.length).toBe(bald + 1);
+    c.update(input({ haircut: "cap" }), 16);
+    expect(s.meshes.length).toBe(bald);                              // no hair, no extra mesh at all
+    c.dispose();
+    expect(s.meshes.length).toBeLessThan(bald);
+  });
+
+  it("an unknown or empty haircut falls back to the default instead of throwing", () => {
+    const s = scene(), c = new Character(s, 0, "junk");
+    for (const v of ["", "nonsense", "buzz#abc", "#4", "cap#0", "buzz#-3"]) {
+      expect(() => c.update(input({ haircut: v }), 16)).not.toThrow();
+    }
+    c.update(input({ haircut: "bleach" }), 16);                     // a real one still cuts
+    expect(hairMesh(c)!.material!.name).toContain("ch_bleach");
+    c.update(input({ haircut: "wig-of-lies" }), 16);                // ...and a lie is back to the cap
+    expect(hairMesh(c)).toBeUndefined();
+    expect(named(c, "cap_merged").isEnabled()).toBe(true);
   });
 });

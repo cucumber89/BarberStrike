@@ -5,7 +5,7 @@ import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { PLAYER, WEAPONS, type Team, type WeaponId } from "@frankibarber/shared";
+import { PLAYER, WEAPONS, haircutLook, type HaircutStyle, type Team, type WeaponId } from "@frankibarber/shared";
 import { HOLD } from "./characterHold";
 import { TEAM_KITS } from "./teamKit";
 import { buildWeaponModel, createWeaponMaterials, forEachMesh, type WeaponMaterials, type WeaponModel } from "./weaponMeshes";
@@ -66,6 +66,12 @@ export interface CharacterInput {
    * and unlike the perk band it stays on a corpse: the shave is the point.
    */
   shaved?: boolean;
+  /**
+   * Drop E: the raw `PlayerState.haircut` field — `"buzz"` or `"buzz#3"`. The head mesh is rebuilt
+   * only when this string changes (equip, and a shave death), never per frame; `shaved` still wins,
+   * because a bare scalp has no hair on it.
+   */
+  haircut?: string;
 }
 
 /** Joint angles exposed for tests/tools (radians). */
@@ -75,7 +81,7 @@ export interface Pose {
   armR: number; armL: number; rootZ: number; rootX: number;
 }
 
-interface SharedMats { skin: PBRMaterial; cloth: PBRMaterial; vest: PBRMaterial; accent: PBRMaterial; trim: PBRMaterial; boots: PBRMaterial; stubble: PBRMaterial; weapons: WeaponMaterials }
+interface SharedMats { skin: PBRMaterial; cloth: PBRMaterial; vest: PBRMaterial; accent: PBRMaterial; trim: PBRMaterial; boots: PBRMaterial; stubble: PBRMaterial; hair: PBRMaterial; bleach: PBRMaterial; weapons: WeaponMaterials }
 
 const SHARED = new Map<Scene, Map<Team, SharedMats>>();
 
@@ -109,6 +115,12 @@ function teamMats(scene: Scene, team: Team): SharedMats {
     // shaved head reads as "no hair" at gameplay distance rather than as a bald skin tone. Not a
     // kit colour: a shaved scalp is a scalp whichever side shaved you.
     stubble: mk("ch_stubble", "#8f7a6c", 0.95, 0, "#120d0b"),
+    // Drop E: the two hair tones. Like the stubble above they are NOT kit colours — a haircut is a
+    // haircut whichever side you are on, and reading it off a head is how a player knows who has
+    // been done. Dark enough to separate from every kit skin tone, matte so it is not mistaken for
+    // a helmet; the bleach is the one look that is meant to be spotted across the map.
+    hair: mk("ch_hair", "#241c16", 0.92, 0, "#0d0906"),
+    bleach: mk("ch_bleach", "#e0cf95", 0.8, 0, "#241f12"),
     weapons: createWeaponMaterials(scene),
   };
   byTeam.set(team, m);
@@ -116,6 +128,61 @@ function teamMats(scene: Scene, team: Team): SharedMats {
 }
 
 const DEATH_MS = 900;
+
+// ------------------------------------------------------------------ Drop E: the hair
+//
+// Head-local landmarks the hair is cut against, all read off the head built in the constructor:
+// the skull box spans y 0…0.24, x ±0.11, z ±0.12, and the goggle frame's top edge sits at 0.1925.
+// Every clump starts SUNK into the skull by `SINK`, so no amount of style data can make hair that
+// hovers — the "nothing floats" rule, applied to a head instead of to a prop.
+const SKULL_TOP = 0.24, SKULL_HX = 0.11, SKULL_HZ = 0.12, BROW_TOP = 0.1925, SINK = 0.01;
+/** The crown slab's footprint: a hair wider and deeper than the skull so it reads as a covering. */
+const CROWN_W = 0.222, CROWN_D = 0.244;
+
+/**
+ * The boxes one `HaircutStyle` asks for, in head-local space, unparented and ready to be merged.
+ *
+ * Cosmetic only (L1): every clump lives inside the volume the cap already occupied, so a haircut
+ * never changes the silhouette a shooter reads — and it could not change how a player is hit in any
+ * case, since the hitbox is the shared AABB and nothing here touches it.
+ */
+function hairParts(style: HaircutStyle, scene: Scene): Mesh[] {
+  const parts: Mesh[] = [];
+  const add = (n: string, w: number, h: number, d: number, x: number, y: number, z: number) => {
+    const m = beveledBox(n, w, h, d, scene); m.position.set(x, y, z); parts.push(m);
+  };
+  const base = SKULL_TOP - SINK;
+  if (style.crown > 0) {
+    const h = style.crown + SINK, y = base + h / 2;
+    if (style.track > 0) {
+      // The clipper track is mown front-to-back THROUGH the crown: one slab becomes two ridges with
+      // a bald strip of exactly `track` metres between them. A wide track leaves two thin ridges and
+      // scalp down the middle — that is what a ruined head looks like from above and from the side.
+      const ridge = Math.max(0.01, (CROWN_W - style.track) / 2);
+      for (const s of [-1, 1]) add("hair_ridge", ridge, h, CROWN_D, s * (style.track + ridge) / 2, y, 0);
+    } else add("hair_crown", CROWN_W, h, CROWN_D, 0, y, 0);
+  }
+  if (style.sides > 0) {
+    // Left, right and back, from ear height to the crown. It stops at y 0.06 rather than at the
+    // skull's bottom so hair can never hang past the neck into the collar.
+    const h = 0.18, y = 0.06 + h / 2, t = style.sides + SINK;
+    for (const s of [-1, 1]) add("hair_side", t, h, 0.24, s * (SKULL_HX + style.sides / 2 - SINK / 2), y, 0);
+    add("hair_back", 0.22, h, t, 0, y, -(SKULL_HZ + style.sides / 2 - SINK / 2));
+  }
+  if (style.fringe > 0) {
+    // Hangs off the front of the crown, forward of the skull's +Z face, and stops just ABOVE the
+    // goggle frame: a fringe that reached the brow would bury the goggles, and the goggles are how
+    // a head reads at gameplay range.
+    const top = SKULL_TOP + 0.005, bottom = BROW_TOP + 0.004, d = style.fringe + SINK;
+    add("hair_fringe", 0.216, top - bottom, d, 0, (top + bottom) / 2, SKULL_HZ - SINK + d / 2);
+  }
+  if (style.tuft > 0) {
+    // The one clump the clippers missed: off-centre, and taller than the crown, so on a shaved head
+    // it is the thing sticking out of the silhouette.
+    add("hair_tuft", 0.05, style.tuft + SINK, 0.06, 0.052, base + (style.tuft + SINK) / 2, -0.02);
+  }
+  return parts;
+}
 
 export class Character {
   readonly root: TransformNode;
@@ -158,9 +225,15 @@ export class Character {
   private capParts: Mesh[] = [];
   private cap!: Mesh;
   private bareHead: Mesh;
+  /** Drop E: the raw field this head is currently cut for, and the one merged mesh built from it. */
+  private haircutValue = "";
+  private style: HaircutStyle = haircutLook("").style;
+  private hair: Mesh | null = null;
+  private mats: SharedMats;
 
   constructor(private scene: Scene, team: Team, name: string) {
     const M = teamMats(scene, team);
+    this.mats = M;
     this.weaponMaterials = M.weapons;
     this.root = new TransformNode(`char_${name}`, scene);
     const node = (n: string, parent: TransformNode, x: number, y: number, z: number) => {
@@ -261,6 +334,37 @@ export class Character {
     }
 
     this.ensureWeapon(this.currentWeapon);
+    this.rebuildHair();
+  }
+
+  /**
+   * Re-cut the head for `this.haircutValue`. Called from the constructor and then only when the
+   * replicated string changes — on equip and on a shave death, a handful of times a match.
+   *
+   * All of the style's clumps become ONE mesh, for the same reason the cap and its visor are one:
+   * an extra mesh per character is an extra draw call in every mode, for every body on screen. A
+   * style with no hair (the default cap) builds nothing at all and costs nothing.
+   */
+  private rebuildHair(): void {
+    if (this.hair) {
+      const i = this.meshes.indexOf(this.hair);
+      if (i >= 0) this.meshes.splice(i, 1);
+      this.hair.dispose();
+      this.hair = null;
+    }
+    this.style = haircutLook(this.haircutValue).style;
+    const parts = hairParts(this.style, this.scene);
+    if (parts.length === 0) return;
+    // Merge in head-local space: the parts are unparented, so their world matrix is their local
+    // position and the head's transform is not baked into the vertices.
+    for (const p of parts) p.computeWorldMatrix(true);
+    const hair = parts.length === 1 ? parts[0] : Mesh.MergeMeshes(parts, true, true)!;
+    hair.name = "hair";
+    hair.parent = this.head;
+    hair.material = this.style.tone === "stubble" ? this.mats.stubble : this.style.tone === "bleach" ? this.mats.bleach : this.mats.hair;
+    hair.isPickable = false; hair.receiveShadows = true; hair.visibility = this.fade;
+    this.hair = hair;
+    this.meshes.push(hair);
   }
 
   /** Build only weapons this player actually equips, instead of all eleven for every bot. */
@@ -349,7 +453,15 @@ export class Character {
     if (this.perkBand.isEnabled() !== perked) this.perkBand.setEnabled(perked);
     // Shaved (drop D) is not gated on `alive`: the shaved head stays on the body that fell.
     const shaved = !!inp.shaved;
-    if (this.bareHead.isEnabled() !== shaved) { this.bareHead.setEnabled(shaved); this.cap.setEnabled(!shaved); }
+    // Drop E: the string, not the style, is the change detector — the same test `weapon` gets above.
+    const haircut = inp.haircut ?? "";
+    if (haircut !== this.haircutValue) { this.haircutValue = haircut; this.rebuildHair(); }
+    if (this.bareHead.isEnabled() !== shaved) this.bareHead.setEnabled(shaved);
+    // The cap comes off when the style says so, and always when shaved. The bare scalp wins over
+    // hair outright: whatever a player equipped, a head that has just been done has nothing on it.
+    const capOn = !shaved && this.style.cap;
+    if (this.cap.isEnabled() !== capOn) this.cap.setEnabled(capOn);
+    if (this.hair && this.hair.isEnabled() === shaved) this.hair.setEnabled(!shaved);
 
     // ---- Death: buckle (0–0.25) → fall away from the killer with a tumble (0.25–0.8) → settle.
     if (this.deathT >= 0) {
