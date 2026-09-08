@@ -45,75 +45,79 @@ What the first run found (2 of 11 passed) and what changed, all in `apps/client/
 | shotgun stock 50 mm behind the receiver | 50 mm | stock lengthened to meet the receiver |
 | clippers muzzle past the teeth, aim point 37 mm above the body, hand 20 mm below the body | 10 / 37 / 20 mm | body extended down to the hand; anchors moved onto the comb |
 
-## First person, camera space (`vm-fit.mjs`) — 2026-09-07, slice 3 re-measure, 11/11
+## First person, camera space (`vm-fit.mjs`) — 2026-09-07, slice 4 re-measure, 11/11
 
 Viewport 960×540, camera space +x right, +y up, +z forward, metres. "ADS aim" is the weapon's aim
-node projected to the screen, offset from the centre in pixels, MEAN over one breath (4.5 s): the
-viewmodel breathes ±2.5 mm (halved in ADS), which alone is ±1.3 px at this viewport and 3 px
-through the sniper's zoom. Acceptance ±1 px on the mean: **worst 0.09 px** (after the smg2/dmr rebuild and the five re-seated specs). The sniper's 3 px peak
-is the breath through the scope (Drop B: hold-breath). "Near-plane cut" counts gun vertices inside
-the frustum but closer than the camera's 0.05 m near plane — the shotgun's pump had them before
-the ADS distance rule (`Viewmodel.ts`, aim point ≥ 15 cm ahead of the eye); now **0 everywhere**.
+node projected to the screen, offset from the centre in pixels, MEAN over TWO breath periods (9 s).
+The viewmodel breathes ±2.5 mm (halved in ADS), which alone is ±1.3 px at this viewport and 3 px
+through the sniper's zoom, so a single period sampled thinly reads its own breath: under CPU
+contention (a second browser capturing at the same time) SwiftShader drops to 2–4 fps and the same
+weapons measured 0.9–1.15 px. On an idle machine, two periods, 30–37 samples each:
+**worst mean 0.18 px** against the plan's ±1 px. The sniper's 3.03 px peak is the breath through
+its zoom — Drop B's hold-breath, not a fit defect. "Near-plane cut" counts gun vertices inside the
+frustum but closer than the camera's 0.05 m near plane: **0 everywhere**.
 
-| weapon | hip box min (x, y, z) | hip box max | hip muzzle | ADS box min | ADS box max | near-plane cut verts hip / ADS | ADS aim mean px (dx, dy) | ADS aim peak px | ADS fov |
+| weapon | hip box min (x, y, z) | hip box max | hip muzzle | ADS box min | ADS box max | near-plane cut hip / ADS | ADS aim mean px | ADS aim peak px | ADS fov |
 |---|---|---|---|---|---|---|---|---|---|
-| pistol | 0.209, -0.355, 0.316 | 0.263, -0.171, 0.541 | 0.226, -0.211, 0.54 | -0.017, -0.182, 0.178 | 0.019, -0.001, 0.4 | 0 / 0 | 0.01, -0.03 | 1.3 | 1.2566 |
-| revolver | 0.207, -0.348, 0.306 | 0.262, -0.172, 0.532 | 0.227, -0.211, 0.53 | -0.018, -0.177, 0.148 | 0.018, -0.002, 0.37 | 0 / 0 | -0.01, -0.05 | 1.34 | 1.2252 |
-| smg | 0.16, -0.426, 0.078 | 0.283, -0.153, 0.817 | 0.21, -0.212, 0.81 | -0.047, -0.268, -0.12 | 0.028, -0.001, 0.615 | 0 / 0 | -0.03, -0.02 | 1.34 | 1.2252 |
-| smg2 | 0.178, -0.432, 0.088 | 0.281, -0.147, 0.643 | 0.22, -0.214, 0.64 | -0.04, -0.266, -0.07 | 0.026, 0.015, 0.481 | 0 / 0 | -0.02, -0.02 | 1.31 | 1.2566 |
-| rifle | 0.13, -0.44, -0.032 | 0.273, -0.115, 1.147 | 0.169, -0.2, 1.139 | -0.035, -0.314, -0.22 | 0.036, -0.001, 0.955 | 0 / 0 | 0.01, -0.03 | 0.72 | 1.1781 |
-| lmg | 0.128, -0.407, -0.064 | 0.283, -0.094, 1.134 | 0.169, -0.199, 1.129 | -0.066, -0.298, -0.25 | 0.053, -0.001, 0.94 | 0 / 0 | 0, -0.02 | 0.83 | 1.1781 |
-| shotgun | 0.146, -0.34, -0.052 | 0.271, -0.146, 1.042 | 0.175, -0.193, 1.04 | -0.027, -0.194, -0.24 | 0.028, -0.002, 0.85 | 0 / 0 | 0, -0.01 | 0.52 | 1.3352 |
-| dmr | 0.126, -0.39, -0.092 | 0.275, -0.09, 1.312 | 0.158, -0.203, 1.309 | -0.027, -0.257, -0.05 | 0.048, 0.029, 1.35 | 0 / 0 | 0, 0.02 | 1.33 | 0.9425 |
-| sniper | 0.114, -0.37, -0.122 | 0.28, -0.08, 1.502 | 0.147, -0.208, 1.499 | — (viewmodel hidden in the scope) | — | 0 / 0 | 0.03, 0.03 | 3.03 | 0.4398 |
-| launcher | 0.162, -0.376, 0.038 | 0.287, -0.124, 0.854 | 0.207, -0.222, 0.85 | -0.04, -0.244, -0.01 | 0.046, 0.003, 0.8 | 0 / 0 | -0.01, -0.01 | 1.25 | 1.2881 |
-| clippers | 0.21, -0.31, 0.228 | 0.271, -0.227, 0.503 | 0.23, -0.239, 0.5 | -0.021, -0.074, 0.1 | 0.024, 0.005, 0.372 | 0 / 0 | 0.01, 0.09 | 0.95 | 1.5708 |
+| pistol | 0.209, -0.356, 0.316 | 0.263, -0.171, 0.541 | 0.226, -0.212, 0.54 | -0.017, -0.182, 0.178 | 0.019, -0.001, 0.4 | 0 / 0 | 0.02, -0.16 | 1.3 | 1.2566 |
+| revolver | 0.207, -0.353, 0.306 | 0.262, -0.177, 0.532 | 0.227, -0.216, 0.53 | -0.018, -0.175, 0.148 | 0.018, 0, 0.37 | 0 / 0 | 0.01, 0.12 | 1.35 | 1.2252 |
+| smg | 0.16, -0.426, 0.078 | 0.283, -0.153, 0.817 | 0.21, -0.212, 0.81 | -0.047, -0.268, -0.12 | 0.028, -0.001, 0.615 | 0 / 0 | -0.02, -0.11 | 1.34 | 1.2252 |
+| smg2 | 0.178, -0.435, 0.088 | 0.281, -0.15, 0.643 | 0.22, -0.216, 0.64 | -0.04, -0.264, -0.07 | 0.026, 0.017, 0.481 | 0 / 0 | 0.02, 0.18 | 1.3 | 1.2566 |
+| rifle | 0.13, -0.442, -0.032 | 0.274, -0.118, 1.147 | 0.169, -0.202, 1.139 | -0.035, -0.314, -0.22 | 0.036, -0.001, 0.955 | 0 / 0 | 0, -0.1 | 0.73 | 1.1781 |
+| lmg | 0.128, -0.408, -0.064 | 0.283, -0.094, 1.134 | 0.169, -0.199, 1.129 | -0.066, -0.297, -0.25 | 0.053, 0, 0.94 | 0 / 0 | -0.02, 0.05 | 0.84 | 1.1781 |
+| shotgun | 0.146, -0.343, -0.052 | 0.27, -0.15, 1.042 | 0.174, -0.196, 1.04 | -0.027, -0.194, -0.24 | 0.028, -0.001, 0.85 | 0 / 0 | 0, -0.05 | 0.52 | 1.3352 |
+| dmr | 0.126, -0.389, -0.092 | 0.275, -0.089, 1.312 | 0.159, -0.202, 1.309 | -0.027, -0.256, -0.05 | 0.048, 0.03, 1.35 | 0 / 0 | 0.01, 0 | 1.33 | 0.9425 |
+| sniper | 0.114, -0.373, -0.122 | 0.28, -0.083, 1.502 | 0.147, -0.21, 1.499 | — (viewmodel hidden in the scope) | — | 0 / 0 | 0.03, 0.1 | 3.03 | 0.4398 |
+| launcher | 0.162, -0.372, 0.038 | 0.287, -0.108, 0.854 | 0.208, -0.219, 0.85 | -0.04, -0.244, -0.01 | 0.046, 0.016, 0.8 | 0 / 0 | 0.04, 0.05 | 1.26 | 1.2881 |
+| clippers | 0.209, -0.31, 0.228 | 0.271, -0.227, 0.503 | 0.23, -0.239, 0.5 | -0.021, -0.075, 0.1 | 0.024, 0.004, 0.372 | 0 / 0 | 0.02, -0.13 | 0.95 | 1.5708 |
 
-## Third person (`hand-pose.mjs`) — 2026-09-07, 2 bots × 11 weapons
+## Third person (`hand-pose.mjs`) — 2026-09-07, slice 4, 2 bots × 11 weapons
 
-Bore vs the body's facing, settled idle pose. Acceptance 5°: every firearm is at **4.6°** (the
-procedural `gunHand` yaw of −0.08 rad, a deliberate inward cant) or 2.4° (sidearms); the clippers
-sit at 15.4° / −15° pitch because the melee hold points them down (Character.ts, `melee` term) — a
-tool, not a bore, recorded as is.
+Bore vs the body's facing in the settled idle pose, after the low-ready hold. Acceptance 5°: every
+firearm is **3.5–3.9°** (was 4.6° before the hold change), muzzle height 1.34–1.38 m. `muzzleForward`
+tracks the model's length — a 1.31 m sniper reaches 1.25 m in front of the body, a pistol 0.38 m —
+so it is reported, not bounded. The clippers sit at 16.4° with a −16° pitch because the melee hold
+points them down: a tool, not a bore.
 
 | weapon | bore vs facing (deg, worst bot) | bore pitch (deg) | muzzle height (m) | muzzle forward (m) | muzzle side (m) |
 |---|---|---|---|---|---|
-| pistol | 2.4 | 0.6 | 1.422 | 0.426 | 0.209 |
-| revolver | 2.3 | -0.3 | 1.411 | 0.424 | 0.223 |
-| smg | 4.6 | -0.1 | 1.4 | 0.637 | 0.126 |
-| smg2 | 4.6 | 0.5 | 1.405 | 0.472 | 0.121 |
-| rifle | 4.6 | -0.6 | 1.394 | 0.972 | 0.088 |
-| lmg | 4.6 | 0.6 | 1.409 | 0.953 | 0.107 |
-| shotgun | 4.6 | -0.5 | 1.397 | 0.876 | 0.113 |
-| dmr | 4.6 | 0.1 | 1.406 | 1.128 | 0.074 |
-| sniper | 4.6 | 0.3 | 1.414 | 1.306 | 0.055 |
-| launcher | 4.6 | -0.6 | 1.389 | 0.678 | 0.124 |
-| clippers | 14.7 | -13.9 | 1.255 | 0.336 | 0.153 |
+| pistol | 3.9 | -1.8 | 1.375 | 0.376 | 0.277 |
+| revolver | 3.8 | -1.5 | 1.377 | 0.364 | 0.277 |
+| smg | 3.7 | -1.3 | 1.364 | 0.578 | 0.169 |
+| smg2 | 3.9 | -1.8 | 1.36 | 0.42 | 0.176 |
+| rifle | 3.5 | -0.7 | 1.361 | 0.906 | 0.171 |
+| lmg | 3.9 | -1.8 | 1.342 | 0.904 | 0.174 |
+| shotgun | 3.7 | -1.3 | 1.36 | 0.815 | 0.171 |
+| dmr | 3.8 | -1.6 | 1.348 | 1.073 | 0.138 |
+| sniper | 3.9 | -1.8 | 1.337 | 1.254 | 0.133 |
+| launcher | 3.6 | -1 | 1.355 | 0.614 | 0.193 |
+| clippers | 16.4 | -16 | 1.213 | 0.279 | 0.218 |
 
 ## Screenshots (`weapon-shots.mjs`) — `apps/client/e2e/out/weapons/<id>/`
 
-Art review round 3 (after the jointed hands, the smg2/dmr rebuild and five re-seated specs): the
-hands now read as a forearm reaching the fore-end (accepted; palm/fingers are a "mitten" at 720p —
-style limit); smg2 is distinct from smg and dmr from sniper in first person and the sniper/dmr in
-profile. Still rejected and Deferred: DMR opaque lens (Drop B), launcher sight slab (spec art),
-the reload read (choreography), the third-person front pose hiding the gun behind the arms
-(character animation), and the shotgun/dmr/rifle profiles sharing a plain-barrel silhouette.
-Capture faults it found (inspect pressed during shell-by-shell reloads, a bot kill between the
-alive check and the shutter) are fixed in `weapon-shots.mjs` and those frames re-shot.
+`fp_idle`, `fp_ads`, `fp_reload_mid` (45 % into that weapon's real `reloadMs`, read from the shared
+WeaponDef source), `fp_inspect`, `tp_idle` (a bot 2.2 m ahead, facing the camera) and `tp_side`
+(the same bot in profile). Regenerate with `node e2e/tools/weapon-shots.mjs` from `apps/client`
+with the dev servers up; `FP_ONLY=1` / `TP_ONLY=1` shoot one half.
 
-
-`fp_idle`, `fp_ads`, `fp_reload_mid` (40 % into the reload), `fp_inspect`, `tp_idle` (a bot 2.2 m
-away facing the camera), `tp_side` (the same bot in profile). Regenerate with
-`node e2e/tools/weapon-shots.mjs` from `apps/client` with the dev servers up. Reviewed by a
-separate art-reviewer agent; verdicts in the ledger.
+Three capture faults were found by the reviews rather than by the code, and each was a fix to the
+tool, not to the art: inspect was pressed while a shell-by-shell reload still ran (six frames were
+the idle pose); the mid-reload frame used a 2 s default for every weapon, so the LMG at 5.2 s was
+photographed at 18 % of its reload with the magazine still seated; and the third-person room posed
+the bot 2.2 m ahead of whatever the spawn faced, which was a wall — every third-person frame in
+round 4 was an empty street, which is why that round could not judge the hold at all. The heading
+is now chosen by casting sixteen rays through the game's own `CollisionWorld` and keeping the
+longest clear line.
 
 ## Open items
 
-- **The running game never shows the imported guns or characters.** `Game.ts:164` empties the
-  manifest's `characters` and `weapons` ("Characters and weapons share our procedural art at every
-  quality level", since the ChatGPT merge). Everything in the parts table that says "gltf" is
-  measured through the import pipeline but is NOT what a player sees; the vm-fit / hand-pose /
-  screenshot numbers are of the procedural guns, which ARE what a player sees. Owner decision
-  needed (Decisions log): keep the procedural guns as the product and retire the import path, or
-  re-enable the imports and re-run this file's tools on them.
-- Real GPU: SwiftShader runs at 10 fps; the numbers do not depend on it, the look does.
+- **The glTF weapon import path is retired but not yet deleted.** `Game.ts:164` has emptied the
+  manifest's `characters` and `weapons` since the ChatGPT merge, so no player has ever seen the
+  imported guns; the owner confirmed on 2026-09-07 that the procedural weapons are the product.
+  Everything in the parts table tagged "gltf" is measured through a pipeline the game does not
+  use — kept green only until the deletion commit (Deferred; blocked on the owner's word about the
+  characters' import path, which is disabled the same way).
+- **Drop B owns the DMR's scope**: it carries a scope model but is not `scoped`, so ADS looks
+  through an opaque lens disc with no overlay. Every review round has rejected that frame.
+- Real GPU: SwiftShader runs at 10 fps and the captures are software-rendered. The numbers above do
+  not depend on the renderer; how the guns read under real lighting does.
