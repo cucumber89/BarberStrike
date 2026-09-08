@@ -269,7 +269,7 @@ export const GORA: MapDef = (() => {
     { x: -5, y: 0, z: 6.6, yaw: 0, team: 0 },
     { x: 5, y: 0, z: 6.6, yaw: 0, team: 1 },
     { x: 8.6, y: DECK, z: 0.6, yaw: 1.4, team: 0 },
-    { x: 15.4, y: DECK, z: 5.6, yaw: -2.2, team: 1 },
+    { x: 11.5, y: DECK, z: 6.5, yaw: -2.2, team: 1 },
   ];
 
   // ---------- Buy stations: the furniture the barber keeps his float in ----------

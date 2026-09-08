@@ -31,6 +31,21 @@ for (const map of Object.values(MAPS)) {
       }
     });
 
+    it("puts every arena spawn on reachable floor too (FFA, Gun Game, the Ostrzyżeni chaser)", () => {
+      // `spawns` is what the team modes draw from and what the tests above judge; `arenaSpawns` is
+      // the pool FFA, Gun Game and a returning Ostrzyżony use, and nothing judged it. Drop G's roof
+      // spawn sat over the loft-stair opening: free, reachable, and a three-metre drop on arrival.
+      const walk = walkable(map);
+      const seen = reachable(walk, map.spawns[0]);
+      for (const s of map.arenaSpawns ?? []) {
+        const free = !world.overlaps(s.x - HW, s.y + 0.02, s.z - HW, s.x + HW, s.y + H, s.z + HW);
+        expect(free, `arena spawn ${JSON.stringify(s)} intersects a solid`).toBe(true);
+        const hit = world.raycast(s.x, s.y + 0.5, s.z, 0, -1, 0, 1.2, makeRayHit());
+        expect(hit.hit, `arena spawn ${JSON.stringify(s)} has nothing under it`).toBe(true);
+        expect(cellReached(seen, s.x, s.z), `arena spawn ${JSON.stringify(s)} unreachable`).toBe(true);
+      }
+    });
+
     it("keeps every spawn inside the bounds and above the kill plane", () => {
       const b = map.bounds;
       for (const s of map.spawns) {
