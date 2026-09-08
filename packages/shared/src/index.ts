@@ -24,3 +24,4 @@ export * from "./smoke";
 export * from "./bomb";
 
 export * from "./boys";
+export * from "./rng";

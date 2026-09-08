@@ -150,6 +150,7 @@ export class WeaponModelLibrary {
 
     return {
       root,
+      meshesByMat: new Map(),
       muzzle: anchor("muzzle", src.anchors.muzzle),
       eject: anchor("eject", src.anchors.eject),
       aim: anchor("aim", src.anchors.aimPoint),
