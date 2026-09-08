@@ -655,3 +655,12 @@ button { font-family: inherit; }
 .plan-tag { font-size: 9px; letter-spacing: 0.2em; color: var(--tx-3); }
 .plan-active-name { font-family: var(--font-display); font-size: 14px; letter-spacing: 0.14em; color: var(--brass); }
 @media (max-width: 760px) { .plan-options { grid-template-columns: 1fr; } }
+
+/* ---------- First-run hints (2.4) ---------- */
+/* Bottom-centre, above the ammo block, out of the crosshair's way. `pointer-events: none` is not
+   decoration: a hint must never eat the click that was meant for the game. */
+.hint { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); pointer-events: none;
+  background: rgba(11,11,13,.88); border-left: 2px solid var(--brass); padding: 7px 14px;
+  font-size: 13px; letter-spacing: 0.02em; color: var(--tx); white-space: nowrap; max-width: 92vw;
+  overflow: hidden; text-overflow: ellipsis; animation: slide-in 200ms ease-out; }
+@media (max-width: 700px) { .hint { font-size: 12px; bottom: 96px; } }

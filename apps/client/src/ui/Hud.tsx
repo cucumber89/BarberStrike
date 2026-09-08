@@ -3,6 +3,7 @@ import { BOMB, GAME_VERSION, GRENADES, MATCH, MODES, MatchPhase, PERKS, PERK_ORD
 import { useHud } from "../game/store";
 import { TeamPicker } from "./TeamPicker";
 import { PlanPanel } from "./PlanPanel";
+import { Hints } from "./Hints";
 import type { MatchReward } from "../game/progression/profile";
 import { CROSSHAIR_COLORS, keyLabel, resolveBindings, type Settings } from "../settings";
 import { SettingsPanel } from "./SettingsPanel";
@@ -386,6 +387,9 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {scoreboard && h.phase !== MatchPhase.Ended && (
         <div className="scoreboard-wrap" data-testid="scoreboard"><Scoreboard rows={h.players} myId={h.myId} mode={h.mode} /></div>
       )}
+
+      {/* First-run hints: one short line, once each, never blocking (2.4) */}
+      {!paused && <Hints h={h} />}
 
       {/* Living arena: the round's plan vote, or what is in force (2.4) */}
       {!h.shopOpen && <PlanPanel h={h} onVote={onVotePlan} />}
