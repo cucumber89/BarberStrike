@@ -309,8 +309,8 @@ button { font-family: inherit; }
 /* Drop B (D-B2): the M-1's ring. A thin circle over a mostly clear view — the DMR is a rifle you
    keep your surroundings in, not a tube you disappear down. Its reticle lines are short crops
    rather than the sniper's full-screen cross. */
-.scope.ring .scope-mask { background: radial-gradient(circle at 50% 50%, transparent 0, transparent min(26vw, 26vh), rgba(0,0,0,.55) calc(min(26vw, 26vh) + 2px), rgba(0,0,0,.72) 100%); }
-.scope.ring .scope-reticle::before { content: ""; position: absolute; left: 50%; top: 50%; width: min(52vw, 52vh); height: min(52vw, 52vh); transform: translate(-50%, -50%); border: 1px solid rgba(0,0,0,.75); border-radius: 50%; }
+.scope.ring .scope-mask { background: radial-gradient(circle at 50% 50%, transparent 0, transparent min(26vw, 26vh), rgba(0,0,0,.22) calc(min(26vw, 26vh) + 2px), rgba(0,0,0,.34) 100%); }
+.scope.ring .scope-reticle::before { content: ""; position: absolute; left: 50%; top: 50%; width: min(52vw, 52vh); height: min(52vw, 52vh); transform: translate(-50%, -50%); border: 2px solid rgba(0,0,0,.85); border-radius: 50%; box-shadow: 0 0 0 1px rgba(255,255,255,.12); }
 .scope.ring .scope-reticle .v { top: -12vh; height: 24vh; }
 .scope.ring .scope-reticle .hz { left: -12vw; width: 24vw; }
 .shop-glyph { margin-right: 8px; }

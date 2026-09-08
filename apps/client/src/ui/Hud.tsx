@@ -236,7 +236,9 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
       )}
 
       {/* Minimap + compass (drop 5): hidden behind the scope and the result screen */}
-      {h.connected && !h.scoped && h.phase !== MatchPhase.Ended && <Minimap radar={radar} />}
+      {/* The tube takes your surroundings away with it; the M-1's ring is the weapon that does NOT,
+          which is most of what separates the two long rifles in play. */}
+      {h.connected && h.scopeStyle !== "tube" && h.phase !== MatchPhase.Ended && <Minimap radar={radar} />}
       {/* Chat (drop 5) */}
       {h.connected && <Chat lines={h.chat} open={h.chatOpen} teams={teams} myId={h.myId} api={chat} />}
 
