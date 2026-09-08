@@ -637,4 +637,183 @@ test.describe("two clients", () => {
     expect(errors, errors.join("\n")).toEqual([]);
     await ctx.close();
   });
+
+  /**
+   * Drop D acceptance: two clients, one WHOLE Gun Game — every rung of the ladder climbed by
+   * killing, ending on the clippers.
+   *
+   * Why it is written as eleven scripted kills rather than a fight: the ladder's claim is that a
+   * kill with the rung weapon hands you the NEXT one, all the way to the end, and that only the
+   * last rung ends the match. That is eleven distinct server transitions, and the only way to see
+   * all of them is to make them happen in order. The shooting itself (spread, recoil, hit
+   * registration) is covered by the combat test above; here each kill is delivered from point
+   * blank so the weapon in hand is the only variable.
+   */
+  test("gun game: two clients, the whole ladder to the end", async ({ browser }) => {
+    test.setTimeout(900_000);
+    const LADDER = ["pistol", "revolver", "smg", "smg2", "shotgun", "rifle", "lmg", "dmr", "sniper", "launcher", "clippers"];
+    const room = `${ROOM}-gg`;
+    const ca = await browser.newContext(ctxOpts);
+    const cb = await browser.newContext(ctxOpts);
+    try {
+      for (const c of [ca, cb]) {
+        await c.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), LOW_SETTINGS);
+        await c.addInitScript(() => { localStorage.setItem("fb_mode", "gungame"); localStorage.setItem("fb_bots", "0"); });
+      }
+      const a = await ca.newPage(), b = await cb.newPage();
+      await joinRoom(a, "LADDER", room);
+      await joinRoom(b, "TARGET", room);
+      await fakeLock(a); await fakeLock(b);
+      await expect.poll(async () => (await hud(a)).mode, { timeout: 10_000 }).toBe("gungame");
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 60_000 }).toBe("playing");
+      const idA = (await hud(a)).myId, idB = (await hud(b)).myId;
+
+      // The shop never opens in this mode, and nobody has a penny to spend in it.
+      expect((await hud(a)).buyWindowLeft).toBe(0);
+      await expect.poll(async () => (await hud(a)).money, { timeout: 10_000 }).toBe(0);
+      await expect(a.getByTestId("ladder")).toHaveText(`1/${LADDER.length}`);
+      expect((await hud(a)).weapon).toBe("pistol");
+
+      const teleport = (p: Page, x: number, y: number, z: number) =>
+        p.evaluate(([x, y, z]) => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x, y, z }), [x, y, z]);
+      const bodyOf = (p: Page, id: string) => p.evaluate((pid) => {
+        const st = (window.__fb.game as unknown as { conn: { state: { players: { get(id: string): { x: number; y: number; z: number; alive: boolean } } } } }).conn.state.players.get(pid);
+        return { x: st.x, y: st.y, z: st.z, alive: st.alive };
+      }, id);
+      const rowOf = async (p: Page, id: string) => (await hud(p)).players.find((r) => r.id === id);
+
+      for (let rung = 0; rung < LADDER.length; rung++) {
+        const weapon = LADDER[rung];
+        await expect.poll(async () => (await hud(a)).weapon, { timeout: 20_000, message: `rung ${rung}: A should hold ${weapon}` }).toBe(weapon);
+        await expect(a.getByTestId("ladder")).toHaveText(`${rung + 1}/${LADDER.length}`);
+        // B must be up and reachable before the kill: only the casualty waits out the 3 s timer.
+        await expect.poll(async () => (await bodyOf(a, idB)).alive, { timeout: 20_000, message: `rung ${rung}: B should be alive` }).toBe(true);
+        // The launcher is the one rung that hurts its own user at point blank; take that one from
+        // across the room and aim at the feet so the shell lands rather than sailing past.
+        const reach = weapon === "launcher" ? 9 : weapon === "clippers" ? 1.2 : 2.5;
+        let killed = false;
+        for (let attempt = 0; attempt < 8 && !killed; attempt++) {
+          const t = await bodyOf(a, idB);
+          if (!t.alive) break;
+          const ang = attempt * Math.PI / 4;
+          await teleport(a, t.x + Math.sin(ang) * reach, t.y, t.z + Math.cos(ang) * reach);
+          await a.waitForTimeout(350);
+          await waitForFrames(a, 2);
+          for (let shot = 0; shot < 14 && !killed; shot++) {
+            await lookAt(a, t.x, t.z, t.y + (weapon === "launcher" ? 0.2 : 1.1));
+            // Semi-autos need distinct clicks; the automatics are happy with a short hold.
+            await a.mouse.down(); await waitForFrames(a, 2); await a.mouse.up(); await waitForFrames(a, 1);
+            killed = !(await bodyOf(a, idB)).alive;
+            const ha = await hud(a);
+            if (!killed && ha.ammo === 0 && !ha.reloading) { await a.keyboard.press("KeyR"); await a.waitForTimeout(2600); }
+          }
+        }
+        expect(killed, `rung ${rung} (${weapon}): A should have killed B`).toBe(true);
+        // The kill moved A up the ladder and left B where they were: the setback rule only fires
+        // for a clippers kill, and B is on the first rung throughout.
+        const expected = rung + 1;
+        await expect.poll(async () => (await rowOf(a, idA))?.score, { timeout: 15_000, message: `rung ${rung}: A's rung after the kill` }).toBe(expected);
+        expect((await rowOf(a, idB))?.score, "B never climbs").toBe(0);
+        if (rung === 4) await a.screenshot({ path: "e2e/out/d/gungame/mid-ladder.png" });
+      }
+
+      // The clippers kill finished the ladder: the match ends and the result names A.
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 20_000 }).toBe("ended");
+      await expect(a.getByTestId("ladder")).toHaveText(`${LADDER.length}/${LADDER.length}`);
+      await expect(a.getByTestId("ladder-gun")).toContainText("LADDER DONE");
+      expect((await hud(a)).winnerName).toBe("LADDER");
+      expect((await hud(b)).winnerName).toBe("LADDER");
+      await expect(a.getByTestId("result")).toBeVisible();
+      await a.screenshot({ path: "e2e/out/d/gungame/result.png" });
+      // Still no economy, after eleven kills.
+      expect((await hud(a)).money).toBe(0);
+    } finally {
+      await ca.close(); await cb.close();
+    }
+  });
+
+
+  /**
+   * Drop D: the conversion, in two real browsers — the rule the mode is built on and the one visual
+   * claim that cannot be checked from a unit test (a shaved head, on somebody else's screen).
+   *
+   * The chaser is whoever the room shaved; the test finds out rather than assuming, teleports them
+   * onto the other client and swings. What it asserts is what a player would see: the victim
+   * changes sides, is holding the clippers, has no money, and the HUD's round line counts one
+   * fewer unshaved head.
+   */
+  test("ostrzyzeni: a clippers kill converts the victim, and the shaved head shows on both screens", async ({ browser }) => {
+    test.setTimeout(300_000);
+    const room = `${ROOM}-inf`;
+    const ca = await browser.newContext(ctxOpts);
+    const cb = await browser.newContext(ctxOpts);
+    try {
+      for (const c of [ca, cb]) {
+        await c.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), LOW_SETTINGS);
+        await c.addInitScript(() => { localStorage.setItem("fb_mode", "ostrzyzeni"); localStorage.setItem("fb_bots", "0"); });
+      }
+      const a = await ca.newPage(), b = await cb.newPage();
+      await joinRoom(a, "GOLIBRODA", room);
+      await joinRoom(b, "KLIENT", room);
+      await fakeLock(a); await fakeLock(b);
+      await expect.poll(async () => (await hud(a)).mode, { timeout: 10_000 }).toBe("ostrzyzeni");
+      // The buy window opens for the survivors in Prep, and the round line names the round.
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 60_000 }).toBe("prep");
+      await expect(a.getByTestId("infection-line")).toContainText("RUNDA 1 / 5");
+      // Two players: one of them is the chaser, so one head is left to shave.
+      await expect(a.getByTestId("infection-line")).toContainText("1 NIEOSTRZYŻONYCH");
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 60_000 }).toBe("playing");
+
+      const sideOf = (p: Page, id: string) => p.evaluate((pid) => {
+        const st = (window.__fb.game as unknown as { conn: { state: { players: { get(id: string): { x: number; y: number; z: number; shaved: boolean; team: number; weapon: string; money: number; alive: boolean } } } } }).conn.state.players.get(pid);
+        return { x: st.x, y: st.y, z: st.z, shaved: !!st.shaved, team: st.team, weapon: st.weapon, money: st.money, alive: st.alive };
+      }, id);
+      const idA = (await hud(a)).myId, idB = (await hud(b)).myId;
+      // Whoever the room shaved does the hunting; the other one is the head.
+      const aShaved = (await sideOf(a, idA)).shaved;
+      const [hunter, prey] = aShaved ? [a, b] : [b, a];
+      const preyId = aShaved ? idB : idA;
+      expect((await sideOf(hunter, aShaved ? idA : idB)).weapon, "the chaser holds the clippers").toBe("clippers");
+      expect((await sideOf(hunter, aShaved ? idA : idB)).money, "…and no money").toBe(0);
+      expect((await sideOf(hunter, preyId)).shaved).toBe(false);
+
+      const teleport = (p: Page, x: number, y: number, z: number) =>
+        p.evaluate(([x, y, z]) => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x, y, z }), [x, y, z]);
+      let converted = false;
+      for (let attempt = 0; attempt < 10 && !converted; attempt++) {
+        const t = await sideOf(hunter, preyId);
+        if (!t.alive) break;
+        const ang = attempt * Math.PI / 4;
+        await teleport(hunter, t.x + Math.sin(ang) * 1.2, t.y, t.z + Math.cos(ang) * 1.2);
+        await hunter.waitForTimeout(350);
+        for (let swing = 0; swing < 10 && !converted; swing++) {
+          await lookAt(hunter, t.x, t.z, t.y + 1.1);
+          await hunter.mouse.down(); await waitForFrames(hunter, 2); await hunter.mouse.up(); await waitForFrames(hunter, 2);
+          converted = (await sideOf(hunter, preyId)).shaved;
+        }
+      }
+      expect(converted, "a clippers kill should shave the victim onto the chasers' side").toBe(true);
+
+      // What the victim is now, read from the OTHER client's replicated state: same side as the
+      // chaser, clippers in hand, nothing to spend.
+      const after = await sideOf(hunter, preyId);
+      expect(after.team).toBe(1);
+      expect(after.weapon).toBe("clippers");
+      expect(after.money).toBe(0);
+      await hunter.screenshot({ path: "e2e/out/d/ostrzyzeni/converted-hunter-view.png" });
+      await prey.screenshot({ path: "e2e/out/d/ostrzyzeni/converted-victim-view.png" });
+      // With only two players that conversion was the last head: the round is the shaved side's,
+      // and the break is followed by a fresh round with exactly one chaser again.
+      await expect.poll(async () => (await hud(a)).scoreB, { timeout: 15_000 }).toBe(1);
+      expect((await hud(a)).scoreA).toBe(0);
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 20_000 }).toBe("prep");
+      await expect.poll(async () => {
+        const [x, y] = [await sideOf(a, idA), await sideOf(a, idB)];
+        return [x.shaved, y.shaved].filter(Boolean).length;
+      }, { timeout: 30_000, message: "a new round shaves exactly one player again" }).toBe(1);
+      await expect(a.getByTestId("infection-line")).toContainText("RUNDA 2 / 5");
+    } finally {
+      await ca.close(); await cb.close();
+    }
+  });
 });

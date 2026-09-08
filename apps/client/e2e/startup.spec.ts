@@ -66,3 +66,38 @@ test("cancelled connection cannot replace the menu with a late game", async ({ p
   await expect(page.getByTestId("hud")).toHaveCount(0);
   await expect(page.locator(".game-canvas-host canvas")).toHaveCount(0);
 });
+
+/**
+ * Drop D — join by link. The lobby a friend's `/r/<room>` link opens asks for a nickname and
+ * nothing else, and CHANGE opens the full one with the link's room and mode already filled in.
+ * (This lived in `menu.spec.ts`, which the structure refactor removed; the check did not.)
+ */
+test("a /r/<room> link asks for a nickname only, and CHANGE opens the full lobby", async ({ page }) => {
+  await page.goto("/r/late-shift?mode=gungame");
+  await expect(page.getByTestId("link-join")).toBeVisible();
+  await expect(page.getByTestId("link-room")).toHaveText("late-shift");
+  await expect(page.getByTestId("link-mode")).toHaveText("GUN");
+  await expect(page.getByTestId("input-room")).toHaveCount(0);
+  await expect(page.getByTestId("mode-picker")).toHaveCount(0);
+  await expect(page.getByTestId("btn-quickplay")).toBeDisabled();
+  await page.getByTestId("input-name").fill("Franki");
+  await expect(page.getByTestId("btn-quickplay")).toBeEnabled();
+  await page.getByTestId("btn-link-edit").click();
+  await expect(page.getByTestId("input-room")).toHaveValue("late-shift");
+  await expect(page.getByTestId("mode-gungame")).toHaveAttribute("aria-checked", "true");
+  // And the lobby can MAKE one: the link names this room in this mode.
+  await page.getByTestId("btn-invite").click();
+  const link = await page.getByTestId("invite-link").inputValue();
+  expect(link).toContain("/r/late-shift");
+  expect(link).toContain("mode=gungame");
+});
+
+/** Drop D: the picker offers main's four modes and both party modes. */
+test("the lobby offers six modes", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("btn-play").click();
+  for (const m of ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni"]) {
+    await expect(page.getByTestId(`mode-${m}`)).toBeVisible();
+  }
+  await expect(page.getByTestId("mode-ffa")).toHaveCount(0);
+});

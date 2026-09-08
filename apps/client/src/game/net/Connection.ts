@@ -19,6 +19,8 @@ export interface NetPlayer {
   lean: number; tac: boolean;
   /** Drop 5: scoreboard assists; server-driven bot. */
   assists: number; bot: boolean;
+  /** Drop D: a visibly shaved head (Ostrzyżeni's shaved side; Drop E's shave). */
+  shaved: boolean;
 }
 
 /** Drop 4: a Domination flag as replicated. */

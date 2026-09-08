@@ -15,6 +15,8 @@ interface Snapshot {
   perkUntil: number;
   /** Drop 4: lean (-1/0/1) and tactical sprint. */
   lean: number; tac: boolean;
+  /** Drop D: a shaved head (Ostrzyżeni's shaved side). Replicated per player, like a skin id. */
+  shaved: boolean;
 }
 
 const SNAP_BUFFER = 16;
@@ -44,7 +46,7 @@ export class RemotePlayer {
   vx = 0; vz = 0; reloading = false; weapon: WeaponId = "pistol";
   lean = 0; tac = false;
   private wasAlive = true;
-  private input = { speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol" as WeaponId, moveDir: 0, perked: false, lean: 0, tac: false };
+  private input = { speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol" as WeaponId, moveDir: 0, perked: false, lean: 0, tac: false, shaved: false };
 
   /**
    * `displayTeam` (drop 4) is the side this player is DRAWN as: in FFA everyone is on team 0 for
@@ -81,6 +83,7 @@ export class RemotePlayer {
     for (const id of PERK_ORDER) { const u = p.perks?.get(id) ?? 0; if (u > until) until = u; }
     s.perkUntil = until;
     s.lean = p.lean ?? 0; s.tac = !!p.tac;
+    s.shaved = !!p.shaved;
   }
 
   /** Teleport (spawn): rewrite the buffer so we don't interpolate across the map. */
@@ -129,6 +132,7 @@ export class RemotePlayer {
     inp.alive = this.alive; inp.reloading = this.reloading; inp.weapon = this.weapon;
     inp.perked = b.perkUntil > renderT;
     inp.lean = this.lean; inp.tac = this.tac;
+    inp.shaved = b.shaved;
     // Direction of travel relative to facing (for the strafe lean).
     inp.moveDir = this.speed > 0.3 ? Math.atan2(this.vx, this.vz) - this.yaw : 0;
     c.update(inp, dtMs);

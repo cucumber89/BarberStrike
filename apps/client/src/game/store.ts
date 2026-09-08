@@ -20,6 +20,8 @@ export interface ScoreRow {
   assists: number;
   money: number;
   bot: boolean;
+  /** Drop D: on the shaved side (Ostrzyżeni) — the HUD counts the unshaved from these rows. */
+  shaved: boolean;
 }
 
 /** Drop 5: a chat line as shown (server time `at`, local `seen` for the fade). */
@@ -32,6 +34,8 @@ export interface KillFeedEntry extends KillEvent { at: number; key: number }
 export interface HudState {
   smokeOpacity: number;
   bomb: import("@frankibarber/shared").BombData | null;
+  /** Rounds finished in a round mode (Bomb Plant, Ostrzyżeni). 0 outside them. */
+  round: number;
   connected: boolean;
   myId: string;
   myTeam: Team;
@@ -157,7 +161,7 @@ export const initialHud: HudState = {
   buyWindowLeft: 0, nearStation: false, shopOpen: false, shopResult: null, moneyToasts: [],
   cookingKind: "", cooking: 0, flashStrength: 0, flashUntil: 0, flashAt: 0,
   armor: 0, perks: { flask: 0, roids: 0, energy: 0, fade: 0 }, armorBrokeAt: 0, scoped: false, breath: 0, hitArmor: false,
-  boysClass: 1, nextClass: 1, mode: "tdm", smokeOpacity: 0, bomb: null, flags: [], inFlag: -1, winnerId: "", winnerName: "", flagNotice: null, tac: 1, tacOn: false,
+  boysClass: 1, nextClass: 1, mode: "tdm", smokeOpacity: 0, bomb: null, round: 0, flags: [], inFlag: -1, winnerId: "", winnerName: "", flagNotice: null, tac: 1, tacOn: false,
   chat: [], chatOpen: null, marks: [],
 };
 

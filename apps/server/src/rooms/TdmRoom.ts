@@ -14,6 +14,8 @@ import {
   perkSpeedScale, splitDamage, isPerkId, isArmorId,
   BTN_MASK, DOM, MODES, isGameMode, leanOf, tacActive, leanEye, inFlagZone, stepFlag, domTick, neutralFlag,
   CHAT, MARK, MAX_BOTS, BOT_NAMES, botId, isBotLevel,
+  GUN_GAME, MELEE_WEAPON, ladderAfterKill, ladderDone, ladderWeapon,
+  OSTRZYZENI, PERK_ARMED_MS, convertsOnKill, infectionRoundWinner, pickFirstShaved,
   type BodyState, type CollisionWorld, type DamagedEvent, type FireMessage, type HitEvent, type InputTuple, type KillEvent,
   type MapDef, type PlayerInput, type ShotEvent, type SpawnEvent, type Target, type Team, type WeaponId, type WelcomeMessage,
   type Projectile, type Wallet, type ThrowMessage, type ThrowEvent, type BoomEvent, type FlashedEvent, type MoneyEvent,
@@ -118,6 +120,9 @@ class Session {
   lean: -1 | 0 | 1 = 0;
   tac = false;
   eye: [number, number, number] = [0, 0, 0];
+  // ---- drop D: Gun Game. The rung is private; it is replicated as `PlayerState.score` (in this
+  // mode the score IS the rung), so the HUD and the scoreboard need no new field.
+  rung = 0;
   // ---- drop 5: chat / mark rate limits; the brain for a bot session.
   lastChatAt = -Infinity;
   lastMarkAt = -Infinity;
@@ -207,6 +212,30 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   /** Team modes (TDM, Domination) keep friendly fire off and score per team; FFA does neither. */
   private get teams(): boolean { return MODES[this.mode].teams; }
+  /** Drop D: Gun Game — the loadout is the ladder rung, kills move rungs, nothing is for sale. */
+  private get ladder(): boolean { return this.mode === "gungame"; }
+  /** Drop D: a mode without an economy pays nobody and sells nothing. */
+  private get noShop(): boolean { return MODES[this.mode].shop === "none"; }
+  /**
+   * Drop D: Ostrzyżeni (infection) — rounds like Bomb Plant, sides that reuse the teams (survivors
+   * = `OSTRZYZENI.survivorTeam`, the shaved = `OSTRZYZENI.shavedTeam`), one random chaser per round,
+   * a clippers kill converts. The round counter is `state.bomb.round`: it is the only replicated
+   * round number and the HUD already reads it; nothing else in `bomb` is touched by this mode.
+   */
+  private get infection(): boolean { return this.mode === "ostrzyzeni"; }
+  /** Which Prep an infection round is in: the buy window before the round, or the break after it. */
+  private infectionStage: "buy" | "break" = "buy";
+  /**
+   * How long a casualty waits. Gun Game has its own short timer (a party mode: no waves, no shop to
+   * spend the wait in) and no perks, so the fade never applies there. A shaved chaser (infection)
+   * is back on a short timer too; an unshaved survivor is not respawned by the timer at all during a
+   * round (see `step`), so their value only matters in the warm-up.
+   */
+  private respawnDelay(p: PlayerState, fade = false): number {
+    if (this.ladder) return GUN_GAME.respawnMs;
+    if (this.infection && p.shaved) return OSTRZYZENI.shavedRespawnMs;
+    return RESPAWN_DELAY_MS - (fade ? PERK_EFFECT.fadeRespawnMs : 0);
+  }
 
   /**
    * The room's roster in the shape the shared team rules take. A disconnected player still sits in
@@ -368,9 +397,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.name = BOT_NAMES[n % BOT_NAMES.length];
     p.bot = true;
     p.boysClass = p.nextClass = (n % 5) + 1;
-    // `roster()` rather than a bare team list: it excludes players who have disconnected but not
-    // yet been cleaned up, which used to send the next joiner to the side about to be short.
-    p.team = this.teams ? teamForNewPlayer(this.roster()) : 0;
+    p.team = this.teamForJoiner();
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
     this.state.players.set(id, p); this.connectedCount++;
@@ -411,7 +438,13 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       flags: (this.mode === "dom" || this.mode === "boys") ? this.flagSims.map((f, i) => ({ x: this.map.flags[i].x, y: this.map.flags[i].y, z: this.map.flags[i].z, owner: f.owner, contested: this.state.flags[i]?.contested ?? false })) : [],
       roamPoints: this.roamPoints,
       mayPlan: this.navTick % MAX_BOTS === s.planPhase,
-      objective: this.mode === "bomb" && this.state.phase === MatchPhase.Playing ? this.bombGoal(p, s) : this.mode === "boys" ? boysMedicGoal(p, this.state.players.values()) : undefined,
+      objective: this.mode === "bomb" && this.state.phase === MatchPhase.Playing ? this.bombGoal(p, s)
+        : this.mode === "boys" ? boysMedicGoal(p, this.state.players.values())
+        : this.infection && p.shaved && this.state.phase === MatchPhase.Playing ? this.nearestSurvivor(p) : undefined,
+      // Drop D: the mode and this bot's side, for the one decision the brain cannot see — whether
+      // it is the one with the clippers.
+      mode: this.mode,
+      shaved: p.shaved,
     };
     const d = brain.think(senses);
     if (senses.objective && !d.fire && !senses.blinded && !senses.hazards?.length && Math.hypot(p.x - senses.objective.x, p.z - senses.objective.z) < 1.9) {
@@ -478,7 +511,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.id = client.sessionId;
     p.boysClass = p.nextClass = isBoysClass(options?.boysClass) ? options.boysClass : 1;
     p.name = name;
-    p.team = this.teams ? teamForNewPlayer(this.roster()) : 0;
+    p.team = this.teamForJoiner();
+    // Drop D: joining an infection round in progress means joining the chasers — a late survivor
+    // would be a free extra life for the survivor side. `spawn` reads the flag and hands the clippers.
+    p.shaved = this.infection && p.team === OSTRZYZENI.shavedTeam;
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
     this.state.players.set(client.sessionId, p); this.connectedCount++;
@@ -494,6 +530,21 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       p.alive = false; p.health = 0;
     }
     this.maybeStartCountdown();
+  }
+
+  /**
+   * The side a joiner (human or bot) lands on. Team modes balance the two sides; FFA and Gun Game
+   * have none. Infection (drop D) never balances: the sides are survivors vs the shaved, so a joiner
+   * in the warm-up is a survivor and one arriving while a round runs (Prep or Playing) is shaved.
+   */
+  private teamForJoiner(): Team {
+    if (this.infection) {
+      const inRound = this.state.phase === MatchPhase.Prep || this.state.phase === MatchPhase.Playing;
+      return inRound ? OSTRZYZENI.shavedTeam : OSTRZYZENI.survivorTeam;
+    }
+    // `roster()` rather than a bare team list: it excludes players who have disconnected but not
+    // yet been cleaned up, which used to send the next joiner to the side about to be short.
+    return this.teams ? teamForNewPlayer(this.roster()) : 0;
   }
 
   /**
@@ -575,6 +626,11 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // Slots are 1 = primary (owned), 2 = sidearm; anything not owned is refused (drop 2).
     const id = weaponForSlot(this.walletOf(p), slot);
     if (!id || id === p.weapon) return;
+    // Drop D: the free sidearm fallback of slot 2 would let a rifle rung carry the pistol as well;
+    // on the ladder only the rung weapon and the clippers are in the hands.
+    if (this.ladder && id !== ladderWeapon(s.rung) && id !== MELEE_WEAPON) return;
+    // Drop D: the same fallback would hand a shaved chaser the free pistol; clippers only.
+    if (this.infection && p.shaved && id !== MELEE_WEAPON) return;
     p.weapon = id;
     p.reloading = false;
     s.reloadEndsAt = 0;
@@ -807,7 +863,16 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // A fresh fade (drop 3) is spent here: quicker respawn and a longer shield on the next spawn.
     const fade = perkActive(this.perksOf(victim), "fade", this.now());
     if (fade) { victim.perks.set("fade", 0); vs.fadeShield = true; }
-    vs.respawnAt = this.now() + RESPAWN_DELAY_MS - (fade ? PERK_EFFECT.fadeRespawnMs : 0);
+    // Drop D: the conversion happens BEFORE the respawn timer is set — a victim who has just been
+    // shaved is a chaser now, and chasers come back on the short timer. Both mode scores are a
+    // BONUS on top of the kill award every mode pays: a shave is a kill and then some.
+    if (this.infection && convertsOnKill(weapon, victim.shaved, this.state.phase === MatchPhase.Playing)) {
+      this.shave(victim, vs);
+      if (this.state.phase === MatchPhase.Playing) attacker.score += OSTRZYZENI.convertScore;
+    } else if (this.infection && this.state.phase === MatchPhase.Playing && victim.shaved && !attacker.shaved) {
+      attacker.score += OSTRZYZENI.killScore;
+    }
+    vs.respawnAt = this.now() + this.respawnDelay(victim, fade);
     vs.lastKilledBy = attacker.id;
     vs.inputs.length = 0;
     // A corpse must not be rewound into by late shots: drop its lag-comp history.
@@ -816,9 +881,29 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     const counts = this.state.phase === MatchPhase.Playing;
     if (counts) {
       attacker.kills += 1;
-      attacker.score += headshot ? 150 : 100;
+      // Drop D: on the ladder `score` is the rung, written below; points would corrupt it.
+      if (!this.ladder) attacker.score += headshot ? 150 : 100;
       // Drop 4: only TDM scores the team on a kill (Domination scores flags, FFA scores the player).
       if (this.mode === "tdm") { if (attacker.team === 0) this.state.scoreA += 1; else this.state.scoreB += 1; }
+    }
+    // Drop D: move both players on the ladder. The killer is re-armed on the spot (they are alive
+    // and the client follows a server weapon change); the victim's rung shows at their respawn,
+    // which reads it. Both scores are the rungs, so the scoreboard is right before anyone spawns.
+    let finished = false;
+    const ks = this.sessions.get(attacker.id);
+    if (this.ladder && counts && ks) {
+      const after = ladderAfterKill(ks.rung, vs.rung, weapon);
+      vs.rung = after.victim; victim.score = vs.rung;
+      if (after.killer !== ks.rung) {
+        ks.rung = after.killer;
+        finished = ladderDone(ks.rung);
+        if (attacker.alive && !finished) {
+          this.handLadderWeapon(attacker, ks);
+          attacker.reloading = false; ks.reloadEndsAt = 0; ks.spread = 0;
+          ks.equipEndsAt = this.now() + WEAPONS[attacker.weapon as WeaponId].equipMs;
+        }
+      }
+      attacker.score = ks.rung;
     }
     const ev: KillEvent = {
       killer: attacker.id, killerName: attacker.name, killerTeam: attacker.team as Team,
@@ -832,13 +917,54 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     for (const [id, e] of vs.damagedBy) {
       if (id === attacker.id || now - e.at > ECONOMY.assistWindowMs || e.amount < ECONOMY.assistMinDamage) continue;
       const helper = this.state.players.get(id);
-      if (helper && (!this.teams || helper.team === attacker.team)) { this.pay(helper, ECONOMY.assistReward, "assist"); if (counts) { helper.assists += 1; helper.score += 50; } }
+      if (helper && (!this.teams || helper.team === attacker.team)) { this.pay(helper, ECONOMY.assistReward, "assist"); if (counts) { helper.assists += 1; if (!this.ladder) helper.score += 50; } }
     }
     vs.damagedBy.clear();
     if (!counts) return;
+    // Drop D: the ladder ends on the last rung's kill, never on a kill count — a clippers kill from
+    // a low rung is a kill that moved nobody up. `endMatch` names the top rung, i.e. the finisher.
+    if (finished) { this.endMatch(); return; }
     const limit = MODES[this.mode].scoreLimit;
     if (this.mode === "tdm" && (this.state.scoreA >= limit || this.state.scoreB >= limit)) this.endMatch();
     else if (this.mode === "ffa" && attacker.kills >= limit) this.endMatch();
+  }
+
+  /**
+   * Drop D: the whole loadout of a rung. No money, no grenades, no plates, no perks — the rung
+   * weapon alone in `owned` (the clippers are always in slot 3, so the last rung owns nothing), a
+   * full magazine and reserve, and `score` = rung for the HUD. Called at spawn and on the kill that
+   * moved the killer up; the caller decides whether an equip animation is due.
+   */
+  private handLadderWeapon(p: PlayerState, s: Session): void {
+    const w = ladderWeapon(s.rung);
+    this.writeWallet(p, { ...freshWallet(), money: 0, owned: w === MELEE_WEAPON ? [] : [w] });
+    s.ammo[w] = WEAPONS[w].magazine; s.reserve[w] = WEAPONS[w].reserve;
+    p.weapon = w;
+    p.score = s.rung;
+    this.syncAmmo(p, s);
+  }
+
+  /**
+   * Drop D: shave a player onto the chasers' side — the Ostrzyżony loadout in one place, because it
+   * is applied at three moments that must agree: the round's first chaser, a conversion, and a
+   * spawn. Clippers only (they are always in slot 3, so `owned` is empty), no money, and the energy
+   * perk armed for the whole round: the chaser has to close the distance on people who can shoot.
+   */
+  private shave(p: PlayerState, s: Session): void {
+    p.shaved = true;
+    p.team = OSTRZYZENI.shavedTeam;
+    this.writeWallet(p, { ...freshWallet(), money: 0, owned: [], perks: { ...noPerks(), [OSTRZYZENI.speedPerk]: PERK_ARMED_MS } });
+    p.weapon = MELEE_WEAPON;
+    p.reloading = false; s.reloadEndsAt = 0; s.spread = 0;
+    s.ammo[MELEE_WEAPON] = WEAPONS[MELEE_WEAPON].magazine;
+    this.syncAmmo(p, s);
+  }
+
+  /** Drop D: the survivors' side of the same coin — a clean head, a fresh wallet for the round. */
+  private unshave(p: PlayerState): void {
+    p.shaved = false;
+    p.team = OSTRZYZENI.survivorTeam;
+    this.writeWallet(p, { ...freshWallet(), money: OSTRZYZENI.roundMoney });
   }
 
   // ---------------------------------------------------------------- spawning
@@ -979,10 +1105,12 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         this.world.raycast(ax, ay, az, dx / l, dy / l, dz / l, l, worldHit);
         return !worldHit.hit;
       },
-      // FFA alone ignores sides. TDM used to be in here too, which let a TDM player spawn on the
-      // enemy's points or an arena point — the coin toss that made TdmRoom.test.ts:53 flaky, and
-      // the thing that would make a team switch land the player back where they came from.
-    }, this.mode === "ffa");
+      // A mode with no sides uses the whole map: FFA, and Gun Game with it (drop D). TDM used to
+      // be in here too, which let a TDM player spawn on the enemy's points or an arena point — the
+      // coin toss that made TdmRoom.test.ts:53 flaky, and the thing that would make a team switch
+      // land the player back where they came from. `!this.teams` says "no sides" without naming a
+      // mode, so the next sideless mode gets the right pool for free.
+    }, !this.teams);
     const b = s.body;
     b.x = sp.x; b.y = sp.y; b.z = sp.z; b.vx = b.vy = b.vz = 0; b.grounded = true; b.crouching = false;
     s.inputs.length = 0;
@@ -1003,6 +1131,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.health = this.mode === "boys" ? boysClass(p.boysClass).health : PLAYER.maxHealth; p.alive = true; p.reloading = false;
     const wallet = this.walletOf(p);
     p.weapon = primaryOf(wallet) ?? secondaryOf(wallet);
+    if (this.ladder) this.handLadderWeapon(p, s);
+    // Drop D: a chaser comes back a chaser — the clippers and the perk, not the wallet they had.
+    if (this.infection && p.shaved) this.shave(p, s);
     // A shield granted inside the frozen preparation window would be spent standing still, before
     // the fighting resumed — so it starts counting from the RELEASE. Here rather than at the one
     // call site that respawns a wave, because joining and reconnecting land in prep too and every
@@ -1010,6 +1141,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     const shieldFrom = this.state.phase === MatchPhase.Prep ? this.state.phaseEndsAt : this.now();
     p.protectedUntil = shieldFrom + (s.fadeShield ? PERK_EFFECT.fadeShieldMs : SPAWN_PROTECTION_MS);
     if (this.mode === "bomb" && this.state.phase !== MatchPhase.Waiting && this.state.phase !== MatchPhase.Countdown) p.protectedUntil = 0;
+    // Drop D: a chaser is back every three seconds inside a live round; a shield on each of those
+    // returns would let them walk through fire to reach somebody (code review). They keep it for
+    // the round's own start, where everyone gets one.
+    if (this.infection && p.shaved && this.state.phase === MatchPhase.Playing) p.protectedUntil = 0;
     s.fadeShield = false;
     s.blindedUntil = 0; s.objectiveUntil = 0; s.respawnAt = 0;
     p.spawnedAt = this.now(); s.spawnedAt = p.spawnedAt;
@@ -1019,6 +1154,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // Drop 5: a bot shops in its spawn window like anyone else — a primary it can afford.
     if (s.brain) {
       s.brain.onSpawn(sp.yaw);
+      if (this.noShop) return;                       // drop D: nothing to shop for
+      if (this.infection && p.shaved) return;        // drop D: a chaser has the clippers and no money
       const item = this.mode === "boys"
         ? boysClass(p.boysClass).weapons.find(w => w !== boysClass(p.boysClass).starter && primaryOf(this.walletOf(p)) === boysClass(p.boysClass).starter && WEAPON_PRICES[w] <= p.money)
         : s.brain.pickBuy(p.money, Array.from(p.owned));
@@ -1045,25 +1182,106 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private startMatch(): void {
     this.state.phase = MatchPhase.Playing;
-    // One uninterrupted live phase until the time or score limit is reached.
-    this.state.matchEndsAt = this.now() + (this.mode === "bomb" ? 30 * 60000 : MATCH.durationMs);
+    // One uninterrupted live phase until the time or score limit is reached. The round modes get a
+    // clock long enough for every round they can play, so the match ends on rounds, not on time.
+    this.state.matchEndsAt = this.now() + (this.mode === "bomb" ? 30 * 60000
+      : this.infection ? OSTRZYZENI.rounds * (OSTRZYZENI.prepMs + OSTRZYZENI.roundMs + OSTRZYZENI.breakMs) + 60000
+      : MATCH.durationMs);
     this.state.phaseEndsAt = this.state.matchEndsAt;
     this.state.scoreA = 0; this.state.scoreB = 0; this.state.winner = -1;
     this.state.winnerId = ""; this.state.winnerName = "";
     this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
     if (this.mode === "bomb") { this.state.bomb.round = 0; this.state.bomb.attackTeam = 0; this.bombLosses = [0, 0]; }
+    if (this.infection) this.state.bomb.round = 0;
     // Drop 4: flags go back to neutral; the first score tick is a full interval away.
     for (let i = 0; i < this.flagSims.length; i++) { this.flagSims[i] = neutralFlag(); this.syncFlag(i, false); }
     this.nextDomTickAt = this.now() + DOM.tickMs;
     for (const [id, p] of this.state.players) {
       p.kills = 0; p.deaths = 0; p.score = 0; p.assists = 0;
+      const s = this.sessions.get(id);
+      if (s) s.rung = 0; // drop D: everyone starts the ladder on the first rung
       this.writeWallet(p, freshWallet());
-      this.clientOf(id)?.send(S2C.Money, { delta: 0, reason: "reset", total: p.money } satisfies MoneyEvent);
       if (this.mode === "bomb") p.money = BOMB.startMoney;
-      else this.spawn(id);
+      else if (!this.infection) this.spawn(id); // infection spawns everyone in `beginInfectionRound`
+      // AFTER the spawn, because the spawn is what decides the wallet in a mode that overrides it:
+      // Gun Game hands out a rung and no money, so announcing the fresh wallet first told those
+      // clients they had $2000 they were never going to have, and the HUD believed it until the
+      // next snapshot corrected it.
+      this.clientOf(id)?.send(S2C.Money, { delta: 0, reason: "reset", total: p.money } satisfies MoneyEvent);
     }
     if (this.mode === "bomb") this.beginBombRound(true);
+    else if (this.infection) this.beginInfectionRound();
     else this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Playing, winner: -1, endsAt: this.state.phaseEndsAt } satisfies MatchEventMessage);
+  }
+
+  // ---------------------------------------------------------------- Ostrzyżeni (drop D)
+
+  /**
+   * A round begins with everybody unshaved and one random player shaved in place. The buy window is
+   * a Prep phase, which the shared `rounds.ts` rules already freeze on both sides — survivors spend
+   * their round money, the Ostrzyżony waits with the clippers where everyone can see them.
+   *
+   * Everyone is respawned here, not at the release: the point of Prep is to look around and buy.
+   */
+  private beginInfectionRound(): void {
+    const st = this.state, now = this.now();
+    st.phase = MatchPhase.Prep;
+    st.phaseEndsAt = now + OSTRZYZENI.prepMs;
+    this.infectionStage = "buy";
+    this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
+    const roster: PlayerState[] = [];
+    for (const [id, p] of st.players) {
+      if (!p.connected) continue;
+      this.unshave(p);
+      this.spawn(id);
+      roster.push(p);
+    }
+    const first = pickFirstShaved(roster, this.rand);
+    const fs = first && this.sessions.get(first.id);
+    if (first && fs) this.shave(first, fs);
+    this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Prep, winner: -1, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
+  }
+
+  /** The clippers are loose: the buy window ends and the round clock starts. */
+  private releaseInfectionRound(): void {
+    const st = this.state;
+    st.phase = MatchPhase.Playing;
+    st.phaseEndsAt = this.now() + OSTRZYZENI.roundMs;
+    this.infectionStage = "break";
+    this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Playing, winner: -1, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
+  }
+
+  /**
+   * Is the round over? Asked every tick while it is live. The survivors' win is the clock; the
+   * chasers' win is the last unshaved head. Surviving to the whistle is worth more than a kill,
+   * because outlasting is the thing this mode asks for.
+   */
+  private stepInfection(now: number): void {
+    if (!this.infection || this.state.phase !== MatchPhase.Playing) return;
+    const st = this.state;
+    // The chaser leaving ends the round there and then: with nobody who can convert, the survivors
+    // have already won and the alternative is ninety seconds of walking about (code review).
+    const anyChaser = [...st.players.values()].some((p) => p.shaved && p.connected);
+    const winner = anyChaser
+      ? infectionRoundWinner(Array.from(st.players.values()), now, st.phaseEndsAt)
+      : "survivors";
+    if (winner === null) return;
+    if (winner === "survivors") {
+      st.scoreA++;
+      for (const p of st.players.values()) if (p.connected && p.alive && !p.shaved) p.score += OSTRZYZENI.surviveScore;
+    } else {
+      st.scoreB++;
+    }
+    st.bomb.round++;
+    this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
+    if (st.bomb.round >= OSTRZYZENI.rounds) { this.endMatch(); return; }
+    st.phase = MatchPhase.Prep;
+    st.phaseEndsAt = now + OSTRZYZENI.breakMs;
+    this.infectionStage = "break";
+    this.broadcast(S2C.MatchEvent, {
+      phase: MatchPhase.Prep, winner: winner === "survivors" ? OSTRZYZENI.survivorTeam : OSTRZYZENI.shavedTeam,
+      endsAt: st.phaseEndsAt,
+    } satisfies MatchEventMessage);
   }
 
   private bombPlayers(): BombPlayer[] {
@@ -1074,6 +1292,21 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
           && s.body.grounded && Math.hypot(s.body.vx, s.body.vz) < 0.4 && !p.reloading
           && this.now() > Math.max(s.equipEndsAt, s.lastFireAt + 350, s.lastThrowAt + 700, s.lastDamageAt + 500, s.blindedUntil) };
     });
+  }
+
+  /**
+   * Drop D: where a shaved bot is going — the closest living unshaved head. Straight-line distance
+   * rather than path length: the chaser only needs to pick a direction, and a path search per bot
+   * per tick to rank them would cost far more than picking the occasional wrong one.
+   */
+  private nearestSurvivor(p: PlayerState): NavPoint | undefined {
+    let best: PlayerState | undefined, bestD = Infinity;
+    for (const q of this.state.players.values()) {
+      if (q.shaved || !q.alive || !q.connected) continue;
+      const d = Math.hypot(q.x - p.x, q.z - p.z);
+      if (d < bestD) { bestD = d; best = q; }
+    }
+    return best ? { x: best.x, y: best.y, z: best.z } : undefined;
   }
 
   private bombGoal(p: PlayerState, s: Session): NavPoint | undefined {
@@ -1168,12 +1401,24 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.projectiles.length = 0;
     this.fires.length = 0;
     this.smokes.length = 0;
-    if (this.teams) {
+    // Drop D: a mode where everyone plays both sides (infection) still has a team score per round,
+    // but the name on the result screen is a player's — the one who did most with both hands.
+    if (MODES[this.mode].winner === "player" && this.teams) {
+      this.state.winner = this.state.scoreA === this.state.scoreB ? -1 : this.state.scoreA > this.state.scoreB ? 0 : 1;
+      const rows = Array.from(this.state.players.values()).sort((a, b) => b.score - a.score || b.kills - a.kills);
+      const top = rows[0];
+      const tied = rows.length > 1 && rows[1].score === top?.score && rows[1].kills === top?.kills;
+      this.state.winnerId = top && !tied ? top.id : "";
+      this.state.winnerName = top && !tied ? top.name : "";
+    } else if (this.teams) {
       this.state.winner = this.state.scoreA === this.state.scoreB ? -1 : this.state.scoreA > this.state.scoreB ? 0 : 1;
     } else {
-      // FFA: most kills, then score; a dead heat is a draw.
+      // FFA: most kills, then score; a dead heat is a draw. Gun Game (drop D): the score is the
+      // rung, so the highest rung wins when the clock runs out — kills only break a tie.
       this.state.winner = -1;
-      const rows = Array.from(this.state.players.values()).sort((a, b) => b.kills - a.kills || b.score - a.score);
+      const byRung = this.ladder;
+      const rows = Array.from(this.state.players.values()).sort((a, b) =>
+        byRung ? b.score - a.score || b.kills - a.kills : b.kills - a.kills || b.score - a.score);
       const top = rows[0];
       const tied = rows.length > 1 && rows[1].kills === top?.kills && rows[1].score === top?.score;
       this.state.winnerId = top && !tied ? top.id : "";
@@ -1263,6 +1508,15 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       }
       return;
     }
+    // Drop D: infection runs on rounds too — Prep is either the buy window (release it) or the
+    // break after a round (start the next one). The round's own end is decided by `stepInfection`.
+    if (this.infection && connected > 0 && (st.phase === MatchPhase.Playing || st.phase === MatchPhase.Prep)) {
+      if (now >= st.matchEndsAt) this.endMatch();
+      else if (st.phase === MatchPhase.Prep && now >= st.phaseEndsAt) {
+        if (this.infectionStage === "buy") this.releaseInfectionRound(); else this.beginInfectionRound();
+      }
+      return;
+    }
     const next = nextPhase(st.phase as MatchPhase, now, st.phaseEndsAt, connected, st.matchEndsAt);
     if (next === st.phase) return;
     switch (next) {
@@ -1307,7 +1561,12 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       // Each casualty returns on their own timer; living players keep fighting.
       if (!p.alive) {
         const warmUp = this.state.phase === MatchPhase.Waiting || this.state.phase === MatchPhase.Countdown;
-        if ((warmUp || (this.state.phase === MatchPhase.Playing && this.mode !== "bomb")) && s.respawnAt && now >= s.respawnAt && p.connected) { s.respawnAt = 0; this.spawn(id); }
+        // Drop D: in infection only the chasers come back inside a round — an unshaved survivor who
+        // dies without being converted is out until the next round, or the last one standing would
+        // never be the last one standing.
+        const returns = warmUp || (this.state.phase === MatchPhase.Playing && this.mode !== "bomb"
+          && (!this.infection || p.shaved));
+        if (returns && s.respawnAt && now >= s.respawnAt && p.connected) { s.respawnAt = 0; this.spawn(id); }
         continue;
       }
 
@@ -1386,6 +1645,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.stepBoys(now);
     this.stepFlags(now);
     this.stepBombMode(now);
+    this.stepInfection(now);
   }
 
   // ---------------------------------------------------------------- economy (drop 2)
@@ -1412,7 +1672,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   }
 
   private pay(p: PlayerState, delta: number, reason: MoneyEvent["reason"]): void {
-    if (delta === 0) return;
+    if (delta === 0 || this.noShop) return; // drop D: no economy, the wallet stays at 0
+    // Drop D: a shaved chaser has no shop, so paying them is a "+$300" they can never spend and a
+    // wallet the next round would have to clear anyway.
+    if (MODES[this.mode].shop === "survivors" && p.shaved) return;
     p.money = Math.max(0, Math.min(ECONOMY.maxMoney, p.money + delta));
     this.clientOf(p.id)?.send(S2C.Money, { delta, reason, total: p.money } satisfies MoneyEvent);
   }
@@ -1440,6 +1703,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (!s || !p || this.rateLimited(s, "other")) return;
     const item = isRecord(msg) ? msg.item : msg;
     if (!isShopItemId(item)) { client.send(S2C.Shop, { ok: false, item: String(item), reason: "unknown" } satisfies ShopResult); return; }
+    if (this.noShop) { client.send(S2C.Shop, { ok: false, item, reason: "no-shop" } satisfies ShopResult); return; }
     const w = this.walletOf(p);
     const ctx = this.buyContext(p, s);
     if (sell) {
@@ -1459,6 +1723,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   /** The purchase itself (humans via `onBuy`, bots at spawn): rules, wallet, equip, money event. */
   private buyItem(p: PlayerState, s: Session, item: ShopItemId): ShopResult {
+    if (this.noShop) return { ok: false, item, reason: "no-shop" }; // drop D: bots included
+    // Drop D: the shaved side has no economy — the clippers are the whole loadout.
+    if (MODES[this.mode].shop === "survivors" && p.shaved) return { ok: false, item, reason: "shaved" };
     if (this.mode === "bomb" && (isPerkId(item) || item === "launcher")) return { ok: false, item, reason: "closed" };
     const w = this.walletOf(p);
     const v = applyBuy(w, item, this.buyContext(p, s));
@@ -1647,7 +1914,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private fallDeath(p: PlayerState, s: Session): void {
     p.alive = false; p.health = 0;
-    s.respawnAt = this.now() + RESPAWN_DELAY_MS;
+    s.respawnAt = this.now() + this.respawnDelay(p);
     s.inputs.length = 0;
     s.history.length = 0;
     p.deaths += 1;

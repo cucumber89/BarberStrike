@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { boysClass, BOMB, GAME_VERSION, GRENADES, MATCH, MODES, MatchPhase, PERKS, PERK_ORDER, TEAM_NAMES, WEAPONS, BADGES, killerName, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
+import { boysClass, BOMB, GAME_VERSION, GRENADES, GUN_GAME, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, TEAM_NAMES, WEAPONS, BADGES, killerName, ladderDone, ladderWeapon, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import { TeamPicker } from "./TeamPicker";
 import { PlanPanel } from "./PlanPanel";
@@ -85,6 +85,13 @@ function useClock(intervalMs: number): number {
 }
 
 const money = (n: number) => `$${n.toLocaleString("en-US")}`;
+
+/**
+ * Drop D: Ostrzyżeni's sides, in the team slots. The shared `TEAM_NAMES` are the shop's two chairs
+ * (FADE / TAPER) and mean nothing here — this mode's sides are "the spared" and "the shaved", and
+ * a player changes sides mid-round, which is the whole point.
+ */
+const OSTRZYZENI_SIDES = ["OCALENI", "OSTRZYŻENI"] as const;
 const REASON_SHORT: Record<string, string> = { kill: "KILL", headshot: "HEAD SHOT", assist: "ASSIST", buy: "", sell: "SOLD", reset: "" };
 
 export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, onChooseTeam, onVotePlan, shop, chat, radar }: Props) {
@@ -172,6 +179,22 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   const leader = h.players.find((r) => r.id !== h.myId) ?? null;
   const myKills = meRow?.kills ?? 0;
   const leading = !leader || myKills >= leader.kills;
+  // Drop D: Gun Game replicates the ladder rung as `score` (0..11; 11 = finished). The top bar shows
+  // the rung, the gun it hands you and the next one, against the leader's rung instead of kills.
+  const gunGame = h.mode === "gungame";
+  const noShop = MODES[h.mode].shop === "none";
+  const myRung = meRow?.score ?? 0;
+  const leaderRung = leader?.score ?? 0;
+  const rungLabel = (rung: number) => `${Math.min(GUN_GAME.ladder.length, rung + 1)}/${GUN_GAME.ladder.length}`;
+  const rungGun = WEAPONS[ladderWeapon(myRung)].name;
+  const nextGun = myRung + 1 < GUN_GAME.ladder.length ? WEAPONS[ladderWeapon(myRung + 1)].name : null;
+  const ladderLeading = !leader || myRung >= leaderRung;
+  // Drop D: Ostrzyżeni. The sides are the teams, so the only new reads are who is still unshaved
+  // (counted from the scoreboard rows the HUD already has) and which side I am on.
+  const infection = h.mode === "ostrzyzeni";
+  const sideNames = infection ? OSTRZYZENI_SIDES : TEAM_NAMES;
+  const meShaved = !!meRow?.shaved;
+  const unshavedLeft = infection ? h.players.filter((r) => r.connected && r.alive && !r.shaved).length : 0;
   const here = h.inFlag >= 0 ? h.flags[h.inFlag] : null;
   const captureText = here
     ? here.contested ? `CONTESTED · ${here.id}`
@@ -181,6 +204,8 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
     : "";
   const noticeAge = h.flagNotice ? now - h.flagNotice.at : Infinity;
   const winnerFfa = h.winnerId === "" ? "DRAW" : h.winnerId === h.myId ? "VICTORY" : "DEFEAT";
+  // Drop D: the result names a side or a player by the mode's `winner`, not by whether it has teams.
+  const teamWinner = MODES[h.mode].winner === "team";
 
   return (
     <div className={`hud ${lowHealth ? "low-health" : ""}`} data-testid="hud">
@@ -195,6 +220,16 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           : h.bomb.stage === "dropped" ? "BOMB DROPPED · WALK OVER IT TO PICK UP" : "ESCORT THE BOMB CARRIER"}</span>
         {h.bomb.actor && <><div className="bomb-progress"><i style={{ width: `${h.bomb.progress * 100}%` }} /></div><small>{h.bomb.actor === h.myId ? "KEEP HOLDING T · STAND STILL" : h.bomb.stage === "planted" ? "DEFUSING" : "PLANTING"}</small></>}
       </div>}
+      {/* Ostrzyżeni (drop D): the round, how many heads are left, and which side the clock favours. */}
+      {infection && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && (
+        <div className={`bomb-hud infection ${meShaved ? "shaved" : ""}`} data-testid="infection-line">
+          <b>RUNDA {Math.min(OSTRZYZENI.rounds, h.round + 1)} / {OSTRZYZENI.rounds} · {unshavedLeft} NIEOSTRZYŻONYCH · {fmtTime(timeLeft)}</b>
+          <span>{h.phase === MatchPhase.Prep
+            ? (meShaved ? "OSTRZYSZ ICH ZA CHWILĘ — maszynka w dłoni" : `PRZYGOTOWANIE · B TO BUY · RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`)
+            : meShaved ? "JESTEŚ OSTRZYŻONY — goń ich z maszynką"
+            : "PRZEŻYJ — nie daj się ostrzyc"}</span>
+        </div>
+      )}
       {/* Damage vignette / direction */}
       {dmgAge < 600 && <div className="damage-dir" style={{ transform: `rotate(${h.damageAngle}rad)`, opacity: 1 - dmgAge / 600 }} />}
 
@@ -226,16 +261,21 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {/* Top: score + timer (team modes) or me vs the leader (FFA, drop 4) */}
       <div className="top-bar" data-mode={h.mode}>
         {teams
-          ? <div className={`team-score t0 ${h.myTeam === 0 ? "mine" : ""}`}><span className="tname">{TEAM_NAMES[0]}</span><span className="tscore" data-testid="score-a">{h.scoreA}</span></div>
-          : <div className="ffa-score mine"><span className="tname">YOU</span><span className="tscore" data-testid="score-a">{myKills}</span></div>}
+          ? <div className={`team-score t0 ${h.myTeam === 0 ? "mine" : ""}`}><span className="tname">{sideNames[0]}</span><span className="tscore" data-testid="score-a">{h.scoreA}</span></div>
+          : gunGame
+            ? <div className="ffa-score mine ladder"><span className="tname">GUN</span><span className="tscore" data-testid="ladder">{rungLabel(myRung)}</span>
+                <span className="ladder-gun" data-testid="ladder-gun">{ladderDone(myRung) ? <b>LADDER DONE</b> : <><b>{rungGun}</b>{nextGun && <small>NEXT: {nextGun}</small>}</>}</span></div>
+            : <div className="ffa-score mine"><span className="tname">YOU</span><span className="tscore" data-testid="score-a">{myKills}</span></div>}
         <div className={`timer ${matchLeft > 0 && matchLeft <= 30000 ? "urgent" : ""}`} data-testid="timer">
           {h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep ? fmtTime(matchLeft)
             : h.phase === MatchPhase.Countdown ? `START ${Math.max(0, Math.ceil(timeLeft / 1000))}`
             : h.phase === MatchPhase.Waiting ? "WARM-UP" : "MATCH OVER"}
         </div>
         {teams
-          ? <div className={`team-score t1 ${h.myTeam === 1 ? "mine" : ""}`}><span className="tscore" data-testid="score-b">{h.scoreB}</span><span className="tname">{TEAM_NAMES[1]}</span></div>
-          : <div className={`ffa-score ${leading ? "" : "lead"}`}><span className="tscore" data-testid="score-b">{leader?.kills ?? 0}</span><span className="tname">{leader?.name ?? "NOBODY"}</span></div>}
+          ? <div className={`team-score t1 ${h.myTeam === 1 ? "mine" : ""}`}><span className="tscore" data-testid="score-b">{h.scoreB}</span><span className="tname">{sideNames[1]}</span></div>
+          : gunGame
+            ? <div className={`ffa-score ${ladderLeading ? "" : "lead"}`}><span className="tscore" data-testid="score-b">{leader ? rungLabel(leaderRung) : "–"}</span><span className="tname">{leader?.name ?? "NOBODY"}</span></div>
+            : <div className={`ffa-score ${leading ? "" : "lead"}`}><span className="tscore" data-testid="score-b">{leader?.kills ?? 0}</span><span className="tname">{leader?.name ?? "NOBODY"}</span></div>}
       </div>
       {/* Domination (drop 4): A / B / C with owner colour, capture bar, contested pulse */}
       {(h.mode === "dom" || h.mode === "boys") && h.flags.length > 0 && (
@@ -285,12 +325,17 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           {activePerks.map((id) => {
             const p = PERKS[id];
             const leftMs = h.perks[id] - h.serverNow;
-            const frac = p.durationMs > 0 ? Math.max(0, Math.min(1, leftMs / p.durationMs)) : 1;
+            // Drop D: a perk can be armed for a whole round rather than for its own duration (the
+            // Ostrzyżony's speed). That is written as `PERK_ARMED_MS`, which as a countdown reads
+            // "999985s" and pins the bar full — so anything longer than the perk's own life shows
+            // as ARMED, the same way a fade does.
+            const timed = p.durationMs > 0 && leftMs <= p.durationMs;
+            const frac = timed ? Math.max(0, Math.min(1, leftMs / p.durationMs)) : 1;
             return (
               <div key={id} className={`perk perk-${id}`} title={p.blurb}>
                 <span className="perk-glyph">{p.glyph}</span>
                 <span className="perk-name">{p.name.toUpperCase()}</span>
-                <span className="perk-time">{p.durationMs > 0 ? `${Math.max(0, Math.ceil(leftMs / 1000))}s` : "ARMED"}</span>
+                <span className="perk-time">{timed ? `${Math.max(0, Math.ceil(leftMs / 1000))}s` : "ARMED"}</span>
                 <span className="perk-bar" style={{ width: `${Math.round(frac * 100)}%` }} />
               </div>
             );
@@ -299,7 +344,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       )}
 
       {/* Wallet + buy prompt (drop 2) */}
-      {h.connected && (
+      {h.connected && !noShop && (
         <div className="wallet" data-testid="wallet">
           {h.mode === "boys" && <div className="wallet-role">{boysClass(h.boysClass).name} · B: class / shop{h.nextClass !== h.boysClass ? ` · Next: ${boysClass(h.nextClass).name}` : ""}</div>}
           <div className={`wallet-money ${h.money >= 8000 ? "rich" : ""}`} data-testid="money">{money(h.money)}</div>
@@ -315,7 +360,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           <div key={t.key} className={`money-toast ${t.delta < 0 ? "neg" : ""}`}>{t.delta > 0 ? "+" : ""}{money(t.delta)}<span className="why">{REASON_SHORT[t.reason] ?? t.reason.toUpperCase()}</span></div>
         ))}
       </div>
-      {shopHint && <div className="shop-closed-hint" data-testid="shop-closed">SHOP CLOSED · REACH A $ BUY COUNTER</div>}
+      {shopHint && <div className="shop-closed-hint" data-testid="shop-closed">{noShop ? `NO SHOP IN ${MODES[h.mode].name} · KILLS HAND OUT THE GUNS` : "SHOP CLOSED · REACH A $ BUY COUNTER"}</div>}
 
       {/* Bottom-right: weapon + ammo, grenade slots above */}
       {h.connected && (
@@ -363,9 +408,11 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {/* Match end */}
       {h.phase === MatchPhase.Ended && (
         <div className="result" data-testid="result">
-          <div className={`result-title ${(teams ? winnerTeam : winnerFfa).toLowerCase()}`}>{teams ? winnerTeam : winnerFfa}</div>
+          <div className={`result-title ${(teamWinner ? winnerTeam : winnerFfa).toLowerCase()}`}>{teamWinner ? winnerTeam : winnerFfa}</div>
           <div className="result-score">
-            {teams ? <>{TEAM_NAMES[0]} {h.scoreA} — {h.scoreB} {TEAM_NAMES[1]}</> : h.winnerName ? <><b>{h.winnerName}</b> TAKES THE NIGHT</> : "NOBODY TAKES THE NIGHT"}
+            {teamWinner ? <>{sideNames[0]} {h.scoreA} — {h.scoreB} {sideNames[1]}</>
+              : <>{infection && <span className="result-rounds">{sideNames[0]} {h.scoreA} — {h.scoreB} {sideNames[1]} · </span>}
+                {h.winnerName ? <><b>{h.winnerName}</b> TAKES THE NIGHT</> : "NOBODY TAKES THE NIGHT"}</>}
           </div>
           {h.reward && <MatchSummary reward={h.reward} />}
           <Scoreboard rows={h.players} myId={h.myId} mode={h.mode} />
@@ -439,12 +486,13 @@ function ScoreTr({ r, myId }: { r: ReturnType<typeof useHud>["players"][number];
 
 function Scoreboard({ rows, myId, mode }: { rows: ReturnType<typeof useHud>["players"]; myId: string; mode: GameMode }) {
   if (!MODES[mode].teams) {
-    // FFA (drop 4): one table, most kills first.
-    const sorted = [...rows].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+    // FFA (drop 4): one table, most kills first. Gun Game (drop D): highest rung first, the score column is the rung.
+    const gun = mode === "gungame";
+    const sorted = [...rows].sort((a, b) => (gun ? b.score - a.score || b.kills - a.kills : b.kills - a.kills || a.deaths - b.deaths));
     return (
       <div className="scoreboard">
         <table className="sb-team ffa">
-          <thead><tr><th className="sb-name">{MODES[mode].name}</th><th>K</th><th>D</th><th>A</th><th>$</th><th>SCORE</th><th>PING</th></tr></thead>
+          <thead><tr><th className="sb-name">{MODES[mode].name}</th><th>K</th><th>D</th><th>A</th><th>$</th><th>{gun ? "RUNG" : "SCORE"}</th><th>PING</th></tr></thead>
           <tbody>
             {sorted.map((r) => <ScoreTr key={r.id} r={r} myId={myId} />)}
           </tbody>
@@ -456,7 +504,7 @@ function Scoreboard({ rows, myId, mode }: { rows: ReturnType<typeof useHud>["pla
     <div className="scoreboard">
       {[0, 1].map((team) => (
         <table key={team} className={`sb-team t${team}`}>
-          <thead><tr><th className="sb-name">{TEAM_NAMES[team]}</th><th>K</th><th>D</th><th>A</th><th>$</th><th>SCORE</th><th>PING</th></tr></thead>
+          <thead><tr><th className="sb-name">{(mode === "ostrzyzeni" ? OSTRZYZENI_SIDES : TEAM_NAMES)[team]}</th><th>K</th><th>D</th><th>A</th><th>$</th><th>SCORE</th><th>PING</th></tr></thead>
           <tbody>
             {rows.filter((r) => r.team === team).map((r) => <ScoreTr key={r.id} r={r} myId={myId} />)}
           </tbody>

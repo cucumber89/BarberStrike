@@ -3,10 +3,19 @@ import type { GrenadeId } from "./grenades";
 
 export type Team = 0 | 1;
 
-/** Drop 4: game modes. TDM and Domination are team modes; FFA puts everyone on team 0 with no friendly checks. */
-export type GameMode = "tdm" | "ffa" | "dom" | "bomb" | "boys";
-export const GAME_MODES: readonly GameMode[] = ["tdm", "boys", "dom", "bomb"] as const;
-export const isGameMode = (v: unknown): v is GameMode => v === "tdm" || v === "ffa" || v === "dom" || v === "bomb" || v === "boys";
+/**
+ * Drop 4: game modes. TDM, Domination, Bomb and The Boys are team modes; FFA puts everyone on
+ * team 0 with no friendly checks. Drop D: Gun Game (FFA on a weapon ladder) and Ostrzyżeni
+ * (infection: sides are survivors / shaved, reusing the team plumbing).
+ *
+ * `GAME_MODES` is the lobby's list and FFA is deliberately not in it — The Boys replaced it in the
+ * picker (PR #14) while the mode itself stays playable for rooms that already ask for it, which is
+ * why `isGameMode` still accepts it.
+ */
+export type GameMode = "tdm" | "ffa" | "dom" | "bomb" | "boys" | "gungame" | "ostrzyzeni";
+export const GAME_MODES: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni"] as const;
+export const isGameMode = (v: unknown): v is GameMode =>
+  typeof v === "string" && (v === "ffa" || (GAME_MODES as readonly string[]).includes(v));
 
 export enum MatchPhase {
   Waiting = "waiting",
