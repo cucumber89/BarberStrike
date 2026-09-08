@@ -1,6 +1,7 @@
 import {
-  BADGES, addMatch, emptyLifetime, levelFor, newBadges, titleFor, xpForMatch,
-  type LevelState, type LifetimeStats, type MatchStats, type XpLine,
+  BADGES, DEFAULT_HAIRCUT, addMatch, emptyLifetime, haircutDef, isHaircutId, levelFor,
+  newBadges, newHaircuts, ownedHaircuts, titleFor, xpForMatch,
+  type HaircutDef, type LevelState, type LifetimeStats, type MatchStats, type XpLine,
 } from "@frankibarber/shared";
 
 /**
@@ -19,9 +20,15 @@ export interface Profile {
   life: LifetimeStats;
   /** Ids of `BADGES`, in the order they were first earned. */
   badges: string[];
+  /**
+   * Drop E: the equipped haircut id. Which haircuts are OWNED is not stored — it is recomputed from
+   * `life` by `ownedHaircuts`, so a stored list can never disagree with the counters that earned it,
+   * and a catalog that grows later hands out what a player already qualifies for.
+   */
+  haircut: string;
 }
 
-export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [] });
+export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT });
 
 /**
  * Reads the profile, repairing anything the shape has outgrown.
@@ -44,6 +51,9 @@ export function loadProfile(): Profile {
       xp: Number.isFinite(p.xp) ? Math.max(0, Math.floor(p.xp as number)) : 0,
       life,
       badges: Array.isArray(p.badges) ? p.badges.filter((b) => known.has(b)) : [],
+      // An id from a build that had a haircut this one does not, or one the player has not earned
+      // (a cleared profile, an edited blob), falls back to the cap rather than to nothing.
+      haircut: isHaircutId(p.haircut) && ownedHaircuts(life).some((h) => h.id === p.haircut) ? (p.haircut as string) : DEFAULT_HAIRCUT,
     };
   } catch {
     // A corrupt or unreadable profile is not worth a crash on the way into a match.
@@ -64,6 +74,8 @@ export interface MatchReward {
   levelsGained: number;
   /** Badge ids earned by THIS match. */
   earned: string[];
+  /** Drop E: haircut ids unlocked by THIS match, shown next to the badges. */
+  haircuts: string[];
   title: string;
 }
 
@@ -73,15 +85,43 @@ export interface MatchReward {
  * Pure in the profile it is given — it does not write. The caller saves, so a summary can be
  * computed and rendered without committing anything, and the test does not need storage.
  */
-export function applyMatch(profile: Profile, stats: MatchStats, clipperKills: number): { profile: Profile; reward: MatchReward } {
+export function applyMatch(profile: Profile, stats: MatchStats, clipperKills: number, shaves = 0): { profile: Profile; reward: MatchReward } {
   const { lines, total } = xpForMatch(stats);
   const before = levelFor(profile.xp);
-  const life = addMatch(profile.life, stats, clipperKills);
+  const life = addMatch(profile.life, stats, clipperKills, shaves);
   const earned = newBadges(profile.life, life);
+  const haircuts = newHaircuts(profile.life, life);
   const xp = profile.xp + total;
   const after = levelFor(xp);
   return {
-    profile: { xp, life, badges: [...profile.badges, ...earned.filter((b) => !profile.badges.includes(b))] },
-    reward: { lines, total, before, after, levelsGained: after.level - before.level, earned, title: titleFor(after.level) },
+    profile: {
+      xp, life,
+      badges: [...profile.badges, ...earned.filter((b) => !profile.badges.includes(b))],
+      haircut: profile.haircut,
+    },
+    reward: { lines, total, before, after, levelsGained: after.level - before.level, earned, haircuts, title: titleFor(after.level) },
   };
+}
+
+// ------------------------------------------------------------------ Drop E: the wardrobe
+
+/** The haircuts this profile has earned, catalog order. Always at least the cap. */
+export const ownedCuts = (p: Profile = loadProfile()): HaircutDef[] => ownedHaircuts(p.life);
+
+/**
+ * The equipped haircut id, for the join options.
+ *
+ * Storage-first and defensive: this is called on the way INTO a match, where a throw would cost the
+ * player the match rather than the haircut.
+ */
+export function equippedHaircut(): string {
+  try { return loadProfile().haircut; } catch { return DEFAULT_HAIRCUT; }
+}
+
+/** Equips a haircut the player owns. Returns what is equipped afterwards. */
+export function equipHaircut(id: string): string {
+  const p = loadProfile();
+  if (!ownedCuts(p).some((h) => h.id === id)) return p.haircut;
+  saveProfile({ ...p, haircut: id });
+  return haircutDef(id).id;
 }

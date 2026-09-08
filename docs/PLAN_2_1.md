@@ -230,6 +230,8 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 
 | 2026-09-08 | D | drop/d-modes (after PR #16 merged) | Owner: *"zrób tak aby zrobić to co miałeś robić i żeby działało w grze wszystko"* — so, the two things that did not work. **(1) Fullscreen was hiding the whole UI.** Drop I's Play-button immersion fullscreens the CANVAS HOST; a fullscreen element is promoted to the browser's top layer and everything outside it stops being painted and stops taking clicks, so from the ENTER MATCH click onwards a player had no HUD, no buy menu, no chat, no pause card and no result screen — in the state the game puts every player into. MEASURED: a screenshot at an open buy menu shows the barbershop and nothing else; `document.fullscreenElement` was `DIV.game-canvas-host`; Playwright reported `<canvas class="game-canvas"> … intercepts pointer events` for a click on a BUY button. Fullscreen now goes on `.app`, which holds the canvas AND the overlays, and `startup.spec.ts` asserts that whatever is fullscreen contains the HUD. **(2) Ostrzyżeni was not a game.** The OWNER DECISION WANTED entry answered as option (b), measured not guessed: a chaser returns ON THE HUNT (nearest spawn ≥ 14 m from a living survivor, where every other rule maximises that distance) and carries `shavedHealth` 220 — no damage change, no armour, no new field, nothing gated. Eight seeded 90 s rounds of five: 9 conversions of 40 with THREE blank rounds → 14–22 of 40 with at most one blank, survivors still usually holding the clock. The HUD health bar now scales to what the player can hold, so a 220 HP chaser does not draw a bar twice its box. Room tests (k) and (l) added. NO playtest evidence is claimed anywhere in this drop: the owner declined to fill `docs/PLAYTEST_TEMPLATE.md`. Also fixed on the way: the stale shop e2e (tab clicks that the one-screen shop replaced with aisles) and a suite that must run at 1280×720 where it opens the shop. | screenshots and numbers quoted in the two Decisions entries of this date; `apps/client/e2e/out/d/**` regenerates per `e2e/tools/README-drop-d.md` | typecheck ✓ test ✓ (584: shared 180, client 249, server 155) build ✓ check:weapons ✓ (19/19) **e2e ✓ 15/15** (7.8 min, freshly started server) | review |
 
+| 2026-09-08 | E | drop/e-shave | **The shave and haircuts, whole drop, mechanic done and art NOT accepted.** `shared/haircuts.ts`: a clippers kill FROM BEHIND is a shave (`isShave`, reusing the `isBackstab` the melee swing already runs — no new geometry, no client claim); the victim's head is written once, on the death, and they wear it for the rest of the match. **One schema field**, `PlayerState.haircut`, a string `"<id>"` / `"<id>#<n>"` carrying the equipped cosmetic AND the shave count together, so the chosen look survives being done and the count stays exact for the award (Decisions). Written on join, equip and a shave death, never per tick — verified by the reviewer against `step`/`spawn`/`beginInfectionRound`/the rung reset. HUD: a razor SVG replaces the weapon's name in the kill feed (there was no icon system at all — three text spans and some perk emoji), a razor column on the scoreboard parsed from the field rather than tallied from events a late joiner never saw, and "Najgorsza fryzura" on the summary from a pure shared `worstHaircut`. Nine haircuts unlocked off lifetime counters, owned DERIVED not stored, equipped in the lobby picker (locked ones shown with what earns them), carried on the join like the nickname. Bots wear the catalog. Reviewer (separate agent) found 3 real things, all fixed: **IROKEZ rendered as its own inverse** (a mohawk written as a `track` is a bald strip with hair at the temples — and the view test had asserted that shape rather than questioned it), a scoreboard CSS rule that could never fire, and an unreachable `C2S.Haircut` handler (deleted — the picker is pre-match, so the join option IS the equip path). **Art: three rounds, two of them valid, and the drop's headline claim FAILED both.** At 8 m the head is ~12 px and no shave stage read as a bad haircut; round 2 also found the escalation inverted (RUINA read as a CLEAN bald head). Two responses shipped — hair coverage now falls monotonically instead of a groove widening, and the shaved scalp got its own raw-red material because at 12 px only tone survives — but neither has been judged: round 3's set was invalidated by a harness regression of mine (moving the camera got true ranges and lost the subject; 17 of 37 frames had nobody in them) and is reverted. | apps/client/e2e/out/haircuts/*.png (regenerate: dev servers up, `node apps/client/e2e/tools/haircut-shots.mjs`); art verdicts quoted in the Decisions entries of this date | typecheck ✓ test ✓ (646: shared 196, client 287, server 163) build ✓ check:weapons ✓ (19/19) e2e — (not run) | blocked: art — a shaved head does not read at gameplay range; needs a human on a real GPU, or a different idea |
+
 Status vocabulary reminder: these rows are `review` because the full e2e path was not run here.
 
 | 2026-09-08 | G | drop/g-map-2 | Slice 1, docs only, the gate the drop names: `docs/MAP_2.md`. Four recon passes first (map data model; the validity suite; what each of the seven modes needs from a map; what the client pipeline gives a new map for free). **Theme decided and argued, not offered as a menu: the upstairs flat, not the delivery yard** — NIGHT_DISTRICT already contains an alley and a loading yard (`map.ts:113-116`), so a second yard is a re-skin of the same fight. MEASURED, 400 k eye-to-eye pairs over its 24 751 walkable cells: NIGHT_DISTRICT's median clear sight line is **24.0 m**, 36.6 % of clear lines exceed 30 m, longest 111 m. GÓRA is drawn at 34 × 18 m, ≈ 544 m², longest line 20 m, first contact 3.6 s (vs 8.0 s) and a bomb rotation 2.3 s (vs a measured 10.9 s). Two rings around a solid stair core and an open light well; spawns, three buy stations, three dom flags and two bomb sites placed for all seven modes. Rotation times come from the real `simulateBody` via a new `map-rotation.ts`; the ASCII plan is RENDERED from the extents table by `map-plan.ts` so the picture cannot drift from the numbers. Found while drawing: (a) `map.test.ts:107` demands buy stations spread > 30 m in x — a NIGHT_DISTRICT-shaped rule in a generic test, and the reason the flat is 34 m wide rather than 26; (b) `BOMB_SITES` is a module global (`bomb.ts:6`), so bomb cannot run on a second map without per-map sites; (c) `huntSpawnMinM` 14 m (`modes.ts:142`) is proportionally 3× as far on a 39 m diagonal as on a 121 m one; (d) corners and stairs cost **zero** time in this movement model, so height must be priced in exposure. Six decisions D-G1…D-G6 for the owner. No code touched; STOPPED for sign-off as the plan requires. | docs/MAP_2.md; `apps/client/e2e/tools/{map-rotation,map-plan}.ts` → `apps/client/e2e/out/g/{rotation.md,plan.txt}` (gitignored, regenerate with the command in each tool header) | typecheck ✓ test ✓ (shared 180/180) check:weapons ✓ (19/19) build — test:client/server — e2e — (no game code changed) | blocked: owner sign-off on docs/MAP_2.md |
@@ -401,6 +403,72 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   session's remaining differences, not taken: a z-score signature metric instead of octaves, and a
   measured half of the signature test that asserts separation on the JSONs the tool wrote rather
   than only on the design. Worth a look if the octave metric ever needs a second opinion. (lead)
+- 2026-09-08 — **Drop E started before a playtest exists**, which `MASTER_PROMPT.md` says it should
+  not ("Drop E/F/G/H — do not start these until the owner has played A–D and filled
+  `docs/PLAYTEST_TEMPLATE.md`"). `docs/playtests/` is empty and Drop D's row records that the owner
+  declined to fill the template. The owner named Drop E for this session, which is the override the
+  rule allows for; it is written down rather than passed over, because the consequence is real: no
+  claim in this drop about how the shave FEELS is backed by anybody playing it. (owner; lead)
+- 2026-09-08 — Drop E: the plan names **one schema field** for haircuts, and one is what it got —
+  `PlayerState.haircut`, a string encoded `"<id>"` or `"<id>#<n>"`: the equipped cosmetic id, plus
+  the number of times that head has been shaved this match. Both live in one field on purpose, not
+  to save a field: the equipped id SURVIVES a shave (so at the whistle a player still owns the look
+  they chose, and `newMatch` restores it), and the count is exact rather than clamped to the four
+  drawable stages, so "Najgorsza fryzura" can rank three players who have all been ruined. Written
+  on join, on equip and on a shave death, never per tick (L6). (lead)
+- 2026-09-08 — Drop E does **not** reuse Drop D's `shaved` boolean for the shave, against the
+  Deferred note that suggested it. `shaved` is a bare scalp and an Ostrzyżeni side; Drop E's shave
+  is a BAD HAIRCUT, which is a different picture and the one the plan asks for ("a visibly bad
+  haircut", not "no hair"). They coexist on the same head with a stated precedence: a bare scalp
+  wins, because a head that has just been clipped to the skin has no hair on it to ruin. (lead)
+- 2026-09-08 — Drop E: the scoreboard's razor column counts times a player has **been** shaved, not
+  shaves they dealt. That is what the replicated field carries and what the award ranks, and it is
+  the joke the mode is about. Shaves DEALT are counted separately, client-side, from the server's
+  `shave` flag on the kill event into `LifetimeStats.shaves` — that is what unlocks IROKEZ and
+  BLOND. A player who joins mid-match sees the right column either way, because the count is parsed
+  from the state rather than tallied from events they did not receive. (lead)
+- 2026-09-08 — Drop E: `isShave` is mode-independent — a clippers backstab is a shave in Ostrzyżeni
+  and Gun Game too, on top of whatever those modes already do with a clippers kill. Making it
+  TDM-only would have been a second rule to explain; letting it run everywhere costs one string
+  write on a death that was already happening. Ostrzyżeni will therefore produce high counts and its
+  "Najgorsza fryzura" will usually name whoever chased worst, which reads correctly. (lead)
+- 2026-09-08 — Drop E: **"first person" in the evidence set means the view of somebody ELSE'S head.**
+  Measured, not assumed: `Character` is constructed only for remote players
+  (`RemotePlayer.ts:59`), the viewmodel is hands and a gun (`handSpec.ts`), `Game.ts:172` empties
+  the imported character list, and there is no mirror and no third-person camera — so a player
+  never sees their own haircut at all. `haircut-shots.mjs` therefore shoots the head through a
+  player's own eyes at 4 m and 8 m, which is the view the mechanic actually has to survive. Giving
+  the player a look at their own head needs a profile/preview screen; PR #14 deleted the one that
+  existed. (lead)
+
+- 2026-09-08 — **Drop E, art: the shave does not read at gameplay range, and that is the drop's own
+  headline claim failing.** Two art reviewers who did not build it, looking at two independently
+  captured sets, agreed: at 8 m the character's head is about TWELVE PIXELS, and at that size no
+  shave stage was distinguishable from an ordinary haircut. Round 2 added that the escalation ran
+  backwards — RUINA read as a CLEAN bald head, less ruined than the patchy stage before it, under a
+  tall block that read as "a chimney or a render fault". Two things were changed in response and
+  NEITHER has been judged: hair coverage now falls monotonically across the stages (the first cut
+  escalated a *groove's width*, which left the worst stage with more hair standing than the one
+  before it), and the shaved scalp got its own raw-red material distinct from Drop D's pale stubble,
+  on the reasoning that at twelve pixels geometry is gone and only TONE survives — a pale bald head
+  is a look somebody might choose, a red one is something done to them. The owner's call is whether
+  a red scalp on a night map is the right answer or whether the mechanic needs a different carrier
+  entirely (a marker over the head, a kill-feed-only tell, a bigger head). Do not read the code as
+  settled art. (lead)
+- 2026-09-08 — Drop E, harness: `haircut-shots.mjs` pins the SUBJECT in front of the camera, so its
+  "4m" / "8m" filenames are NOMINAL — the game's own `RemotePlayer.update` writes the remote's
+  position from interpolation on the same frame, and the rendered range drifts toward wherever the
+  server has them. The obvious fix, teleporting the camera to a true stand-off instead, was built,
+  measured and REVERTED: bots walk, so it got true ranges and lost the subject — 17 of 37 frames came
+  back with nobody in them. Holding a bot still needs a dev hook that does not exist. Until then the
+  set proves "a head, near and far", not "a head at exactly 8 m". (lead)
+- 2026-09-08 — Drop E: two harness faults cost most of this session and are worth writing down so the
+  next tool does not repeat them. (1) The client joins with `deferSpawn: true` and does not put you
+  in the world until ENTER MATCH is clicked (Drop D/I's connect → ready → deploy); without the click
+  `hud.alive` is false forever and every shutter reports a death that never happened. Drop A's
+  `weapon-shots.mjs` predates that gate, so copying its recipe is not enough. (2) The photographed
+  subject must be a TEAMMATE — an enemy bot shoots the camera between the pose and the shutter, every
+  time. (lead)
 
 ## Deferred (things noticed, deliberately not done)
 
@@ -414,6 +482,36 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   crosshair and no scope overlay. `weapon-shots.mjs` leaves fullscreen to work around it. Somebody
   should check on a real browser whether a player in fullscreen keeps their HUD; if it reproduces
   there it is a serious bug and it is drop I's.
+- **Drop E, the open item: make a shave read at 8 m.** Not done, and not for want of trying — see the
+  Decisions entry. The unexplored options, cheapest first: a bolder scalp colour or an outline; the
+  shave changing something LARGER than the head (the apron, a towel round the neck); a HUD tell on
+  the shaved player rather than on their model; or accepting that the shave is a kill-feed-and-
+  scoreboard mechanic that you read on the summary screen rather than across a street. The last is
+  not a defeat — the award and the razor column already work — but it is a design decision, not a
+  bug fix, so it is the owner's.
+- Drop E: art review round 2 found `bowl` ≈ `curtains` and `pompadour` ≈ `taper` at a glance, and
+  buzz/taper/pompadour identical in profile. Nine haircuts built from crown/sides/fringe boxes do not
+  give nine silhouettes; separating them needs either more shape vocabulary (partings, volume,
+  asymmetry) or colour, which is Drop C's problem solved for weapons and not yet for heads.
+
+- **Drop E: a player cannot see their own haircut.** There is no mirror, no third-person camera and
+  no profile preview (PR #14 deleted `ui/Profile.tsx` and `ui/Armoury.tsx`), so the reward a player
+  earns is a reward only other people see. The lobby picker names the cut and says what unlocks it,
+  which is the cheapest thing that could work; a rendered head in the picker is the real fix and is
+  a Drop C-shaped piece of work (a small scene, one character, no map).
+- Drop E: the HUD evidence is screenshots, not tests. The client has no React test renderer (no
+  `@testing-library`, no jsdom environment — the suite runs in node), so the razor in the kill feed,
+  the scoreboard column and the "Najgorsza fryzura" row are proven by looking at them. The DATA
+  behind all three is unit-tested (`haircuts.test.ts`, `DropE.test.ts`, `profile.test.ts`); the
+  markup is not. Adding a renderer is a repo-wide decision, not Drop E's.
+- Drop E: bots wear haircuts from the catalog, spread across it by index, and a bot can therefore
+  win "Najgorsza fryzura". That is correct — a bot that got backstabbed four times deserves the
+  award — but a room of bots will hand it out most nights, which may make it feel cheap. Worth a
+  playtest verdict before excluding bots from it.
+- Drop E: the shave count is per MATCH, and `newMatch` clears it. A player who leaves and rejoins
+  mid-match comes back unshaved, because `onJoin` builds a fresh `PlayerState`. That is the same
+  hole as the wallet reset already recorded above, closed by the same thing (a stable player
+  identity, nick+token or the accounts of Drop H) and not worth a separate mechanism.
 
 - Drop D: a TDM player can spawn on an ARENA spawn point, because `pickSpawn` is called with the
   whole pool for TDM (`this.mode === "ffa" || this.mode === "tdm"` on main, unchanged in meaning

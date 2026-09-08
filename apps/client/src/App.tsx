@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { C2S, WEAPONS, WEAPON_ORDER, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { C2S, HAIRCUTS, SHAVE_STAGES, WEAPONS, WEAPON_ORDER, type BotLevel, type GameMode } from "@frankibarber/shared";
 import { WEAPON_FEEL } from "./game/combat/weaponFeel";
 import { Connection, defaultServerUrl } from "./game/net/Connection";
 import { Game } from "./game/Game";
@@ -88,7 +88,7 @@ export function App() {
       // Harness hook for the e2e tools. `WEAPONS` and `WEAPON_FEEL` ride along so a tool reads the
       // numbers the running bundle was built from rather than a copy it keeps in its own source —
       // a copy is how a tool ends up reporting a matrix the game stopped implementing.
-      (window as unknown as { __fb: unknown }).__fb = { game, hud, shared: { WEAPONS, WEAPON_ORDER }, feel: WEAPON_FEEL };
+      (window as unknown as { __fb: unknown }).__fb = { game, hud, shared: { WEAPONS, WEAPON_ORDER, HAIRCUTS, SHAVE_STAGES }, feel: WEAPON_FEEL };
       setScreen({ kind: "ready" });
     };
     try {

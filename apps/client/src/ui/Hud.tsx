@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { boysClass, BOMB, GAME_VERSION, GRENADES, GUN_GAME, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, PLAYER, TEAM_NAMES, WEAPONS, BADGES, killerName, ladderDone, ladderWeapon, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
+import { boysClass, BOMB, GAME_VERSION, GRENADES, GUN_GAME, HAIRCUTS, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, PLAYER, TEAM_NAMES, WEAPONS, BADGES, killerName, ladderDone, ladderWeapon, parseHaircut, perkActive, worstHaircut, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import { pelletRing } from "../game/combat/weaponFeel";
 import { TeamPicker } from "./TeamPicker";
@@ -51,10 +51,11 @@ const fmtTime = (ms: number): string => {
  * The lines are the point. A bare "+1 400" tells a player nothing; "8 kills, 3 head shots, a win"
  * tells them what the game rewards, which is the only job a cosmetic progression has.
  */
-function MatchSummary({ reward }: { reward: MatchReward }): React.ReactElement {
+function MatchSummary({ reward, worst }: { reward: MatchReward; worst: ReturnType<typeof worstHaircut> }): React.ReactElement {
   const { after, before, levelsGained } = reward;
   const pct = Math.max(0, Math.min(100, Math.round((after.into / Math.max(1, after.need)) * 100)));
   const badges = reward.earned.map((id) => BADGES.find((b) => b.id === id)).filter(Boolean);
+  const cuts = reward.haircuts.map((id) => HAIRCUTS.find((h) => h.id === id)).filter(Boolean) as { id: string; name: string }[];
   return (
     <div className="summary" data-testid="summary">
       <div className="summary-lines">
@@ -72,9 +73,22 @@ function MatchSummary({ reward }: { reward: MatchReward }): React.ReactElement {
         <div className="summary-bar"><div className="summary-bar-fill" style={{ "--v": pct / 100 } as React.CSSProperties} /></div>
         <div className="summary-xp">{after.into} / {after.need} XP{before.level !== after.level ? "" : ""}</div>
       </div>
-      {badges.length > 0 && (
+      {/* Drop E: the match award. It names somebody ELSE as often as it names you, which is the
+          point — it is the thing the table talks about afterwards, not a reward you collect. */}
+      {worst && (
+        <div className="summary-award" data-testid="summary-worst-haircut">
+          <Razor className="award-icon" />
+          <div>
+            <b>NAJGORSZA FRYZURA</b>
+            <span>{worst.name} — {worst.look.name}, ogolony {worst.shaves}×</span>
+          </div>
+        </div>
+      )}
+      {(badges.length > 0 || cuts.length > 0) && (
         <div className="summary-badges" data-testid="summary-badges">
           {badges.map((b) => b && <div className="summary-badge" key={b.id}><b>{b.name}</b><span>{b.blurb}</span></div>)}
+          {/* Drop E: a haircut unlocked by this match reads as a badge, because that is what it is. */}
+          {cuts.map((c) => <div className="summary-badge cut" key={c.id} data-testid="summary-haircut"><b>{c.name}</b><span>Nowa fryzura</span></div>)}
         </div>
       )}
     </div>
@@ -345,7 +359,14 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
         {h.killFeed.map((k) => (
           <li key={k.key} className={k.victim === h.myId ? "me-victim" : k.killer === h.myId ? "me-killer" : ""}>
             <span className={`kf-name ${teams ? `t${k.killerTeam}` : "ffa"}`}>{k.killer === k.victim ? "" : k.killerName}</span>
-            <span className="kf-weapon">{k.killer === k.victim ? "fell" : killerName(k.weapon).split(" ")[0]}{k.headshot ? " ✦" : ""}</span>
+            {/* Drop E: a shave gets the razor instead of the weapon's name. Nobody needs telling it
+                was the clippers — the icon IS the clippers, and what matters is that it was from
+                behind. A razor is drawn rather than spelled: it reads at a glance and at 1080p. */}
+            <span className="kf-weapon">
+              {k.killer === k.victim ? "fell"
+                : k.shave ? <Razor className="kf-razor" title="OGOLENIE" />
+                : <>{killerName(k.weapon).split(" ")[0]}{k.headshot ? " ✦" : ""}</>}
+            </span>
             <span className={`kf-name ${teams ? `t${k.victimTeam}` : "ffa"}`}>{k.victimName}</span>
           </li>
         ))}
@@ -454,7 +475,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
               : <>{infection && <span className="result-rounds">{sideNames[0]} {h.scoreA} — {h.scoreB} {sideNames[1]} · </span>}
                 {h.winnerName ? <><b>{h.winnerName}</b> TAKES THE NIGHT</> : "NOBODY TAKES THE NIGHT"}</>}
           </div>
-          {h.reward && <MatchSummary reward={h.reward} />}
+          {h.reward && <MatchSummary reward={h.reward} worst={worstHaircut(h.players)} />}
           <Scoreboard rows={h.players} myId={h.myId} mode={h.mode} />
           <div className="result-foot">Next match in {Math.max(0, Math.ceil(timeLeft / 1000))}s · <button className="link" onClick={onLeave}>LEAVE</button></div>
         </div>
@@ -518,12 +539,39 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   );
 }
 
-/** One scoreboard row (drop 5): K / D / A / $ / score / ping, a BOT tag, a dash for a bot's ping. */
+/**
+ * A straight razor, drawn rather than spelled.
+ *
+ * There is no icon system in this UI — the kill feed is text and the only glyphs anywhere are perk
+ * emoji — so this is a local SVG in `currentColor` rather than a new dependency or an emoji whose
+ * shape is the operating system's opinion. It inherits the feed's colour, so a shave on your own
+ * head is red and one you dealt is not, without a second rule.
+ */
+function Razor({ className, title }: { className?: string; title?: string }): React.ReactElement {
+  return (
+    <svg className={className} viewBox="0 0 24 12" width="18" height="9" aria-hidden={title ? undefined : true} role={title ? "img" : undefined} focusable="false">
+      {title && <title>{title}</title>}
+      {/* Blade: a long flat wedge with a ground edge along the bottom. */}
+      <path d="M1 3.2 L13.6 3.2 L15.2 5.4 L13.6 7.6 L1 7.6 Z" fill="currentColor" opacity="0.95" />
+      <path d="M1 6.9 L13.9 6.9 L13.2 7.6 L1 7.6 Z" fill="#000" opacity="0.35" />
+      {/* Pivot and handle, folded open behind the blade. */}
+      <circle cx="16.1" cy="5.4" r="1.15" fill="currentColor" />
+      <rect x="17" y="4.35" width="6.2" height="2.1" rx="1.05" fill="currentColor" opacity="0.75" />
+    </svg>
+  );
+}
+
+/** One scoreboard row (drop 5): K / D / A / shaves / $ / score / ping, a BOT tag, a dash for a bot's ping. */
 function ScoreTr({ r, myId }: { r: ReturnType<typeof useHud>["players"][number]; myId: string }) {
+  const shaves = parseHaircut(r.haircut).shaves;
   return (
     <tr className={r.id === myId ? "me" : r.connected ? "" : "dc"} data-testid="sb-row" data-bot={r.bot ? "1" : "0"}>
       <td className="sb-name">{r.name}{r.boysClass && <span className="sb-bot">{boysClass(r.boysClass).name}</span>}{r.bot && <span className="sb-bot">BOT</span>}</td>
-      <td>{r.kills}</td><td>{r.deaths}</td><td>{r.assists}</td><td className="sb-money">{r.money}</td><td>{r.score}</td><td>{r.bot ? "–" : r.ping}</td>
+      <td>{r.kills}</td><td>{r.deaths}</td><td>{r.assists}</td>
+      {/* Drop E: how many times this head has been done. A dot rather than a 0, so the column reads
+          as "who got done" at a glance instead of as a wall of zeroes. */}
+      <td className={`sb-shaved ${shaves > 0 ? "" : "none"}`} data-testid="sb-shaved">{shaves > 0 ? shaves : "·"}</td>
+      <td className="sb-money">{r.money}</td><td>{r.score}</td><td>{r.bot ? "–" : r.ping}</td>
     </tr>
   );
 }
@@ -536,7 +584,7 @@ function Scoreboard({ rows, myId, mode }: { rows: ReturnType<typeof useHud>["pla
     return (
       <div className="scoreboard">
         <table className="sb-team ffa">
-          <thead><tr><th className="sb-name">{MODES[mode].name}</th><th>K</th><th>D</th><th>A</th><th>$</th><th>{gun ? "RUNG" : "SCORE"}</th><th>PING</th></tr></thead>
+          <thead><tr><th className="sb-name">{MODES[mode].name}</th><th>K</th><th>D</th><th>A</th><th className="sb-shaved"><Razor title="OGOLONY" /></th><th>$</th><th>{gun ? "RUNG" : "SCORE"}</th><th>PING</th></tr></thead>
           <tbody>
             {sorted.map((r) => <ScoreTr key={r.id} r={r} myId={myId} />)}
           </tbody>
@@ -548,7 +596,7 @@ function Scoreboard({ rows, myId, mode }: { rows: ReturnType<typeof useHud>["pla
     <div className="scoreboard">
       {[0, 1].map((team) => (
         <table key={team} className={`sb-team t${team}`}>
-          <thead><tr><th className="sb-name">{(mode === "ostrzyzeni" ? OSTRZYZENI_SIDES : TEAM_NAMES)[team]}</th><th>K</th><th>D</th><th>A</th><th>$</th><th>SCORE</th><th>PING</th></tr></thead>
+          <thead><tr><th className="sb-name">{(mode === "ostrzyzeni" ? OSTRZYZENI_SIDES : TEAM_NAMES)[team]}</th><th>K</th><th>D</th><th>A</th><th className="sb-shaved"><Razor title="OGOLONY" /></th><th>$</th><th>SCORE</th><th>PING</th></tr></thead>
           <tbody>
             {rows.filter((r) => r.team === team).map((r) => <ScoreTr key={r.id} r={r} myId={myId} />)}
           </tbody>

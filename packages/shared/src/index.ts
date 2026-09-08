@@ -18,6 +18,7 @@ export * from "./mapWalk";
 export * from "./nav";
 export * from "./rounds";
 export * from "./progression";
+export * from "./haircuts";
 export * from "./bots";
 export * from "./smoke";
 export * from "./bomb";

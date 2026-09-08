@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { BOYS_CLASSES, BOYS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MODES, MODE_ORDER, isGameMode, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { BOYS_CLASSES, BOYS, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MODES, MODE_ORDER, isGameMode, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { equipHaircut, equippedHaircut, ownedCuts } from "../game/progression/profile";
 import { copyText, inviteLink, isMapId, mapChoices, parseInvite } from "./invite";
 import { Connection, defaultServerUrl, type RoomListing } from "../game/net/Connection";
 import type { Settings } from "../settings";
@@ -46,6 +47,11 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   });
   const [boysClass, setBoysClass] = useState(() => { try { return Number(localStorage.getItem("fb_boys_class")) || 1; } catch { return 1; } });
   const pickClass = (id: number) => { setBoysClass(id); try { localStorage.setItem("fb_boys_class", String(id)); } catch { /* private mode */ } };
+  // Drop E: the wardrobe. Owned is DERIVED from the lifetime counters, never stored, so the list
+  // cannot drift from what earned it; the equipped id is the only thing written down.
+  const owned = useMemo(() => new Set(ownedCuts().map((h) => h.id)), []);
+  const [haircut, setHaircut] = useState(() => equippedHaircut());
+  const pickHaircut = (id: string) => setHaircut(equipHaircut(id));
   const pickMode = (m: GameMode) => { setGameMode(m); try { localStorage.setItem("fb_mode", m); } catch { /* private mode */ } };
   // Drop G: the map the room plays. A link's map wins, then the last one picked here; with neither
   // it is the map the game has always opened on.
@@ -182,6 +188,27 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                     <b>{m.name}</b>
                   </button>
                 ))}
+              </div>
+            </div>
+            {/* Drop E: haircuts. Locked ones are SHOWN, with what earns them — a cosmetic nobody
+                knows exists is not a reward, and L1 means seeing one you have not earned costs you
+                nothing in a fight. */}
+            <div className="field">
+              <span>FRYZURA <em data-testid="haircut-count">{owned.size}/{HAIRCUTS.length}</em></span>
+              <div className="cut-grid" data-testid="haircut-picker">
+                {HAIRCUTS.map((h) => {
+                  const have = owned.has(h.id);
+                  return (
+                    <button
+                      key={h.id} type="button" disabled={!have}
+                      className={`cut ${haircut === h.id ? "on" : ""} ${have ? "" : "locked"}`}
+                      aria-pressed={haircut === h.id} data-testid={`haircut-${h.id}`}
+                      onClick={() => pickHaircut(h.id)} title={have ? h.name : `Zablokowane — ${h.requirement}`}
+                    >
+                      <b>{h.name}</b><span>{have ? "\u00a0" : h.requirement}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
             {gameMode === "boys" && <div className="boys-grid">{BOYS_CLASSES.map(id => <button key={id} className={`boys-class ${boysClass === id ? "on" : ""}`} aria-pressed={boysClass === id} onClick={() => pickClass(id)}><b>{id} · {BOYS[id].name}</b><span>{BOYS[id].blurb}</span><small>Free: {WEAPONS[BOYS[id].starter].name} + pistol</small></button>)}</div>}

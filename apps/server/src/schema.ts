@@ -67,6 +67,16 @@ export class PlayerState extends Schema {
    * conversion and at round start, never per tick.
    */
   @type("boolean") shaved = false;
+  /**
+   * Drop E: the haircut, as ONE string — `"<id>"` or `"<id>#<n>"`, the equipped cosmetic plus the
+   * number of times this player has been shaved (a clippers kill from behind) this match. See
+   * `shared/haircuts.ts` for why both live in one field.
+   *
+   * It is written on join, on equip and on a shave death, and at no other time — never per tick
+   * (L6). Drop D's `shaved` above is a different thing: the Ostrzyzeni side's bare scalp for a
+   * round. A bare head hides hair, so the two never fight over the same pixels.
+   */
+  @type("string") haircut = "";
 }
 
 /** Domination flag (drop 4). `owner` / `capTeam` are -1 for neutral / nobody. */

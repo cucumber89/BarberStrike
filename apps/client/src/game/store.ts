@@ -23,6 +23,8 @@ export interface ScoreRow {
   bot: boolean;
   /** Drop D: on the shaved side (Ostrzyżeni) — the HUD counts the unshaved from these rows. */
   shaved: boolean;
+  /** Drop E: the haircut field as replicated. The scoreboard's shave column is parsed from it. */
+  haircut: string;
 }
 
 /** Drop 5: a chat line as shown (server time `at`, local `seen` for the fade). */

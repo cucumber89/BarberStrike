@@ -259,6 +259,11 @@ export interface KillEvent {
   /** Weapon or grenade that killed (see `killerName()` in economy.ts for display). */
   weapon: WeaponId | GrenadeId;
   headshot: boolean;
+  /**
+   * Drop E: this kill was a SHAVE — the clippers, from behind. The kill feed draws a razor for it.
+   * The victim's new head is in their `haircut` field; this flag is only how the feed reads.
+   */
+  shave?: boolean;
 }
 
 export interface ThrowMessage {

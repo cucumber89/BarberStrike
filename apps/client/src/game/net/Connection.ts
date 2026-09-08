@@ -1,6 +1,7 @@
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import type { ArraySchema, MapSchema } from "@colyseus/schema";
-import { C2S, DEFAULT_MAP_ID, S2C, MatchPhase, type BombData, type BotLevel, type GameMode, type WelcomeMessage } from "@frankibarber/shared";
+import { C2S, DEFAULT_HAIRCUT, DEFAULT_MAP_ID, S2C, MatchPhase, type BombData, type BotLevel, type GameMode, type WelcomeMessage } from "@frankibarber/shared";
+import { equippedHaircut } from "../progression/profile";
 
 /** Client-side mirror of the server's PlayerState schema (read-only). */
 export interface NetPlayer {
@@ -19,8 +20,10 @@ export interface NetPlayer {
   lean: number; tac: boolean;
   /** Drop 5: scoreboard assists; server-driven bot. */
   assists: number; bot: boolean;
-  /** Drop D: a visibly shaved head (Ostrzyżeni's shaved side; Drop E's shave). */
+  /** Drop D: a visibly shaved head (Ostrzyżeni's shaved side). */
   shaved: boolean;
+  /** Drop E: the haircut field — `"<id>"` or `"<id>#<n>"`. See shared/haircuts.ts. */
+  haircut: string;
 }
 
 /** Drop 4: a Domination flag as replicated. */
@@ -59,8 +62,12 @@ export interface RoomListing { roomId: string; clients: number; maxClients: numb
  * What the client asks the room for. The map (Drop G) rides next to the mode: the lobby's pick has
  * to reach the room, and a room that was never told falls back to the same map it has always
  * played. Pure, so the lobby's contract with the server is testable without a socket.
+ *
+ * The haircut (Drop E) rides along the same way, and is a PARAMETER rather than a call to
+ * `equippedHaircut()` in here, so this stays the pure thing Drop G made it: reading localStorage
+ * from inside would make the lobby's contract untestable without a browser again.
  */
-export function joinOptions(opts: ConnectOptions, boysClass: number) {
+export function joinOptions(opts: ConnectOptions, boysClass: number, haircut: string = DEFAULT_HAIRCUT) {
   return {
     deferSpawn: true, boysClass,
     name: opts.name,
@@ -69,6 +76,7 @@ export function joinOptions(opts: ConnectOptions, boysClass: number) {
     map: opts.mapId ?? DEFAULT_MAP_ID,
     bots: opts.bots ?? 0,
     botLevel: opts.botLevel ?? "normal",
+    haircut,
   };
 }
 
@@ -168,7 +176,10 @@ export class Connection {
   static async connect(opts: ConnectOptions): Promise<Connection> {
     const client = new Client(opts.url);
     let selectedClass = 1; try { selectedClass = Number(localStorage.getItem("fb_boys_class")) || 1; } catch { /* private mode */ }
-    const joinOpts = joinOptions(opts, selectedClass);
+    // Drop E: the equipped haircut travels with the join, like the nickname and the class. Read
+    // HERE rather than inside `joinOptions` for the same reason the class is read here: it is a
+    // profile fact from storage, and `joinOptions` is the pure part.
+    const joinOpts = joinOptions(opts, selectedClass, equippedHaircut());
     let room: Room<NetState>;
     if (opts.mode === "create") room = await client.create<NetState>("tdm", joinOpts);
     else if (opts.mode === "join" && opts.roomId) room = await client.joinById<NetState>(opts.roomId, joinOpts);
