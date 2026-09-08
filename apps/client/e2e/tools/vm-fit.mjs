@@ -157,7 +157,7 @@ for (const r of out) {
 const worst = Math.max(...out.filter((r) => r.ads?.aimPxMean).map((r) => Math.hypot(...r.ads.aimPxMean)));
 const peak = Math.max(...out.filter((r) => r.ads?.aimPxPeak).map((r) => r.ads.aimPxPeak));
 const cut = out.filter((r) => !r.error && (r.hip.nearCut > 0 || r.ads?.nearCut > 0)).map((r) => `${r.weapon}[hip ${r.hip.nearCut} ads ${r.ads?.nearCut ?? 0}]`);
-const summary = `vm-fit: ${out.filter((r) => !r.error).length}/${out.length} measured; worst mean ADS aim offset ${Number.isFinite(worst) ? worst.toFixed(2) : "?"} px over one breath (acceptance ±1 px), worst instantaneous ${Number.isFinite(peak) ? peak.toFixed(2) : "?"} px; near-plane cuts: ${cut.length ? cut.join(" ") : "none"}`;
+const summary = `vm-fit: ${out.filter((r) => !r.error).length}/${out.length} measured; worst mean ADS aim offset ${Number.isFinite(worst) ? worst.toFixed(2) : "?"} px over two breaths (acceptance ±1 px), worst instantaneous ${Number.isFinite(peak) ? peak.toFixed(2) : "?"} px; near-plane cuts: ${cut.length ? cut.join(" ") : "none"}`;
 writeFileSync(`${OUT}/vm-fit.md`, [`# vm-fit — ${new Date().toISOString()}`, "", summary, "", `Viewport ${W}×${H}, camera space: +x right, +y up, +z forward, metres.`, "", ...rows].join("\n"));
 console.log(summary);
 for (const r of rows) console.log(r);
