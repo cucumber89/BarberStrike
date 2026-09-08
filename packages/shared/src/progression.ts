@@ -124,6 +124,8 @@ export interface LifetimeStats {
   deaths: number;
   captures: number;
   clipperKills: number;
+  /** Drop E: shaves GIVEN — clippers kills from behind. What the haircut catalog unlocks on. */
+  shaves: number;
   /** Matches finished without dying once. */
   flawless: number;
   bestKills: number;
@@ -132,7 +134,7 @@ export interface LifetimeStats {
 
 export const emptyLifetime = (): LifetimeStats => ({
   matches: 0, wins: 0, kills: 0, headshots: 0, assists: 0, deaths: 0,
-  captures: 0, clipperKills: 0, flawless: 0, bestKills: 0, wavesSurvived: 0,
+  captures: 0, clipperKills: 0, shaves: 0, flawless: 0, bestKills: 0, wavesSurvived: 0,
 });
 
 export interface BadgeDef {
@@ -163,7 +165,7 @@ export const BADGES: readonly BadgeDef[] = [
 ];
 
 /** Adds one match to a lifetime total. Pure: the caller decides what to do with the result. */
-export function addMatch(life: LifetimeStats, s: MatchStats, clipperKills: number): LifetimeStats {
+export function addMatch(life: LifetimeStats, s: MatchStats, clipperKills: number, shaves = 0): LifetimeStats {
   return {
     matches: life.matches + 1,
     wins: life.wins + (s.result === 1 ? 1 : 0),
@@ -173,6 +175,7 @@ export function addMatch(life: LifetimeStats, s: MatchStats, clipperKills: numbe
     deaths: life.deaths + s.deaths,
     captures: life.captures + s.captures,
     clipperKills: life.clipperKills + clipperKills,
+    shaves: life.shaves + shaves,
     flawless: life.flawless + (s.deaths === 0 && s.kills > 0 ? 1 : 0),
     bestKills: Math.max(life.bestKills, s.kills),
     wavesSurvived: life.wavesSurvived + s.wavesSurvived,

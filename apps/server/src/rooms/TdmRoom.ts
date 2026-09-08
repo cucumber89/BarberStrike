@@ -16,6 +16,7 @@ import {
   CHAT, MARK, MAX_BOTS, BOT_NAMES, botId, isBotLevel,
   GUN_GAME, MELEE_WEAPON, ladderAfterKill, ladderDone, ladderWeapon,
   OSTRZYZENI, PERK_ARMED_MS, convertsOnKill, infectionRoundWinner, pickFirstShaved,
+  DEFAULT_HAIRCUT, HAIRCUTS, encodeHaircut, isHaircutId, isShave, parseHaircut, resetShaves, shaveOnce,
   type BodyState, type CollisionWorld, type DamagedEvent, type FireMessage, type HitEvent, type InputTuple, type KillEvent,
   type MapDef, type PlayerInput, type SpawnPoint, type ShotEvent, type SpawnEvent, type Target, type Team, type WeaponId, type WelcomeMessage,
   type Projectile, type Wallet, type ThrowMessage, type ThrowEvent, type BoomEvent, type FlashedEvent, type MoneyEvent,
@@ -151,6 +152,8 @@ const boxTmp: Box = { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 };
 
 export interface TdmJoinOptions {
   deferSpawn?: boolean; boysClass?: number; name?: string; room?: string; mode?: string; bots?: number; botLevel?: string; seed?: number;
+  /** Drop E: the haircut the player has equipped in their profile. Cosmetic; unknown ids fall back. */
+  haircut?: string;
 }
 
 const isChatMessage = (v: unknown): v is { text: string; team: boolean } => isRecord(v) && typeof v.text === "string";
@@ -302,6 +305,14 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.onMessage(C2S.Throw, this.guarded((client, msg) => this.onThrow(client, msg)));
     this.onMessage(C2S.Team, this.guarded((client, msg) => this.onTeam(client, msg)));
     this.onMessage(C2S.Vote, this.guarded((client, msg) => this.onVote(client, msg)));
+    // Drop E: equip a haircut. The id changes; the shave COUNT does not, so re-equipping is not a
+    // way to grow your hair back — you carry the number of times you were done until the match ends.
+    this.onMessage(C2S.Haircut, this.guarded((client, msg) => {
+      const p = this.state.players.get(client.sessionId), s = this.sessions.get(client.sessionId);
+      const id = isRecord(msg) ? msg.id : msg;
+      if (!p || !s || !isHaircutId(id) || this.rateLimited(s, "other")) return;
+      p.haircut = encodeHaircut(id, parseHaircut(p.haircut).shaves);
+    }));
 
     // Development-only test hooks (never registered unless FB_DEV_TOOLS=1): teleport a player to a free
     // spot; set a wallet balance (screenshot/e2e tooling for the shop).
@@ -398,6 +409,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.bot = true;
     p.boysClass = p.nextClass = (n % 5) + 1;
     p.team = this.teamForJoiner();
+    // Drop E: bots wear the catalog too, spread across it deterministically. A room of identical
+    // caps makes the shave invisible in exactly the place it is easiest to look at — a bot match.
+    p.haircut = encodeHaircut(HAIRCUTS[n % HAIRCUTS.length].id, 0);
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
     this.state.players.set(id, p); this.connectedCount++;
@@ -515,6 +529,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // Drop D: joining an infection round in progress means joining the chasers — a late survivor
     // would be a free extra life for the survivor side. `spawn` reads the flag and hands the clippers.
     p.shaved = this.infection && p.team === OSTRZYZENI.shavedTeam;
+    // Drop E: the equipped haircut arrives with the join, like the nickname — it is a look, not a
+    // loadout, so it needs no validation beyond "is it a haircut we can draw".
+    p.haircut = encodeHaircut(isHaircutId(options?.haircut) ? options.haircut : DEFAULT_HAIRCUT, 0);
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
     this.state.players.set(client.sessionId, p); this.connectedCount++;
@@ -785,7 +802,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (!r.targetId) return;
     const vs = this.sessions.get(r.targetId);
     const backstab = vs ? isBackstab(vs.lastYaw, s.body.x, s.body.z, vs.body.x, vs.body.z) : false;
-    this.applyDamage(p, r.targetId, backstab ? MELEE.backstabDamage : w.damage, backstab, client, w.id);
+    // The backstab flag is passed on its own as well as standing in for `headshot`: a shave is a
+    // fact about HOW the kill landed, and reading it back off the headshot argument would tie the
+    // shave to a scoring detail that is free to change.
+    this.applyDamage(p, r.targetId, backstab ? MELEE.backstabDamage : w.damage, backstab, client, w.id, backstab);
   }
 
   /** Launcher (drop 3): the round is a projectile in the shared simulation; everyone sees the arc from the Throw event. */
@@ -824,7 +844,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     return best;
   }
 
-  private applyDamage(attacker: PlayerState, victimId: string, amount: number, headshot: boolean, attackerClient: Client | undefined, weapon: WeaponId | GrenadeId = attacker.weapon as WeaponId): void {
+  private applyDamage(attacker: PlayerState, victimId: string, amount: number, headshot: boolean, attackerClient: Client | undefined, weapon: WeaponId | GrenadeId = attacker.weapon as WeaponId, backstab = false): void {
     const v = this.state.players.get(victimId);
     const vs = this.sessions.get(victimId);
     if (!v || !vs || !v.alive || amount <= 0) return;
@@ -850,12 +870,12 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       ddx /= dl; ddz /= dl;
       victimClient.send(S2C.Damaged, { from: attacker.id, amount: credited, dx: ddx, dz: ddz, health: v.health, armor: v.armor, broke: split.broke } satisfies DamagedEvent);
     }
-    if (kill) this.kill(attacker, v, vs, headshot, weapon);
+    if (kill) this.kill(attacker, v, vs, headshot, weapon, backstab);
   }
 
   private clientOf(id: string): Client | undefined { return this.clients.find((c) => c.sessionId === id); }
 
-  private kill(attacker: PlayerState, victim: PlayerState, vs: Session, headshot: boolean, weapon: WeaponId | GrenadeId): void {
+  private kill(attacker: PlayerState, victim: PlayerState, vs: Session, headshot: boolean, weapon: WeaponId | GrenadeId, backstab = false): void {
     victim.alive = false;
     victim.reloading = false;
     victim.armor = 0; // plates do not survive death
@@ -905,10 +925,15 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       }
       attacker.score = ks.rung;
     }
+    // Drop E — the shave. A clippers kill from behind writes the victim's head, once, here: they
+    // respawn wearing it and keep it for the rest of the match (`newMatch` is what clears it). One
+    // string write on a death, which is the whole cost of the mechanic on the wire.
+    const shave = isShave(weapon, backstab);
+    if (shave) victim.haircut = shaveOnce(victim.haircut);
     const ev: KillEvent = {
       killer: attacker.id, killerName: attacker.name, killerTeam: attacker.team as Team,
       victim: victim.id, victimName: victim.name, victimTeam: victim.team as Team,
-      weapon, headshot,
+      weapon, headshot, shave,
     };
     this.broadcast(S2C.Kill, ev);
     // Economy: the killer is paid; anyone else who did real damage recently gets an assist.
@@ -1215,6 +1240,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.nextDomTickAt = this.now() + DOM.tickMs;
     for (const [id, p] of this.state.players) {
       p.kills = 0; p.deaths = 0; p.score = 0; p.assists = 0;
+      // Drop E: "for the rest of the match" ends here. The equipped haircut survives; the shaves do not.
+      p.haircut = resetShaves(p.haircut);
       const s = this.sessions.get(id);
       if (s) s.rung = 0; // drop D: everyone starts the ladder on the first rung
       this.writeWallet(p, freshWallet());

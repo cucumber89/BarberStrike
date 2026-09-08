@@ -123,6 +123,8 @@ export const C2S = {
   Team: "team",
   /** Living arena (2.4): vote for one of the plans on offer this round: { plan }. */
   Vote: "vote",
+  /** Drop E: equip a haircut: { id }. Cosmetic only, and it never clears a shave. */
+  Haircut: "haircut",
 } as const;
 
 /** Drop 5: chat limits (the server enforces them, the client mirrors them in the box). */
@@ -259,6 +261,11 @@ export interface KillEvent {
   /** Weapon or grenade that killed (see `killerName()` in economy.ts for display). */
   weapon: WeaponId | GrenadeId;
   headshot: boolean;
+  /**
+   * Drop E: this kill was a SHAVE — the clippers, from behind. The kill feed draws a razor for it.
+   * The victim's new head is in their `haircut` field; this flag is only how the feed reads.
+   */
+  shave?: boolean;
 }
 
 export interface ThrowMessage {
