@@ -296,7 +296,15 @@ export class InputState {
     if (b.lastWeapon.includes(e.code)) this.lastWeaponRequested = true;
     if (b.lethal.includes(e.code) && this.pointerLocked) this.lethalHeld = true;
     if (b.tactical.includes(e.code) && this.pointerLocked) this.tacticalRequested = true;
-    if (b.sprint.includes(e.code) && (this.mouseButtons & 4)) this.aimSuppressed = true;
+    // Sprint drops the aim — but only when it would actually BE a sprint. `sprintActive` needs
+    // Forward and no crouch, so Shift pressed standing still was never going to run anywhere; it
+    // still cancelled the aim, which meant the SR-50's breath hold could not be reached at all:
+    // the HUD said "SHIFT · HOLD BREATH" and Shift took you out of the scope instead. Now Shift
+    // while stationary keeps the sight picture (and holds the breath), and Shift under a forward
+    // key is a request to run, which is what matrix rule S2 asked for.
+    if (b.sprint.includes(e.code) && (this.mouseButtons & 4) && this.isDown(b.forward) && !this.isDown(b.crouch)) this.aimSuppressed = true;
+    // The same request arriving in the other order: breath already held, now the player asks to move.
+    if (b.forward.includes(e.code) && (this.mouseButtons & 4) && this.isDown(b.sprint) && !this.isDown(b.crouch)) this.aimSuppressed = true;
     if (b.sprint.includes(e.code)) {
       const now = performance.now();
       if (now - this.lastSprintDownAt < TAC_DOUBLE_TAP_MS) this.tacLatched = true;

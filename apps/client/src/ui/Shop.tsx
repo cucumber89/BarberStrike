@@ -7,6 +7,7 @@ import { MatchPhase,
 } from "@frankibarber/shared";
 import type { HudState } from "../game/store";
 import { uiSound } from "../game/audio";
+import { feelOf } from "../game/combat/weaponFeel";
 
 export interface ShopApi {
   /** "The Boys" mode: pick the role you respawn as. */
@@ -144,8 +145,10 @@ export function Shop({ h, api, now }: Props) {
     const v = verdict(id);
     const sellable = carried && open && canSell(wallet, id, ctx).ok;
     const swapping = w.slot === 1 ? primary : secondary !== "pistol" ? secondary : null;
+    // The SCOPE badge follows the glass the player will actually look through (matrix D-B2), not
+    // WeaponDef.scoped, which stays the sniper-only balance predicate it has always been.
     return row(id, cat, i + 1, null,
-      <>{w.name}{w.scoped && <span className="shop-slot">SCOPE</span>}</>,
+      <>{w.name}{feelOf(w.id).scope !== null && <span className="shop-slot">SCOPE</span>}</>,
       starter ? 0 : WEAPON_PRICES[id],
       w.kind === "launcher"
         ? <>BLAST {GRENADES.shell.damage} · R {GRENADES.shell.radius} m · MAG {w.magazine}</>

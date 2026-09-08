@@ -39,7 +39,8 @@ export class Tracers {
     return { mesh, life: 0, ttl: 0 };
   }
 
-  spawn(from: Vector3, to: Vector3, density: number): void {
+  /** `width` scales the 20 mm default: the MG-4's rounds are ropes, the VZ-9's are threads. */
+  spawn(from: Vector3, to: Vector3, density: number, width = 1): void {
     if (density <= 0) return;
     const t = this.pool.pop() ?? (this.active.length < POOL * 2 ? this.make() : this.active.shift()!);
     const m = t.mesh;
@@ -49,7 +50,7 @@ export class Tracers {
     this.dir.scaleInPlace(1 / len);
     this.mid.copyFrom(from).addInPlace(to).scaleInPlace(0.5);
     m.position.copyFrom(this.mid);
-    m.scaling.set(1, len, 1);
+    m.scaling.set(width, len, width);
     // Orient the cylinder's Y axis along dir.
     m.rotation.set(Math.acos(Math.max(-1, Math.min(1, this.dir.y))), Math.atan2(this.dir.x, this.dir.z), 0);
     // rotation order in Babylon is YXZ (yaw, pitch, roll); pitch = angle from +Y measured around X after yaw.

@@ -1,9 +1,14 @@
 import { C2S, WEAPONS, carriedWeapons, effectiveSpread, fireIntervalMs, isWeaponId, noPerks, primaryOf, recoilResetMs, recoilStep, usesAmmo, weaponForSlot, type FireMessage, type Wallet, type WeaponId } from "@frankibarber/shared";
 import type { Connection, NetPlayer } from "../net/Connection";
 import type { LocalPlayer } from "../player/LocalPlayer";
+import { BIPOD, feelOf } from "./weaponFeel";
 
-/** Delay before the first shot after sprinting (weapon raise). Server tolerance covers it. */
-const SPRINT_OUT_MS = 150;
+/**
+ * Delay before the first shot after sprinting (weapon raise). Per weapon since Drop B — a VZ-9
+ * comes up in 80 ms and an SR-50 takes 300, which is most of what "light" and "heavy" mean in the
+ * hand. Server tolerance covers all of it: this only ever delays our own shot.
+ */
+const sprintOutMs = (id: WeaponId): number => feelOf(id).sprintOutMs;
 /** After a local slot request, snapshots still carrying the old weapon are ignored for this long. */
 const EQUIP_GRACE_MS = 400;
 
@@ -62,6 +67,7 @@ export class WeaponController {
         this.previousWeapon = this.weapon;
         this.weapon = p.weapon;
         this.player.weapon = this.weapon;
+        this.player.clearWeaponState(); // the old gun's action and bipod dwell do not carry over
         this.reloading = false; this.spread = 0; this.shotIndex = 0;
         this.equipEndsAt = performance.now() + WEAPONS[this.weapon].equipMs;
         this.onEquip?.(this.weapon);
@@ -92,6 +98,7 @@ export class WeaponController {
     this.weapon = id;
     this.shotIndex = 0;
     this.player.weapon = id;
+    this.player.clearWeaponState();
     this.reloading = false;
     this.spread = 0;
     this.equipEndsAt = now + WEAPONS[id].equipMs;
@@ -155,7 +162,7 @@ export class WeaponController {
     if (!wantFire || !this.player.alive || this.player.frozen) return;
     if (this.reloading || now < this.equipEndsAt) return;
     // Sprint-out: a short delay before the first shot after sprinting (the weapon comes back up).
-    if (now - this.lastSprintAt < SPRINT_OUT_MS) return;
+    if (now - this.lastSprintAt < sprintOutMs(this.weapon)) return;
     if (now - this.lastFireAt < fireIntervalMs(w)) return;
     if (usesAmmo(w) && this.ammo <= 0) {
       if (!w.automatic || now - this.lastFireAt > 250) { this.lastFireAt = now; this.onDryFire?.(); }
@@ -183,7 +190,14 @@ export class WeaponController {
     this.conn.send(C2S.Fire, msg);
     this.spread = Math.min(w.spreadMax, this.spread + w.spreadPerShot);
     const [up, side] = recoilStep(w, this.shotIndex++, Math.random, this.recoilTmp);
-    this.player.addRecoil(up * (this.player.isAiming() ? 0.7 : 1), side, w.recoilRecoverPerSec, w.recoilRecoverDelayMs);
+    // Aiming steadies every weapon; the bipod (matrix B1) steadies the LMG further, and only while
+    // it is crouched and settled. Both are camera-side: the server's cone is untouched, so this
+    // cannot turn into a hidden accuracy buff.
+    const feel = feelOf(this.weapon);
+    const steady = (this.player.isAiming() ? 0.7 : 1) * (this.player.bipod ? BIPOD.recoil : 1);
+    this.player.addRecoil(up * steady, side * steady, w.recoilRecoverPerSec, w.recoilRecoverDelayMs);
+    // The action worked after the shot: the sniper's bolt takes the scope away with it (S1).
+    if (feel.actionMs > 0) this.player.workAction(feel.actionMs, feel.scope !== null);
     this.onShot?.({ weapon: this.weapon, origin, dir });
     if (usesAmmo(w) && this.ammo === 0 && this.reserve > 0) this.requestReload(now + 80);
   }

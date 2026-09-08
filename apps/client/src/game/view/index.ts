@@ -10,6 +10,7 @@ import { Flags } from "./Flags";
 import { BombSites } from "./BombSites";
 import { Marks } from "./Marks";
 import { hud } from "../store";
+import { feelOf } from "../combat/weaponFeel";
 import { boysClass, INTERP_DELAY_MS, MatchPhase, WEAPONS, makeRayHit } from "@frankibarber/shared";
 
 /**
@@ -71,22 +72,67 @@ export const installView: GameModule = (ctx) => {
     return tmpA.copyFrom(n.getAbsolutePosition());
   };
 
+  /** A case owed by a hand-worked action, and the size it should come out at (0 = nothing pending). */
+  let ejectAt = 0;
+  let ejectScale = 1;
+  /** Shots this module has presented, for `weapon-signature.mjs` to measure cadence against. */
+  let shotCount = 0;
+  /** The recoil the last shot put on the view, sampled at the shot rather than a frame later. */
+  let lastKick = { pitch: 0, yaw: 0 };
+
   const offs = [
     ctx.events.on("matchPhase", e => { if (e.phase === MatchPhase.Prep || e.phase === MatchPhase.Ended || e.phase === MatchPhase.Playing) grenades.reset(); }),
     ctx.events.on("localShot", (s) => {
       viewmodel.onFire();
+      // Axis 6 of the matrix, from the feel table: how much violence the shot puts on the screen.
+      // Every number that used to be one value for all eleven weapons — flash size, shake, tracer
+      // width, whether a case comes out at all — is now the weapon's own.
+      shotCount++;
+      lastKick = ctx.local.recoilOffset; // sampled here, where the kick has just been applied
+      const feel = feelOf(s.weapon);
       const kind = WEAPONS[s.weapon].kind;
       if (kind === "melee") return;                       // the swing is the whole show
-      if (kind === "launcher") { effects.flash(localMuzzle(), 0.35, true); ctx.local.addShake(0.014); return; } // the shell draws its own arc
+      ctx.local.addShake(feel.shake);
+      if (kind === "launcher") { effects.flash(localMuzzle(), feel.flash, true); return; } // the shell draws its own arc
       const m = localMuzzle();
-      effects.flash(m, 0.22, true);
-      ctx.world.raycast(...s.origin, ...s.dir, WEAPONS[s.weapon].rangeMax, shotHit);
-      const distance = shotHit.hit ? shotHit.t : WEAPONS[s.weapon].rangeMax;
-      tmpB.set(s.origin[0] + s.dir[0] * distance, s.origin[1] + s.dir[1] * distance, s.origin[2] + s.dir[2] * distance);
-      tracers.spawn(m, tmpB, density());
-      const ej = viewmodel.ejectNode; ej.computeWorldMatrix(true);
-      effects.eject(tmpC.copyFrom(ej.getAbsolutePosition()), ctx.local.yaw);
-      ctx.local.addShake(s.weapon === "shotgun" ? 0.012 : s.weapon === "dmr" ? 0.01 : 0.004);
+      effects.flash(m, feel.flash, true);
+      if (feel.tracer > 0) {
+        ctx.world.raycast(...s.origin, ...s.dir, WEAPONS[s.weapon].rangeMax, shotHit);
+        const distance = shotHit.hit ? shotHit.t : WEAPONS[s.weapon].rangeMax;
+        tmpB.set(s.origin[0] + s.dir[0] * distance, s.origin[1] + s.dir[1] * distance, s.origin[2] + s.dir[2] * distance);
+        tracers.spawn(m, tmpB, density(), feel.tracer);
+        // A pellet gun throws its whole pattern: one line down the middle is what made the S12 look
+        // like a very loud rifle. The spread here is presentation only — the pellets that decide the
+        // damage were traced by the server from its own cone.
+        if (feel.tracerCount > 1) {
+          // The S12's cone is constant (spreadPerShot 0), so its base spread IS its pattern width.
+          const cone = WEAPONS[s.weapon].spread * distance;
+          for (let i = 1; i < feel.tracerCount; i++) {
+            const a = (i / (feel.tracerCount - 1)) * Math.PI * 2;
+            const r = cone * (0.35 + Math.random() * 0.65);
+            tmpB.set(
+              s.origin[0] + s.dir[0] * distance + Math.cos(a) * r,
+              s.origin[1] + s.dir[1] * distance + Math.sin(a) * r * 0.8,
+              s.origin[2] + s.dir[2] * distance + Math.sin(a) * r,
+            );
+            tracers.spawn(m, tmpB, density(), feel.tracer);
+          }
+        }
+      }
+      // A gun that cycles itself throws its brass now; one worked by hand (revolver, pump, bolt)
+      // holds on to it until the action is worked, which is where the eye expects to see it.
+      if (feel.casings > 0) {
+        const ej = viewmodel.ejectNode; ej.computeWorldMatrix(true);
+        for (let i = 0; i < feel.casings; i++) effects.eject(tmpC.copyFrom(ej.getAbsolutePosition()), ctx.local.yaw, feel.casingScale, feel.ejectDown);
+        // A belt gun throws the spent link with the case — two objects a second is most of why an
+        // MG-4 firing looks like machinery rather than a rifle with a big magazine.
+        if (feel.beltLink) effects.eject(tmpC.copyFrom(ej.getAbsolutePosition()), ctx.local.yaw, 0.55, true);
+      } else if (feel.actionMs > 0) {
+        // At the peak of the VISIBLE action, which is a tenth of a second, not at the end of the
+        // rhythm the shooter feels — the bolt is open for 125 ms and the SR-50's `actionMs` is 700.
+        ejectAt = performance.now() + viewmodel.actionPeakMs;
+        ejectScale = feel.casingScale;
+      }
     }),
     ctx.events.on("remoteShot", ({ player, event }) => {
       const origin = player ? player.muzzle(tmpA) : tmpA.set(event.o[0], event.o[1], event.o[2]);
@@ -133,13 +179,15 @@ export const installView: GameModule = (ctx) => {
     }),
     ctx.events.on("localDamaged", () => ctx.local.addShake(0.015)),
     ctx.events.on("remoteJoin", ({ player }) => { for (const m of player.character.allMeshes) ctx.mapInstance.addCaster(m); }),
-    ctx.events.on("weaponEquip", (e) => viewmodel.setWeapon(e.weapon)),
+    // A case owed by the gun you just put away is not owed by the one in your hands: without this
+    // an SR-50 hull drops out of the pistol you swapped to a third of a second later.
+    ctx.events.on("weaponEquip", (e) => { ejectAt = 0; viewmodel.setWeapon(e.weapon); }),
     ctx.events.on("weaponInspect", () => viewmodel.inspect()),
     ctx.events.on("reloadStart", () => viewmodel.onReload()),
     ctx.events.on("reloadEnd", () => viewmodel.onReloadEnd()),
     ctx.events.on("landed", (e) => viewmodel.onLanded(e.impactSpeed)),
     ctx.events.on("jump", () => viewmodel.onJump()),
-    ctx.events.on("localDeath", () => { viewmodel.cancelGrenade(); viewmodel.setVisible(false); }),
+    ctx.events.on("localDeath", () => { ejectAt = 0; viewmodel.cancelGrenade(); viewmodel.setVisible(false); }),
     ctx.events.on("localSpawn", () => { viewmodel.setVisible(true); viewmodel.cancelGrenade(); viewmodel.setWeapon(ctx.weapons.weapon); }),
     ctx.events.on("settings", () => { effects.setDensity(density()); grenades.setDensity(density()); }),
     // ---- drop 2: grenades
@@ -157,6 +205,13 @@ export const installView: GameModule = (ctx) => {
       if (e.kind === "knife" && e.effectMs === 0) { tmpB.set(e.x, e.y, e.z); effects.puff(tmpB, 0.6); }
     }),
     ctx.onFrame((dt) => {
+      // The brass a hand-worked gun held on to (pump, bolt, break-open): it comes out with the
+      // action, not with the shot, which is the whole reason a pump gun reads as a pump gun.
+      if (ejectAt > 0 && performance.now() >= ejectAt) {
+        ejectAt = 0;
+        const ej = viewmodel.ejectNode; ej.computeWorldMatrix(true);
+        effects.eject(tmpC.copyFrom(ej.getAbsolutePosition()), ctx.local.yaw, ejectScale);
+      }
       viewmodel.setEmpty(ctx.weapons.ammo === 0 && WEAPONS[ctx.weapons.weapon].magazine > 0 && !ctx.weapons.reloading);
       viewmodel.update(dt);
       tracers.update(dt);
@@ -172,8 +227,17 @@ export const installView: GameModule = (ctx) => {
     }),
   ];
 
+  // Harness hook for the e2e tools, the same shape the audio module uses (`__fbAudio`):
+  // `weapon-signature.mjs` reads the viewmodel's sway and counts shots through it.
+  (window as unknown as { __fbView?: unknown }).__fbView = {
+    viewmodel,
+    get shots(): number { return shotCount; },
+    get lastKick(): { pitch: number; yaw: number } { return lastKick; },
+  };
+
   return () => {
     hud.set({ smokeOpacity: 0 });
+    delete (window as unknown as { __fbView?: unknown }).__fbView;
     for (const off of offs) off();
     tracers.dispose();
     viewmodel.dispose();

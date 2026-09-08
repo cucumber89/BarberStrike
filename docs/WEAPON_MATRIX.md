@@ -1,6 +1,10 @@
 # WEAPON_MATRIX — Drop B, the intended feel of every weapon
 
-**Status: DRAFT, awaiting owner sign-off. No code has been written against this yet.**
+**Status: signed off by the owner 2026-09-08 ("dobra dalej kończmy to") and IMPLEMENTED.**
+The rows below are the intent; `apps/client/src/game/combat/weaponFeel.ts` is the same table in
+code, and `weaponFeel.test.ts` judges it. Measured evidence:
+`apps/client/e2e/out/signature/` (regenerate with `node e2e/tools/weapon-signature.mjs`).
+See **As built** at the end for what changed on the way in and what is still open.
 
 This is the artefact `PLAN_2_1.md` Drop B asks for before any feel code: one row per weapon, the
 six axes as columns, the *intended* character in words and in numbers. It is the contract that
@@ -136,3 +140,44 @@ from today; plain values are today's numbers kept on purpose.
 ## Sign-off
 
 Owner: _Aleksander_Ogorek_  Date: 8.09.2026  "signed" / changes requested: ___yes_
+
+All four decisions taken as proposed (D-B1 client-only table, D-B2 the M-1 becomes
+scoped with a ring, D-B3 Shift = breath when still / sprint when moving, D-B4 the threshold frozen
+from the first real run). R1 applies to every weapon, not only scoped ones.
+
+## As built
+
+Where the implementation deviates from the rows above, and why:
+
+- **D-B4's threshold is 0.9, not 0.25, and the metric changed.** The distance is measured in
+  OCTAVES per axis, then divided by the roster's own spread in that space. In raw units 420 rpm and
+  1000 rpm are 0.083 s apart while 45 and 107 rpm are 0.79 s apart — a tenfold lie about two equal
+  differences, which let the two fastest guns look identical on cadence. Measured on the first real
+  run: closest pair **shotgun vs launcher 0.98** (both slow, heavy, single-shot), median 4.0,
+  maximum 8.2. The matrix predicted the SMGs would be closest; they are 1.6 apart.
+- **S2 was not where the matrix thought it was.** `InputState` cancelled the aim on *any* Shift
+  under a held aim button, so the SR-50's breath hold was unreachable in normal play — the HUD read
+  "SHIFT · HOLD BREATH" and Shift took the player out of the scope. Fixed at the source: Shift only
+  takes the aim when it would actually be a sprint (forward key, not crouched). This is a bug fix
+  that predates Drop B, not a new rule.
+- **The scope style is client-side, not `WeaponDef.scoped`.** `scoped` is also a balance-test
+  predicate in shared; widening it for the M-1 would have silently changed which weapons that test
+  covers. `WeaponDef.scoped` still means the SR-50.
+- **The M-1 keeps the minimap; the SR-50 does not.** Hiding it is what a full tube earns, and it is
+  now most of what separates the two long rifles in play.
+- **Cadence is not measured, it is quoted.** Under SwiftShader the scene runs at 2–4 fps with bots
+  in it and the client fires at most once per frame, so every automatic weapon is frame-limited long
+  before it is weapon-limited. Those rows carry the renderer's number and a mark saying so. Burst
+  shape is deterministic and asserted in the unit test instead.
+
+Still open:
+
+- **M1, the clippers' hum, is NOT built.** A looping voice is a new capability in the audio engine,
+  which is a bigger change than this drop needs; the clippers' identity currently rests on the swing
+  and the lightest handling in the game. Deferred.
+- **The LMG's belt rattle is visual only** (a spent link is thrown with the case). The per-shot
+  audio layer was left out for the same reason: at 600 rpm it is ten extra voices a second.
+- **The scope must be judged on a real GPU by the owner.** SwiftShader proves the numbers and the
+  overlay geometry (screenshots under `e2e/out/weapons/dropb/`), not how it feels to look through.
+- **Prediction corrections per minute** (F3 telemetry) have not been compared before and after on a
+  real client. Recoil is client-side and the server cone is untouched, so they should not move.

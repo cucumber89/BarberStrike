@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { MatchPhase, type GameMode, type GrenadeId, type KillEvent, type MoneyEvent, type PerkTimes, type PlanEvent, type ShopResult, type Team, type TeamResult, type WeaponId } from "@frankibarber/shared";
 import { emptyProfile, type MatchReward, type Profile } from "./progression/profile";
+import type { ScopeStyle } from "./combat/weaponFeel";
 
 /** Drop 4: a Domination flag for the HUD. */
 export interface HudFlag { id: string; name: string; owner: number; capTeam: number; cap: number; contested: boolean }
@@ -122,6 +123,8 @@ export interface HudState {
   armorBrokeAt: number;
   /** Looking through a scope (scoped weapon in ADS): the HUD draws the reticle, the gun is hidden. */
   scoped: boolean;
+  /** Which glass: the SR-50's full tube or the M-1's light ring (matrix D-B2). */
+  scopeStyle: ScopeStyle | null;
   /** Breath hold left (0..1) while scoped; 0 when not holding. */
   breath: number;
   /** Last hit marker was on a plate. */
@@ -160,7 +163,7 @@ export const initialHud: HudState = {
   money: 0, owned: ["pistol"], lethal: "", lethalCount: 0, tactical: "", tacticalCount: 0,
   buyWindowLeft: 0, nearStation: false, shopOpen: false, shopResult: null, moneyToasts: [],
   cookingKind: "", cooking: 0, flashStrength: 0, flashUntil: 0, flashAt: 0,
-  armor: 0, perks: { flask: 0, roids: 0, energy: 0, fade: 0 }, armorBrokeAt: 0, scoped: false, breath: 0, hitArmor: false,
+  armor: 0, perks: { flask: 0, roids: 0, energy: 0, fade: 0 }, armorBrokeAt: 0, scoped: false, scopeStyle: null, breath: 0, hitArmor: false,
   boysClass: 1, nextClass: 1, mode: "tdm", smokeOpacity: 0, bomb: null, round: 0, flags: [], inFlag: -1, winnerId: "", winnerName: "", flagNotice: null, tac: 1, tacOn: false,
   chat: [], chatOpen: null, marks: [],
 };

@@ -100,9 +100,11 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     reloadMs: 2300, equipMs: 380, pellets: 1,
     spread: 0.005, spreadPerShot: 0.03, spreadMax: 0.07, spreadRecoveryPerSec: 0.08,
     spreadAim: 0.35, spreadMove: 1.8, spreadAir: 3.0,
-    // One big kick per shot, settles fast enough for a deliberate second.
-    recoilUp: 0.06, recoilSide: 0.008, recoilRecoverPerSec: 7,
-    recoilPattern: [[0.06, 0.008], [0.063, -0.01], [0.058, 0.012]],
+    // Drop B: a hammer blow, then a slow arc back. Taller than it was (60 → 70 mrad) and slower to
+    // settle (7 → 6/s), so the second shot has to be waited for rather than spammed — which is the
+    // whole difference between this and the P9 at the same range.
+    recoilUp: 0.07, recoilSide: 0.012, recoilRecoverPerSec: 6,
+    recoilPattern: [[0.070, 0.012], [0.074, -0.012], [0.068, 0.012]],
     recoilJitter: 0.15, recoilRecoverDelayMs: 100,
     adsZoom: 0.78, adsMs: 120, scoped: false,
     range: 28, rangeMax: 55, damageMin: 34, mobility: 0.98, sound: "revolver",
@@ -128,9 +130,12 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     // Screams through the mag: wide bloom, fastest handling in the game.
     spread: 0.014, spreadPerShot: 0.007, spreadMax: 0.08, spreadRecoveryPerSec: 0.07,
     spreadAim: 0.6, spreadMove: 1.25, spreadAir: 2.0,
-    recoilUp: 0.007, recoilSide: 0.006, recoilRecoverPerSec: 11,
-    recoilPattern: [[0.007, 0.004], [0.008, -0.005], [0.006, 0.006], [0.007, -0.006], [0.009, 0.003], [0.006, -0.004]],
-    recoilJitter: 0.35, recoilRecoverDelayMs: 60,
+    // Drop B: climbs in a straight line to the right instead of wandering, and springs back the
+    // instant the trigger is released (11 → 13/s). Predictable is the VZ-9's compensation for being
+    // the weakest round in the game; the K-7 keeps the wander, and that is how they tell apart.
+    recoilUp: 0.0073, recoilSide: 0.0037, recoilRecoverPerSec: 13,
+    recoilPattern: [[0.007, 0.003], [0.007, 0.004], [0.008, 0.003], [0.007, 0.005], [0.008, 0.004], [0.007, 0.003]],
+    recoilJitter: 0.20, recoilRecoverDelayMs: 60,
     adsZoom: 0.8, adsMs: 90, scoped: false,
     range: 13, rangeMax: 32, damageMin: 9, mobility: 1.03, sound: "smg2",
   },
@@ -148,7 +153,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
       [0.007, -0.009], [0.007, -0.012], [0.006, -0.010], [0.008, -0.004],
     ],
     recoilJitter: 0.18, recoilRecoverDelayMs: 90,
-    adsZoom: 0.75, adsMs: 120, scoped: false,
+    adsZoom: 0.75, adsMs: 130, scoped: false,
     range: 32, rangeMax: 70, damageMin: 19, mobility: 0.94, sound: "rifle",
   },
   lmg: {
@@ -178,9 +183,10 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     // Pellet cone: devastating inside 6 m (all 9 pellets land on a torso), weak past 15 m.
     spread: 0.055, spreadPerShot: 0.0, spreadMax: 0.055, spreadRecoveryPerSec: 0.1,
     spreadAim: 0.85, spreadMove: 1.1, spreadAir: 1.3,
-    // One heavy kick.
-    recoilUp: 0.075, recoilSide: 0.010, recoilRecoverPerSec: 7,
-    recoilPattern: [[0.075, 0.010], [0.078, -0.012]],
+    // One heavy shove (Drop B: 75 → 85 mrad, settling at 6.5/s). The gun comes off the target and
+    // the pump is what brings it back, which is the rhythm the weapon is built around.
+    recoilUp: 0.085, recoilSide: 0.012, recoilRecoverPerSec: 6.5,
+    recoilPattern: [[0.085, 0.012], [0.088, -0.012]],
     recoilJitter: 0.25, recoilRecoverDelayMs: 120,
     adsZoom: 0.85, adsMs: 130, scoped: false,
     range: 9, rangeMax: 22, damageMin: 3, mobility: 0.92, sound: "shotgun",
@@ -199,7 +205,9 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     recoilUp: 0.057, recoilSide: 0.010, recoilRecoverPerSec: 4.5,
     recoilPattern: [[0.055, 0.008], [0.058, -0.010], [0.060, 0.012]],
     recoilJitter: 0.12, recoilRecoverDelayMs: 160,
-    adsZoom: 0.6, adsMs: 140, scoped: false,
+    // Drop B: 140 → 160 ms to the sight picture. The M-1 is now a scoped weapon (matrix D-B2) and
+    // has to cost something to bring up; the SR-50's 260 still dwarfs it.
+    adsZoom: 0.6, adsMs: 160, scoped: false,
     range: 60, rangeMax: 120, damageMin: 45, mobility: 0.88, sound: "dmr",
   },
   sniper: {

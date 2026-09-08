@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { boysClass, BOMB, GAME_VERSION, GRENADES, GUN_GAME, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, TEAM_NAMES, WEAPONS, BADGES, killerName, ladderDone, ladderWeapon, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
+import { pelletRing } from "../game/combat/weaponFeel";
 import { TeamPicker } from "./TeamPicker";
 import { PlanPanel } from "./PlanPanel";
 import { Hints } from "./Hints";
@@ -160,7 +161,12 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   const dmgAge = performance.now() - h.damageAt;
   const lowHealth = h.alive && h.health <= 30;
   // Crosshair gap grows with the effective spread (radians → px at the current FOV). Clamped for readability.
-  const gap = Math.round(Math.min(34, 5 + h.crosshairSpread * 900));
+  const ch = settings.hud.crosshair;
+  // The gap is the player's own resting gap, opened by the real spread when they asked for that.
+  const gap = ch.dynamic ? Math.round(Math.min(34, ch.gap + h.crosshairSpread * 900)) : ch.gap;
+  // C1 (matrix): pellet weapons show the true cone as a ring, uncapped — the gap above stops at
+  // 34 px, and the S12's cone is roughly 50.
+  const spreadRing = pelletRing(h.weapon as WeaponId) ? Math.round(h.crosshairSpread * 900) : null;
   const protectedNow = h.alive && h.spawnProtectedUntil > h.serverNow;
   const reloadMs = w.reloadMs;
   const winnerTeam = h.winner === -1 ? "DRAW" : h.winner === h.myTeam ? "VICTORY" : "DEFEAT";
@@ -233,10 +239,22 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {/* Damage vignette / direction */}
       {dmgAge < 600 && <div className="damage-dir" style={{ transform: `rotate(${h.damageAngle}rad)`, opacity: 1 - dmgAge / 600 }} />}
 
-      {/* Crosshair (hidden in ADS and while a grenade is in the hand: the cook ring takes its place) */}
+      {/* Crosshair (hidden in ADS and while a grenade is in the hand: the cook ring takes its place).
+          Shape, size, thickness, gap and colour come from the player's own settings — this is the
+          one piece of UI they look at every second of the match. */}
       {h.alive && h.pointerLocked && !h.aiming && h.cookingKind === "" && (
-        <div className={`crosshair ${hitAge < 180 ? (h.hitKill ? "kill" : h.hitHead ? "head" : h.hitArmor ? "armor" : "hit") : ""} ${protectedNow ? "shield" : ""}`} data-testid="crosshair" style={{ "--gap": `${gap}px` } as React.CSSProperties}>
-          <span className="ch-top" /><span className="ch-bottom" /><span className="ch-left" /><span className="ch-right" />
+        <div
+          className={`crosshair ch-${ch.style} ${ch.outline ? "outlined" : ""} ${hitAge < 180 ? (h.hitKill ? "kill" : h.hitHead ? "head" : h.hitArmor ? "armor" : "hit") : ""} ${protectedNow ? "shield" : ""}`}
+          data-testid="crosshair"
+          style={{ "--gap": `${gap}px`, "--len": `${ch.size}px`, "--w": `${ch.thickness}px`, "--ch-color": ch.color } as React.CSSProperties}
+        >
+          {ch.style !== "dot" && ch.style !== "circle" && <><span className="ch-top" /><span className="ch-bottom" /><span className="ch-left" /><span className="ch-right" /></>}
+          {ch.style === "circle" && <span className="ch-circle" />}
+          {(ch.style === "dot" || ch.style === "cross-dot") && <span className="ch-dot" />}
+          {/* C1: a pellet gun's cone is far wider than the 34 px the four lines can open to, so the
+              S12 draws the real radius as a ring. Four lines that stopped growing told the player
+              nothing about where nine pellets were actually going. */}
+          {spreadRing !== null && <span className="ch-ring" style={{ "--r": `${spreadRing}px` } as React.CSSProperties} />}
           {hitAge < 180 && <span className="hitmarker" />}
           {protectedNow && <span className="ch-shield" />}
         </div>
@@ -248,12 +266,17 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {h.alive && h.pointerLocked && (h.tacOn || h.tac < 0.98) && (
         <div className={`tac-meter ${h.tacOn ? "on" : ""} ${h.tac <= 0.01 ? "empty" : ""}`} data-testid="tac"><div className="tac-fill" style={{ width: `${Math.round(h.tac * 100)}%` }} /></div>
       )}
-      {/* Scope (drop 3): black mask with a round window, a reticle, breath meter */}
+      {/* Scope (drop 3): black mask with a round window, a reticle, breath meter.
+          Drop B / D-B2: the SR-50 keeps the full tube; the M-1 gets a light ring that leaves most
+          of the view clear and has no breath to hold, so the two long rifles are not one weapon
+          shown twice. */}
       {h.alive && h.scoped && (
-        <div className="scope" data-testid="scope">
+        <div className={`scope ${h.scopeStyle === "ring" ? "ring" : ""}`} data-testid="scope" data-style={h.scopeStyle ?? ""}>
           <div className="scope-mask" />
           <div className={`scope-reticle ${hitAge < 180 ? "hit" : ""}`}><span className="v" /><span className="hz" /><span className="dot" /></div>
-          <div className="scope-breath"><div className="scope-breath-fill" style={{ width: `${Math.round(h.breath * 100)}%` }} /><span>{h.breath <= 0 ? "WINDED" : "SHIFT · HOLD BREATH"}</span></div>
+          {h.scopeStyle === "tube" && (
+            <div className="scope-breath"><div className="scope-breath-fill" style={{ width: `${Math.round(h.breath * 100)}%` }} /><span>{h.breath <= 0 ? "WINDED" : "SHIFT · HOLD BREATH"}</span></div>
+          )}
         </div>
       )}
 
@@ -299,7 +322,9 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       )}
 
       {/* Minimap + compass (drop 5): hidden behind the scope and the result screen */}
-      {h.connected && !h.scoped && h.phase !== MatchPhase.Ended && <Minimap radar={radar} />}
+      {/* The tube takes your surroundings away with it; the M-1's ring is the weapon that does NOT,
+          which is most of what separates the two long rifles in play. */}
+      {h.connected && h.scopeStyle !== "tube" && h.phase !== MatchPhase.Ended && <Minimap radar={radar} />}
       {/* Chat (drop 5) */}
       {h.connected && <Chat lines={h.chat} open={h.chatOpen} teams={teams} myId={h.myId} api={chat} />}
 
@@ -459,10 +484,12 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
         </div>
       )}
 
-      {/* Debug overlay (dev only) */}
-      {import.meta.env.DEV && (
+      {/* Frame counter. The player can turn this on in a built game now — it used to be DEV-only,
+          so the one number anybody asks for ("what fps am I getting?") did not exist outside a dev
+          server. The F3 telemetry table stays a development thing. */}
+      {(settings.hud.fps || import.meta.env.DEV) && (
         <div className="debug" data-testid="debug">
-          v{GAME_VERSION} · {h.fps} fps · {h.ping} ms{!telemetry && " · F3"}
+          v{GAME_VERSION} · {h.fps} fps · {h.ping} ms{!telemetry && import.meta.env.DEV && " · F3"}
           {telemetry && (
             <table className="telemetry"><tbody>
               {Object.entries(h.telemetry).map(([k, v]) => <tr key={k}><td>{k}</td><td>{v}</td></tr>)}
