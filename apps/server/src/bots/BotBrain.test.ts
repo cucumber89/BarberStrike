@@ -274,7 +274,18 @@ function prng(seed: number): () => number {
 const spawn = NIGHT_DISTRICT.spawns[0];
 const start: NavPoint = { x: spawn.x, y: standHeight(walk, spawn.x, spawn.z, spawn.y)!, z: spawn.z };
 
-describe("bot movement", () => {
+/**
+ * These run whole simulations — 14 to 22 seconds of ticks each, through the real mover and the real
+ * path search — against vitest's DEFAULT 5 s timeout, which was never chosen with that in mind.
+ * MEASURED: "keeps its destination" is 1.77 s on a dev machine and 3.9x slower on a GitHub runner
+ * (its siblings ran 818 ms → 3502 ms in the same job), which lands it either side of 5 s depending
+ * on how loaded the runner is. It failed CI for that reason and nothing else.
+ *
+ * The timeout is raised rather than the work reduced or the assertion loosened: every test here
+ * still runs in full and still asserts exactly what it did. 30 s is ~8x the slowest observed run,
+ * so a genuine hang is still caught — it just is not caught by a stopwatch set for a unit test.
+ */
+describe("bot movement", { timeout: 30_000 }, () => {
   it("walks off immediately instead of standing still to turn round", () => {
     // The goal is placed BEHIND the bot's starting facing, the case the old code handled worst: it
     // pressed nothing until the body was within 0.6 rad, so an easy bot (3.2 rad/s) stood for a

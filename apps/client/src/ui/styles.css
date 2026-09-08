@@ -200,6 +200,12 @@ button { font-family: inherit; }
 
 .pause { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(6,6,8,.6); pointer-events: auto; }
 .pause-card { width: min(480px, 90vw); background: var(--bg); border: 1px solid var(--line); padding: 28px; display: flex; flex-direction: column; gap: 10px; max-height: 90vh; overflow: auto; }
+.pause-hint { margin: 0 0 2px; font-size: 12px; color: var(--tx-2); text-align: center; }
+.pause-hint kbd, .pause-warn kbd { font-family: var(--font-mono); font-size: 10px; padding: 1px 5px; border: 1px solid var(--line); color: var(--tx); }
+/* A refused pointer lock has to be SAID. Chrome rejects the request for about a second after the
+   user pressed Escape to leave a previous lock, and a silent refusal reads as a frozen game. */
+.pause-warn { margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: #f0c89a; background: rgba(217,164,65,.09);
+  border-left: 2px solid var(--brass); padding: 8px 10px; }
 .pause-card .version { margin-top: 6px; font-size: 11px; letter-spacing: 0.15em; color: var(--tx-3); text-align: right; }
 .pause-card details summary { list-style: none; cursor: pointer; }
 .pause-card details summary::-webkit-details-marker { display: none; }
@@ -249,35 +255,89 @@ button { font-family: inherit; }
 .smoke-screen { position: absolute; inset: 0; background: radial-gradient(ellipse at 45% 45%, #747a7b, #4e5556); pointer-events: none; }
 .shop-closed-hint { position: absolute; left: 50%; top: 68%; transform: translateX(-50%); font-size: 12px; letter-spacing: 0.25em; color: var(--tx-2); background: rgba(10,10,12,.7); padding: 6px 14px; animation: slide-in 160ms ease-out; }
 
-.shop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(6,6,8,.72); pointer-events: auto; }
-.shop-card { width: min(920px, 94vw); max-height: 92vh; overflow: auto; background: var(--bg); border: 1px solid var(--line); padding: 22px 26px; display: flex; flex-direction: column; gap: 12px; }
-.shop-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
-.shop-title { font-family: var(--font-display); font-size: 34px; letter-spacing: 0.12em; line-height: 1; }
-.shop-sub { font-size: 11px; letter-spacing: 0.25em; color: var(--brass); margin-top: 6px; }
-.shop-wallet { font-family: var(--font-display); font-size: 40px; color: #7dff9a; line-height: 1; }
-.shop-section { font-family: var(--font-display); font-size: 18px; letter-spacing: 0.25em; color: var(--tx); margin-top: 6px; display: flex; align-items: baseline; gap: 12px; }
-.shop-hint { font-family: var(--font-ui); font-size: 11px; letter-spacing: 0.15em; color: var(--tx-3); }
-.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
-.shop-item { background: var(--bg-2); border: 1px solid var(--line); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
-.shop-item.carried { border-color: var(--brass); }
-.shop-item.locked { opacity: 0.55; }
-.shop-item-head { display: flex; justify-content: space-between; align-items: baseline; }
-.shop-item-name { font-family: var(--font-display); font-size: 20px; letter-spacing: 0.08em; }
-.shop-item-price { font-family: var(--font-mono); font-size: 13px; color: #7dff9a; }
-.shop-item-stats { display: flex; gap: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--tx-2); }
-.shop-item-blurb { font-size: 12px; color: var(--tx-2); line-height: 1.35; min-height: 32px; }
-.shop-item-actions { display: flex; gap: 8px; align-items: center; margin-top: auto; }
-.shop-tag { font-size: 10px; letter-spacing: 0.2em; color: var(--brass); }
-.shop-slot { font-family: var(--font-mono); font-size: 11px; margin-left: 8px; padding: 1px 5px; border: 1px solid var(--line); color: var(--tx-2); vertical-align: middle; }
+.shop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(6,6,8,.78); pointer-events: auto; }
+/* THE LAYOUT RULE (see Shop.tsx): the menu fits one screen at 1280x720 with nothing cut off.
+   Three fixed rows — head, body, foot — so the wallet and CLOSE can never leave the screen the way
+   they did when the whole card was one tall scroll. Only the BODY may ever scroll, and at every
+   supported resolution it does not need to: the tallest aisle is 8 rows of 38 px = 328 px against
+   roughly 520 px of body at 720p. */
+.shop-card { width: min(1400px, 96vw); height: min(94vh, 880px); overflow: hidden;
+  background: var(--bg); border: 1px solid var(--line); padding: 16px 22px;
+  display: flex; flex-direction: column; gap: 10px; }
+.shop-head { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.shop-head-right { display: flex; align-items: center; gap: 16px; }
+.shop-title { font-family: var(--font-display); font-size: 28px; letter-spacing: 0.12em; line-height: 1; }
+.shop-sub { font-size: 11px; letter-spacing: 0.2em; color: var(--brass); margin-top: 5px; }
+.shop-wallet { font-family: var(--font-display); font-size: 34px; color: #7dff9a; line-height: 1; }
+
+.shop-body { flex: 1 1 auto; display: grid; grid-template-columns: 1.08fr 1fr 1fr; gap: 4px 18px; align-content: start; overflow: auto; min-height: 0; }
+.shop-aisle { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.shop-aisle-head { display: flex; align-items: baseline; gap: 8px; padding: 4px 0 3px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+.shop-aisle-head.armed { border-color: var(--brass); }
+.shop-aisle-key { font-family: var(--font-mono); font-size: 10px; line-height: 1; padding: 3px 5px; border: 1px solid var(--line); color: var(--tx-2); }
+.shop-aisle-head.armed .shop-aisle-key { background: var(--brass); border-color: var(--brass); color: #141008; }
+.shop-aisle-label { font-family: var(--font-display); font-size: 17px; letter-spacing: 0.2em; }
+.shop-hint { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.08em; color: var(--tx-3); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* One item = one 38 px row: shortcut, glyph, name over stats, price, state, button. */
+/* Row height follows the viewport so browser zoom (which SHRINKS the CSS viewport rather than
+   scaling the page) cannot push the last aisle past the bottom. 30 px is the floor: below that the
+   38 px shortcut/price/button row stops being comfortably clickable. MEASURED at 1024x576 — what
+   1280x720 reports at 125 % zoom — the tallest aisle is then 291 px against 389 px of body. */
+/* FLEX, not grid: a row has five children or seven depending on whether the item is carried and
+   sellable, and a fixed column template silently wrapped the extra ones onto a second line that
+   the fixed height then clipped over the row below. */
+.shop-row { display: flex; align-items: center; gap: 7px; height: clamp(30px, 5.3vh, 38px);
+  padding: 0 7px; background: var(--bg-2); border: 1px solid var(--line); overflow: hidden; }
+.shop-row.carried { border-color: var(--brass); }
+.shop-row.locked { opacity: .5; }
+.shop-row.aisle-armed { border-color: var(--brass-2); background: #17150f; }
+.shop-key { font-family: var(--font-mono); font-size: 10px; color: var(--tx-3); letter-spacing: .04em; }
+.shop-row.aisle-armed .shop-key { color: var(--brass); }
+.shop-key i { font-style: normal; opacity: .5; margin: 0 1px; }
+.shop-row-art { flex: 0 0 22px; width: 22px; height: 22px; color: var(--brass); display: flex; align-items: center; justify-content: center; }
+.shop-row-art svg { max-width: 100%; max-height: 100%; }
+.shop-row.locked .shop-row-art { color: var(--tx-3); }
+/* The name never collapses to an ellipsis-only stub, however many tags the row carries. */
+.shop-row-main { flex: 1 1 auto; min-width: 74px; display: flex; flex-direction: column; justify-content: center; line-height: 1.15; }
+.shop-row-name { font-family: var(--font-display); font-size: 16px; letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shop-row-stats { font-family: var(--font-mono); font-size: 9.5px; color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shop-why { font-style: normal; color: #d8a49a; }
+.shop-row-price { flex: 0 0 auto; font-family: var(--font-mono); font-size: 12px; color: #7dff9a; text-align: right; }
+.shop-row-price s { color: var(--tx-3); margin-right: 4px; font-size: 10px; }
+.shop-row-price .credit { color: #9fd8ff; }
+.shop-key { flex: 0 0 auto; }
+.shop-row.locked .shop-row-price { color: var(--tx-3); }
+.shop-tag { font-size: 9px; letter-spacing: 0.14em; color: var(--brass); white-space: nowrap; }
+.shop-slot { flex: 0 0 auto; font-family: var(--font-mono); font-size: 9px; margin-left: 6px; padding: 1px 4px; border: 1px solid var(--line); color: var(--tx-2); vertical-align: middle; }
 .shop-slot.lethal { border-color: var(--red); color: #f0a49a; }
-.shop-btn { margin-left: auto; padding: 8px 14px; background: var(--brass); border: 1px solid var(--brass); color: #141008; font-family: var(--font-display); font-size: 16px; letter-spacing: 0.15em; cursor: pointer; }
+.shop-btn { flex: 0 0 auto; padding: 5px 9px; background: var(--brass); border: 1px solid var(--brass); color: #141008; font-family: var(--font-display); font-size: 13px; letter-spacing: 0.1em; cursor: pointer; white-space: nowrap; }
 .shop-btn:hover:not(:disabled) { background: #e6b355; }
 .shop-btn:disabled { background: var(--bg-3); border-color: var(--line); color: var(--tx-3); cursor: default; }
 .shop-btn.ghost { background: transparent; color: var(--tx-2); border-color: var(--line); }
 .shop-btn.ghost:hover { color: var(--tx); border-color: var(--tx-3); background: transparent; }
-.shop-foot { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); padding-top: 12px; font-size: 12px; color: var(--tx-3); }
+.shop-foot { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 16px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 12px; color: var(--tx-3); }
+.shop-keyhelp { font-size: 11px; color: var(--tx-3); }
+.shop-keyhelp kbd { font-family: var(--font-mono); font-size: 10px; padding: 1px 5px; border: 1px solid var(--line); color: var(--tx-2); }
+.shop-result { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shop-result.ok { color: #7dff9a; }
 .shop-result.err { color: #f0a49a; }
+/* Three aisles are held down to 900 px, well past 125 % zoom on a 1280 screen (1024 px). Folding
+   to two columns is what actually breaks the fit — it makes one column carry two aisles — so it is
+   the LAST resort, not the first. */
+/* Below three comfortable columns the refund figure goes before the button does: a clipped
+   "SELL $1," helps nobody, and the amount is still on the button's tooltip and in the price cell. */
+@media (max-width: 1150px) { .shop-sell-amount { display: none; } .shop-row-main { min-width: 60px; } }
+@media (max-width: 900px) { .shop-body { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 640px) { .shop-body { grid-template-columns: 1fr; } .shop-keyhelp { display: none; } }
+/* When the screen is short, the stats line is the first thing to go: a truncated "DMG 33 · RPM…"
+   helps nobody, while the name, the price and the button all still have to be readable. The full
+   text stays on the row's tooltip. */
+@media (max-height: 700px) {
+  .shop-row-stats { display: none; }
+  .shop-title { font-size: 24px; } .shop-wallet { font-size: 28px; }
+  .shop-card { padding: 12px 16px; }
+}
 
 /* ---------- Drop 3: armour, perks, scope ---------- */
 .armor-fill { position: absolute; left: 0; top: -4px; height: 3px; background: #8fd3ff; }
@@ -415,21 +475,13 @@ button { font-family: inherit; }
 .health { padding:12px 16px; border-radius:8px; background:#10151edb; bottom:22px; }
 .health-bar { width:120px; height:8px; }
 .boys-status { top:auto; left:26px; bottom:195px; transform:none; max-width:300px; white-space:normal; border-radius:6px; }
-.shop-head { position:sticky; top:0; background:#151a21; z-index:2; align-items:center; gap:14px; padding:16px; border-radius:8px; }
-.shop-countdown { display:flex; flex-direction:column; text-align:center; color:#e8bd75; }
-.shop-countdown small { font-size:10px; letter-spacing:.12em; }
-.shop-countdown strong { font:700 32px var(--font-mono); }
-.shop-title { font-size:24px; }
 .shop-sub { letter-spacing:.04em; line-height:1.5; color:#c4ccd6; }
-.shop-item-blurb { color:#c4ccd6; line-height:1.5; }
-.shop-btn { min-height:36px; font-size:13px; }
 .boys-class:focus-visible,button:focus-visible { outline:2px solid #f4cf8e; outline-offset:3px; }
 @media(max-width:900px) {
   .team-score .tname { display:none; }
   .top-bar { top:12px; padding:4px; }
   .timer { min-width:90px; font-size:24px; }
   .killfeed { top:115px; max-width:40vw; }
-  .shop-head { flex-wrap:wrap; }
 }
 @media(max-height:600px) {
   .loading h1 { margin:10px 0 16px; font-size:36px; }
@@ -439,16 +491,102 @@ button { font-family: inherit; }
 }
 @media(prefers-reduced-motion:reduce) { .loading-fill { transition:none; } }
 
-.shop-tabs { display:flex; gap:6px; margin:18px 0; flex-wrap:wrap; }
-.shop-tabs button { flex:1; padding:12px 16px; color:#c4ccd6; background:#20262e; border:1px solid #424b58; border-radius:6px; font-weight:700; cursor:pointer; }
-.shop-tabs button.on { color:#151515; background:#e8bd75; border-color:#e8bd75; }
-.shop-foot { position:sticky; bottom:0; background:#151a21; padding:14px 0; }
-.shop-section { font-size:15px; letter-spacing:.06em; }
 
 .flags { top:88px; }
 @media(max-width:900px) { .flags { top:74px; } }
 
+/* ---------- Team picker (2.4) ---------- */
+/* Both sides, their colours, their sizes and which one you are on — all visible at once, because
+   the report was that choosing a side was not discoverable, not that it was slow. */
+.teams { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); padding: 10px; background: var(--bg-2); }
+.teams-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 10px; letter-spacing: 0.2em; color: var(--tx-3); }
+.teams-note { letter-spacing: 0.06em; color: var(--brass); text-transform: none; font-size: 10px; }
+.teams-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.team-card { display: grid; grid-template-columns: 10px 1fr; grid-template-areas: "sw name" "sw count" "state state";
+  gap: 2px 8px; align-items: center; text-align: left; padding: 8px 10px; cursor: pointer;
+  background: var(--bg-3); border: 1px solid var(--line); color: var(--tx); font-family: var(--font-ui); }
+.team-card:hover:not(:disabled) { border-color: var(--team); }
+.team-card.mine { border-color: var(--team); background: color-mix(in srgb, var(--team) 12%, var(--bg-3)); }
+.team-card:disabled { cursor: default; }
+.team-card:disabled:not(.mine) { opacity: .55; }
+.team-swatch { grid-area: sw; align-self: stretch; background: var(--team); }
+.team-name { grid-area: name; font-family: var(--font-display); font-size: 18px; letter-spacing: 0.14em; }
+.team-count { grid-area: count; font-size: 11px; color: var(--tx-2); }
+.team-state { grid-area: state; margin-top: 4px; font-size: 10px; letter-spacing: 0.12em; color: var(--tx-3); }
+.team-card.mine .team-state { color: var(--team); }
+.teams-answer { margin: 2px 0 0; font-size: 11px; line-height: 1.4; }
+.teams-answer.ok { color: #7dff9a; }
+.teams-answer.err { color: #f0a49a; }
+
+/* ---------- The living arena (2.4) ---------- */
+/* Sits under the round timer during the buy window, where a player is already looking. Both teams
+   see it: a map change the defence cannot read would be a random event, not a tactic. */
+.plan { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); width: min(680px, 92vw);
+  background: rgba(11,11,13,.92); border: 1px solid var(--line); border-top: 2px solid var(--brass);
+  padding: 10px 12px; pointer-events: auto; animation: slide-in 180ms ease-out; }
+.plan-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.plan-title { font-family: var(--font-display); font-size: 16px; letter-spacing: 0.2em; color: var(--brass); }
+.plan-sub { font-size: 11px; color: var(--tx-2); }
+.plan-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.plan-option { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "key name" "gain gain" "cost cost" "votes votes";
+  gap: 3px 8px; text-align: left; padding: 8px 10px; cursor: pointer;
+  background: var(--bg-2); border: 1px solid var(--line); color: var(--tx); font-family: var(--font-ui); }
+.plan-option:hover:not(:disabled) { border-color: var(--brass); }
+.plan-option:disabled { cursor: default; opacity: .82; }
+.plan-option.chosen { border-color: var(--brass); background: #17150f; }
+.plan-key { grid-area: key; font-family: var(--font-mono); font-size: 10px; padding: 2px 5px; border: 1px solid var(--line); color: var(--tx-2); }
+.plan-option.chosen .plan-key { background: var(--brass); border-color: var(--brass); color: #141008; }
+.plan-name { grid-area: name; font-family: var(--font-display); font-size: 16px; letter-spacing: 0.12em; align-self: center; }
+.plan-gain { grid-area: gain; font-size: 11px; line-height: 1.35; color: var(--tx-2); }
+/* The cost is not small print: an option without one is not a choice. */
+.plan-cost { grid-area: cost; font-size: 11px; line-height: 1.35; color: #e0b07a; }
+.plan-votes { grid-area: votes; margin-top: 2px; font-size: 10px; letter-spacing: 0.14em; color: var(--brass); }
+.plan-foot { margin: 8px 0 0; font-size: 10px; letter-spacing: 0.06em; color: var(--tx-3); }
+.plan-active { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
+  background: rgba(11,11,13,.72); border-left: 2px solid var(--brass); padding: 4px 10px; font-size: 11px; }
+.plan-tag { font-size: 9px; letter-spacing: 0.2em; color: var(--tx-3); }
+.plan-active-name { font-family: var(--font-display); font-size: 14px; letter-spacing: 0.14em; color: var(--brass); }
+@media (max-width: 760px) { .plan-options { grid-template-columns: 1fr; } }
+
+/* ---------- First-run hints (2.4) ---------- */
+/* Bottom-centre, above the ammo block, out of the crosshair's way. `pointer-events: none` is not
+   decoration: a hint must never eat the click that was meant for the game. */
+.hint { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); pointer-events: none;
+  background: rgba(11,11,13,.88); border-left: 2px solid var(--brass); padding: 7px 14px;
+  font-size: 13px; letter-spacing: 0.02em; color: var(--tx); white-space: nowrap; max-width: 92vw;
+  overflow: hidden; text-overflow: ellipsis; animation: slide-in 200ms ease-out; }
+@media (max-width: 700px) { .hint { font-size: 12px; bottom: 96px; } }
+
 .wallet-role { color:#edc078; font-size:12px; padding:5px 8px; border-radius:5px; background:#10151edb; max-width:300px; }
+
+/* ---------- Shop: countdown, role strip, rebinding (merge with main #14) ---------- */
+.shop-countdown { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.shop-countdown small { font-size: 9px; letter-spacing: 0.2em; color: var(--tx-3); }
+.shop-countdown strong { font-family: var(--font-mono); font-size: 16px; font-weight: normal; color: var(--tx); }
+.shop-countdown.urgent strong { color: #f0a49a; }
+/* "The Boys" roles as a strip above the aisles, not behind a tab: the whole point of this layout
+   is that everything a player needs is on one screen at once. */
+.boys-strip { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 6px 0 8px; border-bottom: 1px solid var(--line); }
+.boys-strip-label { display: flex; flex-direction: column; font-family: var(--font-display); font-size: 13px; letter-spacing: 0.2em; color: var(--brass); white-space: nowrap; }
+.boys-strip-label small { font-family: var(--font-ui); font-size: 9px; letter-spacing: 0.04em; color: var(--tx-3); }
+.boys-strip-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; flex: 1 1 auto; min-width: 0; }
+.boys-chip { display: flex; flex-direction: column; gap: 1px; align-items: flex-start; padding: 5px 8px; cursor: pointer;
+  background: var(--bg-2); border: 1px solid var(--line); color: var(--tx); font-family: var(--font-ui); min-width: 0; }
+.boys-chip:hover { border-color: var(--brass); }
+.boys-chip.on { border-color: var(--brass); background: #17150f; }
+.boys-chip b { font-family: var(--font-display); font-size: 14px; letter-spacing: 0.1em; font-weight: normal; }
+.boys-chip span { font-size: 9px; letter-spacing: 0.12em; color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.boys-chip.on span { color: var(--brass); }
+@media (max-width: 900px) { .boys-strip { flex-direction: column; align-items: stretch; gap: 6px; } }
+
+.keys-table { width: 100%; border-collapse: collapse; }
+.keys-table td { padding: 4px 6px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--tx-2); }
+.keys-table td.key { width: 150px; text-align: right; }
+.keys-table tr.conflict td { color: #f0c89a; }
+.keycap { font-family: var(--font-mono); font-size: 11px; padding: 3px 8px; min-width: 90px; cursor: pointer;
+  background: var(--bg-3); border: 1px solid var(--line); color: var(--tx); }
+.keycap:hover { border-color: var(--brass); }
+.keycap.capturing { border-color: var(--brass); background: var(--brass); color: #141008; }
 
 /* Drop D — join by link: the lobby a friend's /r/<room> link opens asks for a nickname and nothing else. */
 .link-join { max-width: 440px; display: flex; flex-direction: column; gap: 10px; }

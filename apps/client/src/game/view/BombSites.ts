@@ -20,13 +20,25 @@ export class BombSites {
     };
     const yellow = mat("site_paint", "#e5ae52");
     for (const site of BOMB_SITES) {
+      // main's #14 replaced an 80 m² hazard-striped plate with a ring and a 3 × 1.5 m label. That is
+      // a better answer to the overdraw this branch set out to fix — 4.5 m² of alpha instead of 80 —
+      // so its geometry is what survives the merge. What this branch adds back is the discipline the
+      // old plate was missing and this one still is: a decal is emissive PAINT, so walking the
+      // scene's lights per fragment for it buys nothing (each site sits under its own point light),
+      // one texture sample beats two, and nothing here ever moves, so nothing should be re-evaluated
+      // per frame. The ordering problem underneath was map data (see `floorAudit.test.ts`).
       const ring = MeshBuilder.CreateTorus(`site_${site.id}`, { diameter: BOMB.useRadius * 2, thickness: 0.065, tessellation: 32 }, scene);
-      ring.position.set(site.x, site.y + 0.045, site.z); ring.material = yellow; this.meshes.push(ring);
+      ring.position.set(site.x, site.y + 0.045, site.z); ring.material = yellow;
+      ring.freezeWorldMatrix(); ring.doNotSyncBoundingInfo = true; this.meshes.push(ring);
       const texture = new DynamicTexture(`site_label_${site.id}`, { width: 512, height: 256 }, scene, false);
       texture.drawText(`${site.id} / ${site.name}`, null, 150, "bold 44px Arial", "#e5ae52", "#192022", true);
-      const label = mat(`site_label_${site.id}`, "#ffffff"); label.diffuseTexture = texture; label.emissiveTexture = texture;
+      const label = mat(`site_label_${site.id}`, "#ffffff");
+      label.diffuseTexture = texture; label.emissiveTexture = texture;
+      label.disableLighting = true; label.backFaceCulling = true; label.zOffset = -2;
+      label.freeze();
       const plate = MeshBuilder.CreateGround(`site_plate_${site.id}`, { width: 3, height: 1.5 }, scene);
-      plate.position.set(site.x, site.y + 0.035, site.z); plate.material = label; this.meshes.push(plate);
+      plate.position.set(site.x, site.y + 0.035, site.z); plate.material = label;
+      plate.freezeWorldMatrix(); plate.doNotSyncBoundingInfo = true; this.meshes.push(plate);
     }
     this.charge = MeshBuilder.CreateBox("bomb_charge", { width: 0.5, height: 0.24, depth: 0.36 }, scene);
     this.charge.material = mat("bomb_case", "#4b5746"); this.meshes.push(this.charge);

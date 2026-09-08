@@ -9,6 +9,7 @@ import type { ShopApi } from "./ui/Shop";
 import type { ChatApi } from "./ui/Chat";
 import { Loading } from "./ui/Loading";
 import { useHudSlice } from "./game/store";
+import { enterFullscreen, exitImmersion, isFullscreen, lockKeyboard } from "./game/input/immersion";
 import { hud } from "./game/store";
 
 type Screen = { kind: "menu"; error?: string } | { kind: "connecting" } | { kind: "ready" } | { kind: "entering" } | { kind: "game" };
@@ -50,6 +51,9 @@ export function App() {
     starting.current = false;
     const g = gameRef.current, c = connectionRef.current;
     gameRef.current = null; connectionRef.current = null;
+    // Leaving the match gives the keyboard and the screen back to the browser. Without this the
+    // player lands in the menu still fullscreen with Escape captured, which reads as a hang.
+    exitImmersion();
     canvasHost.current?.replaceChildren();
     hud.reset();
     setScreen({ kind: "menu", error: reason && reason !== "left" ? reason : undefined });
@@ -100,7 +104,15 @@ export function App() {
     if (!game || !connection || screen.kind !== "ready") return;
     setScreen({ kind: "entering" });
     if (canvasHost.current) canvasHost.current.style.visibility = "visible";
-    game.requestPointerLock();
+    // THIS CLICK is the user gesture fullscreen, Keyboard Lock and pointer lock all require, and
+    // it is the last one before play starts — asking earlier (before `connect`) would spend the
+    // gesture on an await and have every request refused. Fullscreen first: Keyboard Lock, which
+    // is what puts Escape and Ctrl+W in the game's hands, only works inside it and only on
+    // Chromium, so its failure is normal and silent. The pointer is asked for last; if the browser
+    // refuses it, the pause card is already the retry surface and says so.
+    const host = canvasHost.current;
+    if (host && await enterFullscreen(host)) void lockKeyboard();
+    void game.requestPointerLockAsync();
     connection.send(C2S.Ready);
     try {
       await game.waitForDeployment();
@@ -132,7 +144,18 @@ export function App() {
       <div ref={canvasHost} className="game-canvas-host" style={{ visibility: screen.kind === "game" || screen.kind === "entering" ? "visible" : "hidden" }} />
       {screen.kind === "game" && (
         <Hud
-          settings={settings} onSettings={updateSettings} onLeave={() => void leave("left")} onResume={() => gameRef.current?.requestPointerLock()}
+          settings={settings} onSettings={updateSettings} onLeave={() => void leave("left")}
+          onResume={async () => (await gameRef.current?.requestPointerLockAsync()) ?? false}
+          onPause={() => gameRef.current?.releasePointerLock()}
+          onFullscreen={async () => {
+            const el = canvasHost.current;
+            if (isFullscreen()) { exitImmersion(); return false; }
+            const ok = el ? await enterFullscreen(el) : false;
+            if (ok) void lockKeyboard();
+            return ok;
+          }}
+          onChooseTeam={(t) => gameRef.current?.chooseTeam(t)}
+          onVotePlan={(id) => gameRef.current?.votePlan(id)}
           shop={shopApi} chat={chatApi} radar={radar}
         />
       )}
@@ -155,6 +178,9 @@ function humanError(err: unknown): string {
   if (/startup|deployment/i.test(msg)) return msg;
   if (/ECONNREFUSED|Failed to fetch|NetworkError|network|refused|ENOTFOUND|timeout/i.test(msg)) return "Cannot reach the game server. Is it running?";
   if (/full/i.test(msg)) return "That room is full.";
+  // The renderer's own messages are already written for a player; passing them through beats
+  // replacing them with a generic failure that says nothing about what to try.
+  if (/WebGL2|hardware acceleration/i.test(msg)) return msg;
   if (/not found|no rooms|doesn't exist|does not exist/i.test(msg)) return "Room not found.";
   if (/WebGL2|WebGPU/i.test(msg)) return msg;
   return msg || "Something went wrong.";

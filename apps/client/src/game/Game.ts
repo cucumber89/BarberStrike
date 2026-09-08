@@ -4,9 +4,9 @@ import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import { type GameMode, MODES,
-  dequantAngle, boysClass, Btn, C2S, S2C, CHAT, ECONOMY, INTERP_DELAY_MS, MAPS, MARK, DEFAULT_MAP_ID, PERK_ORDER, RESPAWN_DELAY_MS, TEAM_NAMES, MatchPhase, buildCollisionWorld, buyWindowLeft, inFlagZone, isShopItemId, isWeaponId, makeRayHit, noPerks, packInput, perkSpeedScale,
+  dequantAngle, boysClass, Btn, C2S, S2C, CHAT, ECONOMY, INTERP_DELAY_MS, MAPS, MARK, DEFAULT_MAP_ID, PERK_ORDER, RESPAWN_DELAY_MS, TEAM_NAMES, MatchPhase, buildCollisionWorld, rebuildWorldInto, applyPlan, planById, PLANS, buyWindowLeft, inFlagZone, isShopItemId, isWeaponId, makeRayHit, noPerks, packInput, perkSpeedScale,
   type BoomEvent, type ChatEvent, type CollisionWorld, type DamagedEvent, type FlagEvent, type FlashedEvent, type GrenadeId, type HitEvent, type KillEvent, type MapDef, type MarkEvent, type MarkMessage, type MatchEventMessage, type MoneyEvent,
-  type PerkTimes, type ShopItemId, type ShopResult, type ShotEvent, type SpawnEvent, type Team, type ThrowEvent, type WeaponId,
+  type PerkTimes, type PlanEvent, type ShopItemId, type ShopResult, type ShotEvent, type SpawnEvent, type Team, type TeamResult, type ThrowEvent, type WeaponId,
 } from "@frankibarber/shared";
 import { createEngine, type RendererKind } from "./engine";
 import { InputState } from "./input/InputState";
@@ -85,6 +85,8 @@ export class Game {
   /** Character containers, in flight while the map is built. Null when the manifest lists none. */
   private charactersReady: Promise<(AssetContainer | null)[]> | null = null;
   private mapDef!: MapDef;
+  /** Living arena: the plan this client's world is currently shaped by (0 = none). */
+  private planId = 0;
   private shopOpen = false;
   private toastKey = 0;
   private lethalWasHeld = false;
@@ -172,7 +174,9 @@ export class Game {
     const models = Object.keys(assets.models).length ? new ModelLibrary(scene, assets.models) : undefined;
     const propSources = await this.prepareAssets(scene, assets);
     if (this.disposed) throw new Error("Startup cancelled");
-    this.map = buildMap(scene, mapDef, { shadows: this.settings.graphics.shadows !== "off", shadowMapSize: this.settings.graphics.shadows === "high" ? 2048 : 1024, models, propSources });
+    // Everything any tactical plan can remove is built as its own mesh rather than merged, so a
+    // plan can switch it off for a round (see plans.ts / MapBuilder's `toggleable`).
+    this.map = buildMap(scene, mapDef, { shadows: this.settings.graphics.shadows !== "off", shadowMapSize: this.settings.graphics.shadows === "high" ? 2048 : 1024, models, propSources, toggleable: PLAN_SOLIDS });
 
     this.input.attach(this.opts.canvas);
     this.local = new LocalPlayer(scene, world, this.input, {
@@ -369,6 +373,12 @@ export class Game {
       hud.set({ shopResult: { ...e, at: performance.now() } });
       this.events.emit("shop", e);
     }));
+    this.unsubs.push(c.onMessage<TeamResult>(S2C.TeamResult, (e) => {
+      if (!this.disposed) hud.set({ teamResult: { ...e, at: performance.now() } });
+    }));
+    this.unsubs.push(c.onMessage<PlanEvent>(S2C.Plan, (e) => {
+      if (!this.disposed) hud.set({ plan: { ...e, at: performance.now() } });
+    }));
     c.onReconnecting((active) => { if (!this.disposed) hud.set({ reconnecting: active }); });
     c.onLeave((code) => { if (!this.disposed) this.opts.onLeave(code === 1000 ? "left" : "Connection to the server was lost."); });
     c.onError((_code, message) => { if (!this.disposed) this.opts.onLeave(message ?? "Connection error."); });
@@ -459,8 +469,26 @@ export class Game {
   }
 
   /** Called after every applied state patch (~SNAPSHOT_RATE Hz). */
+  /**
+   * The living arena. `planId` is replicated, and BOTH ends run the identical pure filter over the
+   * identical shared `mapDef.solids` — so the collision world the client predicts against and the
+   * one the server simulates cannot drift apart. The world is mutated IN PLACE because the local
+   * player and the game context hold it by reference.
+   */
+  private applyPlanId(id: number): void {
+    if (id === this.planId) return;
+    const before = planById(this.planId);
+    this.planId = id;
+    const plan = planById(id);
+    rebuildWorldInto(this.world, applyPlan(this.mapDef.solids, id));
+    for (const name of before?.removes ?? []) this.map.setSolidVisible(name, true);
+    for (const name of plan?.removes ?? []) this.map.setSolidVisible(name, false);
+    hud.set({ planId: id });
+  }
+
   private onSnapshot(s: NetState): void {
     if (this.disposed) return;
+    if (s.planId !== this.planId) this.applyPlanId(s.planId);
     const t = s.t;
     s.players.forEach((p, id) => {
       if (id === this.conn.sessionId) {
@@ -666,6 +694,18 @@ export class Game {
     this.conn.send(C2S.Sell, { item });
   }
 
+  /** Vote for one of this round's plans. Sends an index; the server tallies and decides. */
+  votePlan(plan: number): void {
+    if (!Number.isInteger(plan) || plan <= 0) return;
+    this.conn.send(C2S.Vote, { plan });
+  }
+
+  /** Ask to change sides. The server decides and answers with S2C.TeamResult; nothing changes here. */
+  chooseTeam(team: Team): void {
+    if (team !== 0 && team !== 1) return;
+    this.conn.send(C2S.Team, { team });
+  }
+
   get shopIsOpen(): boolean { return this.shopOpen; }
 
   // ---------------------------------------------------------------- chat + marks + radar (drop 5)
@@ -760,6 +800,9 @@ export class Game {
   }
 
   requestPointerLock(): void { this.input.requestPointerLock(); }
+  /** Resolves to whether the pointer is actually locked, so the pause card can offer a retry. */
+  requestPointerLockAsync(): Promise<boolean> { return this.input.requestPointerLockAsync(); }
+  releasePointerLock(): void { this.input.exitPointerLock(); }
   get inputState(): InputState { return this.input; }
   get localPlayer(): LocalPlayer { return this.local; }
   get remotePlayers(): ReadonlyMap<string, RemotePlayer> { return this.remotes; }
@@ -803,3 +846,6 @@ export class Game {
 
   }
 }
+
+/** Every solid any tactical plan can remove — built unmerged so it can be switched off. */
+export const PLAN_SOLIDS: ReadonlySet<string> = new Set(PLANS.flatMap((p) => p.removes));
