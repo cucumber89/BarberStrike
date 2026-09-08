@@ -466,7 +466,9 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       )}
 
       {/* First-run hints: one short line, once each, never blocking (2.4) */}
-      {!paused && <Hints h={h} />}
+      {/* NOT while dormant: a hint is shown once ever and then remembered, so letting the timer
+          run behind an invisible HUD would burn them all before the player saw one. */}
+      {!paused && !dormant && <Hints h={h} />}
 
       {/* Living arena: the round's plan vote, or what is in force (2.4) */}
       {!h.shopOpen && <PlanPanel h={h} onVote={onVotePlan} />}
