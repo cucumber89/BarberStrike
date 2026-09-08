@@ -219,6 +219,8 @@ Nick + password or Discord OAuth, server-side profile (skins, haircuts, XP), wee
 
 | 2026-09-08 | D | drop/d-modes | Whole drop in one session. **Join by link**: the invite link is now `<origin>/r/<room>?mode=…`; the client reads the room off the path (`roomFromPath`), the lobby a link opens asks for a nickname and nothing else (CHANGE opens the full one), the SPA fallback moved into `hosting.ts` as `spaFallback` so it is testable, and `hostcheck.mjs` proves the path from outside (11/11 checks). **Gun Game**: the 11-rung ladder is data in `shared/modes.ts`; the rung replicates as `PlayerState.score` (no new field), a rung-weapon kill re-arms the killer on the spot, a clippers kill sets the victim back one, only the last rung ends the match, no economy, 3 s respawn, FFA spawn pool. **Ostrzyżeni**: rounds on the Prep/Playing machine, sides are the teams (survivors 0 / shaved 1), one random chaser per round with clippers + the energy perk + a bare head (`PlayerState.shaved`, the one field the plan names), a clippers kill converts, survivors who are not converted stay down until the round ends, five rounds, the result names the top score. **Bots** play both (`BotSenses.mode`/`shaved`): Gun Game needs no branch, a chaser closes and swings, a survivor gives ground. Reviewer (separate agent) found six things, all fixed — chiefly the profile recording the OPPOSITE of the result screen in Ostrzyżeni. | apps/client/e2e/out/d/{hostcheck.md,gungame/*.png,ostrzyzeni/*.png}; docs/PLAYTEST_TEMPLATE.md; regenerate with `hostcheck.mjs`, `shaved-shots.mjs`, `infection-shots.mjs` | typecheck ✓ test ✓ (510: shared 153, client 217, server 140) build ✓ check:weapons ✓ (19/19) e2e ✓ (18/18 against a freshly started server; the pre-existing smoke test failed twice against a server process that had been up ~20 min / 64 k ticks, and passes alone — see Deferred) | review |
 
+| 2026-09-08 | D | drop/d-modes (PR #16) | Merged `main` (The Boys, PR #14) into the drop and ported Drop D onto it. Fifteen files conflicted: main had added a mode and deleted the invite module, HowToPlay, Armoury, Profile, Online, the ui sfx, the defuse kit, the bomb blast, slide and the carry pack. Kept both mode tables in one (`MODES` describes 7, the picker offers 6 — FFA stays playable but unoffered); took main's side wherever it had deleted something Drop D merely touched; **restored join-by-link on the owner's word** (the plan names it as Drop D's first deliverable and the deletion was refactor collateral), wired into main's rewritten lobby, which now also MAKES the link (an INVITE box — joining by a link nobody can generate is not a feature). Its e2e moved from the deleted `menu.spec.ts` to `startup.spec.ts`, plus a six-mode picker test. | apps/client/e2e/out/d/** (regenerate per `e2e/tools/README-drop-d.md`) | typecheck ✓ test ✓ (485: shared 137, client 206, server 142) build ✓ e2e 14/15 — the one failure (`drop 2: buy menu…`, asserting a WEAPONS-tab card after switching to the GRENADES tab) reproduces byte-identically on unmodified `main` in a clean worktree, so it is main's, not the merge's | review |
+
 Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 
 ## Decisions log (append-only)
@@ -299,6 +301,16 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
   here). `TdmRoom.test.ts`'s join test asserts the spawn belongs to the player's team, so it fails
   roughly one run in five. Pre-existing, not this drop's — but it is a real flake in the suite:
   either the pool or the assertion is wrong, and somebody should decide which.
+- **`main` is red in e2e**: `drop 2: buy menu, wallet, frag cook + throw, flashbang` asserts that the
+  DMR card is disabled after switching the shop to the GRENADES tab, and the tabbed shop from PR #14
+  does not render the weapons cards on that tab. MEASURED on unmodified `main` in a clean worktree,
+  not only on this branch. One line of the test (switch back to WEAPONS first) or one of the shop.
+- PR #14 (The Boys) landed without a ledger row and deleted a large part of the 2.1 UI — Armoury,
+  Profile, HowToPlay, Online, the invite module, mastery, challenges, the defuse kit, the bomb
+  blast, slide. Some of that is plainly deliberate (the class mode replaces FFA); some looks like
+  collateral (join-by-link, which the plan assigns to Drop D, was restored here on the owner's
+  word). Worth one pass by the owner to say which deletions were meant, before Drop E builds on
+  the parts that are left.
 - Drop D: the smoke e2e ("smoke obscures the view from inside") failed twice in a row against a
   game server process that had been up about twenty minutes and 64 k ticks, and passed both alone
   and in a full 18/18 run against a freshly started one. Nothing in this drop touches grenades,
