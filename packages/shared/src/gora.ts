@@ -297,9 +297,13 @@ export const GORA: MapDef = (() => {
       { id: "A", name: "BALKON", x: 0, y: 0, z: 10 },
       { id: "B", name: "HOL", x: 0, y: 0, z: 0 },
     ],
-    // The chase mode's respawn distance is a per-map number: 14 m on NIGHT_DISTRICT's 121 m
-    // diagonal is 8 m on this map's 39 m one (docs/MAP_2.md, D-G3).
-    huntSpawnMinM: 8,
+    // The chase mode's respawn distance is a per-map number (docs/MAP_2.md, D-G3). Drafted at 8 m
+    // by proportion — 14 m on NIGHT_DISTRICT's 121 m diagonal against this map's 39 m — and then
+    // MEASURED: with five survivors spread one to an area, no point in the pool is 7 m from all of
+    // them, so the rule would fall through to the ordinary spawn pick, which maximises distance
+    // from enemies and is the opposite of hunting. At 6 m every arrangement sampled keeps at least
+    // four legal points, and 6 m is still eight body-widths and a whole spawn-protection window.
+    huntSpawnMinM: 6,
     // Falling down the light well, off the balcony or off the roof is a death (D-G5).
     killY: -8,
     bounds: boxFrom(-20, -12, -10, 40, 20, 23),

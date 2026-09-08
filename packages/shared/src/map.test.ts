@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildCollisionWorld, MAPS, type MapDef } from "./map";
+import { buildCollisionWorld, MAPS, sitesOf, type MapDef } from "./map";
+import { OSTRZYZENI } from "./modes";
 import { makeRayHit } from "./collision";
 import { PLAYER } from "./constants";
 import { cellReached, reachable, walkable } from "./mapWalk";
@@ -135,5 +136,35 @@ for (const map of Object.values(MAPS)) {
       }
       expect(overlaps).toEqual([]);
     });
+  });
+}
+
+/**
+ * Ostrzyżeni respawns the chaser at the point nearest a living survivor that is still
+ * `huntSpawnMinM` away, and falls back to the ordinary pick when nothing qualifies — a pick that
+ * MAXIMISES distance from enemies, which is the opposite of hunting. On a small map that fallback
+ * is easy to hit by accident, so the number has to leave the rule somewhere to work even in the
+ * arrangement that squeezes it hardest: five survivors spread as far from each other as the map
+ * allows (farthest-point sampling over the spawn pool, which is where a round's areas are).
+ * GÓRA was drafted at 8 m by proportion and measured down to 6: at 8 this test has nothing left,
+ * and a sweep over four survivor arrangements says 6 is where every one of them keeps four points.
+ */
+for (const map of Object.values(MAPS)) {
+  it(`${map.id}: the chase mode always has somewhere to bring the chaser back`, () => {
+    const min = map.huntSpawnMinM ?? OSTRZYZENI.huntSpawnMinM;
+    const pool = [...map.spawns, ...(map.arenaSpawns ?? [])];
+    // Five survivors, spread: start at the first spawn, then repeatedly take the pool point
+    // farthest from everyone chosen so far.
+    const survivors = [pool[0]];
+    while (survivors.length < 5) {
+      let best = pool[0], bestD = -1;
+      for (const p of pool) {
+        const d = Math.min(...survivors.map((v) => Math.hypot(p.x - v.x, p.z - v.z)));
+        if (d > bestD) { bestD = d; best = p; }
+      }
+      survivors.push(best);
+    }
+    const legal = pool.filter((s) => survivors.every((v) => Math.hypot(s.x - v.x, s.z - v.z) >= min));
+    expect(legal.length, `${map.id}: with survivors spread out, no spawn is ${min} m from all of them and the hunt spawn falls through`).toBeGreaterThan(0);
   });
 }

@@ -511,5 +511,14 @@ The numbers below are re-measured on the REAL geometry and the REAL walk grid (�
 - **No playtest.** 2–6 players is the intent; six spawn points a side means the map will accept 6v6
   at one player per 42 m² of reachable floor, against NIGHT_DISTRICT's one per 426 m². Whether 4v4
   is already too many is a question for humans, not for a test.
-- **Ostrzyżeni's hunt spawn on this map is 8 m** (`MapDef.huntSpawnMinM`, D-G3) and that number has
-  not been played, only reasoned from the map's 39 m diagonal against NIGHT_DISTRICT's 121 m.
+- **Ostrzyżeni's hunt spawn on this map is 6 m, not the drafted 8** (`MapDef.huntSpawnMinM`, D-G3).
+  8 was proportion: 14 m on a 121 m diagonal scaled to a 39 m one. Measuring it changed it. The
+  rule takes the point nearest a living survivor that is still `huntSpawnMinM` away, and falls
+  through to the ordinary pick when nothing qualifies — and the ordinary pick MAXIMISES distance
+  from enemies, which is the opposite of hunting. Swept over four survivor arrangements: with five
+  survivors spread one to an area, 8 m and 7 m leave **no legal point at all** and the rule silently
+  disengages exactly when it matters; 6 m leaves at least four in every arrangement, and is still
+  eight body widths and a whole spawn-protection window. `map.test.ts` now holds every map to it
+  (survivors placed by farthest-point sampling over the spawn pool); GÓRA fails that test at 8.
+  What is still unproven is the same thing as on NIGHT_DISTRICT: whether the chase is fun. That
+  needs humans.
