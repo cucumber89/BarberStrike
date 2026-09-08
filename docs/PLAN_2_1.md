@@ -386,6 +386,10 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
   among the top three. Locally 1 in 10 runs fails; CI passed and failed the same commit. Either
   the test accepts `[...spawns, ...arenaSpawns]` for TDM, or TDM goes back to `!this.teams` —
   the owner decides which is the intended rule. Seeding the harness PRNG would only hide it.
+  **Drop D, 2026-09-08:** it went red on PR #16's CI, so the TEST now asserts the pool the room
+  actually draws from (a spawn off the grid is still caught). That is a test-only change and does
+  NOT answer the question: if the owner's answer is that TDM should use its own team's spawns, the
+  room drops `|| this.mode === "tdm"` and the assertion goes back to `s.team === p.team`.
 - Drop B: the ADS blend is a framerate-dependent lerp (`LocalPlayer.ts:243`), so `adsMs` is not
   the measured 0.1 → 0.9 time; `weapon-signature.mjs` measures the real time and the matrix quotes
   `adsMs` as intent. Making the blend exact is a one-line change to do with the tool in hand.
