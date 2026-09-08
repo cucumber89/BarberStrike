@@ -538,11 +538,11 @@ export class Game {
     const s = this.conn.state;
     const me = this.conn.me();
     const rows: ScoreRow[] = [];
-    s.players.forEach((p) => rows.push({ id: p.id, name: p.name, team: p.team as Team, kills: p.kills, deaths: p.deaths, score: p.score, ping: p.ping, alive: p.alive, connected: p.connected, assists: p.assists ?? 0, money: p.money, bot: !!p.bot }));
+    s.players.forEach((p) => rows.push({ id: p.id, name: p.name, team: p.team as Team, kills: p.kills, deaths: p.deaths, score: p.score, ping: p.ping, alive: p.alive, connected: p.connected, assists: p.assists ?? 0, money: p.money, bot: !!p.bot, shaved: !!p.shaved }));
     rows.sort((a, b) => b.score - a.score || b.kills - a.kills);
     const near = this.nearStation();
     const windowLeft = me ? buyWindowLeft({ now: this.conn.serverNow(), spawnedAt: me.spawnedAt ?? 0, phase: s.phase, alive: me.alive, nearStation: near,
-      bombBuying: s.mode === "bomb" ? s.phase === MatchPhase.Prep && s.bomb.stage === "buy" : undefined, releaseAt: s.phaseEndsAt, mode: (s.mode ?? "tdm") as GameMode }) : 0;
+      bombBuying: s.mode === "bomb" ? s.phase === MatchPhase.Prep && s.bomb.stage === "buy" : undefined, releaseAt: s.phaseEndsAt, mode: (s.mode ?? "tdm") as GameMode, shaved: !!me.shaved }) : 0;
     const cur = hud.get();
     const scope = this.local.scopeState();
     // Drop 4: flags (Domination) and which zone we stand in.
@@ -569,6 +569,7 @@ export class Game {
       bomb: s.mode === "bomb" && s.bomb ? { round: s.bomb.round, attackTeam: s.bomb.attackTeam, stage: s.bomb.stage, carrier: s.bomb.carrier,
         site: s.bomb.site, x: s.bomb.x, y: s.bomb.y, z: s.bomb.z, endsAt: s.bomb.endsAt, roundEndsAt: s.bomb.roundEndsAt,
         actor: s.bomb.actor, progress: s.bomb.progress, result: s.bomb.result, droppedBy: s.bomb.droppedBy, droppedAt: s.bomb.droppedAt } : null,
+      round: s.bomb?.round ?? 0,
       tac: this.local.tacFraction, tacOn: this.local.isTacSprinting(),
       // Drop 5: expired chat lines (unless the box is open) and marks drop out here.
       chat: !cur.chatOpen && cur.chat.some((l) => now - l.seen > CHAT.showMs) ? cur.chat.filter((l) => now - l.seen <= CHAT.showMs) : cur.chat,
@@ -608,7 +609,7 @@ export class Game {
     if (!me || !me.alive) return;
     const state = this.conn.state;
     const left = buyWindowLeft({ now: this.conn.serverNow(), spawnedAt: me.spawnedAt ?? 0, phase: state.phase, alive: me.alive, nearStation: this.nearStation(),
-      bombBuying: state.mode === "bomb" ? state.phase === MatchPhase.Prep && state.bomb.stage === "buy" : undefined, releaseAt: state.phaseEndsAt, mode: (state.mode ?? "tdm") as GameMode });
+      bombBuying: state.mode === "bomb" ? state.phase === MatchPhase.Prep && state.bomb.stage === "buy" : undefined, releaseAt: state.phaseEndsAt, mode: (state.mode ?? "tdm") as GameMode, shaved: !!me.shaved });
     if (left <= 0) { hud.set({ shopResult: { ok: false, item: "", reason: "closed", at: performance.now() } }); return; }
     this.setShopOpen(true);
   }

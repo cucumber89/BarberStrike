@@ -566,3 +566,9 @@ button { font-family: inherit; }
 .ffa-score .ladder-gun { display: flex; flex-direction: column; line-height: 1.1; font-family: var(--font-ui); }
 .ffa-score .ladder-gun b { font-size: 12px; letter-spacing: .08em; color: var(--tx); white-space: nowrap; }
 .ffa-score .ladder-gun small { font-size: 10px; letter-spacing: .12em; color: var(--tx-2); white-space: nowrap; }
+
+/* Drop D — Ostrzyżeni: the round line reuses the bomb banner's shape, in the shaved side's colour
+   when you are the one holding the clippers, so a glance at the top of the screen says which you are. */
+.bomb-hud.infection { border-top-color: var(--team1, #7fb2d8); color: #cfe3f2; }
+.bomb-hud.infection.shaved { border-top-color: #d8556a; color: #ffc9d1; }
+.result-rounds { color: var(--tx-2); font-family: var(--font-mono); font-size: 12px; }

@@ -62,6 +62,12 @@ export interface CharacterInput {
   bomb?: boolean;
   /** Slide (2.3): leaning back on one leg, the other out front. */
   slide?: boolean;
+  /**
+   * Drop D: a visibly shaved head — the cap comes off and a stubbled skull shows. Ostrzyżeni's
+   * shaved side wears it for the round; Drop E's shave reuses the same flag. Read in every mode,
+   * and unlike the perk band it stays on a corpse: the shave is the point.
+   */
+  shaved?: boolean;
 }
 
 /** Joint angles exposed for tests/tools (radians). */
@@ -71,7 +77,7 @@ export interface Pose {
   armR: number; armL: number; rootZ: number; rootX: number;
 }
 
-interface SharedMats { skin: PBRMaterial; cloth: PBRMaterial; vest: PBRMaterial; accent: PBRMaterial; boots: PBRMaterial; weapons: WeaponMaterials }
+interface SharedMats { skin: PBRMaterial; cloth: PBRMaterial; vest: PBRMaterial; accent: PBRMaterial; boots: PBRMaterial; stubble: PBRMaterial; weapons: WeaponMaterials }
 
 const SHARED = new Map<Scene, Map<Team, SharedMats>>();
 
@@ -97,6 +103,9 @@ function teamMats(scene: Scene, team: Team): SharedMats {
     vest: mk("ch_vest", "#939990", 0.7, 0.05, "#181b19"),
     accent: mk("ch_accent", accentHex, 0.45, 0.1, accentHex),
     boots: mk("ch_boots", "#292e35", 0.6, 0, "#090c10"),
+    // Drop D: a freshly clipped scalp — skin with a grey-blue stubble cast, matte, so a shaved head
+    // reads as "no hair" at gameplay distance rather than as a bald skin tone.
+    stubble: mk("ch_stubble", "#8f7a6c", 0.95, 0, "#120d0b"),
     weapons: createWeaponMaterials(scene),
   };
   byTeam.set(team, m);
@@ -144,6 +153,9 @@ export class Character {
   private flinchAmt = 0;
   private perkBand: Mesh;
   private bombPack: Mesh[] = [];
+  /** Drop D: the cap (and its visor) hide when shaved; the bare, stubbled skull shows instead. */
+  private capParts: Mesh[] = [];
+  private bareHead: Mesh;
 
   constructor(private scene: Scene, team: Team, name: string) {
     const M = teamMats(scene, team);
@@ -169,8 +181,12 @@ export class Character {
     box("shoulderR", this.torso, 0.12, 0.1, 0.22, 0.26, 0.5, 0, M.vest);
     this.head = node("head", this.torso, 0, 0.62, 0);
     box("skull", this.head, 0.22, 0.24, 0.24, 0, 0.12, 0, M.skin);
-    box("cap", this.head, 0.24, 0.07, 0.26, 0, 0.24, 0.01, M.cloth);
-    box("visor", this.head, 0.22, 0.02, 0.1, 0, 0.21, 0.17, M.cloth);
+    this.capParts.push(box("cap", this.head, 0.24, 0.07, 0.26, 0, 0.24, 0.01, M.cloth));
+    this.capParts.push(box("visor", this.head, 0.22, 0.02, 0.1, 0, 0.21, 0.17, M.cloth));
+    // Shaved (drop D): a stubbled skull a hair larger than the skin one so it wins the depth test
+    // where they overlap, reaching up to where the cap's crown used to sit. Hidden until `shaved`.
+    this.bareHead = box("bare_head", this.head, 0.226, 0.25, 0.246, 0, 0.13, 0, M.stubble);
+    this.bareHead.setEnabled(false);
     box("neck", this.head, 0.1, 0.08, 0.1, 0, -0.02, 0, M.skin);
     box("goggle_frame", this.head, 0.238, 0.075, 0.045, 0, 0.155, 0.117, M.boots);
     box("goggle_lens", this.head, 0.198, 0.039, 0.018, 0, 0.16, 0.145, M.accent);
@@ -219,17 +235,18 @@ export class Character {
     box("bootL", this.shinL, 0.14, 0.1, 0.26, 0, -0.42, 0.04, M.boots);
     for (const shin of [this.shinL, this.shinR]) box("knee_pad", shin, 0.145, 0.14, 0.065, 0, -0.045, 0.08, M.vest);
 
-    // Merge only within a joint and material, retaining articulation and the toggled perk band.
-    // Added clothing detail therefore does not add a draw call for every pouch or buckle.
+    // Merge only within a joint and material, retaining articulation and the toggled perk band,
+    // bomb pack, cap and bare head. Added clothing detail therefore does not add a draw call for
+    // every pouch or buckle.
     const groups = new Map<TransformNode, Map<PBRMaterial, Mesh[]>>();
     for (const m of this.meshes) {
-      if (m === this.perkBand || this.bombPack.includes(m)) continue;
+      if (m === this.perkBand || m === this.bareHead || this.bombPack.includes(m) || this.capParts.includes(m)) continue;
       const parent = m.parent as TransformNode, mat = m.material as PBRMaterial;
       const materials = groups.get(parent) ?? new Map<PBRMaterial, Mesh[]>();
       const meshes = materials.get(mat) ?? []; meshes.push(m);
       materials.set(mat, meshes); groups.set(parent, materials);
     }
-    this.meshes = [this.perkBand, ...this.bombPack];
+    this.meshes = [this.perkBand, this.bareHead, ...this.bombPack, ...this.capParts];
     for (const [parent, materials] of groups) for (const [mat, meshes] of materials) {
       // Merge in joint-local space; the joint's world transform must not be baked twice.
       for (const m of meshes) { m.parent = null; m.computeWorldMatrix(true); }
@@ -327,6 +344,9 @@ export class Character {
     if (this.perkBand.isEnabled() !== perked) this.perkBand.setEnabled(perked);
     const bomb = !!inp.bomb && inp.alive;
     if (this.bombPack[0] && this.bombPack[0].isEnabled() !== bomb) for (const m of this.bombPack) m.setEnabled(bomb);
+    // Shaved (drop D) is not gated on `alive`: the shaved head stays on the body that fell.
+    const shaved = !!inp.shaved;
+    if (this.bareHead.isEnabled() !== shaved) { this.bareHead.setEnabled(shaved); for (const m of this.capParts) m.setEnabled(!shaved); }
 
     // ---- Death: buckle (0–0.25) → fall away from the killer with a tumble (0.25–0.8) → settle.
     if (this.deathT >= 0) {

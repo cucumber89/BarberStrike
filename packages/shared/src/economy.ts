@@ -85,10 +85,19 @@ export interface BuyContext {
    * sites keep their meaning; without it the window follows the rules above, as before.
    */
   mode?: GameMode;
+  /** Drop D: the buyer is on the shaved side (Ostrzyżeni), whose whole loadout is the clippers. */
+  shaved?: boolean;
 }
 
-/** Drop D: a mode with no economy (Gun Game) has no window to open — not at a station, not in warm-up. */
-const shopless = (ctx: BuyContext): boolean => ctx.mode !== undefined && MODES[ctx.mode].shop === "none";
+/**
+ * Drop D: who has no window to open at all — not at a station, not in warm-up. A mode with no
+ * economy (Gun Game) closes it for everyone; an infection mode closes it for the shaved side only.
+ */
+const shopless = (ctx: BuyContext): boolean => {
+  if (ctx.mode === undefined) return false;
+  const shop = MODES[ctx.mode].shop;
+  return shop === "none" || (shop === "survivors" && !!ctx.shaved);
+};
 
 /**
  * The shop is open during warm-up, in the frozen preparation window between waves, for a while
