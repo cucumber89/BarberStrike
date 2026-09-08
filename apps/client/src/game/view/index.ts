@@ -106,9 +106,11 @@ export const installView: GameModule = (ctx) => {
       // holds on to it until the action is worked, which is where the eye expects to see it.
       if (feel.casings > 0) {
         const ej = viewmodel.ejectNode; ej.computeWorldMatrix(true);
-        for (let i = 0; i < feel.casings; i++) effects.eject(tmpC.copyFrom(ej.getAbsolutePosition()), ctx.local.yaw, feel.casingScale, s.weapon === "smg2");
+        for (let i = 0; i < feel.casings; i++) effects.eject(tmpC.copyFrom(ej.getAbsolutePosition()), ctx.local.yaw, feel.casingScale, feel.ejectDown);
       } else if (feel.actionMs > 0) {
-        ejectAt = performance.now() + feel.actionMs * 0.8;
+        // At the peak of the VISIBLE action, which is a tenth of a second, not at the end of the
+        // rhythm the shooter feels — the bolt is open for 125 ms and the SR-50's `actionMs` is 700.
+        ejectAt = performance.now() + viewmodel.actionPeakMs;
         ejectScale = feel.casingScale;
       }
     }),
@@ -157,13 +159,15 @@ export const installView: GameModule = (ctx) => {
     }),
     ctx.events.on("localDamaged", () => ctx.local.addShake(0.015)),
     ctx.events.on("remoteJoin", ({ player }) => { for (const m of player.character.allMeshes) ctx.mapInstance.addCaster(m); }),
-    ctx.events.on("weaponEquip", (e) => viewmodel.setWeapon(e.weapon)),
+    // A case owed by the gun you just put away is not owed by the one in your hands: without this
+    // an SR-50 hull drops out of the pistol you swapped to a third of a second later.
+    ctx.events.on("weaponEquip", (e) => { ejectAt = 0; viewmodel.setWeapon(e.weapon); }),
     ctx.events.on("weaponInspect", () => viewmodel.inspect()),
     ctx.events.on("reloadStart", () => viewmodel.onReload()),
     ctx.events.on("reloadEnd", () => viewmodel.onReloadEnd()),
     ctx.events.on("landed", (e) => viewmodel.onLanded(e.impactSpeed)),
     ctx.events.on("jump", () => viewmodel.onJump()),
-    ctx.events.on("localDeath", () => { viewmodel.cancelGrenade(); viewmodel.setVisible(false); }),
+    ctx.events.on("localDeath", () => { ejectAt = 0; viewmodel.cancelGrenade(); viewmodel.setVisible(false); }),
     ctx.events.on("localSpawn", () => { viewmodel.setVisible(true); viewmodel.cancelGrenade(); viewmodel.setWeapon(ctx.weapons.weapon); }),
     ctx.events.on("settings", () => { effects.setDensity(density()); grenades.setDensity(density()); }),
     // ---- drop 2: grenades

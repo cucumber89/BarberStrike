@@ -5,7 +5,7 @@ import {
   Btn, LEAN, MatchPhase, PLAYER, TAC, WEAPONS, aimDirection, copyBody, createBody, dequantVel, eyeHeight, frozenAt, leanClearance, leanOf, maskInput, simulateBody, sprintActive, tacActive, wrapAngle,
   type BodyState, type CollisionWorld, type PlayerInput, type WeaponId,
 } from "@frankibarber/shared";
-import { BIPOD, bipodDeployed, feelOf, lookScale, unscopeForSprint, type ScopeStyle } from "../combat/weaponFeel";
+import { BIPOD, bipodDeployed, feelOf, lookScale, type ScopeStyle } from "../combat/weaponFeel";
 import type { InputState } from "../input/InputState";
 import type { NetPlayer } from "../net/Connection";
 
@@ -27,8 +27,6 @@ const MAX_PITCH = 1.5;
 const tmpDir: [number, number, number] = [0, 0, 0];
 /** Scope sway (drop 3): amplitude in radians, breath hold length and the winded penalty after it. */
 const SCOPE = { sway: 0.0045, holdMs: 4000, refillPerMs: 0.5, windedMs: 2200, heldScale: 0.12, windedScale: 2.2 } as const;
-/** Any movement key: what separates "holding Shift to steady the aim" from "asking to run" (S2). */
-const MOVE_KEYS = Btn.Forward | Btn.Back | Btn.Left | Btn.Right;
 
 /**
  * Locally controlled player: consumes raw input, predicts movement with the shared
@@ -97,6 +95,7 @@ export class LocalPlayer {
     this.yaw = yaw; this.pitch = 0;
     this.pending.length = 0;
     this.recoilPitch = this.recoilYaw = 0;
+    this.clearWeaponState(); // a bolt owed by the body that just died is not owed by this one
     this.alive = true;
   }
 
@@ -151,15 +150,10 @@ export class LocalPlayer {
     // Judged from the shared CLOCK, not from the arrival of `S2C.MatchEvent`: waiting for the
     // message would let the player walk for half a round trip after the server had stopped them and
     // then yank them back, once every seventeen seconds for the whole match.
-    // S2 (matrix): while scoped, Shift means two different things. Standing still it holds the
-    // breath; asking to move under it is a request to RUN, which the shared movement sim refuses
-    // while Aim is held — so the aim is dropped here instead of the player being stuck at a walk
-    // wondering why. Cleared in the input itself, before prediction and before it goes on the wire,
-    // so the server sees exactly the same buttons and there is nothing to reconcile.
-    let buttons = maskInput(this.input.buttons(), this.frozen);
-    if (unscopeForSprint(feelOf(this.weapon), (buttons & Btn.Aim) !== 0, (buttons & Btn.Sprint) !== 0, (buttons & MOVE_KEYS) !== 0)) {
-      buttons &= ~Btn.Aim;
-    }
+    // S2 (matrix) is decided in `InputState.buttons()`, at the source of the Aim bit, so exactly one
+    // place answers "is this Shift a breath or a sprint?" — deciding it twice is how the two answers
+    // drift apart.
+    const buttons = maskInput(this.input.buttons(), this.frozen);
     this.lastButtons = buttons;
     const tacNow = tacActive(buttons, this.body);
     if (tacNow !== this.wasTac) { this.wasTac = tacNow; this.onTac?.(tacNow); }
@@ -247,8 +241,19 @@ export class LocalPlayer {
     if (dropsAim && ms > 0) this.actionUntil = performance.now() + ms;
   }
 
-  /** True while the LMG is crouched, settled and shooting off its bipod (matrix B1). */
-  get bipod(): boolean { return bipodDeployed(feelOf(this.weapon), this.body.crouching, this.stillMs); }
+  /**
+   * Whatever the previous weapon owed the player is void: a bolt worked on the SR-50 must not keep
+   * the pistol you switched to out of its sights, and it must not survive your own death either.
+   */
+  clearWeaponState(): void { this.actionUntil = 0; this.stillMs = 0; }
+
+  /**
+   * True while the LMG is crouched, settled and shooting off its bipod (matrix B1). Airborne and
+   * dead are both excluded: a crouch-jump is not a firing position.
+   */
+  get bipod(): boolean {
+    return this.alive && this.body.grounded && bipodDeployed(feelOf(this.weapon), this.body.crouching, this.stillMs);
+  }
 
   /** Camera shake (radians of roll/pitch noise), scaled by the user's camera-shake setting. Decays quickly. */
   private shake = 0;
@@ -263,7 +268,7 @@ export class LocalPlayer {
     const b = this.body;
     // Bipod dwell (matrix B1): crouched and barely moving, the LMG settles. Any real movement
     // resets it, so the weapon is heavy again the moment its owner does.
-    this.stillMs = b.crouching && Math.hypot(b.vx, b.vz) < BIPOD.speed ? this.stillMs + dtMs : 0;
+    this.stillMs = this.alive && b.grounded && b.crouching && Math.hypot(b.vx, b.vz) < BIPOD.speed ? this.stillMs + dtMs : 0;
     // Recoil recovery (exponential, after the per-weapon hold).
     if (performance.now() >= this.recoilHoldUntil) {
       const k = Math.exp(-this.recoilRecover * dt);

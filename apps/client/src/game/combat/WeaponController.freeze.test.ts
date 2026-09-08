@@ -19,6 +19,9 @@ function rig() {
     eyePosition: (o: number[]) => { o[0] = 0; o[1] = 1.62; o[2] = 0; },
     aimDir: (d: number[]) => { d[0] = 0; d[1] = 0; d[2] = 1; },
     addRecoil: () => {}, isSprinting: () => false, isTacSprinting: () => false, isAiming: () => false, isCrouching: () => false, isMoving: () => false, isAirborne: () => false, aimBlend: 0,
+    // Drop B: the controller hands the weapon's own state back on every equip, and asks the player
+    // whether the bipod is under it before it scales the kick.
+    workAction: () => {}, clearWeaponState: () => {}, bipod: false,
   } as unknown as LocalPlayer;
   const w = new WeaponController(conn, player);
   w.syncFrom({ weapon: "rifle", owned: ["rifle"], ammo: 30, reserve: 90, reloading: false } as unknown as NetPlayer);

@@ -3,7 +3,7 @@ import { WEAPONS, WEAPON_ORDER, type WeaponId } from "@frankibarber/shared";
 import { gunTail } from "../audio/sfx";
 import {
   BIPOD, WEAPON_FEEL, bipodDeployed, closestPair, feelOf, lookScale, pelletRing,
-  signatureDistance, signatureOf, swayScaleOf, unscopeForSprint,
+  signatureDistance, signatureOf, swayScaleOf,
 } from "./weaponFeel";
 
 /**
@@ -96,11 +96,8 @@ describe("weapon feel", () => {
     }
   });
 
-  it("drops the scope for a player who asks to run, and only then (S2)", () => {
-    const sniper = feelOf("sniper");
-    expect(unscopeForSprint(sniper, true, true, true)).toBe(true);
-    expect(unscopeForSprint(sniper, true, true, false)).toBe(false); // standing still: that is breath
-    expect(unscopeForSprint(sniper, false, true, true)).toBe(false); // not aiming: nothing to drop
-    expect(unscopeForSprint(feelOf("rifle"), true, true, true)).toBe(false); // no scope to leave
+  it("ejects downward only where the magazine well is the port", () => {
+    expect(feelOf("smg2").ejectDown).toBe(true);
+    for (const id of WEAPON_ORDER.filter((w) => w !== "smg2")) expect(feelOf(id).ejectDown, id).toBe(false);
   });
 });

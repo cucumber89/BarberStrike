@@ -67,6 +67,7 @@ export class WeaponController {
         this.previousWeapon = this.weapon;
         this.weapon = p.weapon;
         this.player.weapon = this.weapon;
+        this.player.clearWeaponState(); // the old gun's action and bipod dwell do not carry over
         this.reloading = false; this.spread = 0; this.shotIndex = 0;
         this.equipEndsAt = performance.now() + WEAPONS[this.weapon].equipMs;
         this.onEquip?.(this.weapon);
@@ -97,6 +98,7 @@ export class WeaponController {
     this.weapon = id;
     this.shotIndex = 0;
     this.player.weapon = id;
+    this.player.clearWeaponState();
     this.reloading = false;
     this.spread = 0;
     this.equipEndsAt = now + WEAPONS[id].equipMs;

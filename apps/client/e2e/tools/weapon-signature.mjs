@@ -25,7 +25,8 @@ const WEAPONS_ARG = process.env.WEAPONS?.split(",");
 const SETTINGS = JSON.stringify({
   graphics: { preset: "medium", renderer: "webgl2", renderScale: 1, shadows: "off", postProcessing: false, effects: 1, antialiasing: false },
   // The measurements must not be scaled by a user preference that happens to be in localStorage.
-  gameplay: { sensitivity: 1, adsSensitivity: 1, shakeScale: 1, bobScale: 1 },
+  // These are the real keys (`settings.ts`): cameraShake and headBob feed the shake and bob scales.
+  gameplay: { sensitivity: 1, invertY: false, fov: 90, headBob: 0, cameraShake: 1 },
 });
 
 await mkdir(OUT, { recursive: true });
