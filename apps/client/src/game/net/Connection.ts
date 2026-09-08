@@ -24,6 +24,7 @@ export interface NetPlayer {
   shaved: boolean;
   /** Drop E: the haircut field — `"<id>"` or `"<id>#<n>"`. See shared/haircuts.ts. */
   haircut: string;
+  skins?: string;
 }
 
 /** Drop 4: a Domination flag as replicated. */
@@ -67,7 +68,7 @@ export interface RoomListing { roomId: string; clients: number; maxClients: numb
  * `equippedHaircut()` in here, so this stays the pure thing Drop G made it: reading localStorage
  * from inside would make the lobby's contract untestable without a browser again.
  */
-export function joinOptions(opts: ConnectOptions, boysClass: number, haircut: string = DEFAULT_HAIRCUT) {
+export function joinOptions(opts: ConnectOptions, boysClass: number, haircut: string = DEFAULT_HAIRCUT, skins = "") {
   return {
     deferSpawn: true, boysClass,
     name: opts.name,
@@ -77,6 +78,7 @@ export function joinOptions(opts: ConnectOptions, boysClass: number, haircut: st
     bots: opts.bots ?? 0,
     botLevel: opts.botLevel ?? "normal",
     haircut,
+    skins,
   };
 }
 
@@ -179,7 +181,7 @@ export class Connection {
     // Drop E: the equipped haircut travels with the join, like the nickname and the class. Read
     // HERE rather than inside `joinOptions` for the same reason the class is read here: it is a
     // profile fact from storage, and `joinOptions` is the pure part.
-    const joinOpts = joinOptions(opts, selectedClass, equippedHaircut());
+    const joinOpts = joinOptions(opts, selectedClass, equippedHaircut(), equippedSkins());
     let room: Room<NetState>;
     if (opts.mode === "create") room = await client.create<NetState>("tdm", joinOpts);
     else if (opts.mode === "join" && opts.roomId) room = await client.joinById<NetState>(opts.roomId, joinOpts);
@@ -300,3 +302,4 @@ export function defaultServerUrl(): string {
   if (location.port && location.port !== "80" && location.port !== "443") return `${proto}://${location.host}`;
   return `${proto}://${host}:2567`;
 }
+import { equippedSkins } from "../progression/profile";

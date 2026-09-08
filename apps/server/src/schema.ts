@@ -77,6 +77,8 @@ export class PlayerState extends Schema {
    * round. A bare head hides hair, so the two never fight over the same pixels.
    */
   @type("string") haircut = "";
+  /** Drop C: one bounded cosmetic string. Written on join (the menu's equip path), never per tick. */
+  @type("string") skins = "";
 }
 
 /** Domination flag (drop 4). `owner` / `capTeam` are -1 for neutral / nobody. */

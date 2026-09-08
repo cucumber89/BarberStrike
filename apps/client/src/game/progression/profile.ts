@@ -3,6 +3,8 @@ import {
   newBadges, newHaircuts, ownedHaircuts, titleFor, xpForMatch,
   type HaircutDef, type LevelState, type LifetimeStats, type MatchStats, type XpLine,
 } from "@frankibarber/shared";
+import { WEAPON_ORDER, encodeSkins, type WeaponId } from "@frankibarber/shared";
+import { fitsWeapon, skinById, type SkinInstance } from "@frankibarber/skins";
 
 /**
  * The local player profile: lifetime XP, badges and stats, in localStorage.
@@ -26,9 +28,11 @@ export interface Profile {
    * and a catalog that grows later hands out what a player already qualifies for.
    */
   haircut: string;
+  skins: SkinInstance[];
+  equip: Partial<Record<WeaponId, string>>;
 }
 
-export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT });
+export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT, skins: [], equip: {} });
 
 /**
  * Reads the profile, repairing anything the shape has outgrown.
@@ -47,7 +51,18 @@ export function loadProfile(): Profile {
       if (!Number.isFinite(life[k])) life[k] = 0;
     }
     const known = new Set(BADGES.map((b) => b.id));
+    const skins: SkinInstance[] = Array.isArray(p.skins) ? p.skins.flatMap(instance => {
+      if (!instance || typeof instance !== "object" || typeof instance.skin !== "string" || !skinById(instance.skin)) return [];
+      return [{ skin: instance.skin, wear: Number.isFinite(instance.wear) ? Math.max(0, Math.min(1, instance.wear)) : 0,
+        rolledAt: Number.isFinite(instance.rolledAt) ? Math.max(0, instance.rolledAt) : 0 }];
+    }) : [];
+    const equip: Profile["equip"] = {};
+    for (const weapon of WEAPON_ORDER) {
+      const id = p.equip?.[weapon]; const skin = typeof id === "string" ? skinById(id) : undefined;
+      if (skin && fitsWeapon(skin, weapon) && skins.some(instance => instance.skin === id)) equip[weapon] = id;
+    }
     return {
+      skins, equip,
       xp: Number.isFinite(p.xp) ? Math.max(0, Math.floor(p.xp as number)) : 0,
       life,
       badges: Array.isArray(p.badges) ? p.badges.filter((b) => known.has(b)) : [],
@@ -95,6 +110,7 @@ export function applyMatch(profile: Profile, stats: MatchStats, clipperKills: nu
   const after = levelFor(xp);
   return {
     profile: {
+      ...profile,
       xp, life,
       badges: [...profile.badges, ...earned.filter((b) => !profile.badges.includes(b))],
       haircut: profile.haircut,
@@ -124,4 +140,14 @@ export function equipHaircut(id: string): string {
   if (!ownedCuts(p).some((h) => h.id === id)) return p.haircut;
   saveProfile({ ...p, haircut: id });
   return haircutDef(id).id;
+}
+
+export const equippedSkins = (): string => encodeSkins(loadProfile().equip);
+/** Factory finish is always available; ownership gates cosmetics only, never the weapon itself. */
+export function equipSkin(weapon: WeaponId, id: string): string {
+  const profile = loadProfile(); const skin = skinById(id);
+  if (!WEAPON_ORDER.includes(weapon)) return "";
+  if (id && (!skin || !fitsWeapon(skin, weapon) || !profile.skins.some(instance => instance.skin === id))) return profile.equip[weapon] ?? "";
+  const equip = { ...profile.equip }; if (id) equip[weapon] = id; else delete equip[weapon];
+  saveProfile({ ...profile, equip }); return id;
 }
