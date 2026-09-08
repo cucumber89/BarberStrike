@@ -352,9 +352,12 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       </ul>
 
       {/* Bottom-left: health */}
-      <div className="health" data-testid="health">
-        <div className="health-bar"><div className="health-fill" style={{ "--v": h.health / maxHealth } as React.CSSProperties} />{h.armor > 0 && <div className="armor-fill" style={{ "--v": h.armor / 100 } as React.CSSProperties} />}</div>
+      <div className={`health hp-${h.health / maxHealth > 0.6 ? "ok" : h.health / maxHealth > 0.3 ? "hurt" : "critical"}`} data-testid="health">
         <div className="health-num">{h.health}</div>
+        <div className="health-bars">
+          <div className="health-bar"><div className="health-fill" style={{ "--v": h.health / maxHealth } as React.CSSProperties} /></div>
+          {h.armor > 0 && <div className="armor-bar"><div className="armor-fill" style={{ "--v": h.armor / 100 } as React.CSSProperties} /></div>}
+        </div>
         {(h.armor > 0 || brokeAge < 900) && <div className={`armor-num ${brokeAge < 900 ? "broke" : ""}`} data-testid="armor">🛡 {brokeAge < 900 && h.armor === 0 ? "BROKEN" : h.armor}</div>}
       </div>
       {activePerks.length > 0 && (

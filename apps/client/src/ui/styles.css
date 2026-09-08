@@ -658,3 +658,67 @@ button { font-family: inherit; }
 /* The HUD is built while the loading screen is still up so its first commit is not paid at DEPLOY
    (see App.tsx). Until the match starts it is invisible and cannot be clicked or tabbed into. */
 .hud.dormant { visibility: hidden; pointer-events: none; }
+
+/* ==========================================================================================
+   HUD — one plate, one hierarchy (2.5)
+
+   The report was "brzydki i opornie" — ugly, and it drags. The drag was CSS forcing layout every
+   frame (fixed above). The ugliness was inconsistency: #14/#17 gave the health block and the top
+   bar a rounded plate and left the wallet, the ammo and the grenade slots floating naked beside
+   them, so the same screen had two visual languages and no order of importance.
+
+   The rules here are the whole design, and they are deliberately few:
+     PLATE   one treatment for every grouped readout — same ink, same radius, same border.
+     RANK    what you die without is biggest (health, ammo), what you plan with is smaller
+             (money, grenades), what you glance at is smallest (kill feed, timer).
+     STATE   health carries its own colour, so "am I in trouble" is answered by the colour and
+             never by reading a number under fire.
+     EDGE    everything sits on one 24 px margin and one 12 px inner rhythm.
+   ========================================================================================== */
+.hud { --plate: #0d1117e8; --plate-line: #ffffff1f; --plate-pad: 10px 14px; --edge: 24px; }
+
+.top-bar, .health, .ammo, .gear-slot, .wallet-prompt {
+  background: var(--plate); border: 1px solid var(--plate-line); border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(0,0,0,.38);
+}
+
+/* --- bottom left: health, then money above it --- */
+.health { left: var(--edge); bottom: var(--edge); padding: var(--plate-pad); gap: 12px; align-items: center; }
+.health-num { font-size: 40px; min-width: 58px; text-align: right; letter-spacing: 0.02em; transition: color 200ms ease-out; }
+.health-bars { display: flex; flex-direction: column; gap: 4px; }
+.health-bar { width: 132px; height: 7px; border-radius: 4px; overflow: hidden; background: rgba(255,255,255,.10); }
+.armor-bar { width: 132px; height: 4px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,.08); }
+.armor-fill { position: static; top: auto; height: 100%; background: #8fd3ff; }
+/* Colour IS the reading. Green while it does not matter, amber when it starts to, red when it does. */
+.hp-ok      .health-num { color: #d8f5e0; } .hp-ok      .health-fill { background: #7dff9a; }
+.hp-hurt    .health-num { color: #ffd79a; } .hp-hurt    .health-fill { background: #e5ae52; }
+.hp-critical .health-num { color: #ff9a8c; } .hp-critical .health-fill { background: var(--red); }
+
+.wallet { left: var(--edge); bottom: calc(var(--edge) + 78px); gap: 8px; }
+/* Money is a PLAN, not a vital sign: it sits above health and reads a size down from it. */
+.wallet-money { font-size: 22px; letter-spacing: 0.06em; color: #7dff9a; }
+
+/* --- bottom right: the weapon, then its grenades above --- */
+.ammo { right: var(--edge); bottom: var(--edge); padding: var(--plate-pad); }
+.ammo-num { font-size: 40px; letter-spacing: 0.02em; }
+.ammo-num .sep, .ammo-num .res { font-size: 24px; }
+.weapon-name { font-size: 11px; letter-spacing: 0.18em; color: var(--tx-2); margin-bottom: 2px; }
+.gear { right: var(--edge); bottom: calc(var(--edge) + 84px); gap: 8px; }
+/* These were all but invisible at 0.35 opacity on a dark map; an empty slot should read as EMPTY,
+   not as absent. */
+.gear-slot { padding: 6px 10px; font-size: 10px; letter-spacing: 0.14em; color: var(--tx); min-width: 96px; }
+.gear-slot.empty { opacity: 1; color: var(--tx-3); border-style: dashed; }
+.gear-slot.empty .key { color: var(--tx-3); }
+.gear-slot .count { font-size: 17px; }
+
+/* --- top: the match, quieter than the things that kill you --- */
+.top-bar { top: var(--edge); padding: 6px 14px; gap: 14px; }
+.timer { font-size: 24px; min-width: 92px; }
+.team-score .tscore { font-size: 26px; }
+
+/* --- kill feed: one column, one width, quiet until it is about you --- */
+.killfeed { top: var(--edge); right: var(--edge); gap: 3px; }
+.killfeed li { background: rgba(13,17,23,.82); border: 1px solid transparent; border-radius: 6px;
+  padding: 3px 9px; font-size: 12px; }
+.killfeed li.me-victim { border-color: var(--red); border-right-width: 1px; }
+.killfeed li.me-killer { border-color: var(--brass); border-right-width: 1px; }
