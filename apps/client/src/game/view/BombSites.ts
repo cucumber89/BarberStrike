@@ -71,18 +71,50 @@ export class BombSites {
       tex.update(false); tex.hasAlpha = true;
       this.textures.push(tex);
       const fm = new StandardMaterial(`site_floor_${site.id}`, scene);
-      fm.diffuseTexture = tex; fm.opacityTexture = tex; fm.emissiveTexture = tex; fm.emissiveColor = new Color3(0.55, 0.55, 0.55);
-      fm.specularColor = Color3.Black(); fm.backFaceCulling = false; fm.zOffset = -2;
+      // MEASURED CAUSE of "the floor at A and B lags": this plate is an 80 m² alpha-blended quad
+      // laid over the busiest ground on the map, and it used to be the most expensive surface in
+      // the scene per pixel. Four things made it so, all fixed here:
+      //  - `backFaceCulling = false` drew it twice and defeated early-Z, for an underside no player
+      //    can ever see (it lies on the floor);
+      //  - the same 1024² texture was bound to diffuse, opacity AND emissive — three samples per
+      //    fragment where one will do (`useAlphaFromDiffuseTexture` takes the alpha from diffuse);
+      //  - a lit material meant every fragment walked the scene's lights, and each site sits under
+      //    its own point light plus the room lights — for a decal that is pure emissive paint;
+      //  - nothing was frozen, so the world matrix and the material were re-evaluated every frame.
+      // Overdraw at the sites is what the player felt; the ordering problem was the map data
+      // underneath (see `floorAudit.test.ts`).
+      fm.diffuseTexture = tex; fm.useAlphaFromDiffuseTexture = true;
+      fm.emissiveTexture = tex; fm.emissiveColor = new Color3(0.55, 0.55, 0.55);
+      fm.disableLighting = true;
+      fm.specularColor = Color3.Black(); fm.backFaceCulling = true; fm.zOffset = -2;
+      fm.freeze();
       this.materials.push(fm);
       const plate = MeshBuilder.CreateGround(`site_plate_${site.id}`, { width: w, height: d }, scene);
-      plate.position.set(site.x, site.y + 0.03, site.z); plate.material = fm; this.meshes.push(plate);
+      plate.position.set(site.x, site.y + 0.03, site.z); plate.material = fm;
+      plate.freezeWorldMatrix(); plate.doNotSyncBoundingInfo = true;
+      this.meshes.push(plate);
       // Corner posts with a lit cap: the zone's extent is visible even when a crate hides the paint.
+      // Eight boxes per site were eight draw calls each; merged, the posts are one and the caps are
+      // one, and both are static for the life of the match.
       const post = mat(`site_post_${site.id}`, "#2b2f33", 0.05), cap = mat(`site_cap_${site.id}`, "#e5ae52", 0.9);
+      const posts: Mesh[] = [], caps: Mesh[] = [];
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
         const p = MeshBuilder.CreateBox(`site_post_${site.id}`, { width: 0.12, height: 1.1, depth: 0.12 }, scene);
-        p.position.set(site.x + sx * (site.hw - 0.2), site.y + 0.55, site.z + sz * (site.hd - 0.2)); p.material = post; this.meshes.push(p);
+        p.position.set(site.x + sx * (site.hw - 0.2), site.y + 0.55, site.z + sz * (site.hd - 0.2));
+        posts.push(p);
         const c = MeshBuilder.CreateBox(`site_cap_${site.id}`, { width: 0.16, height: 0.08, depth: 0.16 }, scene);
-        c.position.set(p.position.x, site.y + 1.14, p.position.z); c.material = cap; this.meshes.push(c);
+        c.position.set(p.position.x, site.y + 1.14, p.position.z);
+        caps.push(c);
+      }
+      for (const [parts, material, name] of [[posts, post, "posts"], [caps, cap, "caps"]] as const) {
+        // `Mesh.MergeMeshes` disposes the sources and returns null only if the list is empty.
+        const merged = Mesh.MergeMeshes(parts, true, true, undefined, false, false);
+        if (merged) {
+          merged.name = `site_${name}_${site.id}`;
+          merged.material = material;
+          merged.freezeWorldMatrix();
+          this.meshes.push(merged);
+        } else for (const m of parts) { m.material = material; this.meshes.push(m); }
       }
     }
     // The charge: satchel, straps, a display with a bezel, a wire loom, an antenna and the cell.

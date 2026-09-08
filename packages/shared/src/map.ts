@@ -249,7 +249,12 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   }
   solids.push(S(17.6, 0, 10, 2.4, MEZ, 1.0, "metal", "stair_landing"));
   solids.push(S(11, MEZ - 0.25, 10, 6.6, 0.25, 2.6, "floor_metal", "mezzanine"));
-  solids.push(S(17.6, MEZ - 0.25, 11, 2.7, 0.25, 1.6, "floor_metal", "mezzanine_east"));
+  // The landing slab starts where the flight ENDS (z 11.6), and stops at the wall's inner face
+  // (x 20). It used to start at z 11 — laid straight over tread 9, whose top is also MEZ — and to
+  // run 0.3 m INTO the st_east_low wall, whose top is also MEZ: 1.44 m² and 0.48 m² of surfaces the
+  // depth buffer cannot order. Walkable cover at y = MEZ is unbroken either way: stair_landing
+  // (z 10..11) → tread 9 (z 11..11.6) → this slab (z 11.6..12.6).
+  solids.push(S(17.6, MEZ - 0.25, 11.6, 2.4, 0.25, 1.0, "floor_metal", "mezzanine_east"));
   solids.push(S(9.4, MEZ, 12.5, 10.6, 1.0, 0.1, "metal", "mezzanine_rail"));
   solids.push(S(9.4, MEZ, 10, 0.1, 1.0, 2.6, "metal", "mezzanine_rail_w"));
   solids.push(O(10, 0, 14, 1.2, 1.2, 1.2, "wood", "crate", "crate_a"));
@@ -366,7 +371,10 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   // ---------- Loading yard (z 18..36) ----------
   solids.push(S(14, 0, 18, 6, 1.0, 10, "floor_concrete", "loading_dock"));
   solids.push(S(11, 0, 24, 3, 1.0, 4, "floor_concrete", "dock_ramp_base"));
-  for (let i = 0; i < 5; i++) solids.push(S(11 - 0.6 * (i + 1), 0, 24, 0.6, 1.0 - 0.2 * (i + 1), 4, "floor_concrete", `dock_step_${i}`));
+  // Four steps, not five: the fifth was 1.0 - 0.2 * 5 = ZERO high, so its top face sat exactly on
+  // the yard slab (2.4 m² of z-fighting) while adding nothing to walk on. The 0.2 m bottom step
+  // down to the yard is the same rise as every other step.
+  for (let i = 0; i < 4; i++) solids.push(S(11 - 0.6 * (i + 1), 0, 24, 0.6, 1.0 - 0.2 * (i + 1), 4, "floor_concrete", `dock_step_${i}`));
   solids.push(O(0, 0, 22, 2.4, 2.5, 6, "corrugated_red", "container", "container"));
   solids.push(O(2.4, 0, 22, 2.4, 2.5, 6, "corrugated_blue", "container", "container_b"));
   solids.push(O(1.2, 2.5, 22.4, 2.4, 2.5, 6, "corrugated_green", "container", "container_top"));
