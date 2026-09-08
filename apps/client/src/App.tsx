@@ -153,6 +153,9 @@ function humanError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   if (/ECONNREFUSED|Failed to fetch|NetworkError|network|refused|ENOTFOUND|timeout/i.test(msg)) return "Cannot reach the game server. Is it running?";
   if (/full/i.test(msg)) return "That room is full.";
+  // The renderer's own messages are already written for a player; passing them through beats
+  // replacing them with a generic failure that says nothing about what to try.
+  if (/WebGL2|hardware acceleration/i.test(msg)) return msg;
   if (/not found|no rooms|doesn't exist|does not exist/i.test(msg)) return "Room not found.";
   if (/WebGL2|WebGPU/i.test(msg)) return msg;
   return msg || "Something went wrong.";

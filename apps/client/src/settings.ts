@@ -2,6 +2,20 @@ import { DEFAULT_BINDINGS, type KeyBindings } from "./game/input/InputState";
 
 export type QualityPreset = "low" | "medium" | "high" | "ultra";
 
+/**
+ * The choice a player is actually offered (the brief's four): Automatic, Performance, Balanced,
+ * Quality. "auto" is not a fifth quality level — it hands `graphics.preset` to the auto-quality
+ * director, which measures real frames and moves it between low / medium / high. "ultra" stays
+ * reachable as a manual preset for someone who wants it, and picking it turns automatic off.
+ */
+export type QualityMode = "auto" | "low" | "medium" | "high" | "ultra";
+export const QUALITY_MODES: readonly { id: QualityMode; label: string; blurb: string }[] = [
+  { id: "auto", label: "AUTOMATIC", blurb: "Measures your machine and keeps the frame rate steady" },
+  { id: "low", label: "PERFORMANCE", blurb: "Frames first — no shadows, no post-processing" },
+  { id: "medium", label: "BALANCED", blurb: "Shadows and effects, full render scale" },
+  { id: "high", label: "QUALITY", blurb: "Sharp shadows and every effect" },
+];
+
 /** Crosshair colours: named, not free hex, so every one of them has been checked against the map's palette. */
 export type CrosshairColor = "white" | "green" | "cyan" | "brass" | "red" | "magenta";
 export const CROSSHAIR_COLORS: Record<CrosshairColor, string> = {
@@ -56,6 +70,17 @@ export interface Settings {
   };
   graphics: {
     preset: QualityPreset;
+    /**
+     * True while the auto-quality director owns `preset`. It is a separate flag rather than a
+     * fifth preset value so everything downstream keeps reading one concrete quality level.
+     */
+    auto: boolean;
+    /**
+     * "webgl2" (the default) asks for WebGL2 directly. "auto" tries WebGPU first and falls back.
+     * WebGPU is the default nowhere: it can initialise successfully and then fail inside scene
+     * setup on some browser/driver pairs (which is why App.tsx already carries a retry), so the
+     * mode that always works is the one players get without asking.
+     */
     renderer: "auto" | "webgl2";
     renderScale: number; // 0.5 .. 1.0
     brightness: number; // 0.75 .. 1.5; independent of quality
@@ -98,19 +123,21 @@ export interface Settings {
 const KEY = "fb_settings_v1";
 
 export const PRESETS: Record<QualityPreset, Settings["graphics"]> = {
-  low: { preset: "low", renderer: "auto", brightness: 1, targetFps: 60, renderScale: 0.75, shadows: "off", postProcessing: false, effects: 0.4, antialiasing: false, dynamicResolution: true, importedModels: false },
-  medium: { preset: "medium", renderer: "auto", brightness: 1, targetFps: 60, renderScale: 1.0, shadows: "medium", postProcessing: true, effects: 0.7, antialiasing: true, dynamicResolution: true, importedModels: true },
-  high: { preset: "high", renderer: "auto", brightness: 1, targetFps: 60, renderScale: 1.0, shadows: "high", postProcessing: true, effects: 1.0, antialiasing: true, dynamicResolution: true, importedModels: true },
-  ultra: { preset: "ultra", renderer: "auto", brightness: 1, targetFps: 60, renderScale: 1.0, shadows: "high", postProcessing: true, effects: 1.0, antialiasing: true, dynamicResolution: false, importedModels: true },
+  low: { preset: "low", auto: false, renderer: "webgl2", brightness: 1, targetFps: 60, renderScale: 0.75, shadows: "off", postProcessing: false, effects: 0.4, antialiasing: false, dynamicResolution: true, importedModels: false },
+  medium: { preset: "medium", auto: false, renderer: "webgl2", brightness: 1, targetFps: 60, renderScale: 1.0, shadows: "medium", postProcessing: true, effects: 0.7, antialiasing: true, dynamicResolution: true, importedModels: true },
+  high: { preset: "high", auto: false, renderer: "webgl2", brightness: 1, targetFps: 60, renderScale: 1.0, shadows: "high", postProcessing: true, effects: 1.0, antialiasing: true, dynamicResolution: true, importedModels: true },
+  ultra: { preset: "ultra", auto: false, renderer: "webgl2", brightness: 1, targetFps: 60, renderScale: 1.0, shadows: "high", postProcessing: true, effects: 1.0, antialiasing: true, dynamicResolution: false, importedModels: true },
 };
 
 export const DEFAULT_CROSSHAIR: CrosshairSettings = { color: "white", size: 6, gap: 5, thickness: 2, dot: false, dynamic: true, outline: true };
 
 export const defaultSettings = (): Settings => ({
   gameplay: { sensitivity: 2.2, adsSensitivity: 1.0, invertY: false, fov: 90, headBob: 0.6, cameraShake: 0.7 },
-  // MEDIUM, not HIGH: the 0.1 beta playtest on a real machine reported low FPS with HIGH as the
-  // default (2048 PCF shadows + HDR bloom + MSAA at full scale). Players can opt up.
-  graphics: { ...PRESETS.medium },
+  // AUTOMATIC out of the box: the device is probed at startup and the first seconds of real
+  // frames decide the level, so nobody has to find a graphics menu to get a playable game. MEDIUM
+  // is only where it starts — the 0.1 beta playtest reported low FPS with HIGH as a fixed default
+  // (2048 PCF shadows + HDR bloom + MSAA at full scale), which is exactly what measuring avoids.
+  graphics: { ...PRESETS.medium, auto: true },
   audio: { master: 0.8, effects: 1.0, music: 0.5, ui: 0.8 },
   interface: { crosshair: { ...DEFAULT_CROSSHAIR }, hudScale: 1, minimap: true, killFeed: true, showFps: false, moneyToasts: true },
   keys: {},
@@ -127,6 +154,7 @@ export function repairGraphics(input: unknown, fallback = PRESETS.medium): Setti
   const base = g.preset === preset ? PRESETS[preset] : fallback;
   return {
     preset,
+    auto: bool(g.auto, base.auto),
     renderer: g.renderer === "auto" || g.renderer === "webgl2" ? g.renderer : base.renderer,
     renderScale: num(g.renderScale, base.renderScale, .5, 1),
     brightness: num(g.brightness, base.brightness, .75, 1.5),
@@ -141,11 +169,23 @@ export function repairGraphics(input: unknown, fallback = PRESETS.medium): Setti
 }
 
 export function applyQualityPreset(g: Settings["graphics"], preset: QualityPreset): Settings["graphics"] {
-  return { ...PRESETS[preset], renderer: g.renderer, brightness: g.brightness, targetFps: g.targetFps };
+  return { ...PRESETS[preset], auto: g.auto, renderer: g.renderer, brightness: g.brightness, targetFps: g.targetFps };
+}
+
+/** The player picked one of the four buttons. "auto" keeps the level it is on and hands over control. */
+export function applyQualityMode(g: Settings["graphics"], mode: QualityMode): Settings["graphics"] {
+  if (mode === "auto") return { ...g, auto: true };
+  return { ...applyQualityPreset(g, mode), auto: false };
+}
+
+/** Which of the four buttons is lit. */
+export function qualityMode(g: Settings["graphics"]): QualityMode {
+  return g.auto ? "auto" : g.preset;
 }
 
 /** Personal display preferences do not make a quality preset custom. */
 export function isCustomGraphics(g: Settings["graphics"]): boolean {
+  if (g.auto) return false;   // the director owns these; it is not the player having tweaked them
   return (["renderScale", "shadows", "postProcessing", "effects", "antialiasing", "dynamicResolution", "importedModels"] as const)
     .some(key => g[key] !== PRESETS[g.preset][key]);
 }

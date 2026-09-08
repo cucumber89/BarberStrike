@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  BINDABLE_ACTIONS, CROSSHAIR_COLORS, DEFAULT_CROSSHAIR, RESERVED_CODES, applyQualityPreset, isCustomGraphics, bindingConflicts, defaultSettings, keyLabel, resolveBindings,
+  BINDABLE_ACTIONS, CROSSHAIR_COLORS, DEFAULT_CROSSHAIR, QUALITY_MODES, RESERVED_CODES, applyQualityMode, applyQualityPreset, qualityMode, isCustomGraphics, bindingConflicts, defaultSettings, keyLabel, resolveBindings,
   type BindableAction, type CrosshairColor, type QualityPreset, type Settings,
 } from "../settings";
 import { uiSound } from "../game/audio";
@@ -81,8 +81,16 @@ export function SettingsPanel({ settings, onChange, initialTab = "gameplay" }: P
 
       {tab === "graphics" && (
         <div className="tab-body">
-          <Choice label="Quality preset" value={gr.preset} options={(["low", "medium", "high", "ultra"] as QualityPreset[]).map((p) => ({ id: p, label: p.toUpperCase() }))}
-            onChange={(p) => set({ graphics: applyQualityPreset(gr, p) })} hint={isCustomGraphics(gr) ? "CUSTOM — individual options differ from this preset." : "Quality adjusts effects and resolution. Brightness stays the same."} />
+          <Choice label="Quality" value={qualityMode(gr)} options={QUALITY_MODES.map((q) => ({ id: q.id, label: q.label }))}
+            onChange={(m) => set({ graphics: applyQualityMode(gr, m) })}
+            hint={gr.auto
+              ? `Automatic — measuring your machine and holding ${gr.targetFps} fps. Now running ${gr.preset.toUpperCase()}.`
+              : isCustomGraphics(gr) ? "CUSTOM — individual options below differ from this level."
+              : QUALITY_MODES.find((q) => q.id === qualityMode(gr))?.blurb ?? "Brightness stays the same across levels."} />
+          {!gr.auto && (
+            <Choice label="Fixed level" value={gr.preset} options={(["low", "medium", "high", "ultra"] as QualityPreset[]).map((p) => ({ id: p, label: p.toUpperCase() }))}
+              onChange={(p) => set({ graphics: applyQualityPreset(gr, p) })} hint="ULTRA is manual only; automatic mode chooses between the first three." />
+          )}
           <Slider label="Brightness" value={gr.brightness} min={0.75} max={1.5} step={0.05} onChange={(v) => set({ graphics: { ...gr, brightness: v } })} format={pct} hint="Display calibration. Preserved when you change quality." />
           <Slider label="Render scale" value={gr.renderScale} min={0.5} max={1} step={0.05} onChange={(v) => set({ graphics: { ...gr, renderScale: v } })} format={pct} />
           <Choice label="Shadows" value={gr.shadows} options={[{ id: "off", label: "OFF" }, { id: "medium", label: "MEDIUM" }, { id: "high", label: "HIGH" }] as const} onChange={(v) => set({ graphics: { ...gr, shadows: v } })} />
@@ -92,7 +100,7 @@ export function SettingsPanel({ settings, onChange, initialTab = "gameplay" }: P
           <Toggle label="Post-processing" hint="HIGH: bloom. ULTRA: bloom and sharpening. Colour correction stays enabled at every quality." value={gr.postProcessing} onChange={(v) => set({ graphics: { ...gr, postProcessing: v } })} />
           <Toggle label="Anti-aliasing" hint="FXAA edge smoothing. Works independently of post-processing." value={gr.antialiasing} onChange={(v) => set({ graphics: { ...gr, antialiasing: v } })} />
           <Toggle label="Extra scenery models" hint="Characters and weapons are always built in-game; this adds the optional CC0 scenery packs. Off is lighter on weak GPUs." value={gr.importedModels} onChange={(v) => set({ graphics: { ...gr, importedModels: v } })} />
-          <Toggle label="Force WebGL2 (disable WebGPU)" hint="Try this if the screen stays black or the renderer crashes." value={gr.renderer === "webgl2"} onChange={(v) => set({ graphics: { ...gr, renderer: v ? "webgl2" : "auto" } })} />
+          <Toggle label="Try WebGPU (experimental)" hint="Off by default: WebGPU can start up and then fail inside the scene on some drivers, so WebGL2 — which every supported browser has — is what you get without asking." value={gr.renderer === "auto"} onChange={(v) => set({ graphics: { ...gr, renderer: v ? "auto" : "webgl2" } })} />
           <p className="muted small">Brightness, shadows, effects, anti-aliasing and resolution apply immediately. Renderer and extra scenery models apply on the next match.</p>
         </div>
       )}
