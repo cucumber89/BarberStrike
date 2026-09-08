@@ -3,6 +3,8 @@ import type { AssetContainer } from "@babylonjs/core/assetContainer";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
+import type { Material } from "@babylonjs/core/Materials/material";
+import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { type GameMode, MODES,
   dequantAngle, boysClass, Btn, C2S, S2C, CHAT, ECONOMY, INTERP_DELAY_MS, MAPS, MARK, DEFAULT_MAP_ID, PERK_ORDER, RESPAWN_DELAY_MS, TEAM_NAMES, MatchPhase, buildCollisionWorld, rebuildWorldInto, applyPlan, planById, PLANS, buyWindowLeft, inFlagZone, isShopItemId, isWeaponId, makeRayHit, noPerks, packInput, perkSpeedScale,
   type BoomEvent, type ChatEvent, type CollisionWorld, type DamagedEvent, type FlagEvent, type FlashedEvent, type GrenadeId, type HitEvent, type KillEvent, type MapDef, type MarkEvent, type MarkMessage, type MatchEventMessage, type MoneyEvent,
@@ -249,7 +251,39 @@ export class Game {
       engine.runRenderLoop(this.frame);
     });
     if (this.disposed) throw new Error("Startup cancelled");
+    await this.precompileShaders(scene);
+    if (this.disposed) throw new Error("Startup cancelled");
     hud.set({ loadStage: "ready" });
+  }
+
+  /**
+   * Compile every material's shader BEFORE the player is let in.
+   *
+   * `scene.isReady()` above only guarantees what the first two frames happened to draw. Babylon
+   * compiles a material's program the first time something using it is rendered, so the rest of the
+   * map compiles as the player turns to look at it — which is a stall of tens of milliseconds
+   * landing in the first seconds of play, exactly the "wchodzi się do gry i przycina" report.
+   * Paying it here costs a moment on a loading screen that is already up.
+   *
+   * Best-effort by design: a material that will not compile must not stop the player getting in,
+   * so every failure is swallowed and the game starts anyway.
+   */
+  private async precompileShaders(scene: Scene): Promise<void> {
+    const started = performance.now();
+    // One mesh per material is enough — the program is keyed on the material and its defines.
+    const byMaterial = new Map<Material, AbstractMesh>();
+    for (const mesh of scene.meshes) {
+      const m = mesh.material;
+      if (m && mesh.getTotalVertices() > 0 && !byMaterial.has(m)) byMaterial.set(m, mesh);
+    }
+    let done = 0;
+    // Sequential, not Promise.all: compiling a hundred programs at once is its own stall, and this
+    // is a loading screen — it can afford to be steady rather than fast.
+    for (const [material, mesh] of byMaterial) {
+      if (this.disposed) return;
+      try { await material.forceCompilationAsync(mesh); done++; } catch { /* one material short is not a reason to block the match */ }
+    }
+    console.info(`[startup] precompiled ${done}/${byMaterial.size} materials in ${Math.round(performance.now() - started)} ms`);
   }
 
   private wireNetwork(): void {
@@ -620,13 +654,13 @@ export class Game {
       // Drop 5: expired chat lines (unless the box is open) and marks drop out here.
       chat: !cur.chatOpen && cur.chat.some((l) => now - l.seen > CHAT.showMs) ? cur.chat.filter((l) => now - l.seen <= CHAT.showMs) : cur.chat,
       marks: cur.marks.some((m) => now > m.until) ? cur.marks.filter((m) => now <= m.until) : cur.marks,
-      players: rows, ping: Math.round(this.conn.rtt), pointerLocked: this.input.pointerLocked,
+      players: samePlayers(cur.players, rows) ? cur.players : rows, ping: Math.round(this.conn.rtt), pointerLocked: this.input.pointerLocked,
       crosshairSpread: this.weapons.effectiveSpread(),
       aiming: this.local.aimBlend > 0.6,
       serverNow: this.conn.serverNow(), spawnProtectedUntil: me?.protectedUntil ?? 0,
       killFeed: cur.killFeed.filter((k) => now - k.at < 6000),
       money: me?.money ?? 0, owned: this.weapons.owned,
-      armor: me?.armor ?? 0, perks: { ...this.myPerks }, scoped: scope.scoped, scopeStyle: scope.style, breath: scope.winded ? 0 : scope.breath,
+      armor: me?.armor ?? 0, perks: samePerks(cur.perks, this.myPerks) ? cur.perks : { ...this.myPerks }, scoped: scope.scoped, scopeStyle: scope.style, breath: scope.winded ? 0 : scope.breath,
       lethal: this.throwing.lethal, lethalCount: this.throwing.lethalCount, tactical: this.throwing.tactical, tacticalCount: this.throwing.tacticalCount,
       buyWindowLeft: windowLeft, nearStation: near, shopOpen: this.shopOpen,
       cookingKind: this.throwing.state.kind ?? "", cooking: this.throwing.state.cook,
@@ -849,3 +883,29 @@ export class Game {
 
 /** Every solid any tactical plan can remove — built unmerged so it can be switched off. */
 export const PLAN_SOLIDS: ReadonlySet<string> = new Set(PLANS.flatMap((p) => p.removes));
+
+/**
+ * Did the scoreboard actually change?
+ *
+ * `onSnapshot` used to hand the store a brand-new array of brand-new rows twenty times a second,
+ * so the store's identity check always reported a change and the whole HUD — scoreboard, kill feed
+ * and all — re-rendered on every network patch whether or not a single number had moved. These two
+ * comparisons are cheap (eight rows, a dozen fields) and turn most of those re-renders into
+ * nothing at all.
+ */
+function samePlayers(a: readonly ScoreRow[], b: readonly ScoreRow[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i], y = b[i];
+    if (x.id !== y.id || x.name !== y.name || x.team !== y.team || x.kills !== y.kills || x.deaths !== y.deaths
+      || x.score !== y.score || x.ping !== y.ping || x.alive !== y.alive || x.connected !== y.connected
+      || x.assists !== y.assists || x.money !== y.money || x.bot !== y.bot || x.boysClass !== y.boysClass) return false;
+  }
+  return true;
+}
+
+function samePerks(a: PerkTimes, b: PerkTimes): boolean {
+  for (const k of PERK_ORDER) if (a[k] !== b[k]) return false;
+  return true;
+}

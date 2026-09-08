@@ -57,8 +57,9 @@ const gameServer = new Server({
   transport: new WebSocketTransport({ server: httpServer }),
 });
 
-// Rooms match on name AND mode (drop 4): a quick-play into "ffa" never lands in someone's TDM.
-gameServer.define("tdm", TdmRoom).filterBy(["room", "mode"]);
+// Rooms match on name AND mode (drop 4) AND map (drop G): a quick-play into "ffa" never lands in
+// someone's TDM, and a quick-play onto GÓRA never lands in a Night District room.
+gameServer.define("tdm", TdmRoom).filterBy(["room", "mode", "map"]);
 
 gameServer.listen(PORT).then(() => {
   console.log(`[BARBERSTRIKE ${GAME_VERSION}] listening on :${PORT}`);

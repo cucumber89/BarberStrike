@@ -1,6 +1,6 @@
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import type { ArraySchema, MapSchema } from "@colyseus/schema";
-import { C2S, S2C, MatchPhase, type BombData, type BotLevel, type GameMode, type WelcomeMessage } from "@frankibarber/shared";
+import { C2S, DEFAULT_HAIRCUT, DEFAULT_MAP_ID, S2C, MatchPhase, type BombData, type BotLevel, type GameMode, type WelcomeMessage } from "@frankibarber/shared";
 import { equippedHaircut } from "../progression/profile";
 
 /** Client-side mirror of the server's PlayerState schema (read-only). */
@@ -49,12 +49,36 @@ export interface ConnectOptions {
   roomId?: string;
   /** Drop 4: game mode for quick play / create (ignored when joining by id). */
   gameMode?: GameMode;
+  /** Drop G: which map the room plays (ignored when joining by id — that room already has one). */
+  mapId?: string;
   /** Drop 5: bots added when a room is created (quick play / create). */
   bots?: number;
   botLevel?: BotLevel;
 }
 
 export interface RoomListing { roomId: string; clients: number; maxClients: number; metadata?: { name?: string; map?: string; mode?: GameMode; bots?: number } }
+
+/**
+ * What the client asks the room for. The map (Drop G) rides next to the mode: the lobby's pick has
+ * to reach the room, and a room that was never told falls back to the same map it has always
+ * played. Pure, so the lobby's contract with the server is testable without a socket.
+ *
+ * The haircut (Drop E) rides along the same way, and is a PARAMETER rather than a call to
+ * `equippedHaircut()` in here, so this stays the pure thing Drop G made it: reading localStorage
+ * from inside would make the lobby's contract untestable without a browser again.
+ */
+export function joinOptions(opts: ConnectOptions, boysClass: number, haircut: string = DEFAULT_HAIRCUT) {
+  return {
+    deferSpawn: true, boysClass,
+    name: opts.name,
+    room: opts.roomName ?? "",
+    mode: opts.gameMode ?? "tdm",
+    map: opts.mapId ?? DEFAULT_MAP_ID,
+    bots: opts.bots ?? 0,
+    botLevel: opts.botLevel ?? "normal",
+    haircut,
+  };
+}
 
 /**
  * Wraps the Colyseus room: connection lifecycle, server-time estimation and typed messaging.
@@ -152,10 +176,10 @@ export class Connection {
   static async connect(opts: ConnectOptions): Promise<Connection> {
     const client = new Client(opts.url);
     let selectedClass = 1; try { selectedClass = Number(localStorage.getItem("fb_boys_class")) || 1; } catch { /* private mode */ }
-    // Drop E: the equipped haircut travels with the join, like the nickname. Read here rather than
-    // threaded through `ConnectOptions` for the same reason the class is: it is a profile fact, and
-    // every caller would otherwise have to remember to pass it on.
-    const joinOpts = { deferSpawn: true, boysClass: selectedClass, name: opts.name, room: opts.roomName ?? "", mode: opts.gameMode ?? "tdm", bots: opts.bots ?? 0, botLevel: opts.botLevel ?? "normal", haircut: equippedHaircut() };
+    // Drop E: the equipped haircut travels with the join, like the nickname and the class. Read
+    // HERE rather than inside `joinOptions` for the same reason the class is read here: it is a
+    // profile fact from storage, and `joinOptions` is the pure part.
+    const joinOpts = joinOptions(opts, selectedClass, equippedHaircut());
     let room: Room<NetState>;
     if (opts.mode === "create") room = await client.create<NetState>("tdm", joinOpts);
     else if (opts.mode === "join" && opts.roomId) room = await client.joinById<NetState>(opts.roomId, joinOpts);

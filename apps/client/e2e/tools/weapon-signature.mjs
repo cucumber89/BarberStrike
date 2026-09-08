@@ -231,7 +231,12 @@ const table = [
   "",
   head,
   "|---|---|---|---|---|---|---|---|",
-  ...ordered.map((r) => `| ${r.weapon} | ${r.measured.kickPitchRad} | ${r.measured.adsMs} | ${r.measured.swayPeak} | ${r.measured.shotsPerSec}${r.frameLimited ? " (frame-limited)" : ""} | ${r.intended.rpm ? (r.intended.rpm / 60).toFixed(1) : "—"} | ${r.measured.audioPeakDb ?? "—"} | ${r.measured.audioSeconds ?? "—"} |`),
+  // A weapon that was never equipped has no `measured` block. Reading through it threw and took the
+  // whole summary with it, so a run that skipped one gun wrote no table at all and lost the ten it
+  // did measure. Skipped rows are printed AS skipped: silence would be worse than a gap.
+  ...ordered.map((r) => (r.measured
+    ? `| ${r.weapon} | ${r.measured.kickPitchRad} | ${r.measured.adsMs} | ${r.measured.swayPeak} | ${r.measured.shotsPerSec}${r.frameLimited ? " (frame-limited)" : ""} | ${r.intended?.rpm ? (r.intended.rpm / 60).toFixed(1) : "—"} | ${r.measured.audioPeakDb ?? "—"} | ${r.measured.audioSeconds ?? "—"} |`
+    : `| ${r.weapon} | — | — | — | — | ${r.intended?.rpm ? (r.intended.rpm / 60).toFixed(1) : "—"} | — | — |  <!-- ${r.skipped ?? "not measured"} -->`)),
   "",
 ].join("\n");
 await writeFile(`${OUT}/summary.md`, table);

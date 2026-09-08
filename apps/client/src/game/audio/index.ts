@@ -9,7 +9,7 @@
  *                            `settings` event does it)
  *   primeAudio()           — optional explicit resume from a button handler
  */
-import { MATCH, WEAPONS, MatchPhase, isPerkId } from "@frankibarber/shared";
+import { MATCH, WEAPONS, MatchPhase, isPerkId, type WeaponId } from "@frankibarber/shared";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { GameContext, GameModule } from "../context";
 import { loadSettings, type Settings } from "../../settings";
@@ -74,6 +74,25 @@ export const installAudio: GameModule = (ctx) => {
 
   setMusic(false); // gameplay: ambience only
   let reloadVoice: { stop(): void } | null = null;
+  /**
+   * Rule M1: the clippers hum while they are equipped. The engine plays one-shots, so the loop is a
+   * two-second voice re-triggered just before it ends — `clippersHum` fades in and out, so the seam
+   * is inaudible and the engine needs no new concept of a looping source. It stops on death, on
+   * switching away, and on teardown; it is re-armed on spawn, because `weaponEquip` only fires when
+   * the weapon id CHANGES and respawning still holding the clippers would otherwise be silent.
+   */
+  let humVoice: { stop(): void } | null = null;
+  let humTimer = 0;
+  const HUM_S = 2;
+  const stopHum = (): void => { window.clearInterval(humTimer); humTimer = 0; humVoice?.stop(); humVoice = null; };
+  const setHum = (weapon: WeaponId): void => {
+    const level = feelOf(weapon).hum;
+    stopHum();
+    if (level <= 0) return;
+    const tick = (): void => { humVoice = play(sfx.clippersHum(HUM_S), Priority.movement, level); };
+    tick();
+    humTimer = window.setInterval(tick, (HUM_S - 0.12) * 1000);
+  };
   let countdownTimers: number[] = [];
   const clearCountdown = () => { for (const t of countdownTimers) window.clearTimeout(t); countdownTimers = []; };
 
@@ -91,7 +110,7 @@ export const installAudio: GameModule = (ctx) => {
   on("dryFire", () => play(sfx.dryFire, Priority.reload, 0.8));
   on("reloadStart", (e) => { reloadVoice?.stop(); reloadVoice = play(sfx.reload(e.weapon, WEAPONS[e.weapon].reloadMs), Priority.reload, 0.85); });
   on("reloadEnd", () => { reloadVoice = null; });
-  on("weaponEquip", (e) => { reloadVoice?.stop(); reloadVoice = null; play(sfx.equip(WEAPONS[e.weapon].equipMs), Priority.reload, 0.7); });
+  on("weaponEquip", (e) => { reloadVoice?.stop(); reloadVoice = null; play(sfx.equip(WEAPONS[e.weapon].equipMs), Priority.reload, 0.7); setHum(e.weapon); });
   on("footstep", (e) => play(sfx.footstep(e.sprint, e.crouch), Priority.movement, 0.55));
   on("jump", () => play(sfx.jump, Priority.movement, 0.7));
   on("landed", (e) => { if (e.impactSpeed > 1.5) play(sfx.landing(e.impactSpeed), Priority.movement, 0.8); });
@@ -100,8 +119,8 @@ export const installAudio: GameModule = (ctx) => {
     play(sfx.damageTaken, Priority.hit, 0.9); eng.duck(Math.min(1, 0.5 + e.amount / 60), 150);
     if (e.broke) play(sfx.plate(true), Priority.hit, 0.9); else if ((e.armor ?? 0) > 0) play(sfx.plate(false), Priority.hit, 0.6);
   });
-  on("localDeath", () => { reloadVoice?.stop(); reloadVoice = null; play(sfx.death, Priority.hit, 1); eng.duck(1, 600); });
-  on("localSpawn", () => play(sfx.respawn, Priority.hit, 0.8));
+  on("localDeath", () => { reloadVoice?.stop(); reloadVoice = null; stopHum(); play(sfx.death, Priority.hit, 1); eng.duck(1, 600); });
+  on("localSpawn", () => { play(sfx.respawn, Priority.hit, 0.8); setHum(ctx.weapons.weapon); });
   on("kill", () => play(sfx.ui("hover"), Priority.ui, 0.5)); // kill feed tick (local kills already get the confirm)
   on("remoteLeave", (e) => remotes.forget(e.id));
   on("settings", () => eng.setSettings(ctx.settings.audio));
@@ -196,6 +215,7 @@ export const installAudio: GameModule = (ctx) => {
     for (const u of unsubs) u();
     clearCountdown();
     reloadVoice?.stop();
+    stopHum();
     ambience.dispose();
     liveCtx = null;
     delete (window as unknown as { __fbAudio?: unknown }).__fbAudio;

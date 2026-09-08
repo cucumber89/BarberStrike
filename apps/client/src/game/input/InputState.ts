@@ -34,7 +34,12 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   right: ["KeyD", "ArrowRight"],
   jump: ["Space"],
   sprint: ["ShiftLeft", "ShiftRight"],
-  crouch: ["ControlLeft", "ControlRight", "KeyC"],
+  // C, NOT Ctrl. Crouch-walking forward on a Ctrl bind is literally Ctrl+W, and Ctrl+W closes the
+  // tab — `preventDefault()` cannot stop it (see RESERVED_BY_BROWSER in browserKeys.ts), so no
+  // amount of interception saves a player who crouches while moving. Keyboard Lock does capture it,
+  // but only on Chromium and only while fullscreen, which is not a promise a default can rest on.
+  // Ctrl stays BINDABLE for anyone who wants it; the controls screen warns what it costs.
+  crouch: ["KeyC"],
   reload: ["KeyR"],
   scoreboard: ["Tab"],
   // Drop 4: Q/E lean (owner decision), so "last weapon" moves to X.

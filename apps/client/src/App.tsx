@@ -70,7 +70,7 @@ export function App() {
     try { if (g) await g.dispose(); else await c?.leave(); } catch (error) { console.warn("[app] cleanup", error); }
   }, []);
 
-  const play = useCallback(async (name: string, roomName: string, mode: "auto" | "create" | "join", roomId: string | undefined, gameMode: GameMode, bots: { count: number; level: BotLevel }) => {
+  const play = useCallback(async (name: string, roomName: string, mode: "auto" | "create" | "join", roomId: string | undefined, gameMode: GameMode, bots: { count: number; level: BotLevel }, mapId: string) => {
     if (starting.current || gameRef.current) return;
     starting.current = true;
     const token = ++attempt.current;
@@ -78,7 +78,7 @@ export function App() {
     setScreen({ kind: "connecting" });
     const timeout = window.setTimeout(() => { if (attempt.current === token) void leave("Loading took too long. Please try again or lower graphics settings."); }, 90000);
     const startWith = async (s: Settings): Promise<void> => {
-      const connection = await Connection.connect({ url: defaultServerUrl(), name, roomName, mode, roomId, gameMode, bots: bots.count, botLevel: bots.level });
+      const connection = await Connection.connect({ url: defaultServerUrl(), name, roomName, mode, roomId, gameMode, mapId, bots: bots.count, botLevel: bots.level });
       if (attempt.current !== token) { await connection.leave(); return; }
       connectionRef.current = connection;
       const game = new Game({ canvas: freshCanvas(), connection, settings: s, onLeave: reason => { if (attempt.current === token) void leave(reason); } });
@@ -155,8 +155,13 @@ export function App() {
     <div className="app" ref={appRoot}>
       {/* The game canvas is created imperatively per start (see freshCanvas); menus overlay this host. */}
       <div ref={canvasHost} className="game-canvas-host" style={{ visibility: screen.kind === "game" || screen.kind === "entering" ? "visible" : "hidden" }} />
-      {screen.kind === "game" && (
+      {/* Mounted from the READY screen on, not from DEPLOY: React's first commit of this tree is
+          ~25 ms (measured, `e2e/tools/hud-bench.mjs`), and paying it at the moment the player
+          presses DEPLOY is a dropped frame in the first second of play. `dormant` keeps it
+          invisible and inert until the match actually starts. */}
+      {(screen.kind === "ready" || screen.kind === "entering" || screen.kind === "game") && (
         <Hud
+          dormant={screen.kind !== "game"}
           settings={settings} onSettings={updateSettings} onLeave={() => void leave("left")}
           onResume={async () => (await gameRef.current?.requestPointerLockAsync()) ?? false}
           onPause={() => gameRef.current?.releasePointerLock()}

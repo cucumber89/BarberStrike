@@ -2,10 +2,10 @@ import { WEAPON_PRICES } from "@frankibarber/shared";
 import { Room, type Client } from "@colyseus/core";
 import {
   Btn, C2S, S2C, DEFAULT_WEAPON, HEADSHOT_MULTIPLIER, LAG_COMP_MAX_MS, MATCH, MAX_INPUT_BATCH, MAX_INPUT_DT_MS,
-  MAX_INPUT_QUEUE, MAX_INPUT_RATE, MAX_OTHER_MSG_RATE, MAX_PLAYERS, MatchPhase, NIGHT_DISTRICT, PLAYER,
+  MAX_INPUT_QUEUE, MAX_INPUT_RATE, MAX_OTHER_MSG_RATE, MAX_PLAYERS, MatchPhase, MAPS, DEFAULT_MAP_ID, PLAYER,
   RESPAWN_DELAY_MS, SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER,
   isLive, isFrozen, maskInput, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
-  BOMB, BOMB_SITES, bombAttackTeam, resetBomb, stepBomb, type BombPlayer,
+  BOMB, sitesOf, bombAttackTeam, resetBomb, stepBomb, type BombPlayer,
   createBody, quantAngle, quantVel, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
   makeRayHit, mulberry32, pickSpawn, sanitizeName, simulateBody, spreadDirection, traceBullet, unpackInput,
   ECONOMY, GRENADES, THROW_INTERVAL_MS, FIRE_DPS, applyBuy, applySell, buyWindowOpen, giveGrenade, takeGrenade, killReward, weaponForSlot,
@@ -151,7 +151,7 @@ const isThrowMessage = (v: unknown): v is ThrowMessage =>
 const boxTmp: Box = { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 };
 
 export interface TdmJoinOptions {
-  deferSpawn?: boolean; boysClass?: number; name?: string; room?: string; mode?: string; bots?: number; botLevel?: string; seed?: number;
+  deferSpawn?: boolean; boysClass?: number; name?: string; room?: string; mode?: string; map?: string; bots?: number; botLevel?: string; seed?: number;
   /** Drop E: the haircut the player has equipped in their profile. Cosmetic; unknown ids fall back. */
   haircut?: string;
 }
@@ -175,14 +175,16 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   override maxClients = MAX_PLAYERS;
   override state = new MatchState();
 
-  private map: MapDef = NIGHT_DISTRICT;
+  /** Drop G: the room's map is a create-time choice (`options.map`); `onCreate` settles it. */
+  private map: MapDef = MAPS[DEFAULT_MAP_ID];
   // Shared across rooms (performance pass, task 1): see sharedWorld.ts.
   /**
    * This room's own collision world. It used to be the process-wide shared one, which cannot work
    * once a tactical plan takes a wall out for a round — every other match would lose it too.
    * Costs ~376 pointers and 0.03 ms per room. The shared WALK grid is untouched (see sharedWorld).
+   * Built in `onCreate`, once the map is known.
    */
-  private world: CollisionWorld = roomCollisionWorld();
+  private world!: CollisionWorld;
   /** Living arena: one vote per session for the current round, cleared when the round begins. */
   private planVotes = new Map<string, number>();
   private sessions = new Map<string, Session>();
@@ -252,6 +254,11 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   }
 
   override onCreate(options: TdmJoinOptions): void {
+    // Drop G: which map this room runs, validated against the shared table exactly like `mode` is —
+    // an unknown or missing id lands on the default rather than on `undefined`. Everything derived
+    // from the map (collision world, spawns, flags, bomb sites, `state.mapId`) follows this line.
+    this.map = (typeof options?.map === "string" ? MAPS[options.map] : undefined) ?? MAPS[DEFAULT_MAP_ID];
+    this.world = roomCollisionWorld(this.map);
     this.state.mapId = this.map.id;
     this.state.roomName = typeof options?.room === "string" ? options.room.slice(0, 24) : "";
     this.mode = isGameMode(options?.mode) ? options.mode : "tdm";
@@ -267,8 +274,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.botLevel = isBotLevel(options?.botLevel) ? options.botLevel : "normal";
     // Tests and tooling may pin the room's PRNG (spawn picks, pellets, bot aim); never in production.
     if ((DEV_TOOLS || process.env.NODE_ENV === "test") && isFiniteNumber(options?.seed)) this.rand = mulberry32(options.seed >>> 0);
-    // `room` and `mode` must stay in metadata: the matchmaker filterBy(["room", "mode"]) matches against them.
-    this.setMetadata({ room: this.state.roomName, mode: this.mode, name: this.state.roomName, map: this.map.name, bots: this.botCount });
+    // `room`, `mode` and `map` must stay in metadata: the matchmaker filterBy(["room", "mode", "map"])
+    // matches against them, and it is the ID that must be there — two rooms on different maps can
+    // never be the same room, and a display name is not what a client filters on.
+    this.setMetadata({ room: this.state.roomName, mode: this.mode, name: this.state.roomName, map: this.map.id, bots: this.botCount });
     this.patchRate = SNAPSHOT_MS;
     this.setTimestep((dt) => this.tick(dt), TICK_MS);
     this.onMessage(C2S.Chat, this.guarded((client, msg) => this.onChat(client, msg)));
@@ -391,7 +400,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private addBot(n: number): void {
     if (!this.walk) {
-      this.walk = sharedWalk(); // built and warmed once per process, not per room (task 1)
+      this.walk = sharedWalk(this.map); // built and warmed once per map per process, not per room (task 1)
       this.roamPoints = [...this.map.spawns, ...(this.map.arenaSpawns ?? []), ...this.map.flags, ...this.map.stations].map(p => ({ x: p.x, y: p.y, z: p.z }));
     }
     const id = botId(n);
@@ -994,9 +1003,21 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   /** The team that gets the choice this round: the attackers, who are the ones making a play. */
   private get votingTeam(): Team { return this.state.bomb.attackTeam as Team; }
 
+  /**
+   * This round's plans, or nothing at all when the room is not on the map the plans are written for.
+   *
+   * Drop G: every entry in `PLANS` names NIGHT_DISTRICT solids in `removes`, so on any other map a
+   * plan is at best a no-op and at worst a vote for a change nobody can see. The whole mechanic is
+   * therefore off there: no offer, no vote taken, no world rebuilt. This is the predicate rather
+   * than a flag on `MapDef` because "the map the plans were authored against" is exactly what it is.
+   */
+  private planOptions(round: number): number[] {
+    return this.map.id === DEFAULT_MAP_ID ? planOffer(round) : [];
+  }
+
   /** What the vote looks like right now, for a broadcast or a late joiner. */
   private planEvent(chosen: number): PlanEvent {
-    const options = planOffer(this.state.bomb.round + 1);
+    const options = this.planOptions(this.state.bomb.round + 1);
     const tally = options.map((id) => [...this.planVotes.values()].filter((v) => v === id).length);
     return { options, tally, chosen, appliesAt: this.state.phaseEndsAt, votingTeam: this.votingTeam, round: this.state.bomb.round + 1 };
   }
@@ -1016,7 +1037,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (p.team !== this.votingTeam) return;
     const plan = (msg && typeof msg === "object" ? (msg as { plan?: unknown }).plan : undefined);
     if (typeof plan !== "number" || !Number.isInteger(plan)) return;
-    if (!planOffer(this.state.bomb.round + 1).includes(plan)) return;
+    if (!this.planOptions(this.state.bomb.round + 1).includes(plan)) return;
     this.planVotes.set(client.sessionId, plan);
     this.broadcast(S2C.Plan, this.planEvent(0));
   }
@@ -1030,7 +1051,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
    * same timestamp, so the two ends cannot end up with different worlds.
    */
   private resolvePlan(): void {
-    const options = planOffer(this.state.bomb.round + 1);
+    const options = this.planOptions(this.state.bomb.round + 1);
     const chosen = tallyVotes([...this.planVotes.values()], options);
     this.applyPlanId(chosen);
     if (options.length) this.broadcast(S2C.Plan, { ...this.planEvent(chosen), appliesAt: this.now() });
@@ -1354,10 +1375,14 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     for (const q of this.state.players.values()) if (!q.shaved && q.alive && q.connected) prey.push(q);
     if (prey.length === 0) return undefined;
     let best: SpawnPoint | undefined, bestD = Infinity;
+    // Drop G: "not in somebody's face" is a fraction of the map, not an absolute — 14 m across
+    // NIGHT_DISTRICT's 121 m diagonal is 8 m across GÓRA's 39 m one, and a map that does not say
+    // keeps the original number.
+    const minM = this.map.huntSpawnMinM ?? OSTRZYZENI.huntSpawnMinM;
     for (const sp of [...this.map.spawns, ...(this.map.arenaSpawns ?? [])]) {
       let near = Infinity;
       for (const q of prey) near = Math.min(near, Math.hypot(q.x - sp.x, q.z - sp.z));
-      if (near < OSTRZYZENI.huntSpawnMinM) continue;   // never in somebody's face
+      if (near < minM) continue;   // never in somebody's face
       if (near < bestD) { bestD = near; best = sp; }
     }
     return best;
@@ -1366,13 +1391,14 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private bombGoal(p: PlayerState, s: Session): NavPoint | undefined {
     const b = this.state.bomb;
     if (b.stage === "resolved") return undefined;
-    const site = BOMB_SITES[(s.planPhase + b.round) % BOMB_SITES.length];
+    const sites = sitesOf(this.map);
+    const site = sites[(s.planPhase + b.round) % sites.length];
     if (b.stage === "planted") return p.team !== b.attackTeam
       ? { x: b.x, y: b.y, z: b.z } : { x: b.x + (b.x < 0 ? 3.5 : -3.5), y: 0, z: b.z - 3.5 };
     if (p.team === b.attackTeam) {
       if (b.stage === "dropped") return { x: b.x, y: b.y, z: b.z };
       const carrier = this.sessions.get(b.carrier);
-      const target = BOMB_SITES[((carrier?.planPhase ?? 0) + b.round) % 2];
+      const target = sites[((carrier?.planPhase ?? 0) + b.round) % sites.length];
       return { x: target.x, y: target.y, z: target.z };
     }
     return { x: site.x, y: site.y, z: site.z + 2 };
@@ -1421,7 +1447,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (this.mode !== "bomb" || this.state.phase !== MatchPhase.Playing) return;
     const carrier = this.state.bomb.carrier, plantedBefore = this.state.bomb.stage === "planted";
     const winner = stepBomb(this.state.bomb, this.bombPlayers(), now, TICK_MS,
-      (p, q) => !this.losBlocked(p.x, p.y + 1, p.z, q.x, q.y + 0.3, q.z));
+      (p, q) => !this.losBlocked(p.x, p.y + 1, p.z, q.x, q.y + 0.3, q.z), sitesOf(this.map));
     if (!plantedBefore && this.state.bomb.stage === "planted") {
       const planter = this.state.players.get(carrier);
       if (planter) { this.pay(planter, 300, "capture"); planter.score += 200; }

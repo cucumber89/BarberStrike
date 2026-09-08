@@ -1,8 +1,8 @@
-import { NIGHT_DISTRICT, buildCollisionWorld, prepareNav, walkable, type CollisionWorld, type Walk } from "@frankibarber/shared";
+import { DEFAULT_MAP_ID, MAPS, buildCollisionWorld, prepareNav, walkable, type CollisionWorld, type MapDef, type Walk } from "@frankibarber/shared";
 
 /**
- * One map, one process, one thread: the collision world and the walk grid are built ONCE here and
- * shared by every room instead of per room.
+ * One process, one grid PER MAP: the collision world and the walk grid are built once per map id
+ * here and shared by every room on that map instead of being rebuilt per room.
  *
  * Why it was per room and why it is safe not to be: `walkable()` returns a fresh object each call,
  * and `nav.ts` keys its index cache on that object, so every room creation rebuilt the grid
@@ -12,14 +12,21 @@ import { NIGHT_DISTRICT, buildCollisionWorld, prepareNav, walkable, type Collisi
  * builder; the walk grid is read by `findPath`, whose scratch buffers are module-level and, on a
  * single thread, never interleave between two searches), so sharing them is a pure win.
  *
+ * Drop G: two maps, so the caches are keyed by map id. A room on GÓRA must never be handed
+ * NIGHT_DISTRICT's grid, and a room on either map must still pay for its grid only once.
+ *
  * Lazy, not at import: the harness builds rooms without bots that never need the grid, and a cold
- * `import` should not pay for it either.
+ * `import` should not pay for it either — and with two maps registered, a process that only ever
+ * runs one of them must not build the other.
  */
-let world: CollisionWorld | null = null;
-let walk: Walk | null = null;
+const DEFAULT_MAP = MAPS[DEFAULT_MAP_ID];
+const worlds = new Map<string, CollisionWorld>();
+const walks = new Map<string, Walk>();
 
-export function sharedCollisionWorld(): CollisionWorld {
-  return (world ??= buildCollisionWorld(NIGHT_DISTRICT));
+export function sharedCollisionWorld(map: MapDef = DEFAULT_MAP): CollisionWorld {
+  let w = worlds.get(map.id);
+  if (!w) worlds.set(map.id, w = buildCollisionWorld(map));
+  return w;
 }
 
 /**
@@ -30,12 +37,13 @@ export function sharedCollisionWorld(): CollisionWorld {
  * rebuilt: plans only ever REMOVE geometry, so a stale grid is a subset of what is walkable —
  * bots ignore the new route rather than walking into a wall that is no longer there.
  */
-export function roomCollisionWorld(map = NIGHT_DISTRICT): CollisionWorld {
+export function roomCollisionWorld(map: MapDef = DEFAULT_MAP): CollisionWorld {
   return buildCollisionWorld(map);
 }
 
-/** The walk grid with its nav index built and the search warmed (see `prepareNav`). */
-export function sharedWalk(): Walk {
-  if (!walk) { walk = walkable(NIGHT_DISTRICT); prepareNav(walk); }
-  return walk;
+/** The map's walk grid with its nav index built and the search warmed (see `prepareNav`). */
+export function sharedWalk(map: MapDef = DEFAULT_MAP): Walk {
+  let w = walks.get(map.id);
+  if (!w) { w = walkable(map); prepareNav(w); walks.set(map.id, w); }
+  return w;
 }

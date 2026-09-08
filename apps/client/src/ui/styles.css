@@ -105,16 +105,26 @@ button { font-family: inherit; }
 .crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --gap: 5px; --len: 8px; --w: 2px; --ch-color: #fff; }
 .crosshair span { position: absolute; background: var(--ch-color); }
 .crosshair.outlined span { box-shadow: 0 0 0 1px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.9); }
-.ch-top { left: calc(-1 * var(--w) / 2); top: calc(-1 * var(--gap) - var(--len)); width: var(--w); height: var(--len); }
-.ch-bottom { left: calc(-1 * var(--w) / 2); top: var(--gap); width: var(--w); height: var(--len); }
-.ch-left { left: calc(-1 * var(--gap) - var(--len)); top: calc(-1 * var(--w) / 2); width: var(--len); height: var(--w); }
-.ch-right { left: var(--gap); top: calc(-1 * var(--w) / 2); width: var(--len); height: var(--w); }
+/* THE HOT ONE. `--gap` is recomputed from the weapon's live spread on every snapshot, so whatever
+   these arms animate, they animate ~20 times a second for the whole match. Offsetting them with
+   `left`/`top` meant a layout pass each time, on the same main thread as the render loop; a
+   translate is composited and touches neither layout nor paint. The base position is fixed and the
+   gap is applied as a transform. */
+.ch-top { left: calc(-1 * var(--w) / 2); top: calc(-1 * var(--len)); width: var(--w); height: var(--len); transform: translateY(calc(-1 * var(--gap))); }
+.ch-bottom { left: calc(-1 * var(--w) / 2); top: 0; width: var(--w); height: var(--len); transform: translateY(var(--gap)); }
+.ch-left { left: calc(-1 * var(--len)); top: calc(-1 * var(--w) / 2); width: var(--len); height: var(--w); transform: translateX(calc(-1 * var(--gap))); }
+.ch-right { left: 0; top: calc(-1 * var(--w) / 2); width: var(--len); height: var(--w); transform: translateX(var(--gap)); }
 .ch-dot { left: calc(-1 * var(--w) / 2); top: calc(-1 * var(--w) / 2); width: var(--w); height: var(--w); border-radius: 50%; }
-.ch-circle { left: calc(-1 * var(--gap) - var(--len) / 2); top: calc(-1 * var(--gap) - var(--len) / 2);
-  width: calc(2 * var(--gap) + var(--len)); height: calc(2 * var(--gap) + var(--len));
-  border: var(--w) solid var(--ch-color); border-radius: 50%; background: none !important; }
+/* Base 100 px ring, scaled to (2*gap + len). Same reason as the arms: a scale is composited, a
+   width/height change is a layout. The scale is built from UNITLESS copies of the two numbers
+   (`--gap-n`, `--len-n`, set alongside the px ones in Hud.tsx) because CSS `calc()` cannot divide
+   by a length — `calc(40px / 100px)` is invalid and silently drops the whole declaration. */
+.ch-circle { left: -50px; top: -50px; width: 100px; height: 100px;
+  transform: scale(calc((2 * var(--gap-n, 5) + var(--len-n, 8)) / 100));
+  border: calc(var(--w) * 100 / (2 * var(--gap-n, 5) + var(--len-n, 8))) solid var(--ch-color);
+  border-radius: 50%; background: none !important; }
 .crosshair.outlined .ch-circle { box-shadow: 0 0 0 1px rgba(0,0,0,.85), inset 0 0 0 1px rgba(0,0,0,.85); }
-.crosshair span { transition: left 60ms linear, top 60ms linear; }
+.crosshair span { transition: transform 60ms linear; will-change: transform; }
 /* Settings: the crosshair on a strip of the game's own darkness, so the choice is made against
    roughly what it will sit on in play. */
 .ch-preview { position: relative; height: 84px; margin: 6px 0 10px; border: 1px solid var(--line);
@@ -151,7 +161,7 @@ button { font-family: inherit; }
 .health { position: absolute; left: 26px; bottom: 26px; display: flex; align-items: flex-end; gap: 12px; }
 .health-num { font-family: var(--font-display); font-size: 44px; line-height: 1; color: var(--tx); text-shadow: 0 2px 6px rgba(0,0,0,.8); min-width: 64px; }
 .health-bar { width: 180px; height: 6px; background: rgba(255,255,255,.12); margin-bottom: 8px; }
-.health-fill { height: 100%; background: var(--tx); transition: width 160ms ease-out; }
+.health-fill { height: 100%; width: 100%; background: var(--tx); transform-origin: left; transform: scaleX(var(--v, 1)); transition: transform 160ms ease-out; }
 .low-health .health-fill { background: var(--red); }
 
 .ammo { position: absolute; right: 26px; bottom: 26px; text-align: right; }
@@ -185,7 +195,7 @@ button { font-family: inherit; }
 .summary-title { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.22em; color: var(--brass); }
 .summary-up { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em; color: var(--gold, var(--brass)); border: 1px solid currentColor; padding: 2px 6px; }
 .summary-bar { height: 6px; background: rgba(255,255,255,.12); overflow: hidden; }
-.summary-bar-fill { height: 100%; background: var(--brass); transition: width .6s ease-out; }
+.summary-bar-fill { height: 100%; width: 100%; background: var(--brass); transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform .6s ease-out; }
 .summary-xp { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; color: var(--tx-2); }
 .summary-badges { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; }
 .summary-badge { border: 1px solid var(--brass); padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; }
@@ -202,7 +212,7 @@ button { font-family: inherit; }
 .bomb-hud b { color: #fff; font-size: 13px; }
 .bomb-hud.armed { border-color: #ff7050; color: #ff9070; }
 .bomb-progress { height: 5px; background: #ffffff25; }
-.bomb-progress i { display: block; height: 100%; background: #e5ae52; transition: width .1s linear; }
+.bomb-progress i { display: block; height: 100%; width: 100%; background: #e5ae52; transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform .1s linear; }
 
 .result { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: rgba(6,6,8,.78); pointer-events: auto; }
 .result-title { font-family: var(--font-display); font-size: 96px; letter-spacing: 0.2em; line-height: 1; }
@@ -241,14 +251,14 @@ button { font-family: inherit; }
 .loading-card { width: min(520px, 90vw); }
 .loading-stage { font-family: var(--font-display); font-size: 26px; letter-spacing: 0.15em; color: var(--tx); margin-bottom: 14px; }
 .loading-bar { height: 3px; background: var(--line); }
-.loading-fill { height: 100%; background: var(--brass); transition: width 240ms ease-out; }
+.loading-fill { height: 100%; width: 100%; background: var(--brass); transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform 240ms ease-out; }
 .loading-steps { display: flex; justify-content: space-between; margin-top: 10px; font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--tx-3); }
 .loading-steps span.done { color: var(--tx-2); }
 
 /* ---------- Reload / telemetry ---------- */
 .reload-bar { height: 3px; width: 160px; background: rgba(255,255,255,.12); margin: 6px 0 0 auto; overflow: hidden; }
-.reload-fill { height: 100%; width: 0; background: var(--brass); animation: reload-fill linear forwards; }
-@keyframes reload-fill { from { width: 0; } to { width: 100%; } }
+.reload-fill { height: 100%; width: 100%; background: var(--brass); transform-origin: left; animation: reload-fill linear forwards; }
+@keyframes reload-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .telemetry { margin-top: 4px; border-collapse: collapse; }
 .telemetry td { padding: 1px 8px 1px 0; color: var(--tx-2); font-variant-numeric: tabular-nums; }
 .telemetry td:last-child { color: var(--tx); text-align: right; }
@@ -363,7 +373,7 @@ button { font-family: inherit; }
 }
 
 /* ---------- Drop 3: armour, perks, scope ---------- */
-.armor-fill { position: absolute; left: 0; top: -4px; height: 3px; background: #8fd3ff; }
+.armor-fill { position: absolute; left: 0; top: -4px; height: 3px; width: 100%; background: #8fd3ff; transform-origin: left; transform: scaleX(var(--v, 0)); }
 .health-bar { position: relative; }
 .armor-num { font-family: var(--font-display); font-size: 20px; color: #8fd3ff; margin-left: 4px; text-shadow: 0 2px 6px rgba(0,0,0,.8); }
 .armor-num.broke { color: var(--red); animation: pulse 0.3s ease-in-out 3; }
@@ -372,7 +382,7 @@ button { font-family: inherit; }
 .perk-glyph { font-size: 14px; }
 .perk-name { color: var(--tx); }
 .perk-time { margin-left: auto; font-family: var(--font-mono); color: var(--brass); }
-.perk-bar { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--brass); transition: width 250ms linear; }
+.perk-bar { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--brass); transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform 250ms linear; }
 .perk-flask .perk-bar { background: #d9a441; } .perk-roids .perk-bar { background: #7dff9a; } .perk-energy .perk-bar { background: #8fd3ff; } .perk-fade .perk-bar { background: var(--purple); }
 .crosshair.armor span { background: #8fd3ff; }
 .flask-haze { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 140px 40px rgba(217,164,65,.22); backdrop-filter: blur(0px); }
@@ -390,7 +400,7 @@ button { font-family: inherit; }
 .scope-reticle .dot { left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: var(--red); }
 .scope-reticle.hit .dot { background: #fff; box-shadow: 0 0 6px #fff; }
 .scope-breath { position: absolute; left: 50%; top: calc(50% + min(34vw, 34vh) + 14px); transform: translateX(-50%); width: 220px; height: 16px; background: rgba(10,10,12,.7); border: 1px solid var(--line); font-size: 9px; letter-spacing: 0.25em; color: var(--tx-2); display: flex; align-items: center; justify-content: center; }
-.scope-breath-fill { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(143,211,255,.35); }
+.scope-breath-fill { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(143,211,255,.35); width: 100%; transform-origin: left; transform: scaleX(var(--v, 0)); }
 .scope-breath span { position: relative; }
 /* Drop B (D-B2): the M-1's ring. A thin circle over a mostly clear view — the DMR is a rifle you
    keep your surroundings in, not a tube you disappear down. Its reticle lines are short crops
@@ -422,7 +432,7 @@ button { font-family: inherit; }
 .flag { position: relative; width: 56px; height: 30px; display: flex; align-items: center; justify-content: center; background: rgba(10,10,12,.7); border: 1px solid var(--line); font-family: var(--font-display); font-size: 18px; color: var(--tx-2); overflow: hidden; }
 .flag.own0 { border-color: var(--team0); color: var(--team0); } .flag.own1 { border-color: var(--team1); color: var(--team1); }
 .flag.here { box-shadow: 0 0 0 1px var(--tx) inset; }
-.flag-cap { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--tx); transition: width 120ms linear; }
+.flag-cap { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--tx); transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform 120ms linear; }
 .flag.cap0 .flag-cap { background: var(--team0); } .flag.cap1 .flag-cap { background: var(--team1); }
 .flag.contested { animation: pulse .6s ease-in-out infinite; border-color: #ff7a3d; }
 .flag-notice { position: absolute; left: 50%; top: 112px; transform: translateX(-50%); font-family: var(--font-display); font-size: 20px; letter-spacing: .2em; padding: 6px 14px; background: rgba(10,10,12,.7); animation: slide-in 160ms ease-out; white-space: nowrap; }
@@ -430,11 +440,11 @@ button { font-family: inherit; }
 .capture { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); text-align: center; font-size: 12px; letter-spacing: .25em; color: var(--tx); text-shadow: 0 2px 6px rgba(0,0,0,.8); }
 .capture.contested { color: #ff7a3d; }
 .capture-bar { width: 180px; height: 4px; background: rgba(255,255,255,.15); margin: 6px auto 0; }
-.capture-fill { height: 100%; background: var(--brass); transition: width 120ms linear; }
+.capture-fill { height: 100%; width: 100%; background: var(--brass); transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform 120ms linear; }
 .capture.enemy .capture-fill { background: var(--red); }
 
 .tac-meter { position: absolute; left: 50%; top: calc(50% + 36px); transform: translateX(-50%); width: 64px; height: 3px; background: rgba(255,255,255,.15); }
-.tac-fill { height: 100%; background: var(--tx-2); }
+.tac-fill { height: 100%; width: 100%; background: var(--tx-2); transform-origin: left; transform: scaleX(var(--v, 0)); }
 .tac-meter.on .tac-fill { background: var(--brass); }
 .tac-meter.empty .tac-fill { background: var(--red); }
 
@@ -643,6 +653,75 @@ button { font-family: inherit; }
 .bomb-hud.infection { border-top-color: var(--team1, #7fb2d8); color: #cfe3f2; }
 .bomb-hud.infection.shaved { border-top-color: #d8556a; color: #ffc9d1; }
 .result-rounds { color: var(--tx-2); font-family: var(--font-mono); font-size: 12px; }
+.muted.small.warn { color: #f0c89a; border-left: 2px solid var(--brass); padding-left: 8px; }
+
+/* The HUD is built while the loading screen is still up so its first commit is not paid at DEPLOY
+   (see App.tsx). Until the match starts it is invisible and cannot be clicked or tabbed into. */
+.hud.dormant { visibility: hidden; pointer-events: none; }
+
+/* ==========================================================================================
+   HUD — one plate, one hierarchy (2.5)
+
+   The report was "brzydki i opornie" — ugly, and it drags. The drag was CSS forcing layout every
+   frame (fixed above). The ugliness was inconsistency: #14/#17 gave the health block and the top
+   bar a rounded plate and left the wallet, the ammo and the grenade slots floating naked beside
+   them, so the same screen had two visual languages and no order of importance.
+
+   The rules here are the whole design, and they are deliberately few:
+     PLATE   one treatment for every grouped readout — same ink, same radius, same border.
+     RANK    what you die without is biggest (health, ammo), what you plan with is smaller
+             (money, grenades), what you glance at is smallest (kill feed, timer).
+     STATE   health carries its own colour, so "am I in trouble" is answered by the colour and
+             never by reading a number under fire.
+     EDGE    everything sits on one 24 px margin and one 12 px inner rhythm.
+   ========================================================================================== */
+.hud { --plate: #0d1117e8; --plate-line: #ffffff1f; --plate-pad: 10px 14px; --edge: 24px; }
+
+.top-bar, .health, .ammo, .gear-slot, .wallet-prompt {
+  background: var(--plate); border: 1px solid var(--plate-line); border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(0,0,0,.38);
+}
+
+/* --- bottom left: health, then money above it --- */
+.health { left: var(--edge); bottom: var(--edge); padding: var(--plate-pad); gap: 12px; align-items: center; }
+.health-num { font-size: 40px; min-width: 58px; text-align: right; letter-spacing: 0.02em; transition: color 200ms ease-out; }
+.health-bars { display: flex; flex-direction: column; gap: 4px; }
+.health-bar { width: 132px; height: 7px; border-radius: 4px; overflow: hidden; background: rgba(255,255,255,.10); }
+.armor-bar { width: 132px; height: 4px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,.08); }
+.armor-fill { position: static; top: auto; height: 100%; background: #8fd3ff; }
+/* Colour IS the reading. Green while it does not matter, amber when it starts to, red when it does. */
+.hp-ok      .health-num { color: #d8f5e0; } .hp-ok      .health-fill { background: #7dff9a; }
+.hp-hurt    .health-num { color: #ffd79a; } .hp-hurt    .health-fill { background: #e5ae52; }
+.hp-critical .health-num { color: #ff9a8c; } .hp-critical .health-fill { background: var(--red); }
+
+.wallet { left: var(--edge); bottom: calc(var(--edge) + 78px); gap: 8px; }
+/* Money is a PLAN, not a vital sign: it sits above health and reads a size down from it. */
+.wallet-money { font-size: 22px; letter-spacing: 0.06em; color: #7dff9a; }
+
+/* --- bottom right: the weapon, then its grenades above --- */
+.ammo { right: var(--edge); bottom: var(--edge); padding: var(--plate-pad); }
+.ammo-num { font-size: 40px; letter-spacing: 0.02em; }
+.ammo-num .sep, .ammo-num .res { font-size: 24px; }
+.weapon-name { font-size: 11px; letter-spacing: 0.18em; color: var(--tx-2); margin-bottom: 2px; }
+.gear { right: var(--edge); bottom: calc(var(--edge) + 84px); gap: 8px; }
+/* These were all but invisible at 0.35 opacity on a dark map; an empty slot should read as EMPTY,
+   not as absent. */
+.gear-slot { padding: 6px 10px; font-size: 10px; letter-spacing: 0.14em; color: var(--tx); min-width: 96px; }
+.gear-slot.empty { opacity: 1; color: var(--tx-3); border-style: dashed; }
+.gear-slot.empty .key { color: var(--tx-3); }
+.gear-slot .count { font-size: 17px; }
+
+/* --- top: the match, quieter than the things that kill you --- */
+.top-bar { top: var(--edge); padding: 6px 14px; gap: 14px; }
+.timer { font-size: 24px; min-width: 92px; }
+.team-score .tscore { font-size: 26px; }
+
+/* --- kill feed: one column, one width, quiet until it is about you --- */
+.killfeed { top: var(--edge); right: var(--edge); gap: 3px; }
+.killfeed li { background: rgba(13,17,23,.82); border: 1px solid transparent; border-radius: 6px;
+  padding: 3px 9px; font-size: 12px; }
+.killfeed li.me-victim { border-color: var(--red); border-right-width: 1px; }
+.killfeed li.me-killer { border-color: var(--brass); border-right-width: 1px; }
 
 /* ---------------------------------------------------------------- Drop E: the shave */
 

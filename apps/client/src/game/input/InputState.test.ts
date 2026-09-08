@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Btn } from "@frankibarber/shared";
-import { InputState } from "./InputState";
+import { DEFAULT_BINDINGS, InputState } from "./InputState";
 
 describe("game input transitions", () => {
   let input: InputState;
@@ -89,7 +89,9 @@ describe("game input transitions", () => {
   it("does not treat a crouched Shift as a sprint, so a crouched aim survives it", () => {
     emit(canvas, "pointerdown", { button: 2, pointerType: "mouse" });
     emit(win, "pointermove", { buttons: 2, movementX: 0, movementY: 0 });
-    emit(win, "keydown", { code: "ControlLeft" });
+    // The crouch KEY, not a hard-coded Ctrl: crouch moved to C (Ctrl+W closed the tab), and this
+    // test is about crouch-plus-Shift, not about which keycap crouch happens to live on.
+    emit(win, "keydown", { code: DEFAULT_BINDINGS.crouch[0] });
     emit(win, "keydown", { code: "KeyW" });
     emit(win, "keydown", { code: "ShiftLeft" });
     expect(input.buttons() & Btn.Aim).toBe(Btn.Aim);

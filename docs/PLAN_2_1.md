@@ -218,6 +218,7 @@ Nick + password or Discord OAuth, server-side profile (skins, haircuts, XP), wee
 | 2026-09-07 | A | claude/new-session-o0hcng | Slice 4: third-person hold, reload staging, launcher sight. `characterHold.ts` computes the held gun's box in torso space and its test asserts no weapon intersects the vest — two hand-tuned passes had each freed one end of the gun and buried the other, so the pose was solved by search instead (x 0.335, outboard of the shoulder; the bore stays 3.5–3.9° of facing, so angling the gun across the body was ruled out). `reloadFrame` lifts and cants every timeline so the magazine stays in frame (t-ranges untouched — the audio cues on them). Launcher ladder sight rebuilt as a peep frame. Harness: real `reloadMs` per weapon, an open-ground heading from the game's own CollisionWorld, two-breath aim averaging, output paths anchored to the tool. Art review round 5: reloads and sights pass; the first-person support arm still crosses the fore-end (Deferred, the last geometry item). | docs/WEAPON_FIT.md; apps/client/e2e/out/weapons/ | typecheck ✓ test ✓ (474) build ✓ check:weapons ✓ (19/19) e2e — | review |
 | 2026-09-07 | B | drop/b-weapon-feel | Slice 1, docs only: `docs/WEAPON_MATRIX.md` written from three recon passes (client handling `LocalPlayer` / `WeaponController` / `Viewmodel`, audio voice table `sfx.ts:31-44`, VFX `Effects.ts` / `Tracers.ts` / `view/index.ts` / `Hud.tsx`). Found: of the six axes only recoil, ADS and the audio voice are per-weapon today; sprint-out (150 ms), sway, flash, tracer and casing are one global value for all eleven, shake is a three-way ternary, and the ADS sensitivity ignores `adsZoom`. The sniper already hides the viewmodel and has breath hold; it does not scale sensitivity or un-scope on sprint. Matrix proposes bold per-row targets, six named rules (R1 zoom-sens, B1 bipod, C1 pellet ring, S1 bolt kicks out of scope, S2 sprint un-scopes, M1 clippers hum) and four decisions D-B1–D-B4 for the owner. No code touched. STOPPED for sign-off as the plan requires. | docs/WEAPON_MATRIX.md | typecheck — test — build — (no code changed) | blocked: owner sign-off on WEAPON_MATRIX.md |
 | 2026-09-08 | B | drop/b-weapon-feel (recut from main; PR #13 merged the matrix) | Slice 2, the drop implemented. Owner signed the matrix ("dobra dalej kończmy to"), all four decisions as proposed. `weaponFeel.ts` = the matrix in numbers, client-only (D-B1); `weaponFeel.test.ts` judges it, including the closest-pair claim. Signature metric compares axes in OCTAVES normalised by the roster's spread — in raw units 420 vs 1000 rpm is a tenfold lie about the same difference as 45 vs 107; closest pair shotgun/launcher 0.98, median 4.0, threshold frozen at 0.9. Wired: per-weapon sprint-out, sway, raise, flash, shake, tracer width and count, casings (hand-worked guns hold the case until the action), belt link, mechanical action audio (hammer/pump/bolt), R1 zoom-scaled sensitivity, S1 bolt out of the scope, B1 bipod, D-B2 the M-1 scoped with a ring and the minimap it keeps, C1 the S12's true cone as a ring. `weapon-signature.mjs` measures all 11 in a real client. FOUND, predating this drop: `InputState` cancelled the aim on any Shift under a held aim, so the SR-50's breath hold was unreachable while the HUD advertised it — fixed at the source, 3 tests. Review (separate agent) found 6 real bugs: bolt kept the NEXT weapon out of ADS, bipod deployed mid-air and carried across weapons, a case owed by a put-away gun dropped out of the next one, brass left 560 ms after a 125 ms bolt, S2 duplicated in two places disagreeing about which keys count. All fixed. | docs/WEAPON_MATRIX.md ("As built"); apps/client/e2e/out/signature/{summary.md,*.json}; apps/client/e2e/out/weapons/dropb/*.png | typecheck ✓ test ✓ (451) build ✓ audio-selftest ✓ signature tool ✓ (11/11) e2e — (not run) | review |
+| 2026-09-08 | B | drop/b-weapon-feel | Four commits on top of the row above, from a second session that had built Drop B independently; the owner chose this branch as the base and named what to take across. **Linear ADS blend** — it moved by a fraction of the REMAINING distance each frame, so the sights took ~2.3 × `adsMs` and longer on a slow machine (measured 255 ms for the AR-31's declared 130, 549 ms for the SR-50's 260); `adsMs` is now the real time on any framerate. **M1, the clippers' hum, built** — the "needs a looping voice in the engine" note was too pessimistic: a 2 s voice re-triggered before it ends, fading in and out so the seam is inaudible, stopped on death/switch/teardown and re-armed on spawn, −16.7 dBFS in the self-test. **`weapon-shots.mjs` repaired** — it has taken no screenshot since drop I made the spawn deferred (it never clicks ENTER MATCH), and that click also fullscreens the canvas host, which HIDES the HUD from any frame taken inside it. Plus a guard so one unreadable JSON cannot delete the whole signature table. | apps/client/e2e/out/weapons/{dmr,sniper}/fp_ads.png (`PRESET=low RENDER=0.5 node e2e/tools/weapon-shots.mjs`); apps/client/e2e/out/signature/summary.md | typecheck ✓ test ✓ (609: shared 180, client 276, server 153) build ✓ check:weapons ✓ (19/19) audio-selftest ✓ signature tool ✓ (11/11) e2e — | review |
 
 | 2026-09-08 | D | drop/d-modes | Whole drop in one session. **Join by link**: the invite link is now `<origin>/r/<room>?mode=…`; the client reads the room off the path (`roomFromPath`), the lobby a link opens asks for a nickname and nothing else (CHANGE opens the full one), the SPA fallback moved into `hosting.ts` as `spaFallback` so it is testable, and `hostcheck.mjs` proves the path from outside (11/11 checks). **Gun Game**: the 11-rung ladder is data in `shared/modes.ts`; the rung replicates as `PlayerState.score` (no new field), a rung-weapon kill re-arms the killer on the spot, a clippers kill sets the victim back one, only the last rung ends the match, no economy, 3 s respawn, FFA spawn pool. **Ostrzyżeni**: rounds on the Prep/Playing machine, sides are the teams (survivors 0 / shaved 1), one random chaser per round with clippers + the energy perk + a bare head (`PlayerState.shaved`, the one field the plan names), a clippers kill converts, survivors who are not converted stay down until the round ends, five rounds, the result names the top score. **Bots** play both (`BotSenses.mode`/`shaved`): Gun Game needs no branch, a chaser closes and swings, a survivor gives ground. Reviewer (separate agent) found six things, all fixed — chiefly the profile recording the OPPOSITE of the result screen in Ostrzyżeni. | apps/client/e2e/out/d/{hostcheck.md,gungame/*.png,ostrzyzeni/*.png}; docs/PLAYTEST_TEMPLATE.md; regenerate with `hostcheck.mjs`, `shaved-shots.mjs`, `infection-shots.mjs` | typecheck ✓ test ✓ (510: shared 153, client 217, server 140) build ✓ check:weapons ✓ (19/19) e2e ✓ (18/18 against a freshly started server; the pre-existing smoke test failed twice against a server process that had been up ~20 min / 64 k ticks, and passes alone — see Deferred) | review |
 
@@ -232,6 +233,15 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 | 2026-09-08 | E | drop/e-shave | **The shave and haircuts, whole drop, mechanic done and art NOT accepted.** `shared/haircuts.ts`: a clippers kill FROM BEHIND is a shave (`isShave`, reusing the `isBackstab` the melee swing already runs — no new geometry, no client claim); the victim's head is written once, on the death, and they wear it for the rest of the match. **One schema field**, `PlayerState.haircut`, a string `"<id>"` / `"<id>#<n>"` carrying the equipped cosmetic AND the shave count together, so the chosen look survives being done and the count stays exact for the award (Decisions). Written on join, equip and a shave death, never per tick — verified by the reviewer against `step`/`spawn`/`beginInfectionRound`/the rung reset. HUD: a razor SVG replaces the weapon's name in the kill feed (there was no icon system at all — three text spans and some perk emoji), a razor column on the scoreboard parsed from the field rather than tallied from events a late joiner never saw, and "Najgorsza fryzura" on the summary from a pure shared `worstHaircut`. Nine haircuts unlocked off lifetime counters, owned DERIVED not stored, equipped in the lobby picker (locked ones shown with what earns them), carried on the join like the nickname. Bots wear the catalog. Reviewer (separate agent) found 3 real things, all fixed: **IROKEZ rendered as its own inverse** (a mohawk written as a `track` is a bald strip with hair at the temples — and the view test had asserted that shape rather than questioned it), a scoreboard CSS rule that could never fire, and an unreachable `C2S.Haircut` handler (deleted — the picker is pre-match, so the join option IS the equip path). **Art: three rounds, two of them valid, and the drop's headline claim FAILED both.** At 8 m the head is ~12 px and no shave stage read as a bad haircut; round 2 also found the escalation inverted (RUINA read as a CLEAN bald head). Two responses shipped — hair coverage now falls monotonically instead of a groove widening, and the shaved scalp got its own raw-red material because at 12 px only tone survives — but neither has been judged: round 3's set was invalidated by a harness regression of mine (moving the camera got true ranges and lost the subject; 17 of 37 frames had nobody in them) and is reverted. | apps/client/e2e/out/haircuts/*.png (regenerate: dev servers up, `node apps/client/e2e/tools/haircut-shots.mjs`); art verdicts quoted in the Decisions entries of this date | typecheck ✓ test ✓ (646: shared 196, client 287, server 163) build ✓ check:weapons ✓ (19/19) e2e — (not run) | blocked: art — a shaved head does not read at gameplay range; needs a human on a real GPU, or a different idea |
 
 Status vocabulary reminder: these rows are `review` because the full e2e path was not run here.
+
+| 2026-09-08 | G | drop/g-map-2 | Slice 1, docs only, the gate the drop names: `docs/MAP_2.md`. Four recon passes first (map data model; the validity suite; what each of the seven modes needs from a map; what the client pipeline gives a new map for free). **Theme decided and argued, not offered as a menu: the upstairs flat, not the delivery yard** — NIGHT_DISTRICT already contains an alley and a loading yard (`map.ts:113-116`), so a second yard is a re-skin of the same fight. MEASURED, 400 k eye-to-eye pairs over its 24 751 walkable cells: NIGHT_DISTRICT's median clear sight line is **24.0 m**, 36.6 % of clear lines exceed 30 m, longest 111 m. GÓRA is drawn at 34 × 18 m, ≈ 544 m², longest line 20 m, first contact 3.6 s (vs 8.0 s) and a bomb rotation 2.3 s (vs a measured 10.9 s). Two rings around a solid stair core and an open light well; spawns, three buy stations, three dom flags and two bomb sites placed for all seven modes. Rotation times come from the real `simulateBody` via a new `map-rotation.ts`; the ASCII plan is RENDERED from the extents table by `map-plan.ts` so the picture cannot drift from the numbers. Found while drawing: (a) `map.test.ts:107` demands buy stations spread > 30 m in x — a NIGHT_DISTRICT-shaped rule in a generic test, and the reason the flat is 34 m wide rather than 26; (b) `BOMB_SITES` is a module global (`bomb.ts:6`), so bomb cannot run on a second map without per-map sites; (c) `huntSpawnMinM` 14 m (`modes.ts:142`) is proportionally 3× as far on a 39 m diagonal as on a 121 m one; (d) corners and stairs cost **zero** time in this movement model, so height must be priced in exposure. Six decisions D-G1…D-G6 for the owner. No code touched; STOPPED for sign-off as the plan requires. | docs/MAP_2.md; `apps/client/e2e/tools/{map-rotation,map-plan}.ts` → `apps/client/e2e/out/g/{rotation.md,plan.txt}` (gitignored, regenerate with the command in each tool header) | typecheck ✓ test ✓ (shared 180/180) check:weapons ✓ (19/19) build — test:client/server — e2e — (no game code changed) | blocked: owner sign-off on docs/MAP_2.md |
+| 2026-09-08 | G | drop/g-map-2 | Slice 2, the drop built. Owner signed the layout ("już"), all six decisions as proposed. `packages/shared/src/gora.ts` = the doc in solids: 129 solids, 35 props, 14 lights, 12 team + 8 arena spawns, 34 × 18 m, two rings around a boarded stair core with an open light well, a back balcony and a roof over the east wing. **Registered in `MAPS`, which is what makes it real**: `map.test`, `mapFlags.test` and `floorAudit.test` all loop `Object.values(MAPS)`, so every invariant NIGHT_DISTRICT is held to now judges GÓRA on every run. Two new optional `MapDef` fields carry what a second map needs — `sites` (bomb sites were a module constant in `bomb.ts:6`; `sitesOf()` falls back to it, `stepBomb` takes them as an argument) and `huntSpawnMinM` (8 m here against 14 on a map with three times the diagonal). Server: the room takes its map from options, `filterBy(["room","mode","map"])`, `sharedWorld`'s two global caches keyed by map id (Drop I's per-room world intact), the bomb and the bots read `sitesOf(this.map)`, tactical plans are off on any map but the district (their `removes` names district solids). Client: the district's `buildArchitecture`/`buildStreetscape` added **206 meshes** of shopfront and street inside the flat — now gated and counted by a test; bomb markers follow the map; the lobby picks the map, remembers it and puts it in the invite link. **What the built geometry caught that the drawing could not**: a 1.0 m sideboard standing in the salon→kitchen doorway (over the walk grid's 0.88 m jump-up) cut the whole west wing off the map; a 0.9 m bin closed the 2 m balcony; the loft stair landed in the stock-room doorway and the fire escape ended at a 0.45 m gap in the parapet — all four found by flood-filling the walk grid from spawn 0 and printing what was unreachable. Also found and fixed BY ME, not by the suite: `arenaSpawns` (the FFA / Gun Game / Ostrzyżeni pool) was never judged by any test, and GÓRA's north roof spawn sat over the loft-stair opening — a three-metre drop on arrival. That check is now a generic test for every map. MEASURED on the built geometry (400 k eye-to-eye samples over the reachable standing surfaces): median clear sight line **5.0 m** vs NIGHT_DISTRICT's **24.0 m**, bomb rotation **2.2 s** vs **10.9 s**, first contact 5.0 s vs 8.0 s, and KUCHNIA→SKŁAD 26 m apart but 46.8 m on foot because the well splits the north half. | docs/MAP_2.md ("As built"); `apps/client/e2e/tools/{map-rotation,map-plan}.ts` → `apps/client/e2e/out/g/{rotation.md,plan.txt}` (gitignored; regenerate with the command in each tool header) | typecheck ✓ test ✓ (636: shared 194, client 282, server 160) build ✓ check:weapons ✓ (19/19) e2e — (not run: needs two live servers and a browser pair) | review |
+
+| 2026-09-08 | G | drop/g-map-2 | Slice 3, one correction to slice 2 and the test that catches it. GÓRA declared `huntSpawnMinM` **8 m**, scaled by proportion from NIGHT_DISTRICT's 14 m (121 m diagonal → 39 m). MEASURED against the arrangement that squeezes the rule hardest — five survivors spread one to an area — **8 m and 7 m leave no legal point in the pool at all**, so `huntSpawn` falls through to the ordinary pick, which MAXIMISES distance from enemies: the chaser is sent as far from its prey as the map allows, in the mode whose premise is the hunt. **6 m** keeps ≥ 4 legal points in every arrangement swept and is still eight body widths and a whole spawn-protection window. `map.test.ts` now holds every map to it, survivors placed by farthest-point sampling over the map's own pool — GÓRA fails at 8, passes at 6, NIGHT_DISTRICT unaffected at 14. Also in this slice: `arenaSpawns` had never been judged by any test (it is the FFA / Gun Game / Ostrzyżeni pool) and GÓRA's north roof spawn sat over the loft-stair opening — free, reachable, and a 3 m drop on arrival; both the fix and the generic check are in. | docs/MAP_2.md ("As built", last section) | typecheck ✓ test ✓ (640: shared 198, client 282, server 160) check:weapons ✓ (19/19) build ✓ e2e — | review |
+
+
+| 2026-09-08 | G | drop/g-map-2 | Slice 4, the code review (a separate agent, the diff + the acceptance criteria + "try to break it"). It found five things; three were real and are fixed. **(1) The roof could be climbed off.** The air-conditioner on the deck topped 0.9 m above it — under the real 0.931 m jump apex and OVER the walk grid's 0.88 m `JUMP_UP`, so every reachability check in the drop was blind to it — and from there the ceiling slab was 0.5 m up: a player could walk the roof over every room, where no bot could follow. A second route was the east parapet at 1.2 m, inside the 1.251 m crouch-jump mantle. The slab is now 3.0 m thick (top 5.8), 1.6 m clear of the highest standable thing up there, and `gora.test.ts` re-derives the margin from the geometry using the PLAYER's jump numbers rather than the grid's. **(2) Both home flags sat inside their own team's spawn**: four spawn points a side 2.33 m from a 3.5 m capture zone, so Domination gave each team a free flag and Boys let a player re-class from spawn (NIGHT_DISTRICT's nearest spawn to a flag is 20.35 m; nothing had ever checked). Flags moved to the two outer-ring rooms and the inner crossroads — KUCHNIA / SKŁAD / HOL — which also spreads DOM across the whole map; `map.test.ts` now checks every map, as a cylinder so the roof spawns stay legal. **(3) The minimap still read the module-global `BOMB_SITES`** and drew A and B off the edge of GÓRA with the compass pointing at them — a constant that still exists and still holds valid numbers breaks nothing except the picture, so the guard is a grep test over the client sources. Refuted/absorbed: the hunt-spawn test's docstring claimed more than the test samples (docstring corrected, and an adversarial placement falls back to the ordinary pick rather than crashing); two stale "8 m" references in the docs corrected; one dead floor panel under the well removed. | docs/MAP_2.md ("As built", items 4–5); `packages/shared/src/gora.test.ts`; `apps/client/src/mapAgnostic.test.ts` | typecheck ✓ test ✓ (647: shared 204, client 283, server 160) build ✓ check:weapons ✓ (19/19) e2e — | review |
+
 
 ## Decisions log (append-only)
 
@@ -346,6 +356,53 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   for a click meant for a BUY button. `startup.spec.ts` now asserts that whatever is fullscreen
   contains the HUD (a browser that refuses fullscreen outright stays fine). (lead)
 
+- 2026-09-08 — **Drop G: the second map is the upstairs flat, not the delivery yard.** The plan
+  offers either; the flat is the one that changes the game rather than the wallpaper. NIGHT_DISTRICT
+  already has an alley and a loading yard (`map.ts:113-116`), and its measured median clear sight
+  line is 24.0 m with 36.6 % of clear lines over 30 m — a lane map where the long guns own
+  everything. GÓRA's longest line is 20 m and its median is room-scale, which puts the S12, the K-7
+  and the clippers back in the roster Drop B tuned and gives the SR-50 exactly two lanes, both
+  flankable. It is also the shop's own upstairs, which is what the vision paragraph asks a map to
+  be. (lead → owner, D-G1)
+- 2026-09-08 — **PROPOSALS, owner to sign with `docs/MAP_2.md`**: D-G1 the flat over the yard;
+  D-G2 build to the 30 m buy-station spread rather than change the test that demands it;
+  D-G3 `huntSpawnMinM` becomes per-map (8 m on GÓRA) instead of a global 14 m; D-G4 bomb sites on
+  the centre line so both halves of a match are identical, not in the wings where the attacker gets
+  a 1.2 s free plant; D-G5 the light well is a real hole with `killY` under it (5 m across against a
+  measured 4.43 m sprint jump, so it cannot be crossed); D-G6 GÓRA ships with no tactical plans in
+  its first cut. (lead)
+
+- 2026-09-08 — **Owner signed `docs/MAP_2.md` ("już")**, all six decisions as proposed, and the map
+  was built the same session. Two of them cost geometry rather than argument: D-G2 (build to the
+  30 m buy-station spread instead of changing the test) is why the flat is 34 m wide, and D-G4
+  (bomb sites on the centre line) is why they are the balcony and the hall rather than the two end
+  rooms — a wing layout would have handed the attacking side a 1.2 s free plant. D-G3 became a
+  `MapDef` field rather than a global edit, so NIGHT_DISTRICT's 14 m is untouched. (lead)
+- 2026-09-08 — Drop G: **`MapDef` gained exactly two optional fields, `sites` and `huntSpawnMinM`,
+  and no schema field.** Both are map DATA that used to be module constants pinned to one map
+  (`bomb.ts:6`, `modes.ts:142`); both default to today's value, so NIGHT_DISTRICT and every test
+  that names it behave identically. The replicated state gained nothing — `mapId` was already there
+  (`TdmRoom.ts:252`) and the client already resolved it (`Game.ts:164`). L6 untouched. (lead)
+
+- 2026-09-08 — Drop G: **a number arrived at by proportion is not a measurement.** `huntSpawnMinM`
+  was set to 8 m on GÓRA by scaling NIGHT_DISTRICT's 14 m against the two maps' diagonals, and it
+  was wrong: the rule it feeds has a fallback that does the OPPOSITE of what the rule wants, so a
+  value that is merely too large does not degrade — it inverts. Anything scaled from another map
+  should be swept against the case that squeezes it before it ships. (lead)
+
+- 2026-09-08 — Drop G: **the walk grid is not the player.** `JUMP_UP` is 0.88 m and a real jump
+  apexes at 0.931 m, with a crouch-jump mantling 1.251 m, so there is a band of ledges a player can
+  climb and the grid cannot see — and every "is it reachable?" test in this repo runs on the grid.
+  GÓRA's roof was climbable through exactly that band. Any claim that a surface is out of reach has
+  to be made with the PLAYER's numbers; `gora.test.ts` is the pattern. (lead, from the review)
+
+- 2026-09-08 — Drop B was built TWICE, by two sessions in parallel on the same branch name. The
+  owner kept this branch (cleaner D-B2: `WeaponDef.scoped` still means the SR-50 and the overlay is
+  a client-side style, so the shared balance test's predicate never had to move) and took three
+  things from the other: the linear ADS blend, M1, and the `weapon-shots.mjs` repair. The other
+  session's remaining differences, not taken: a z-score signature metric instead of octaves, and a
+  measured half of the signature test that asserts separation on the JSONs the tool wrote rather
+  than only on the design. Worth a look if the octave metric ever needs a second opinion. (lead)
 - 2026-09-08 — **Drop E started before a playtest exists**, which `MASTER_PROMPT.md` says it should
   not ("Drop E/F/G/H — do not start these until the owner has played A–D and filled
   `docs/PLAYTEST_TEMPLATE.md`"). `docs/playtests/` is empty and Drop D's row records that the owner
@@ -415,6 +472,16 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
 
 ## Deferred (things noticed, deliberately not done)
 
+- Drop B: `weapon-signature.mjs` drives the client at ~2 fps, where a 500 ms frame swallows every
+  ADS blend in the roster (a clean run measured 2257 ms for the R-44's 120). Dropping the graphics
+  preset and the render scale for the run puts it above 20 fps and makes axis 3 measurable; the
+  linear-blend commit above was verified at that framerate with a differently configured harness,
+  not with this one.
+- Drop B / Drop I: the ENTER MATCH click fullscreens the CANVAS HOST, and a fullscreen element
+  hides its siblings — the HUD is one, so a frame captured inside fullscreen has no ammo, no
+  crosshair and no scope overlay. `weapon-shots.mjs` leaves fullscreen to work around it. Somebody
+  should check on a real browser whether a player in fullscreen keeps their HUD; if it reproduces
+  there it is a serious bug and it is drop I's.
 - **Drop E, the open item: make a shave read at 8 m.** Not done, and not for want of trying — see the
   Decisions entry. The unexplored options, cheapest first: a bolder scalp colour or an outline; the
   shave changing something LARGER than the head (the apron, a towel round the neck); a HUD tell on
@@ -594,3 +661,51 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   "waiting for 6000 ms of live wave" — neither test touching anything either process did, and both
   passing on the same tree once the strays were killed. Check for stray servers before believing a
   red suite. Worth a `pretest` that refuses to run while something else is holding the CPU.
+
+- Drop G: `map.test.ts:107` asserts the buy stations span **more than 30 m in x**. It reads as a
+  generic "spread across lanes" rule but the number is NIGHT_DISTRICT's (100 m of bounds); on a
+  small map it is a footprint requirement in disguise, and it is why GÓRA is drawn 34 m wide instead
+  of the 26 m the rooms want. "Spread > 60 % of the bounds width" is what the rule means. Not
+  changed here: it is a test on `main` and the owner's call (D-G2).
+- Drop G: `BOMB_SITES` (`bomb.ts:6`), `siteLoad` / `siteOf` (`floorAudit.ts:92,103`), the shared
+  world and walk-grid caches (`sharedWorld.ts:22,33,39`) and `PLANS[].removes` (`plans.ts:40`) are
+  all written against exactly one map. None of it is hard to generalise, but all of it has to be
+  done before a second map is playable in bomb, and none of it was touched by this docs-only slice.
+- Drop G: `floorAudit.test.ts`, `districtExpansion.test.ts`, `nav.test.ts`, `navPerf.test.ts` and
+  `spawn.test.ts` import `NIGHT_DISTRICT` directly, so they stay that map's tests. GÓRA needs its
+  own floor-audit and nav coverage in the same shape — that is geometry-slice work, not a rewrite of
+  the existing files.
+- Drop G (measured, useful beyond this drop): a 90° corner and a flight of stairs cost **zero** time
+  in the movement model — 20 m is 2.62 s straight and 2.60 s with a right angle in it, and 11 m
+  including a 3.0 m climb takes exactly as long as 11 m of floor. Any map's verticality is therefore
+  priced in exposure and audibility only. If height is ever meant to cost time, that is a movement
+  change (L6-adjacent) and not a map one.
+
+- Drop G: GÓRA's longest clear sight line is **31.5 m**, not the 20 m the draft predicted: the
+  SALON's far corner sees the SYPIALNIA's far corner straight down the south hall, because the hall
+  is 2 m deep and both doors sit on its axis. Kept — it is the map's one long lane, no spawn point
+  lies on it, and the obvious fix (1 m doorways) leaves the 0.5 m walk grid no legal standing cell,
+  which would cost the bots the map. If a playtest calls it a spawn-peek, the fix is a jog in the
+  hall's centre, not narrower doors.
+- Drop G: GÓRA ships with **no tactical plans** (D-G6). Three candidates are written up in
+  `docs/MAP_2.md` §7.5 (board over the light well; force the roof hatch; take out the balcony's
+  middle railing). Judge them after the map has been played once.
+- Drop G: bomb site B on GÓRA holds **28 of the 30** solids+props the floor audit allows within
+  7.5 m (site A holds 21). Anyone dressing the south hall or the bathroom further will fail
+  `floorAudit.test.ts` — which is the test doing its job on an interior map, not a false positive.
+- Drop G: `districtExpansion.test.ts`, `nav.test.ts`, `navPerf.test.ts` and `spawn.test.ts` remain
+  NIGHT_DISTRICT-only by design (they are that map's tests), so GÓRA has **no pathfinding-perf
+  coverage**: nothing asserts that `findPath` across the flat stays inside a server tick. It is a
+  ninth of the district's grid so it should be comfortable, but nobody has measured it.
+  **Measured, same day:** 40 of 40 paths between GÓRA's spawns, arena spawns and flags are found,
+  mean 0.97 ms against NIGHT_DISTRICT's 2.78 ms on the same harness, and the walk grid + nav build
+  takes 121 ms against 338 ms — comfortably inside the 16.7 ms tick. What is still missing is the
+  TEST: `navPerf.test.ts` names NIGHT_DISTRICT and nothing pins these numbers for GÓRA.
+- Drop G: the map has never been RENDERED. Lighting (14 practicals, two shadow casters), whether a
+  2.8 m ceiling reads in first person, and whether the roof is worth climbing to all need a real GPU
+  and the owner's eyes; and no e2e path (join → pick GÓRA → play a round) has been walked.
+- Drop G: `collision.bench.test.ts`'s "cuts the cost of a hitscan ray" asserts the grid broadphase
+  is ≥ 1.5× faster than the linear scan and measured **1.36×** once, in a run that shared the
+  machine with three agents; alone it measures 2.1–2.2× repeatedly. It is a wall-clock benchmark in
+  a unit suite, on NIGHT_DISTRICT's boxes, and nothing in Drop G touches it. Same family as the e2e
+  note above: check what else is on the CPU before believing a red benchmark.
