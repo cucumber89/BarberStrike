@@ -103,6 +103,8 @@ button { font-family: inherit; }
 .ch-left { left: calc(-1 * var(--gap) - 6px); top: -1px; width: 6px; height: 2px; }
 .ch-right { left: var(--gap); top: -1px; width: 6px; height: 2px; }
 .crosshair span { transition: left 60ms linear, top 60ms linear; }
+/* C1: the pellet cone drawn at its true radius, which the four-line gap caps out well below. */
+.crosshair .ch-ring { --r: 30px; left: calc(-1 * var(--r)); top: calc(-1 * var(--r)); width: calc(2 * var(--r)); height: calc(2 * var(--r)); border: 1px solid rgba(255,255,255,.55); border-radius: 50%; background: none; box-shadow: 0 0 2px rgba(0,0,0,.9); transition: none; }
 .crosshair.head .hitmarker::before, .crosshair.head .hitmarker::after { background: var(--brass); }
 .ch-shield { left: -22px; top: -22px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(217,164,65,.7); background: none !important; box-shadow: none !important; animation: pulse 0.8s ease-in-out infinite; }
 .hitmarker { left: -8px; top: -8px; width: 16px; height: 16px; background: none !important; box-shadow: none !important; }
@@ -304,6 +306,13 @@ button { font-family: inherit; }
 .scope-breath { position: absolute; left: 50%; top: calc(50% + min(34vw, 34vh) + 14px); transform: translateX(-50%); width: 220px; height: 16px; background: rgba(10,10,12,.7); border: 1px solid var(--line); font-size: 9px; letter-spacing: 0.25em; color: var(--tx-2); display: flex; align-items: center; justify-content: center; }
 .scope-breath-fill { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(143,211,255,.35); }
 .scope-breath span { position: relative; }
+/* Drop B (D-B2): the M-1's ring. A thin circle over a mostly clear view — the DMR is a rifle you
+   keep your surroundings in, not a tube you disappear down. Its reticle lines are short crops
+   rather than the sniper's full-screen cross. */
+.scope.ring .scope-mask { background: radial-gradient(circle at 50% 50%, transparent 0, transparent min(26vw, 26vh), rgba(0,0,0,.55) calc(min(26vw, 26vh) + 2px), rgba(0,0,0,.72) 100%); }
+.scope.ring .scope-reticle::before { content: ""; position: absolute; left: 50%; top: 50%; width: min(52vw, 52vh); height: min(52vw, 52vh); transform: translate(-50%, -50%); border: 1px solid rgba(0,0,0,.75); border-radius: 50%; }
+.scope.ring .scope-reticle .v { top: -12vh; height: 24vh; }
+.scope.ring .scope-reticle .hz { left: -12vw; width: 24vw; }
 .shop-glyph { margin-right: 8px; }
 
 /* ---- drop 4: modes (lobby), Domination flags, capture state, tactical sprint meter ---- */

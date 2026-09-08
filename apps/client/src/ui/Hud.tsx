@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { boysClass, GAME_VERSION, GRENADES, MATCH, MODES, MatchPhase, PERKS, PERK_ORDER, TEAM_NAMES, WEAPONS, BADGES, killerName, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
+import { pelletRing } from "../game/combat/weaponFeel";
 import type { MatchReward } from "../game/progression/profile";
 import type { Settings } from "../settings";
 import { SettingsPanel } from "./SettingsPanel";
@@ -118,6 +119,9 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
   const lowHealth = h.alive && h.health <= 30;
   // Crosshair gap grows with the effective spread (radians → px at the current FOV). Clamped for readability.
   const gap = Math.round(Math.min(34, 5 + h.crosshairSpread * 900));
+  // C1 (matrix): pellet weapons show the true cone as a ring, uncapped — the gap above stops at
+  // 34 px, and the S12's cone is roughly 50.
+  const spreadRing = pelletRing(h.weapon as WeaponId) ? Math.round(h.crosshairSpread * 900) : null;
   const protectedNow = h.alive && h.spawnProtectedUntil > h.serverNow;
   const reloadMs = w.reloadMs;
   const winnerTeam = h.winner === -1 ? "DRAW" : h.winner === h.myTeam ? "VICTORY" : "DEFEAT";
@@ -166,6 +170,10 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
       {h.alive && h.pointerLocked && !h.aiming && h.cookingKind === "" && (
         <div className={`crosshair ${hitAge < 180 ? (h.hitKill ? "kill" : h.hitHead ? "head" : h.hitArmor ? "armor" : "hit") : ""} ${protectedNow ? "shield" : ""}`} data-testid="crosshair" style={{ "--gap": `${gap}px` } as React.CSSProperties}>
           <span className="ch-top" /><span className="ch-bottom" /><span className="ch-left" /><span className="ch-right" />
+          {/* C1: a pellet gun's cone is far wider than the 34 px the four lines can open to, so the
+              S12 draws the real radius as a ring. Four lines that stopped growing told the player
+              nothing about where nine pellets were actually going. */}
+          {spreadRing !== null && <span className="ch-ring" style={{ "--r": `${spreadRing}px` } as React.CSSProperties} />}
           {hitAge < 180 && <span className="hitmarker" />}
           {protectedNow && <span className="ch-shield" />}
         </div>
@@ -177,12 +185,17 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
       {h.alive && h.pointerLocked && (h.tacOn || h.tac < 0.98) && (
         <div className={`tac-meter ${h.tacOn ? "on" : ""} ${h.tac <= 0.01 ? "empty" : ""}`} data-testid="tac"><div className="tac-fill" style={{ width: `${Math.round(h.tac * 100)}%` }} /></div>
       )}
-      {/* Scope (drop 3): black mask with a round window, a reticle, breath meter */}
+      {/* Scope (drop 3): black mask with a round window, a reticle, breath meter.
+          Drop B / D-B2: the SR-50 keeps the full tube; the M-1 gets a light ring that leaves most
+          of the view clear and has no breath to hold, so the two long rifles are not one weapon
+          shown twice. */}
       {h.alive && h.scoped && (
-        <div className="scope" data-testid="scope">
+        <div className={`scope ${h.scopeStyle === "ring" ? "ring" : ""}`} data-testid="scope" data-style={h.scopeStyle ?? ""}>
           <div className="scope-mask" />
           <div className={`scope-reticle ${hitAge < 180 ? "hit" : ""}`}><span className="v" /><span className="hz" /><span className="dot" /></div>
-          <div className="scope-breath"><div className="scope-breath-fill" style={{ width: `${Math.round(h.breath * 100)}%` }} /><span>{h.breath <= 0 ? "WINDED" : "SHIFT · HOLD BREATH"}</span></div>
+          {h.scopeStyle === "tube" && (
+            <div className="scope-breath"><div className="scope-breath-fill" style={{ width: `${Math.round(h.breath * 100)}%` }} /><span>{h.breath <= 0 ? "WINDED" : "SHIFT · HOLD BREATH"}</span></div>
+          )}
         </div>
       )}
 

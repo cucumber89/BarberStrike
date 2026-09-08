@@ -5,6 +5,7 @@ import {
   Btn, LEAN, MatchPhase, PLAYER, TAC, WEAPONS, aimDirection, copyBody, createBody, dequantVel, eyeHeight, frozenAt, leanClearance, leanOf, maskInput, simulateBody, sprintActive, tacActive, wrapAngle,
   type BodyState, type CollisionWorld, type PlayerInput, type WeaponId,
 } from "@frankibarber/shared";
+import { BIPOD, bipodDeployed, feelOf, lookScale, unscopeForSprint, type ScopeStyle } from "../combat/weaponFeel";
 import type { InputState } from "../input/InputState";
 import type { NetPlayer } from "../net/Connection";
 
@@ -26,6 +27,8 @@ const MAX_PITCH = 1.5;
 const tmpDir: [number, number, number] = [0, 0, 0];
 /** Scope sway (drop 3): amplitude in radians, breath hold length and the winded penalty after it. */
 const SCOPE = { sway: 0.0045, holdMs: 4000, refillPerMs: 0.5, windedMs: 2200, heldScale: 0.12, windedScale: 2.2 } as const;
+/** Any movement key: what separates "holding Shift to steady the aim" from "asking to run" (S2). */
+const MOVE_KEYS = Btn.Forward | Btn.Back | Btn.Left | Btn.Right;
 
 /**
  * Locally controlled player: consumes raw input, predicts movement with the shared
@@ -62,6 +65,10 @@ export class LocalPlayer {
   correctionCount = 0;
   /** Extra movement speed multiplier from perks (energy drink); set by the game from the replicated wallet. */
   speedScale: (sprinting: boolean) => number = () => 1;
+  /** End of the mechanical action that took the sight picture away (matrix S1). */
+  private actionUntil = 0;
+  /** How long the body has been crouched and settled, for the LMG's bipod (matrix B1). */
+  private stillMs = 0;
   // ---- scope (drop 3): the reticle drifts; Shift holds the breath for a few seconds.
   private swayYaw = 0;
   private swayPitch = 0;
@@ -104,7 +111,11 @@ export class LocalPlayer {
   private applyLook(): void {
     const m = { dx: 0, dy: 0 };
     this.input.consumeMouse(m);
-    const s = this.settings.sensitivity * 0.001;
+    // R1 (matrix): the zoom scales the sensitivity, so a centimetre of mouse covers the same arc of
+    // the WORLD whatever the weapon. Without it the SR-50's 3.6x scope swept 3.6x more world per
+    // centimetre than the hip did, which is why the scope felt uncontrollable rather than heavy.
+    // Uses the same blend the FOV does, so the two can never disagree mid-transition.
+    const s = this.settings.sensitivity * 0.001 * lookScale(WEAPONS[this.weapon].adsZoom, this.adsBlend);
     this.yaw = wrapAngle(this.yaw + m.dx * s);
     const dy = this.settings.invertY ? -m.dy : m.dy;
     this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch + dy * s));
@@ -133,7 +144,15 @@ export class LocalPlayer {
     // Judged from the shared CLOCK, not from the arrival of `S2C.MatchEvent`: waiting for the
     // message would let the player walk for half a round trip after the server had stopped them and
     // then yank them back, once every seventeen seconds for the whole match.
-    const buttons = maskInput(this.input.buttons(), this.frozen);
+    // S2 (matrix): while scoped, Shift means two different things. Standing still it holds the
+    // breath; asking to move under it is a request to RUN, which the shared movement sim refuses
+    // while Aim is held — so the aim is dropped here instead of the player being stuck at a walk
+    // wondering why. Cleared in the input itself, before prediction and before it goes on the wire,
+    // so the server sees exactly the same buttons and there is nothing to reconcile.
+    let buttons = maskInput(this.input.buttons(), this.frozen);
+    if (unscopeForSprint(feelOf(this.weapon), (buttons & Btn.Aim) !== 0, (buttons & Btn.Sprint) !== 0, (buttons & MOVE_KEYS) !== 0)) {
+      buttons &= ~Btn.Aim;
+    }
     this.lastButtons = buttons;
     const tacNow = tacActive(buttons, this.body);
     if (tacNow !== this.wasTac) { this.wasTac = tacNow; this.onTac?.(tacNow); }
@@ -212,6 +231,18 @@ export class LocalPlayer {
     this.recoilHoldUntil = performance.now() + delayMs;
   }
 
+  /**
+   * A shot that leaves an action to work: the revolver's hammer, the shotgun's pump, the sniper's
+   * bolt. Scoped weapons lose the sight picture for the length of it (matrix S1); the others just
+   * hand the number to the viewmodel and the audio.
+   */
+  workAction(ms: number, dropsAim: boolean): void {
+    if (dropsAim && ms > 0) this.actionUntil = performance.now() + ms;
+  }
+
+  /** True while the LMG is crouched, settled and shooting off its bipod (matrix B1). */
+  get bipod(): boolean { return bipodDeployed(feelOf(this.weapon), this.body.crouching, this.stillMs); }
+
   /** Camera shake (radians of roll/pitch noise), scaled by the user's camera-shake setting. Decays quickly. */
   private shake = 0;
   private shakeSeed = 0;
@@ -223,6 +254,9 @@ export class LocalPlayer {
   private updateCamera(dtMs: number): void {
     const dt = dtMs / 1000;
     const b = this.body;
+    // Bipod dwell (matrix B1): crouched and barely moving, the LMG settles. Any real movement
+    // resets it, so the weapon is heavy again the moment its owner does.
+    this.stillMs = b.crouching && Math.hypot(b.vx, b.vz) < BIPOD.speed ? this.stillMs + dtMs : 0;
     // Recoil recovery (exponential, after the per-weapon hold).
     if (performance.now() >= this.recoilHoldUntil) {
       const k = Math.exp(-this.recoilRecover * dt);
@@ -232,7 +266,12 @@ export class LocalPlayer {
     }
     // ADS: FOV zoom towards the weapon's adsZoom over adsMs.
     const wdef = WEAPONS[this.weapon];
-    const adsTarget = this.alive && this.isAiming() ? 1 : 0;
+    const feel = feelOf(this.weapon);
+    // S1 (matrix): working the bolt kicks the shooter out of the scope for the length of the cycle,
+    // and the aim returns by itself if the button is still held. This is the sniper's rhythm — the
+    // shot, the lost picture, the hunt back to the target — not a penalty bolted on top of it.
+    const boltOut = performance.now() < this.actionUntil;
+    const adsTarget = this.alive && this.isAiming() && !boltOut ? 1 : 0;
     this.adsBlend += (adsTarget - this.adsBlend) * Math.min(1, dtMs / Math.max(16, wdef.adsMs));
     if (Math.abs(this.adsBlend - adsTarget) < 0.01) this.adsBlend = adsTarget;
     // Tactical sprint (drop 4): a wider FOV sells the extra speed.
@@ -244,14 +283,17 @@ export class LocalPlayer {
     this.leanBlend += (leanTarget - this.leanBlend) * Math.min(1, dt * 12);
     if (Math.abs(this.leanBlend) < 0.002) this.leanBlend = 0;
     // Scope sway + breath hold (drop 3). The sway is part of the aim so shots land where the reticle is.
+    // The style and the drift come from the feel table now (matrix D-B2): the SR-50 looks down a
+    // tube that wanders and can be steadied, the M-1 through a ring that wanders half as much and
+    // has no breath to hold — which is what stops the two long rifles being the same weapon twice.
     const nowMs = performance.now();
-    const scoped = this.alive && wdef.scoped && this.adsBlend > 0.9;
-    const holding = scoped && (this.lastButtons & Btn.Sprint) !== 0 && this.breathLeft > 0 && nowMs >= this.windedUntil;
+    const scoped = this.alive && feel.scope !== null && this.adsBlend > 0.9;
+    const holding = scoped && feel.breath && (this.lastButtons & Btn.Sprint) !== 0 && this.breathLeft > 0 && nowMs >= this.windedUntil;
     if (holding) { this.breathLeft = Math.max(0, this.breathLeft - dtMs / SCOPE.holdMs); if (this.breathLeft === 0) this.windedUntil = nowMs + SCOPE.windedMs; }
     else this.breathLeft = Math.min(1, this.breathLeft + (dtMs / SCOPE.holdMs) * SCOPE.refillPerMs);
     if (scoped) {
       const t = nowMs / 1000;
-      const amp = SCOPE.sway * (holding ? SCOPE.heldScale : nowMs < this.windedUntil ? SCOPE.windedScale : 1);
+      const amp = SCOPE.sway * feel.scopeDrift * (holding ? SCOPE.heldScale : nowMs < this.windedUntil ? SCOPE.windedScale : 1);
       const targetYaw = (Math.sin(t * 0.9) + 0.4 * Math.sin(t * 2.3)) * amp;
       const targetPitch = (Math.cos(t * 1.3) + 0.4 * Math.sin(t * 3.1)) * amp * 0.8;
       this.swayYaw += (targetYaw - this.swayYaw) * Math.min(1, dt * 6);
@@ -324,10 +366,11 @@ export class LocalPlayer {
   /** Sequence of the newest predicted input (a shot references it so the server can check the aim). */
   get lastSeq(): number { return this.seq; }
 
-  /** Scope state for the HUD: whether the reticle overlay is up, breath left (0..1) and the winded flag. */
-  scopeState(): { scoped: boolean; breath: number; winded: boolean } {
-    const w = WEAPONS[this.weapon];
-    return { scoped: this.alive && w.scoped && this.adsBlend > 0.9, breath: this.breathLeft, winded: performance.now() < this.windedUntil };
+  /** Scope state for the HUD: which overlay is up (if any), breath left (0..1) and the winded flag. */
+  scopeState(): { scoped: boolean; style: ScopeStyle | null; breath: number; winded: boolean } {
+    const feel = feelOf(this.weapon);
+    const scoped = this.alive && feel.scope !== null && this.adsBlend > 0.9;
+    return { scoped, style: scoped ? feel.scope : null, breath: feel.breath ? this.breathLeft : 1, winded: feel.breath && performance.now() < this.windedUntil };
   }
 
   isSprinting(): boolean {

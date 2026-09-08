@@ -10,6 +10,7 @@ import { Flags } from "./Flags";
 import { BombSites } from "./BombSites";
 import { Marks } from "./Marks";
 import { hud } from "../store";
+import { feelOf } from "../combat/weaponFeel";
 import { boysClass, INTERP_DELAY_MS, MatchPhase, WEAPONS, makeRayHit } from "@frankibarber/shared";
 
 /**
@@ -71,22 +72,39 @@ export const installView: GameModule = (ctx) => {
     return tmpA.copyFrom(n.getAbsolutePosition());
   };
 
+  /** A case owed by a hand-worked action, and the size it should come out at (0 = nothing pending). */
+  let ejectAt = 0;
+  let ejectScale = 1;
+
   const offs = [
     ctx.events.on("matchPhase", e => { if (e.phase === MatchPhase.Prep || e.phase === MatchPhase.Ended || e.phase === MatchPhase.Playing) grenades.reset(); }),
     ctx.events.on("localShot", (s) => {
       viewmodel.onFire();
+      // Axis 6 of the matrix, from the feel table: how much violence the shot puts on the screen.
+      // Every number that used to be one value for all eleven weapons — flash size, shake, tracer
+      // width, whether a case comes out at all — is now the weapon's own.
+      const feel = feelOf(s.weapon);
       const kind = WEAPONS[s.weapon].kind;
       if (kind === "melee") return;                       // the swing is the whole show
-      if (kind === "launcher") { effects.flash(localMuzzle(), 0.35, true); ctx.local.addShake(0.014); return; } // the shell draws its own arc
+      ctx.local.addShake(feel.shake);
+      if (kind === "launcher") { effects.flash(localMuzzle(), feel.flash, true); return; } // the shell draws its own arc
       const m = localMuzzle();
-      effects.flash(m, 0.22, true);
-      ctx.world.raycast(...s.origin, ...s.dir, WEAPONS[s.weapon].rangeMax, shotHit);
-      const distance = shotHit.hit ? shotHit.t : WEAPONS[s.weapon].rangeMax;
-      tmpB.set(s.origin[0] + s.dir[0] * distance, s.origin[1] + s.dir[1] * distance, s.origin[2] + s.dir[2] * distance);
-      tracers.spawn(m, tmpB, density());
-      const ej = viewmodel.ejectNode; ej.computeWorldMatrix(true);
-      effects.eject(tmpC.copyFrom(ej.getAbsolutePosition()), ctx.local.yaw);
-      ctx.local.addShake(s.weapon === "shotgun" ? 0.012 : s.weapon === "dmr" ? 0.01 : 0.004);
+      effects.flash(m, feel.flash, true);
+      if (feel.tracer > 0) {
+        ctx.world.raycast(...s.origin, ...s.dir, WEAPONS[s.weapon].rangeMax, shotHit);
+        const distance = shotHit.hit ? shotHit.t : WEAPONS[s.weapon].rangeMax;
+        tmpB.set(s.origin[0] + s.dir[0] * distance, s.origin[1] + s.dir[1] * distance, s.origin[2] + s.dir[2] * distance);
+        tracers.spawn(m, tmpB, density(), feel.tracer);
+      }
+      // A gun that cycles itself throws its brass now; one worked by hand (revolver, pump, bolt)
+      // holds on to it until the action is worked, which is where the eye expects to see it.
+      if (feel.casings > 0) {
+        const ej = viewmodel.ejectNode; ej.computeWorldMatrix(true);
+        for (let i = 0; i < feel.casings; i++) effects.eject(tmpC.copyFrom(ej.getAbsolutePosition()), ctx.local.yaw, feel.casingScale, s.weapon === "smg2");
+      } else if (feel.actionMs > 0) {
+        ejectAt = performance.now() + feel.actionMs * 0.8;
+        ejectScale = feel.casingScale;
+      }
     }),
     ctx.events.on("remoteShot", ({ player, event }) => {
       const origin = player ? player.muzzle(tmpA) : tmpA.set(event.o[0], event.o[1], event.o[2]);
@@ -157,6 +175,13 @@ export const installView: GameModule = (ctx) => {
       if (e.kind === "knife" && e.effectMs === 0) { tmpB.set(e.x, e.y, e.z); effects.puff(tmpB, 0.6); }
     }),
     ctx.onFrame((dt) => {
+      // The brass a hand-worked gun held on to (pump, bolt, break-open): it comes out with the
+      // action, not with the shot, which is the whole reason a pump gun reads as a pump gun.
+      if (ejectAt > 0 && performance.now() >= ejectAt) {
+        ejectAt = 0;
+        const ej = viewmodel.ejectNode; ej.computeWorldMatrix(true);
+        effects.eject(tmpC.copyFrom(ej.getAbsolutePosition()), ctx.local.yaw, ejectScale);
+      }
       viewmodel.setEmpty(ctx.weapons.ammo === 0 && WEAPONS[ctx.weapons.weapon].magazine > 0 && !ctx.weapons.reloading);
       viewmodel.update(dt);
       tracers.update(dt);

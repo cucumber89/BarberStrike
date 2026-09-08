@@ -7,6 +7,7 @@ import { MatchPhase,
 } from "@frankibarber/shared";
 import type { HudState } from "../game/store";
 import { uiSound } from "../game/audio";
+import { feelOf } from "../game/combat/weaponFeel";
 
 export interface ShopApi {
   selectClass?(id: number): void;
@@ -89,7 +90,9 @@ export function Shop({ h, api, now }: Props) {
     return (
       <div key={id} className={`shop-item ${carried ? "carried" : ""} ${!carried && !v.ok ? "locked" : ""}`} data-testid={`shop-${id}`}>
         <div className="shop-item-head">
-          <span className="shop-item-name">{w.name}{w.scoped && <span className="shop-slot">SCOPE</span>}</span>
+          {/* The badge follows the glass the player will actually look through (matrix D-B2), not
+              WeaponDef.scoped, which stays the sniper-only balance predicate it has always been. */}
+          <span className="shop-item-name">{w.name}{feelOf(w.id).scope !== null && <span className="shop-slot">SCOPE</span>}</span>
           <span className="shop-item-price">{starter || WEAPON_PRICES[id] === 0 ? "FREE" : money(WEAPON_PRICES[id])}</span>
         </div>
         <div className="shop-item-stats">

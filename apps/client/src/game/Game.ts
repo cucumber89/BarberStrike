@@ -592,7 +592,7 @@ export class Game {
       serverNow: this.conn.serverNow(), spawnProtectedUntil: me?.protectedUntil ?? 0,
       killFeed: cur.killFeed.filter((k) => now - k.at < 6000),
       money: me?.money ?? 0, owned: this.weapons.owned,
-      armor: me?.armor ?? 0, perks: { ...this.myPerks }, scoped: scope.scoped, breath: scope.winded ? 0 : scope.breath,
+      armor: me?.armor ?? 0, perks: { ...this.myPerks }, scoped: scope.scoped, scopeStyle: scope.style, breath: scope.winded ? 0 : scope.breath,
       lethal: this.throwing.lethal, lethalCount: this.throwing.lethalCount, tactical: this.throwing.tactical, tacticalCount: this.throwing.tacticalCount,
       buyWindowLeft: windowLeft, nearStation: near, shopOpen: this.shopOpen,
       cookingKind: this.throwing.state.kind ?? "", cooking: this.throwing.state.cook,

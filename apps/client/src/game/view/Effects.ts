@@ -213,15 +213,21 @@ export class Effects {
     puff.manualEmitCount = Math.round(6 * this.effectsScale);
   }
 
-  /** Ejects a shell casing from a world position with a rightward/up velocity in the facing frame. */
-  eject(pos: Vector3, yaw: number): void {
+  /**
+   * Ejects a shell casing from a world position with a rightward/up velocity in the facing frame.
+   * `scale` sizes it against the 12 x 12 x 30 mm default — a 12-gauge hull is not a 9 mm case —
+   * and `down` drops it out of the bottom instead of throwing it right (the VZ-9's magazine well).
+   */
+  eject(pos: Vector3, yaw: number, scale = 1, down = false): void {
     if (this.effectsScale < 0.3) return;
     const c = this.casings.find((x) => !x.active) ?? this.casings[0];
     c.mesh.position.copyFrom(pos);
+    c.mesh.scaling.setAll(scale);
     c.mesh.setEnabled(true);
+    const sideways = down ? 0.15 : 1.2 + Math.random() * 0.8;
     const rx = Math.cos(yaw), rz = -Math.sin(yaw);
-    c.vx = rx * (1.2 + Math.random() * 0.8) + Math.sin(yaw) * 0.3; c.vz = rz * (1.2 + Math.random() * 0.8) + Math.cos(yaw) * 0.3;
-    c.vy = 2 + Math.random() * 1.2;
+    c.vx = rx * sideways + Math.sin(yaw) * 0.3; c.vz = rz * sideways + Math.cos(yaw) * 0.3;
+    c.vy = down ? -0.5 : 2 + Math.random() * 1.2;
     c.rx = (Math.random() - 0.5) * 20;
     c.life = 0; c.active = true;
   }

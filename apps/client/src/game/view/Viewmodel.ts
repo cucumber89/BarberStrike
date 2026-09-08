@@ -13,6 +13,7 @@ import type { WeaponModelLibrary } from "./weaponModels";
 import { beveledBox } from "./geometry";
 import { centre, sizeOf } from "./weaponFit";
 import { handParts, type HandSide } from "./handSpec";
+import { feelOf, swayScaleOf } from "../combat/weaponFeel";
 
 /** Gap between background weapon upgrades: enough frames for the game to stay responsive. */
 const UPGRADE_GAP_MS = 400;
@@ -440,7 +441,10 @@ export class Viewmodel {
     const model = this.models.get(id)!;
     if (model.magazine) { model.magazine.position.y = this.magazineHomes.get(id) ?? 0; model.magazine.setEnabled(true); }
     if (model.action) model.action.position.set(0, 0, 0);
-    if (animate) { this.equipT = 0; this.equipMs = WEAPONS[id].equipMs; }
+    // The raise occupies a FRACTION of the draw (matrix axis 4): a sidearm is up and ready well
+    // before the server's equip gate expires, an SR-50 uses every millisecond of it. Presentation
+    // only — `equipMs` itself is a gameplay number the server gates firing on and never moves.
+    if (animate) { this.equipT = 0; this.equipMs = WEAPONS[id].equipMs * feelOf(id).raise; }
     this.inspectT = -1;
   }
 
@@ -541,7 +545,10 @@ export class Viewmodel {
     let dyaw = local.yaw - this.lastYaw; if (dyaw > Math.PI) dyaw -= Math.PI * 2; if (dyaw < -Math.PI) dyaw += Math.PI * 2;
     const dpitch = local.pitch - this.lastPitch;
     this.lastYaw = local.yaw; this.lastPitch = local.pitch;
-    const swayScale = (1 - ads * 0.8) * 0.6;
+    // Handling weight (matrix axis 4): the same spring, scaled by what the weapon weighs in the
+    // hand. The MG-4 lags the view at 1.6, the VZ-9 tracks it at 0.5 — and on its bipod the MG-4
+    // stops wallowing entirely (B1), which is the reward for having gone prone-ish with it.
+    const swayScale = (1 - ads * 0.8) * 0.6 * swayScaleOf(feelOf(w.id), local.bipod);
     this.sway.vx += (-dyaw * 1.6 - this.sway.x * 40) * dt * 12 * swayScale;
     this.sway.vy += (dpitch * 1.2 - this.sway.y * 40) * dt * 12 * swayScale;
     this.sway.vx *= Math.exp(-dt * 8); this.sway.vy *= Math.exp(-dt * 8);
@@ -654,7 +661,7 @@ export class Viewmodel {
       swX = -0.16 * arc; swY = 0.04 * arc; swZ = 0.12 * arc; swRx = 0.5 * arc; swRz = -0.9 * arc;
     }
     // ---- scoped ADS: the scope overlay replaces the gun (drop 3).
-    const scopedHide = w.scoped && ads > 0.9;
+    const scopedHide = feelOf(w.id).scope !== null && ads > 0.9;
     if (scopedHide !== this.scopeHidden) { this.scopeHidden = scopedHide; if (this.visible) this.root.setEnabled(!scopedHide); }
 
     // ---- compose
