@@ -170,6 +170,12 @@ Where the implementation deviates from the rows above, and why:
   on a slow machine than a fast one — `weapon-signature.mjs` measured 255 ms for the AR-31's
   declared 130 and 549 ms for the SR-50's 260. Every `adsMs` in the rows above is now the time the
   sights actually take, on any framerate.
+- **M1, the clippers' hum, IS built** — the note that it needed a new engine capability was too
+  pessimistic. The engine plays one-shots, so the loop is a two-second voice re-triggered just
+  before it ends; the envelope fades in and out over 80 ms, so the seam is inaudible and the engine
+  learns nothing about loops. It stops on death, on switching away and on teardown, and is re-armed
+  on spawn (`weaponEquip` only fires when the weapon id changes). In the audio self-test like every
+  other voice, which matters most for this one: it is the only sound that runs for a whole match.
 - **Cadence is not measured, it is quoted.** Under SwiftShader the scene runs at 2–4 fps with bots
   in it and the client fires at most once per frame, so every automatic weapon is frame-limited long
   before it is weapon-limited. Those rows carry the renderer's number and a mark saying so. Burst
@@ -177,9 +183,6 @@ Where the implementation deviates from the rows above, and why:
 
 Still open:
 
-- **M1, the clippers' hum, is NOT built.** A looping voice is a new capability in the audio engine,
-  which is a bigger change than this drop needs; the clippers' identity currently rests on the swing
-  and the lightest handling in the game. Deferred.
 - **The LMG's belt rattle is visual only** (a spent link is thrown with the case). The per-shot
   audio layer was left out for the same reason: at 600 rpm it is ten extra voices a second.
 - **The scope must be judged on a real GPU by the owner.** SwiftShader proves the numbers and the

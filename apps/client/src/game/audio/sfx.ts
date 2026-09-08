@@ -255,6 +255,31 @@ function swish(g: Graph, at: number, from: number, to: number, len: number, leve
 }
 
 /**
+ * Rule M1: the clippers' motor, running the whole time they are in your hands.
+ *
+ * The engine plays one-shots, and the matrix's "still open" note said a looping voice would be a
+ * new engine capability. It does not have to be: this renders `seconds` of motor and the caller
+ * re-triggers it just before it ends. The envelope fades in and out over 80 ms, so the seam between
+ * repeats is inaudible, and stopping is clearing a timer rather than teaching the engine about
+ * loops. A saw and a triangle an octave apart through a band-pass is a small brushed motor under
+ * load; it is deliberately quiet, because unlike every other voice in the game it never stops.
+ */
+export function clippersHum(seconds: number): SoundFn {
+  return (g) => {
+    const t = g.t;
+    const out = gain(g, 0);
+    const f = filter(g, "bandpass", 420, 1.6);
+    const a = osc(g, "sawtooth", vary(g, 96, 0.02), seconds + 0.2);
+    const b = osc(g, "triangle", vary(g, 192, 0.02), seconds + 0.2);
+    a.connect(f); b.connect(f);
+    f.connect(out);
+    out.connect(g.out);
+    env(out.gain, t, 0.16, 0.08, seconds);
+    return seconds;
+  };
+}
+
+/**
  * Drop B, axis 2: the action a gun makes the shooter work between shots. The report says what the
  * weapon is; this says what kind of machine it is — a hammer cocked, a pump run, a bolt lifted and
  * pushed home. `actionMs` is the rhythm the shooter feels (the feel table's number), and the sounds

@@ -31,6 +31,9 @@ function catalogue(): [string, sfx.SoundFn][] {
     list.push([`gunshot:${w}:distant`, sfx.gunshot(w, true)]);
     list.push([`reload:${w}`, sfx.reload(w, WEAPONS[w].reloadMs)]);
     if (WEAPON_FEEL[w].actionMs > 0) list.push([`action:${w}`, sfx.weaponAction(w, WEAPON_FEEL[w].actionMs)]);
+    // The hum is held to the same -40..-1 dBFS window as every other voice, and it matters more
+    // here than anywhere: it is the one sound that plays continuously for a whole match.
+    if (WEAPON_FEEL[w].hum > 0) list.push([`hum:${w}`, sfx.clippersHum(1)]);
     list.push([`equip:${w}`, sfx.equip(WEAPONS[w].equipMs)]);
   }
   list.push(["dryFire", sfx.dryFire]);
