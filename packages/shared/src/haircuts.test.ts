@@ -113,6 +113,12 @@ describe("what gets drawn", () => {
     expect(worst.crown).toBe(0);
     expect(worst.sides).toBe(0);
     expect(worst.tuft).toBeGreaterThan(0);
+    // The last clump lies FLAT, and lower than the one before it. Two art reviews read a tall block
+    // on a bald head as a chimney or a render fault rather than as the worst haircut in the game.
+    expect(worst.tuftWide).toBe(true);
+    expect(worst.tuft).toBeLessThan(SHAVE_STAGES[SHAVE_STAGES.length - 2].style.tuft);
+    // And nothing a player CHOOSES wears the flat clump: a topknot's bun has to stand up.
+    expect(HAIRCUTS.every((h) => !h.style.tuftWide)).toBe(true);
     // The default look is the cap, and it is the only one wearing it.
     expect(haircutDef(DEFAULT_HAIRCUT).style.cap).toBe(true);
     expect(HAIRCUTS.filter((h) => h.style.cap)).toHaveLength(1);
@@ -140,7 +146,7 @@ describe("the catalog is cosmetic only (L1)", () => {
     // The style is geometry and a tone. If a stat ever appears here, this test is the alarm.
     const keys = new Set<string>();
     for (const h of [...HAIRCUTS, ...SHAVE_STAGES]) for (const k of Object.keys(h.style)) keys.add(k);
-    expect([...keys].sort()).toEqual(["cap", "crown", "fringe", "scalp", "sides", "tone", "track", "tuft", "width"]);
+    expect([...keys].sort()).toEqual(["cap", "crown", "fringe", "scalp", "sides", "tone", "track", "tuft", "tuftWide", "width"]);
   });
 });
 

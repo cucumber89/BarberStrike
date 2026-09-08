@@ -51,6 +51,8 @@ export interface HaircutStyle {
   track: number;
   /** A stray clump left standing after the track went through. 0 = none. */
   tuft: number;
+  /** The clump is a flat lopsided patch rather than a standing tuft — hair missed, not an antenna. */
+  tuftWide: boolean;
   /**
    * The clippers have been over this head: show the stubbled SCALP under whatever hair is left.
    *
@@ -83,7 +85,7 @@ export interface HaircutDef {
 export const FULL_CROWN = 0.222;
 
 const style = (s: Partial<HaircutStyle>): HaircutStyle =>
-  ({ cap: false, crown: 0, width: FULL_CROWN, sides: 0, fringe: 0, track: 0, tuft: 0, scalp: false, tone: "hair", ...s });
+  ({ cap: false, crown: 0, width: FULL_CROWN, sides: 0, fringe: 0, track: 0, tuft: 0, tuftWide: false, scalp: false, tone: "hair", ...s });
 
 /** The default look: the shop cap, which is what every character has worn until now. */
 export const DEFAULT_HAIRCUT = "cap";
@@ -162,15 +164,17 @@ export const SHAVE_STAGES: readonly HaircutDef[] = [
   },
   {
     id: "shave-3", name: "DOLINA", requirement: "Ogolony trzy razy",
-    // The crown is gone; a rim around the sides and one clump survive.
-    style: style({ crown: 0, sides: 0.01, tuft: 0.075, scalp: true }),
+    // The crown is gone; a rim around the sides and one lopsided clump survive.
+    style: style({ crown: 0, sides: 0.01, tuft: 0.055, scalp: true }),
     unlockedBy: () => false,
   },
   {
     id: "shave-4", name: "RUINA", requirement: "Ogolony cztery razy lub więcej",
-    // Nothing left but scalp and one clump the clippers went round. The head goes pale and narrow,
-    // which is the read that survives at 8 m where a groove on the crown does not.
-    style: style({ crown: 0, sides: 0, tuft: 0.105, scalp: true }),
+    // Nothing left but a raw scalp and one flat clump the clippers went round. The tuft is WIDER and
+    // LOWER than the stage before it, not taller: a tall thin block on a bald head read as a chimney
+    // or a render fault to two reviewers, and a clean bald head read as LESS ruined than the patchy
+    // stage before it. What makes this the worst one is the tone of the whole head, not a spike.
+    style: style({ crown: 0, sides: 0, tuft: 0.03, tuftWide: true, scalp: true }),
     unlockedBy: () => false,
   },
 ];

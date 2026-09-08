@@ -81,7 +81,7 @@ export interface Pose {
   armR: number; armL: number; rootZ: number; rootX: number;
 }
 
-interface SharedMats { skin: PBRMaterial; cloth: PBRMaterial; vest: PBRMaterial; accent: PBRMaterial; trim: PBRMaterial; boots: PBRMaterial; stubble: PBRMaterial; hair: PBRMaterial; bleach: PBRMaterial; weapons: WeaponMaterials }
+interface SharedMats { skin: PBRMaterial; cloth: PBRMaterial; vest: PBRMaterial; accent: PBRMaterial; trim: PBRMaterial; boots: PBRMaterial; stubble: PBRMaterial; razorburn: PBRMaterial; hair: PBRMaterial; bleach: PBRMaterial; weapons: WeaponMaterials }
 
 const SHARED = new Map<Scene, Map<Team, SharedMats>>();
 
@@ -115,6 +115,12 @@ function teamMats(scene: Scene, team: Team): SharedMats {
     // shaved head reads as "no hair" at gameplay distance rather than as a bald skin tone. Not a
     // kit colour: a shaved scalp is a scalp whichever side shaved you.
     stubble: mk("ch_stubble", "#8f7a6c", 0.95, 0, "#120d0b"),
+    // Drop E: a scalp somebody else clipped, raw from the blade. It is a DIFFERENT tone from Drop D's
+    // stubble on purpose, and the difference is the whole mechanic at range: two art reviews found
+    // that at 8 m the head is about twelve pixels, where no amount of geometry survives and only
+    // COLOUR does. A pale stubbled scalp reads as "bald", which is a look a player might choose; a
+    // raw red one reads as "somebody did that to them", which is the thing the shave has to say.
+    razorburn: mk("ch_razorburn", "#b05a48", 0.9, 0, "#2a0f0a"),
     // Drop E: the two hair tones. Like the stubble above they are NOT kit colours — a haircut is a
     // haircut whichever side you are on, and reading it off a head is how a player knows who has
     // been done. Dark enough to separate from every kit skin tone, matte so it is not mistaken for
@@ -180,7 +186,10 @@ function hairParts(style: HaircutStyle, scene: Scene): Mesh[] {
   if (style.tuft > 0) {
     // The one clump the clippers missed: off-centre, and taller than the crown, so on a shaved head
     // it is the thing sticking out of the silhouette.
-    add("hair_tuft", 0.05, style.tuft + SINK, 0.06, 0.052, base + (style.tuft + SINK) / 2, -0.02);
+    // A wide clump lies FLAT and lopsided across the scalp (hair the clippers went round); a narrow
+    // one stands up (the bun of a topknot). A tall narrow block on a bald head reads as an antenna.
+    const w = style.tuftWide ? 0.115 : 0.05, d = style.tuftWide ? 0.13 : 0.06, x = style.tuftWide ? 0.038 : 0.052;
+    add("hair_tuft", w, style.tuft + SINK, d, x, base + (style.tuft + SINK) / 2, -0.02);
   }
   return parts;
 }
@@ -463,6 +472,11 @@ export class Character {
     // can see from behind or from eight metres (art review of the first cut).
     const scalp = shaved || this.style.scalp;
     if (this.bareHead.isEnabled() !== scalp) this.bareHead.setEnabled(scalp);
+    // One mesh, two meanings: Drop D's bare Ostrzyżeni scalp and Drop E's shaved one are the same
+    // geometry wearing different materials, so telling them apart costs a material swap on a flag
+    // that changes on a death, not a second toggled mesh and the draw call that comes with it.
+    const scalpMat = this.style.scalp ? this.mats.razorburn : this.mats.stubble;
+    if (this.bareHead.material !== scalpMat) this.bareHead.material = scalpMat;
     // The cap comes off when the style says so, and always when shaved. The bare scalp wins over
     // hair outright: whatever a player equipped, a head that has just been done has nothing on it.
     const capOn = !scalp && this.style.cap;

@@ -239,9 +239,14 @@ describe("Character haircuts", () => {
     worst.update(input({ haircut: encodeHaircut("bowl", 4) }), 16);
     const ruin = xIslands(worst, SKULL_TOP + 0.005);
     expect(ruin.length).toBe(1);
-    // One clump, well under a third of what a full head of hair covers. (That the stages take hair
-    // away MONOTONICALLY is asserted in `haircuts.test.ts`, where the catalog lives.)
-    expect(covered(ruin)).toBeLessThan(covered(solid) / 3);
+    // One clump, and it LIES FLAT: wider than it is tall, and barely standing off the scalp. Two art
+    // reviews read the previous tall narrow block as a chimney or a render fault. (That the stages
+    // take hair away MONOTONICALLY is asserted in `haircuts.test.ts`, where the catalog lives.)
+    const rv = hairVerts(worst);
+    const stand = Math.max(...rv.map((p) => p.y)) - SKULL_TOP;
+    expect(covered(ruin)).toBeGreaterThan(stand * 2);
+    expect(stand).toBeLessThan(0.05);
+    expect(covered(ruin)).toBeLessThan(covered(solid) / 1.8);
   });
 
   it("shows the stubbled scalp on a shaved head, and never on one somebody chose", () => {
