@@ -25,6 +25,10 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// stdout is a pipe when this runs from a harness, and node buffers a pipe — a run that is merely
+// slow then looks identical to one that has hung. Write every line straight through.
+const log = (m) => { process.stdout.write(`${m}\n`); };
+
 // Anchored to THIS tool, not to the shell's cwd: run from the repo root and a bare "e2e/out" lands
 // outside the ignored directory and shows up as untracked files (Drop A learned this).
 const OUT = process.env.OUT ? resolve(process.env.OUT) : resolve(dirname(fileURLToPath(import.meta.url)), "../out/haircuts");
@@ -39,7 +43,7 @@ const browser = await chromium.launch({
 const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
 await ctx.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), SET);
 const page = await ctx.newPage();
-page.on("pageerror", (e) => console.log("PAGEERROR", e.message));
+page.on("pageerror", (e) => log(`PAGEERROR ${e.message}`));
 
 await page.goto(`${HOST}/`);
 await page.getByTestId("btn-play").click();
@@ -78,7 +82,7 @@ const clear = await page.evaluate(() => {
   lp.yaw = best; lp.pitch = 0;
   return bestD;
 });
-console.log(`[cuts] heading picked, ${clear.toFixed(1)} m clear`);
+log(`[cuts] heading picked, ${clear.toFixed(1)} m clear`);
 
 // The catalog, from the client's own shared bundle rather than a list copied into this file: a
 // haircut added to `HAIRCUTS` is then photographed without anybody remembering to edit the tool.
@@ -89,7 +93,10 @@ const CATALOG = process.env.CUTS
     // Every equippable haircut, then every shave stage (as the field would really carry it).
     return [...s.HAIRCUTS.map((h) => h.id), ...s.SHAVE_STAGES.map((_, i) => `cap#${i + 1}`)];
   });
-console.log(`[cuts] ${CATALOG.length}: ${CATALOG.join(", ")}`);
+log(`[cuts] ${CATALOG.length} subjects: ${CATALOG.join(", ")}`);
+
+/** Which subjects get the first-person pair: every shave stage, plus a control at each extreme. */
+const FP_SET = new Set(CATALOG.filter((id) => id.includes("#")).concat(["cap", "mohawk"]));
 
 const alive = () => page.evaluate(() => window.__fb.hud.get().alive !== false && (window.__fb.hud.get().health ?? 1) > 0);
 
@@ -117,7 +124,10 @@ const pose = (haircut, dist, turn, pitch) => page.evaluate(([haircut, dist, turn
   };
   if (window.__cutsPose) s.onBeforeRenderObservable.remove(window.__cutsPose);
   window.__cutsPose = s.onBeforeRenderObservable.add(hold);
-  for (let i = 0; i < 30; i++) { hold(); s.render(); }
+  // Two renders, not thirty: the observable re-applies the pose on the game's OWN loop, and
+  // `frames()` below is what waits for it. Thirty synchronous 1920x1080 SwiftShader renders per
+  // pose is minutes of wall clock for a picture the render loop was going to draw regardless.
+  hold(); s.render(); hold(); s.render();
   return r.character.currentHaircut ?? haircut;
 }, [haircut, dist, turn, pitch]);
 
@@ -135,27 +145,28 @@ for (const id of CATALOG) {
     // Third person: close, front and profile. The camera looks slightly UP at 1.1 m so the crown —
     // where a clipper track lives — is in frame rather than foreshortened away.
     for (const [tag, turn, dist, pitch] of [["front", Math.PI, 1.1, -0.16], ["side", Math.PI / 2, 1.1, -0.16]]) {
-      if (!(await pose(id, dist, turn, pitch))) { console.log("no bot to pose"); break; }
+      if (!(await pose(id, dist, turn, pitch))) { log("no bot to pose"); break; }
       await frames(4);
       if (!(await alive())) break;
       await page.screenshot({ path: `${OUT}/tp_${file(id)}_${tag}.png` });
-      taken++;
+      taken++; done = true;
     }
     // First person: the same head at the distances a fight happens at, level, no zoom, exactly what
-    // a player sees. This is the frame the "does it read at 1080p" verdict has to come from.
-    for (const dist of [4, 8]) {
+    // a player sees. This is the frame the "does it read at 1080p" verdict has to come from — so it
+    // is shot for every SHAVED head (the claim under test) plus two equipped cuts as the control,
+    // rather than for all thirteen, which is minutes of SwiftShader for pictures nobody judges.
+    for (const dist of (FP_SET.has(id) ? [4, 8] : [])) {
       if (!(await pose(id, dist, Math.PI, 0.02))) break;
       await frames(4);
       if (!(await alive())) break;
       await page.screenshot({ path: `${OUT}/fp_${file(id)}_${dist}m.png` });
       taken++;
-      done = true;
     }
   }
-  if (!done) { skipped++; console.log(`${id}: no live frame`); }
+  if (!done) { skipped++; log(`${id}: no live frame`); }
 }
 
 await page.evaluate(() => { const g = window.__fb.game; const s = g.currentScene ?? g.scene; if (window.__cutsPose) s.onBeforeRenderObservable.remove(window.__cutsPose); });
 await browser.close();
-console.log(`haircut-shots: ${taken} frames, ${skipped} subjects missed, under ${OUT}/`);
+log(`haircut-shots: ${taken} frames, ${skipped} subjects missed, under ${OUT}/`);
 process.exit(skipped > 0 ? 1 : 0);

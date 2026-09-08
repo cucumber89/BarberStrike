@@ -136,8 +136,8 @@ const DEATH_MS = 900;
 // Every clump starts SUNK into the skull by `SINK`, so no amount of style data can make hair that
 // hovers — the "nothing floats" rule, applied to a head instead of to a prop.
 const SKULL_TOP = 0.24, SKULL_HX = 0.11, SKULL_HZ = 0.12, BROW_TOP = 0.1925, SINK = 0.01;
-/** The crown slab's footprint: a hair wider and deeper than the skull so it reads as a covering. */
-const CROWN_W = 0.222, CROWN_D = 0.244;
+/** The crown slab's depth. Its WIDTH is `style.width` — a full covering, or a mohawk's ridge. */
+const CROWN_D = 0.244;
 
 /**
  * The boxes one `HaircutStyle` asks for, in head-local space, unparented and ready to be merged.
@@ -154,13 +154,14 @@ function hairParts(style: HaircutStyle, scene: Scene): Mesh[] {
   const base = SKULL_TOP - SINK;
   if (style.crown > 0) {
     const h = style.crown + SINK, y = base + h / 2;
+    const w = style.width;
     if (style.track > 0) {
       // The clipper track is mown front-to-back THROUGH the crown: one slab becomes two ridges with
       // a bald strip of exactly `track` metres between them. A wide track leaves two thin ridges and
       // scalp down the middle — that is what a ruined head looks like from above and from the side.
-      const ridge = Math.max(0.01, (CROWN_W - style.track) / 2);
+      const ridge = Math.max(0.01, (w - style.track) / 2);
       for (const s of [-1, 1]) add("hair_ridge", ridge, h, CROWN_D, s * (style.track + ridge) / 2, y, 0);
-    } else add("hair_crown", CROWN_W, h, CROWN_D, 0, y, 0);
+    } else add("hair_crown", w, h, CROWN_D, 0, y, 0);
   }
   if (style.sides > 0) {
     // Left, right and back, from ear height to the crown. It stops at y 0.06 rather than at the

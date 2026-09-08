@@ -121,23 +121,36 @@ describe("the haircut field", () => {
     expect([g.health, g.money, g.weapon, g.armor]).toEqual([l.health, l.money, l.weapon, l.armor]);
   });
 
-  it("changes on equip and on a shave — and equipping is not a way to grow it back", async () => {
-    const { a, b } = await duel();
-    h.send(b, C2S.Haircut, { id: "mohawk" }); await h.tick();
+  it("keeps the chosen look through a shave: the id is yours, the tally is theirs", async () => {
+    const a = await h.join("Alpha");
+    const b = await h.join("Bravo", { haircut: "mohawk" });
+    await h.advance(MATCH.countdownMs + 100);
+    await h.settle();
     expect(h.player(b.sessionId).haircut).toBe("mohawk");
     await clip(a, b, "behind", 1);
-    expect(h.player(b.sessionId).haircut).toBe("mohawk#1");
-    // Re-equipping after being done keeps the count: the id is yours, the tally is theirs.
-    h.send(b, C2S.Haircut, { id: "bowl" }); await h.tick();
-    expect(parseHaircut(h.player(b.sessionId).haircut)).toEqual({ id: "bowl", shaves: 1 });
-    // A made-up id is ignored outright rather than resetting anything.
-    h.send(b, C2S.Haircut, { id: "wig" }); await h.tick();
-    expect(h.player(b.sessionId).haircut).toBe("bowl#1");
+    // The equipped id survives — this is the reason both live in one field rather than two.
+    expect(parseHaircut(h.player(b.sessionId).haircut)).toEqual({ id: "mohawk", shaves: 1 });
+    expect(haircutLook(h.player(b.sessionId).haircut).style.track).toBeGreaterThan(0);
+  });
+
+  it("bots wear the catalog, so a room of them is not a room of identical caps", async () => {
+    const bots = [...h.state.players.values()].filter((p) => p.bot);
+    const room = await RoomHarness.create({ room: "dropE-bots", bots: 4 });
+    try {
+      await room.settle();
+      const worn = [...room.state.players.values()].filter((p) => p.bot).map((p) => p.haircut);
+      expect(worn.length).toBe(4);
+      expect(new Set(worn).size).toBeGreaterThan(1);
+      for (const w of worn) expect(parseHaircut(w).shaves).toBe(0);
+    } finally { await room.dispose(); }
+    expect(bots).toHaveLength(0); // the duel room has none, so the check above is really about bots
   });
 
   it("is cleared by the next match, keeping the look the player chose", async () => {
-    const { a, b } = await duel();
-    h.send(b, C2S.Haircut, { id: "taper" }); await h.tick();
+    const a = await h.join("Alpha");
+    const b = await h.join("Bravo", { haircut: "taper" });
+    await h.advance(MATCH.countdownMs + 100);
+    await h.settle();
     await clip(a, b, "behind", 1);
     expect(h.player(b.sessionId).haircut).toBe("taper#1");
     await h.advance(MATCH.durationMs + MATCH.endedMs + MATCH.countdownMs + 500);

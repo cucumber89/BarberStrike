@@ -36,6 +36,13 @@ export interface HaircutStyle {
   cap: boolean;
   /** Hair slab standing on the crown. 0 = shaved to the skin on top. */
   crown: number;
+  /**
+   * How wide that slab is across the head. The skull is 0.22 m wide, so `FULL_CROWN` is a covering
+   * and anything much less is a ridge — which is what separates a MOHAWK (a narrow strip of hair
+   * left standing) from a shave stage (a wide strip of hair taken away). Those are opposites and
+   * the catalog had them confused: a mohawk written as a `track` is a reverse mohawk.
+   */
+  width: number;
   /** Hair down the sides and back. 0 = clipped to the skin around. */
   sides: number;
   /** Fringe hanging forward over the brow. 0 = none. */
@@ -62,8 +69,11 @@ export interface HaircutDef {
   unlockedBy: (s: LifetimeStats) => boolean;
 }
 
+/** A crown that covers the whole skull. Narrower than this reads as a ridge, not as hair. */
+export const FULL_CROWN = 0.222;
+
 const style = (s: Partial<HaircutStyle>): HaircutStyle =>
-  ({ cap: false, crown: 0, sides: 0, fringe: 0, track: 0, tuft: 0, tone: "hair", ...s });
+  ({ cap: false, crown: 0, width: FULL_CROWN, sides: 0, fringe: 0, track: 0, tuft: 0, tone: "hair", ...s });
 
 /** The default look: the shop cap, which is what every character has worn until now. */
 export const DEFAULT_HAIRCUT = "cap";
@@ -106,7 +116,8 @@ export const HAIRCUTS: readonly HaircutDef[] = [
   },
   {
     id: "mohawk", name: "IROKEZ", requirement: "5 ogoleń",
-    style: style({ crown: 0.11, sides: 0, track: 0.145, tuft: 0 }), unlockedBy: (s) => s.shaves >= 5,
+    // A strip of hair LEFT, not taken: a narrow, tall crown with the sides clipped to the skin.
+    style: style({ crown: 0.115, width: 0.058, sides: 0 }), unlockedBy: (s) => s.shaves >= 5,
   },
   {
     id: "bleach", name: "BLOND", requirement: "20 ogoleń",

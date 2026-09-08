@@ -16,7 +16,7 @@ import {
   CHAT, MARK, MAX_BOTS, BOT_NAMES, botId, isBotLevel,
   GUN_GAME, MELEE_WEAPON, ladderAfterKill, ladderDone, ladderWeapon,
   OSTRZYZENI, PERK_ARMED_MS, convertsOnKill, infectionRoundWinner, pickFirstShaved,
-  DEFAULT_HAIRCUT, HAIRCUTS, encodeHaircut, isHaircutId, isShave, parseHaircut, resetShaves, shaveOnce,
+  DEFAULT_HAIRCUT, HAIRCUTS, encodeHaircut, isHaircutId, isShave, resetShaves, shaveOnce,
   type BodyState, type CollisionWorld, type DamagedEvent, type FireMessage, type HitEvent, type InputTuple, type KillEvent,
   type MapDef, type PlayerInput, type SpawnPoint, type ShotEvent, type SpawnEvent, type Target, type Team, type WeaponId, type WelcomeMessage,
   type Projectile, type Wallet, type ThrowMessage, type ThrowEvent, type BoomEvent, type FlashedEvent, type MoneyEvent,
@@ -305,14 +305,6 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.onMessage(C2S.Throw, this.guarded((client, msg) => this.onThrow(client, msg)));
     this.onMessage(C2S.Team, this.guarded((client, msg) => this.onTeam(client, msg)));
     this.onMessage(C2S.Vote, this.guarded((client, msg) => this.onVote(client, msg)));
-    // Drop E: equip a haircut. The id changes; the shave COUNT does not, so re-equipping is not a
-    // way to grow your hair back — you carry the number of times you were done until the match ends.
-    this.onMessage(C2S.Haircut, this.guarded((client, msg) => {
-      const p = this.state.players.get(client.sessionId), s = this.sessions.get(client.sessionId);
-      const id = isRecord(msg) ? msg.id : msg;
-      if (!p || !s || !isHaircutId(id) || this.rateLimited(s, "other")) return;
-      p.haircut = encodeHaircut(id, parseHaircut(p.haircut).shaves);
-    }));
 
     // Development-only test hooks (never registered unless FB_DEV_TOOLS=1): teleport a player to a free
     // spot; set a wallet balance (screenshot/e2e tooling for the shop).

@@ -646,18 +646,17 @@ button { font-family: inherit; }
 
 /* ---------------------------------------------------------------- Drop E: the shave */
 
-/* The razor in the kill feed sits on the text baseline of the weapon column it replaces, so a feed
-   of mixed lines does not jump. It inherits `currentColor`, which the feed already colours per row
-   (your own death red, your own kill gold), so the icon says WHOSE shave it was for free. */
-.kf-razor { vertical-align: -1px; }
+/* The razor in the kill feed replaces the weapon's name, so the column is a flex box that centres
+   it on the line and a feed of mixed rows does not jump. It inherits `currentColor`, which the feed
+   already colours per row (your own death red, your own kill gold), so the icon says WHOSE shave it
+   was for free. */
 .killfeed .kf-weapon { display: inline-flex; align-items: center; gap: 4px; }
 
-/* Scoreboard shave column: the same width as K/D/A, and the dot for "never done" is dimmed so the
-   eye lands on the numbers. */
-.sb-shaved { text-align: center; color: var(--razor, #e6b980); }
+/* Scoreboard shave column. The dot for "never done" is dimmed by its OWN class rather than by
+   `:not(:empty)` — the cell always has content, so an emptiness test never fires (code review). */
+.sb-shaved { text-align: center; color: #e6b980; }
 td.sb-shaved { font-variant-numeric: tabular-nums; }
-tbody td.sb-shaved { opacity: 0.55; }
-tbody tr td.sb-shaved:not(:empty) { opacity: 1; }
+td.sb-shaved.none { opacity: 0.4; }
 .sb-shaved svg { display: block; margin: 0 auto; }
 
 /* The match award. One row, the razor at the left, the name and what they are wearing at the right;

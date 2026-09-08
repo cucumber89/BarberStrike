@@ -123,8 +123,6 @@ export const C2S = {
   Team: "team",
   /** Living arena (2.4): vote for one of the plans on offer this round: { plan }. */
   Vote: "vote",
-  /** Drop E: equip a haircut: { id }. Cosmetic only, and it never clears a shave. */
-  Haircut: "haircut",
 } as const;
 
 /** Drop 5: chat limits (the server enforces them, the client mirrors them in the box). */

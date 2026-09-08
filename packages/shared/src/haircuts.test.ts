@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_HAIRCUT, HAIRCUTS, MAX_SHAVES, SHAVE_STAGES,
+  DEFAULT_HAIRCUT, FULL_CROWN, HAIRCUTS, MAX_SHAVES, SHAVE_STAGES,
   encodeHaircut, haircutDef, haircutLook, isHaircutId, isShave, newHaircuts,
   ownedHaircuts, parseHaircut, resetShaves, shaveOnce, worstHaircut,
 } from "./haircuts";
@@ -70,6 +70,20 @@ describe("the one field", () => {
 });
 
 describe("what gets drawn", () => {
+  it("leaves a mohawk's strip standing instead of mowing it off", () => {
+    // A MOHAWK and a SHAVE are opposites: one leaves a narrow ridge, the other takes a wide one
+    // away. Written as a `track`, IROKEZ was its own inverse — bald down the middle, hair at the
+    // temples — and the review caught it. This is the test that stops it coming back.
+    const mohawk = HAIRCUTS.find((h) => h.id === "mohawk")!.style;
+    expect(mohawk.track).toBe(0);
+    expect(mohawk.width).toBeLessThan(FULL_CROWN / 2);
+    expect(mohawk.crown).toBeGreaterThan(0.08);
+    expect(mohawk.sides).toBe(0);
+    // Nothing a player EQUIPS has a track: a mown strip is something done to you.
+    expect(HAIRCUTS.every((h) => h.style.track === 0)).toBe(true);
+    expect(SHAVE_STAGES.every((h) => h.style.width === FULL_CROWN)).toBe(true);
+  });
+
   it("shows the equipped haircut until the first shave, then the stages in order", () => {
     expect(haircutLook("pompadour").id).toBe("pompadour");
     expect(haircutLook("pompadour#1").id).toBe(SHAVE_STAGES[0].id);
@@ -117,7 +131,7 @@ describe("the catalog is cosmetic only (L1)", () => {
     // The style is geometry and a tone. If a stat ever appears here, this test is the alarm.
     const keys = new Set<string>();
     for (const h of [...HAIRCUTS, ...SHAVE_STAGES]) for (const k of Object.keys(h.style)) keys.add(k);
-    expect([...keys].sort()).toEqual(["cap", "crown", "fringe", "sides", "tone", "track", "tuft"]);
+    expect([...keys].sort()).toEqual(["cap", "crown", "fringe", "sides", "tone", "track", "tuft", "width"]);
   });
 });
 

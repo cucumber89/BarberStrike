@@ -344,7 +344,64 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   for a click meant for a BUY button. `startup.spec.ts` now asserts that whatever is fullscreen
   contains the HUD (a browser that refuses fullscreen outright stays fine). (lead)
 
+- 2026-09-08 — **Drop E started before a playtest exists**, which `MASTER_PROMPT.md` says it should
+  not ("Drop E/F/G/H — do not start these until the owner has played A–D and filled
+  `docs/PLAYTEST_TEMPLATE.md`"). `docs/playtests/` is empty and Drop D's row records that the owner
+  declined to fill the template. The owner named Drop E for this session, which is the override the
+  rule allows for; it is written down rather than passed over, because the consequence is real: no
+  claim in this drop about how the shave FEELS is backed by anybody playing it. (owner; lead)
+- 2026-09-08 — Drop E: the plan names **one schema field** for haircuts, and one is what it got —
+  `PlayerState.haircut`, a string encoded `"<id>"` or `"<id>#<n>"`: the equipped cosmetic id, plus
+  the number of times that head has been shaved this match. Both live in one field on purpose, not
+  to save a field: the equipped id SURVIVES a shave (so at the whistle a player still owns the look
+  they chose, and `newMatch` restores it), and the count is exact rather than clamped to the four
+  drawable stages, so "Najgorsza fryzura" can rank three players who have all been ruined. Written
+  on join, on equip and on a shave death, never per tick (L6). (lead)
+- 2026-09-08 — Drop E does **not** reuse Drop D's `shaved` boolean for the shave, against the
+  Deferred note that suggested it. `shaved` is a bare scalp and an Ostrzyżeni side; Drop E's shave
+  is a BAD HAIRCUT, which is a different picture and the one the plan asks for ("a visibly bad
+  haircut", not "no hair"). They coexist on the same head with a stated precedence: a bare scalp
+  wins, because a head that has just been clipped to the skin has no hair on it to ruin. (lead)
+- 2026-09-08 — Drop E: the scoreboard's razor column counts times a player has **been** shaved, not
+  shaves they dealt. That is what the replicated field carries and what the award ranks, and it is
+  the joke the mode is about. Shaves DEALT are counted separately, client-side, from the server's
+  `shave` flag on the kill event into `LifetimeStats.shaves` — that is what unlocks IROKEZ and
+  BLOND. A player who joins mid-match sees the right column either way, because the count is parsed
+  from the state rather than tallied from events they did not receive. (lead)
+- 2026-09-08 — Drop E: `isShave` is mode-independent — a clippers backstab is a shave in Ostrzyżeni
+  and Gun Game too, on top of whatever those modes already do with a clippers kill. Making it
+  TDM-only would have been a second rule to explain; letting it run everywhere costs one string
+  write on a death that was already happening. Ostrzyżeni will therefore produce high counts and its
+  "Najgorsza fryzura" will usually name whoever chased worst, which reads correctly. (lead)
+- 2026-09-08 — Drop E: **"first person" in the evidence set means the view of somebody ELSE'S head.**
+  Measured, not assumed: `Character` is constructed only for remote players
+  (`RemotePlayer.ts:59`), the viewmodel is hands and a gun (`handSpec.ts`), `Game.ts:172` empties
+  the imported character list, and there is no mirror and no third-person camera — so a player
+  never sees their own haircut at all. `haircut-shots.mjs` therefore shoots the head through a
+  player's own eyes at 4 m and 8 m, which is the view the mechanic actually has to survive. Giving
+  the player a look at their own head needs a profile/preview screen; PR #14 deleted the one that
+  existed. (lead)
+
 ## Deferred (things noticed, deliberately not done)
+
+- **Drop E: a player cannot see their own haircut.** There is no mirror, no third-person camera and
+  no profile preview (PR #14 deleted `ui/Profile.tsx` and `ui/Armoury.tsx`), so the reward a player
+  earns is a reward only other people see. The lobby picker names the cut and says what unlocks it,
+  which is the cheapest thing that could work; a rendered head in the picker is the real fix and is
+  a Drop C-shaped piece of work (a small scene, one character, no map).
+- Drop E: the HUD evidence is screenshots, not tests. The client has no React test renderer (no
+  `@testing-library`, no jsdom environment — the suite runs in node), so the razor in the kill feed,
+  the scoreboard column and the "Najgorsza fryzura" row are proven by looking at them. The DATA
+  behind all three is unit-tested (`haircuts.test.ts`, `DropE.test.ts`, `profile.test.ts`); the
+  markup is not. Adding a renderer is a repo-wide decision, not Drop E's.
+- Drop E: bots wear haircuts from the catalog, spread across it by index, and a bot can therefore
+  win "Najgorsza fryzura". That is correct — a bot that got backstabbed four times deserves the
+  award — but a room of bots will hand it out most nights, which may make it feel cheap. Worth a
+  playtest verdict before excluding bots from it.
+- Drop E: the shave count is per MATCH, and `newMatch` clears it. A player who leaves and rejoins
+  mid-match comes back unshaved, because `onJoin` builds a fresh `PlayerState`. That is the same
+  hole as the wallet reset already recorded above, closed by the same thing (a stable player
+  identity, nick+token or the accounts of Drop H) and not worth a separate mechanism.
 
 - Drop D: a TDM player can spawn on an ARENA spawn point, because `pickSpawn` is called with the
   whole pool for TDM (`this.mode === "ffa" || this.mode === "tdm"` on main, unchanged in meaning

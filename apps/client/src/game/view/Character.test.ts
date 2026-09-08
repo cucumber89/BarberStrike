@@ -215,18 +215,23 @@ describe("Character haircuts", () => {
   });
 
   it("a clipper track mows a measurable bald strip through the crown", () => {
-    const cut = scene(), mohawk = new Character(cut, 0, "mohawk");
-    mohawk.update(input({ haircut: "mohawk" }), 16);
-    const ridges = xIslands(mohawk, 0.26);
+    // PODCIĘCIE, the first shave stage: one strip taken out of an otherwise whole head of hair.
+    // (This used to measure IROKEZ, which was written as a `track` and therefore rendered as its
+    // own inverse — bald down the middle. A mohawk is a ridge LEFT; see the test below.)
+    const cut = scene(), done = new Character(cut, 0, "done");
+    done.update(input({ haircut: encodeHaircut("bowl", 1) }), 16);
+    const ridges = xIslands(done, 0.26);
     expect(ridges.length).toBe(2);
     const gap = ridges[1][0] - ridges[0][1];
-    expect(gap).toBeCloseTo(haircutLook("mohawk").style.track, 3);   // 0.145 m of bald scalp
+    expect(gap).toBeCloseTo(haircutLook(encodeHaircut("bowl", 1)).style.track, 3);
     const whole = scene(), pomp = new Character(whole, 0, "pompadour");
     pomp.update(input({ haircut: "pompadour" }), 16);
     const solid = xIslands(pomp, 0.26);
     expect(solid.length).toBe(1);
+    // The track is exactly what it removes: hair left = the full crown minus the mown strip. That
+    // is a stronger claim than "thinner", and it holds for every stage rather than only the widest.
     const covered = (r: [number, number][]) => r.reduce((a, [lo, hi]) => a + hi - lo, 0);
-    expect(covered(ridges)).toBeLessThan(covered(solid) / 2);        // and the silhouette is thinner
+    expect(covered(solid) - covered(ridges)).toBeCloseTo(haircutLook(encodeHaircut("bowl", 1)).style.track, 3);
     // RUINA, the worst shave stage: the widest track of all, two slivers of hair left at the edges
     // and the stray tuft standing in the middle of the mown strip — three islands, not one crown.
     const worst = new Character(whole, 0, "ruined");
@@ -234,6 +239,23 @@ describe("Character haircuts", () => {
     const ruin = xIslands(worst, SKULL_TOP + 0.005);
     expect(ruin.length).toBe(3);
     expect(covered(ruin)).toBeLessThan(0.1);                         // of the crown's 0.222 m
+  });
+
+
+  it("a mohawk is one narrow ridge of hair, not a bald strip", () => {
+    // The review caught IROKEZ rendering as its own inverse. A mohawk and a shave are opposites:
+    // one leaves a strip standing, the other takes one away, and both are measured the same way.
+    const s = scene(), c = new Character(s, 0, "mohawk");
+    c.update(input({ haircut: "mohawk" }), 16);
+    const islands = xIslands(c, 0.26);
+    expect(islands.length).toBe(1);
+    const width = islands[0][1] - islands[0][0];
+    expect(width).toBeCloseTo(haircutLook("mohawk").style.width, 3);
+    // Narrow enough to read as a ridge, and it stands taller than any full covering.
+    expect(width).toBeLessThan(0.09);
+    const v = hairVerts(c);
+    expect(Math.max(...v.map((p) => p.y))).toBeGreaterThan(SKULL_TOP + 0.1);
+    c.dispose(); s.dispose();
   });
 
   it("the cap comes off for a haircut, and a shaved scalp beats both", () => {

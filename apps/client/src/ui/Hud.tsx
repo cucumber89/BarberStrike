@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { boysClass, BOMB, GAME_VERSION, GRENADES, GUN_GAME, HAIRCUTS, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, PLAYER, TEAM_NAMES, WEAPONS, BADGES, haircutDef, killerName, ladderDone, ladderWeapon, parseHaircut, perkActive, worstHaircut, type GameMode, type WeaponId } from "@frankibarber/shared";
+import { boysClass, BOMB, GAME_VERSION, GRENADES, GUN_GAME, HAIRCUTS, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, PLAYER, TEAM_NAMES, WEAPONS, BADGES, killerName, ladderDone, ladderWeapon, parseHaircut, perkActive, worstHaircut, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import { pelletRing } from "../game/combat/weaponFeel";
 import { TeamPicker } from "./TeamPicker";
@@ -558,7 +558,7 @@ function ScoreTr({ r, myId }: { r: ReturnType<typeof useHud>["players"][number];
       <td>{r.kills}</td><td>{r.deaths}</td><td>{r.assists}</td>
       {/* Drop E: how many times this head has been done. A dot rather than a 0, so the column reads
           as "who got done" at a glance instead of as a wall of zeroes. */}
-      <td className="sb-shaved" data-testid="sb-shaved">{shaves > 0 ? shaves : "·"}</td>
+      <td className={`sb-shaved ${shaves > 0 ? "" : "none"}`} data-testid="sb-shaved">{shaves > 0 ? shaves : "·"}</td>
       <td className="sb-money">{r.money}</td><td>{r.score}</td><td>{r.bot ? "–" : r.ping}</td>
     </tr>
   );
