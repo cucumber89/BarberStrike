@@ -44,6 +44,12 @@ const GUNS: Record<WeaponId, GunVoice> = {
 };
 
 /** Clippers swing: the motor buzz rising through the arc, with a snap when it connects. */
+/**
+ * How long the report rings for (s) — the audio axis of the weapon signature (Drop B). Exported so
+ * `weaponFeel`'s signature and the matrix test read the voice table itself rather than a copy of it.
+ */
+export const gunTail = (weapon: WeaponId): number => GUNS[weapon].tail;
+
 export function meleeSwing(hit: boolean): SoundFn {
   return (g) => {
     const t = g.t;
