@@ -37,7 +37,7 @@ import type { Flag, LightHint, MapDef, MaterialTag, PropHint, Solid, SolidLook, 
 
 const W = 0.3;      // wall thickness
 const H = 2.8;      // ceiling height inside the flat (domestic, half the shop's industrial 6.0)
-const SLAB = 1.6;   // ceiling slab over the west + centre: top 4.4, out of reach from the 3.0 deck
+const SLAB = 3.0;   // ceiling slab over the west + centre: top 5.8 (see the comment at "Ceilings")
 const DECK = 3.0;   // roof deck over the east wing
 const PAR = 1.2;    // roof parapet
 const DOORH = 2.1;  // door head height (lintels run DOORH..H)
@@ -65,7 +65,6 @@ export const GORA: MapDef = (() => {
   solids.push(S(-8, -1, -1, 16, 1, 6, "floor_wood", "podloga_hol"));
   solids.push(S(-8, -1, 5, 5.5, 1, 4, "floor_wood", "podloga_hol_pn_w"));
   solids.push(S(2.5, -1, 5, 5.5, 1, 4, "floor_wood", "podloga_hol_pn_e"));
-  solids.push(S(-2.5, -1, 8, 5, 1, 1, "floor_wood", "podloga_za_szybem"));
   solids.push(S(-10, -1, 9, 20, 1, 2, "floor_concrete", "podloga_balkon"));
   solids.push(S(10, -1, 9, 4, 1, 2, "floor_metal", "podest_schodow"));
 
@@ -135,8 +134,14 @@ export const GORA: MapDef = (() => {
   solids.push(S(13, 0, 1, 4 - W, H, 2, "wall_plaster", "zabudowa_syp_b"));
   solids.push(S(11.5, DOORH, 1, 1.5, H - DOORH, 2, "wall_plaster", "nadproze_syp"));
 
-  // ---------- Ceilings. West + centre get a 1.6 m slab (top 4.4): from the 3.0 deck that is a
-  // 1.4 m rise, and a crouch-jump tops 1.2 — the rest of the roof is deliberately out of reach.
+  // ---------- Ceilings. The west + centre roof is deliberately NOT walkable, and "deliberately"
+  // has to be measured from every surface a player can actually stand on, not from the deck. It was
+  // 1.6 m thick (top 4.4) and a code review found the chain: the air-conditioner tops at 3.9, which
+  // is a 0.9 m hop from the deck — under the real 0.93 m jump apex, and over the walk grid's 0.88 m
+  // JUMP_UP, so it was invisible to every reachability test — and from 3.9 the slab was half a
+  // metre up. The east parapet gave a second route at 1.2 m, inside the 1.25 m crouch-jump mantle.
+  // The slab is now 3.0 m thick (top 5.8), which is 1.6 m above the highest thing anyone can stand
+  // on up there. `gora.test.ts` re-derives that margin from the geometry rather than trusting it.
   solids.push(S(X0, H, Z0, 14.5, SLAB, 16, "ceiling", "strop_w"));
   solids.push(S(2.5, H, Z0, 3.5, SLAB, 16, "ceiling", "strop_e"));
   solids.push(S(-2.5, H, Z0, 5, SLAB, 12, "ceiling", "strop_c_pd"));
@@ -262,10 +267,10 @@ export const GORA: MapDef = (() => {
 
   // FFA, Gun Game and the Ostrzyżeni chaser draw from these as well, so they cover the ring.
   const arenaSpawns: SpawnPoint[] = [
-    { x: -13, y: 0, z: 7.2, yaw: Math.PI, team: 0 },
-    { x: 13, y: 0, z: 7.2, yaw: Math.PI, team: 1 },
+    { x: -6.5, y: 0, z: 3.0, yaw: 0, team: 0 },
+    { x: 6.5, y: 0, z: 3.0, yaw: 0, team: 1 },
     { x: -6.5, y: 0, z: 10, yaw: Math.PI, team: 0 },
-    { x: 8, y: 0, z: 10, yaw: Math.PI, team: 1 },
+    { x: 6, y: 0, z: 10, yaw: Math.PI, team: 1 },
     { x: -5, y: 0, z: 6.6, yaw: 0, team: 0 },
     { x: 5, y: 0, z: 6.6, yaw: 0, team: 1 },
     { x: 8.6, y: DECK, z: 0.6, yaw: 1.4, team: 0 },
@@ -280,11 +285,16 @@ export const GORA: MapDef = (() => {
   ];
   for (const st of stations) props.push({ kind: "neon", x: st.x, y: 2.2, z: st.z, yaw: 0, text: "$ BUY", w: 1.2, h: 0.4, variant: "station" });
 
-  // ---------- Domination: a home flag each, and the balcony as the contested one ----------
+  // ---------- Domination: the two outer-ring rooms and the inner crossroads ----------
+  // NOT the two home rooms, which is where they were drafted: `DOM.radius` is 3.5 m and four spawn
+  // points a side sat 2.33 m from their own flag, so both teams captured a flag by existing and
+  // only the third was ever fought over — and in Boys, standing in a zone is what opens the class
+  // change, so a player could re-class from their spawn. NIGHT_DISTRICT's nearest spawn to a flag
+  // is 20.35 m; these are 6.7 m, outside every zone, and `map.test.ts` now checks it on every map.
   const flags: Flag[] = [
-    { id: "A", name: "SALON", x: -13, y: 0, z: -3 },
-    { id: "B", name: "SYPIALNIA", x: 13, y: 0, z: -3 },
-    { id: "C", name: "BALKON", x: 0, y: 0, z: 10 },
+    { id: "A", name: "KUCHNIA", x: -14.5, y: 0, z: 6.5 },
+    { id: "B", name: "SKŁAD", x: 12.5, y: 0, z: 7.5 },
+    { id: "C", name: "HOL", x: 0, y: 0, z: 0 },
   ];
 
   return {

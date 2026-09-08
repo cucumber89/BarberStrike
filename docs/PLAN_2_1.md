@@ -237,6 +237,9 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
 | 2026-09-08 | G | drop/g-map-2 | Slice 3, one correction to slice 2 and the test that catches it. GÓRA declared `huntSpawnMinM` **8 m**, scaled by proportion from NIGHT_DISTRICT's 14 m (121 m diagonal → 39 m). MEASURED against the arrangement that squeezes the rule hardest — five survivors spread one to an area — **8 m and 7 m leave no legal point in the pool at all**, so `huntSpawn` falls through to the ordinary pick, which MAXIMISES distance from enemies: the chaser is sent as far from its prey as the map allows, in the mode whose premise is the hunt. **6 m** keeps ≥ 4 legal points in every arrangement swept and is still eight body widths and a whole spawn-protection window. `map.test.ts` now holds every map to it, survivors placed by farthest-point sampling over the map's own pool — GÓRA fails at 8, passes at 6, NIGHT_DISTRICT unaffected at 14. Also in this slice: `arenaSpawns` had never been judged by any test (it is the FFA / Gun Game / Ostrzyżeni pool) and GÓRA's north roof spawn sat over the loft-stair opening — free, reachable, and a 3 m drop on arrival; both the fix and the generic check are in. | docs/MAP_2.md ("As built", last section) | typecheck ✓ test ✓ (640: shared 198, client 282, server 160) check:weapons ✓ (19/19) build ✓ e2e — | review |
 
 
+| 2026-09-08 | G | drop/g-map-2 | Slice 4, the code review (a separate agent, the diff + the acceptance criteria + "try to break it"). It found five things; three were real and are fixed. **(1) The roof could be climbed off.** The air-conditioner on the deck topped 0.9 m above it — under the real 0.931 m jump apex and OVER the walk grid's 0.88 m `JUMP_UP`, so every reachability check in the drop was blind to it — and from there the ceiling slab was 0.5 m up: a player could walk the roof over every room, where no bot could follow. A second route was the east parapet at 1.2 m, inside the 1.251 m crouch-jump mantle. The slab is now 3.0 m thick (top 5.8), 1.6 m clear of the highest standable thing up there, and `gora.test.ts` re-derives the margin from the geometry using the PLAYER's jump numbers rather than the grid's. **(2) Both home flags sat inside their own team's spawn**: four spawn points a side 2.33 m from a 3.5 m capture zone, so Domination gave each team a free flag and Boys let a player re-class from spawn (NIGHT_DISTRICT's nearest spawn to a flag is 20.35 m; nothing had ever checked). Flags moved to the two outer-ring rooms and the inner crossroads — KUCHNIA / SKŁAD / HOL — which also spreads DOM across the whole map; `map.test.ts` now checks every map, as a cylinder so the roof spawns stay legal. **(3) The minimap still read the module-global `BOMB_SITES`** and drew A and B off the edge of GÓRA with the compass pointing at them — a constant that still exists and still holds valid numbers breaks nothing except the picture, so the guard is a grep test over the client sources. Refuted/absorbed: the hunt-spawn test's docstring claimed more than the test samples (docstring corrected, and an adversarial placement falls back to the ordinary pick rather than crashing); two stale "8 m" references in the docs corrected; one dead floor panel under the well removed. | docs/MAP_2.md ("As built", items 4–5); `packages/shared/src/gora.test.ts`; `apps/client/src/mapAgnostic.test.ts` | typecheck ✓ test ✓ (647: shared 204, client 283, server 160) build ✓ check:weapons ✓ (19/19) e2e — | review |
+
+
 ## Decisions log (append-only)
 
 - 2026-09-07 — Plan created from the owner's brief: weapons structure + feel, procedural skins with
@@ -383,6 +386,12 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   was wrong: the rule it feeds has a fallback that does the OPPOSITE of what the rule wants, so a
   value that is merely too large does not degrade — it inverts. Anything scaled from another map
   should be swept against the case that squeezes it before it ships. (lead)
+
+- 2026-09-08 — Drop G: **the walk grid is not the player.** `JUMP_UP` is 0.88 m and a real jump
+  apexes at 0.931 m, with a crouch-jump mantling 1.251 m, so there is a band of ledges a player can
+  climb and the grid cannot see — and every "is it reachable?" test in this repo runs on the grid.
+  GÓRA's roof was climbable through exactly that band. Any claim that a surface is out of reach has
+  to be made with the PLAYER's numbers; `gora.test.ts` is the pattern. (lead, from the review)
 
 ## Deferred (things noticed, deliberately not done)
 
@@ -577,3 +586,8 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
 - Drop G: the map has never been RENDERED. Lighting (14 practicals, two shadow casters), whether a
   2.8 m ceiling reads in first person, and whether the roof is worth climbing to all need a real GPU
   and the owner's eyes; and no e2e path (join → pick GÓRA → play a round) has been walked.
+- Drop G: `collision.bench.test.ts`'s "cuts the cost of a hitscan ray" asserts the grid broadphase
+  is ≥ 1.5× faster than the linear scan and measured **1.36×** once, in a run that shared the
+  machine with three agents; alone it measures 2.1–2.2× repeatedly. It is a wall-clock benchmark in
+  a unit suite, on NIGHT_DISTRICT's boxes, and nothing in Drop G touches it. Same family as the e2e
+  note above: check what else is on the CPU before believing a red benchmark.

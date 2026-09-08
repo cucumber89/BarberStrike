@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildCollisionWorld, MAPS, sitesOf, type MapDef } from "./map";
 import { OSTRZYZENI } from "./modes";
+import { DOM } from "./dom";
 import { makeRayHit } from "./collision";
 import { PLAYER } from "./constants";
 import { cellReached, reachable, walkable } from "./mapWalk";
@@ -143,9 +144,11 @@ for (const map of Object.values(MAPS)) {
  * Ostrzyżeni respawns the chaser at the point nearest a living survivor that is still
  * `huntSpawnMinM` away, and falls back to the ordinary pick when nothing qualifies — a pick that
  * MAXIMISES distance from enemies, which is the opposite of hunting. On a small map that fallback
- * is easy to hit by accident, so the number has to leave the rule somewhere to work even in the
- * arrangement that squeezes it hardest: five survivors spread as far from each other as the map
- * allows (farthest-point sampling over the spawn pool, which is where a round's areas are).
+ * is easy to hit by accident, so the number has to leave the rule somewhere to work in the
+ * arrangement this test can express: five survivors spread as far from each other as the map
+ * allows, sampled over the SPAWN POOL (which is where a round's areas are) rather than over every
+ * square metre of floor. Survivors placed adversarially anywhere can still exhaust it — that is a
+ * fallback to the ordinary pick, not a crash, and no test short of a solver would prove otherwise.
  * GÓRA was drafted at 8 m by proportion and measured down to 6: at 8 this test has nothing left,
  * and a sweep over four survivor arrangements says 6 is where every one of them keeps four points.
  */
@@ -166,5 +169,26 @@ for (const map of Object.values(MAPS)) {
     }
     const legal = pool.filter((s) => survivors.every((v) => Math.hypot(s.x - v.x, s.z - v.z) >= min));
     expect(legal.length, `${map.id}: with survivors spread out, no spawn is ${min} m from all of them and the hunt spawn falls through`).toBeGreaterThan(0);
+  });
+}
+
+/**
+ * Drop G: a flag's capture zone must not contain a spawn point. GÓRA drafted its two home rooms as
+ * flags A and B, and four spawn points a side stood 2.33 m from their own flag inside a 3.5 m
+ * zone — both teams captured a flag by existing, only the third was ever contested, and in Boys
+ * (where standing in a zone is what opens the class change) a player could re-class from spawn.
+ * NIGHT_DISTRICT's nearest spawn to a flag is 20.35 m; nothing had ever checked.
+ */
+for (const map of Object.values(MAPS)) {
+  it(`${map.id}: no spawn point stands inside a capture zone`, () => {
+    const bad: string[] = [];
+    for (const f of map.flags) for (const s of [...map.spawns, ...(map.arenaSpawns ?? [])]) {
+      // A zone is a cylinder: a spawn on the roof three metres up is not standing in the flag below
+      // it (`DOM.heightTolerance`), which is what keeps GÓRA's roof spawns legal.
+      if (Math.abs(s.y - f.y) > DOM.heightTolerance) continue;
+      const d = Math.hypot(s.x - f.x, s.z - f.z);
+      if (d < DOM.radius * 1.5) bad.push(`flag ${f.id} is ${d.toFixed(2)} m from spawn (${s.x}, ${s.z})`);
+    }
+    expect(bad).toEqual([]);
   });
 }

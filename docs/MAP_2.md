@@ -234,10 +234,10 @@ construction rather than by luck.
 | `tdm` | team-filtered `spawns` (`spawn.ts:21`) | 3 stations | 6 per side is the minimum `map.test.ts:24` accepts and what 3v3 wants. |
 | `boys` | team-filtered | flags A/B/C, stations | Class changes happen at flag B — here that is the SYPIALNIA, one room in from team 1's home. |
 | `ffa` | `spawns` + `arenaSpawns` (20) | stations | The arena points exist so a free-for-all does not start in two corners. |
-| `dom` | team-filtered | flags **A** SALON (−13, −3), **B** SYPIALNIA (13, −3), **C** BALKON (0, 10) | Pairwise 26 / 18.4 / 18.4 m, all over the `DOM.radius × 4` = 14 m the flag test demands (`mapFlags.test.ts:32`). Home flag / home flag / the contested balcony. `DOM.heightTolerance` 2.2 means the roof does **not** stand in C's zone: the perch can shoot the flag but never cap it. |
+| `dom` | team-filtered | flags **A** KUCHNIA (−14.5, 6.5), **B** SKŁAD (12.5, 7.5), **C** HOL (0, 0) — drafted as the two home rooms and the balcony, moved in review: see "As built" | Pairwise 26 / 18.4 / 18.4 m, all over the `DOM.radius × 4` = 14 m the flag test demands (`mapFlags.test.ts:32`). Home flag / home flag / the contested balcony. `DOM.heightTolerance` 2.2 means the roof does **not** stand in C's zone: the perch can shoot the flag but never cap it. |
 | `bomb` | attackers → pool 0, defenders → pool 1 (`TdmRoom.ts:1100`) | sites **A** BALKON (0, 10), **B** HOL (0, 0) | Both sites sit on the centre line, so each side is 1.8 s from B and 2.7 s from A — identical before and after the half-time swap. Sites in the wings were drawn first and thrown away: they put the attackers 1.2 s from one site and the defenders 3.9 s from it. |
 | `gungame` | `spawns` + `arenaSpawns` | none (`shop: "none"`) | 3 s respawns on a 34 m map: the ladder will move fast, which is the point. |
-| `ostrzyzeni` | survivors team-filtered; the chaser via `huntSpawn` | stations (survivors only) | See **D-G3** — `huntSpawnMinM` (14 m, `modes.ts:142`) is a NIGHT_DISTRICT number and is too big for this map. |
+| `ostrzyzeni` | survivors team-filtered; the chaser via `huntSpawn` | stations (survivors only) | See **D-G3** — `huntSpawnMinM` (14 m, `modes.ts:142`) is a NIGHT_DISTRICT number and is too big for this map. **Built at 6 m, not the 8 m drafted below: see "As built".** |
 
 Buy stations (three, as `map.test.ts:99` requires, and spread 31 m in x, which is what `:107`
 requires): **KREDENS** (−15.5, −4) in the salon · **KOMODA** (−6, 3) in the klatka · **SZAFA**
@@ -487,6 +487,26 @@ The numbers below are re-measured on the REAL geometry and the REAL walk grid (�
    the deck's opening with it) and the fire escape now ends on a 1.2 m landing with the parapet
    opened for exactly that landing. Both were found by flood-filling the walk grid from spawn 0 and
    printing what was cut off; none of them is visible on a drawing.
+
+### Two more the review found, after the map was built
+
+4. **Both home flags were inside their own team's spawn.** `DOM.radius` is 3.5 m and four spawn
+   points a side stood **2.33 m** from flag A / flag B, so in Domination each team captured a flag
+   by existing and only the balcony was ever contested — and in Boys, where standing in a zone is
+   what opens the class change, a player could re-class without leaving spawn. NIGHT_DISTRICT's
+   nearest spawn to a flag is 20.35 m and nothing had ever checked the distance. The flags are now
+   the two outer-ring rooms and the inner crossroads — **A** KUCHNIA, **B** SKŁAD, **C** HOL — which
+   also spreads Domination across the whole map instead of the two ends, and `map.test.ts` holds
+   every map to it (no spawn within 1.5 × the capture radius, measured as a cylinder so the roof
+   spawns stay legal).
+5. **The roof could be climbed off.** The air-conditioner on the deck topped 0.9 m above it — under
+   the real 0.931 m jump apex and OVER the walk grid's 0.88 m `JUMP_UP`, so it was invisible to
+   every reachability check in this document — and from there the ceiling slab was half a metre up:
+   a player could stand on the roof over every room in the flat, where no bot could follow. The east
+   parapet was a second route at 1.2 m, inside the 1.251 m crouch-jump mantle. The slab is now 3.0 m
+   thick (top 5.8), which is 1.6 m clear of the highest thing anyone can stand on up there, and
+   `gora.test.ts` re-derives that margin from the geometry with the PLAYER's jump numbers rather
+   than the grid's.
 
 ### Other deviations from the draft
 
