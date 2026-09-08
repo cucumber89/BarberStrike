@@ -18,6 +18,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/server/package.json apps/server/
 COPY apps/client/package.json apps/client/
 COPY packages/shared/package.json packages/shared/
+COPY packages/skins/package.json packages/skins/
 RUN pnpm install --frozen-lockfile
 
 # ---- build: klient (vite) + serwer (esbuild, shared inlined)
@@ -27,6 +28,7 @@ ENV VITE_SERVER_URL=$VITE_SERVER_URL
 ENV NODE_OPTIONS=--max-old-space-size=2048
 COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
+COPY packages/skins packages/skins
 COPY apps/server/src apps/server/src
 COPY apps/server/build.mjs apps/server/tsconfig.json apps/server/
 COPY apps/client apps/client
