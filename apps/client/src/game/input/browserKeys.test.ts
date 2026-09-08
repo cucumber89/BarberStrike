@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_BINDINGS } from "./InputState";
-import { boundCodes, isEditableTarget, shouldPreventDefault, INTERCEPTABLE_CHORDS } from "./browserKeys";
+import { boundCodes, isEditableTarget, modifierBindingWarning, shouldPreventDefault, INTERCEPTABLE_CHORDS } from "./browserKeys";
 
 const bound = boundCodes(DEFAULT_BINDINGS as unknown as Record<string, string[]>);
 const chord = (code: string, mods: Partial<{ ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }> = {}) =>
@@ -31,9 +31,12 @@ describe("browser shortcut interception", () => {
   });
 
   it("holds every bound key and the page-scrolling keys during play", () => {
-    for (const code of ["KeyW", "KeyA", "KeyS", "KeyD", "Space", "Tab", "KeyB", "KeyV", "ControlLeft"]) {
+    for (const code of ["KeyW", "KeyA", "KeyS", "KeyD", "Space", "Tab", "KeyB", "KeyV", "KeyC"]) {
       expect(shouldPreventDefault(chord(code), bound, true), code).toBe(true);
     }
+    // Ctrl is no longer bound to anything (crouch moved to C), so it goes back to the browser —
+    // which is the point: an unbound key is not the game's to take.
+    expect(shouldPreventDefault(chord("ControlLeft"), bound, true)).toBe(false);
   });
 
   it("never touches an Alt chord — Alt+F4 and the window menu belong to the OS", () => {
@@ -72,5 +75,30 @@ describe("text fields keep their keystrokes", () => {
     expect(isEditableTarget(el("CANVAS"))).toBe(false);
     expect(isEditableTarget(el("DIV"))).toBe(false);
     expect(isEditableTarget(null)).toBe(false);
+  });
+});
+
+describe("binds that would cost the player their tab", () => {
+  it("does not ship one: crouch is C, not Ctrl", () => {
+    // Crouch-walking forward on a Ctrl bind IS Ctrl+W, and Ctrl+W closes the tab — no page can
+    // refuse it. The default must therefore never put a modifier on a held action.
+    for (const code of DEFAULT_BINDINGS.crouch) expect(modifierBindingWarning(code), code).toBeNull();
+    expect(DEFAULT_BINDINGS.crouch).toContain("KeyC");
+  });
+
+  it("no held action's default is a modifier at all", () => {
+    const held = ["crouch", "sprint", "forward", "back", "left", "right", "leanLeft", "leanRight"] as const;
+    for (const a of held) {
+      for (const code of DEFAULT_BINDINGS[a]) {
+        expect(modifierBindingWarning(code), `${a} defaults to ${code}, which makes browser chords`).toBeNull();
+      }
+    }
+  });
+
+  it("still warns — rather than silently allowing — when a player picks Ctrl themselves", () => {
+    expect(modifierBindingWarning("ControlLeft")).toMatch(/closes the tab/);
+    expect(modifierBindingWarning("MetaLeft")).toMatch(/Cmd\+W/);
+    expect(modifierBindingWarning("KeyC")).toBeNull();
+    expect(modifierBindingWarning("ShiftLeft"), "Shift makes no browser chord").toBeNull();
   });
 });

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { modifierBindingWarning } from "../game/input/browserKeys";
 import {
   BINDABLE_ACTIONS, CROSSHAIR_STYLES, QUALITY_MODES, RESERVED_CODES, applyQualityMode, applyQualityPreset, bindingConflicts,
   defaultSettings, isCustomGraphics, keyLabel, qualityMode, resolveBindings,
@@ -34,7 +35,7 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
  * try 2 px wider is how a crosshair menu becomes a thing nobody touches.
  */
 function CrosshairPreview({ c }: { c: Settings["hud"]["crosshair"] }) {
-  const vars = { "--gap": `${c.gap}px`, "--len": `${c.size}px`, "--w": `${c.thickness}px`, "--ch-color": c.color } as React.CSSProperties;
+  const vars = { "--gap": `${c.gap}px`, "--len": `${c.size}px`, "--gap-n": c.gap, "--len-n": c.size, "--w": `${c.thickness}px`, "--ch-color": c.color } as React.CSSProperties;
   return (
     <div className="ch-preview" data-testid="crosshair-preview">
       <div className={`crosshair ch-${c.style} ${c.outline ? "outlined" : ""}`} style={vars}>
@@ -174,6 +175,9 @@ export function Credits() {
  * (not the game, not a button's default action). `RESERVED_CODES` refuses keys the input layer
  * relies on having a fixed job; Escape cancels, Backspace clears back to the default.
  */
+/** Actions a player HOLDS while moving — the ones a modifier bind turns into a browser chord. */
+const HELD_ACTIONS = new Set<BindableAction>(["crouch", "sprint", "forward", "back", "left", "right", "leanLeft", "leanRight"]);
+
 function Controls({ settings, onChange }: Props) {
   const [capturing, setCapturing] = useState<BindableAction | null>(null);
   const bindings = resolveBindings(settings.keys);
@@ -197,7 +201,8 @@ function Controls({ settings, onChange }: Props) {
       if (e.code === "Escape") return;
       if (e.code === "Backspace" || e.code === "Delete") { write(action, null); return; }
       if (RESERVED_CODES.has(e.code)) { setRefused(`${keyLabel(e.code)} has a fixed job and cannot be rebound.`); return; }
-      setRefused("");
+      // Allowed, but not silently: a Ctrl bind on a held action is how players lose the tab.
+      setRefused(HELD_ACTIONS.has(action) ? modifierBindingWarning(e.code) ?? "" : "");
       write(action, [e.code]);
     };
     window.addEventListener("keydown", onKey, true);
@@ -209,6 +214,12 @@ function Controls({ settings, onChange }: Props) {
       <h3>CONTROLS</h3>
       <p className="muted small">Click a key to rebind it. ESC cancels, BACKSPACE restores that action's default.</p>
       {refused && <p className="muted small" data-testid="bind-refused">{refused}</p>}
+      {(() => {
+        const risky = BINDABLE_ACTIONS.filter((a) => HELD_ACTIONS.has(a.id) && bindings[a.id].some((c) => modifierBindingWarning(c)));
+        if (!risky.length) return null;
+        const first = bindings[risky[0].id].map(modifierBindingWarning).find(Boolean);
+        return <p className="muted small warn" data-testid="bind-risky">{risky.map((a) => a.label).join(", ")}: {first}</p>;
+      })()}
       <table className="keys-table">
         <tbody>
           {BINDABLE_ACTIONS.map((a) => (

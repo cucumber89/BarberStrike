@@ -47,6 +47,28 @@ export const INTERCEPTABLE_CHORDS: ReadonlySet<string> = new Set([
  */
 export const RESERVED_BY_BROWSER: readonly string[] = ["KeyW", "KeyT", "KeyN", "KeyQ", "Tab"];
 
+/**
+ * Modifier keys that turn an ordinary movement key into a browser shortcut the page CANNOT refuse.
+ *
+ * This is the difference between an annoyance and losing the match: bind crouch to Ctrl and
+ * crouch-walking forward is Ctrl+W, which closes the tab. Ctrl+T and Ctrl+N open one. None of the
+ * three can be stopped by `preventDefault`; only Keyboard Lock reaches them, and only on Chromium
+ * while fullscreen. So the UI warns instead of pretending.
+ */
+export const RISKY_MODIFIER_CODES: readonly string[] = ["ControlLeft", "ControlRight", "MetaLeft", "MetaRight"];
+
+/**
+ * What binding `code` to a held action costs, or null when it costs nothing.
+ *
+ * Only HELD actions matter: a modifier you tap (reload, inspect) never overlaps another key, but
+ * one you hold while moving combines with W / T / N and takes the tab with it.
+ */
+export function modifierBindingWarning(code: string): string | null {
+  if (!RISKY_MODIFIER_CODES.includes(code)) return null;
+  const key = code.startsWith("Meta") ? "Cmd" : "Ctrl";
+  return `Holding ${key} while you move makes ${key}+W, ${key}+T and ${key}+N — the browser keeps those, and ${key}+W closes the tab. Fullscreen on Chrome or Edge can capture them; nothing else can.`;
+}
+
 /** True when the event came from somewhere a person is typing. */
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (!target || typeof target !== "object") return false;

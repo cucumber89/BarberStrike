@@ -32,6 +32,12 @@ interface Props {
   /** Drop 5: chat send / close, and the minimap's per-frame feed. */
   chat: ChatApi;
   radar: () => RadarSnapshot | null;
+  /**
+   * Mounted but not yet in play: the tree is built and committed while the loading screen is still
+   * up, so the ~25 ms first commit is not paid at the instant the player presses DEPLOY. Nothing
+   * is interactive and nothing is visible until this goes false.
+   */
+  dormant?: boolean;
 }
 
 const fmtTime = (ms: number): string => {
@@ -63,7 +69,7 @@ function MatchSummary({ reward }: { reward: MatchReward }): React.ReactElement {
           <span className="summary-title">{reward.title}</span>
           {levelsGained > 0 && <span className="summary-up" data-testid="summary-levelup">AWANS {levelsGained > 1 ? `×${levelsGained}` : ""}</span>}
         </div>
-        <div className="summary-bar"><div className="summary-bar-fill" style={{ width: `${pct}%` }} /></div>
+        <div className="summary-bar"><div className="summary-bar-fill" style={{ "--v": pct / 100 } as React.CSSProperties} /></div>
         <div className="summary-xp">{after.into} / {after.need} XP{before.level !== after.level ? "" : ""}</div>
       </div>
       {badges.length > 0 && (
@@ -95,7 +101,7 @@ const money = (n: number) => `$${n.toLocaleString("en-US")}`;
 const OSTRZYZENI_SIDES = ["OCALENI", "OSTRZYŻENI"] as const;
 const REASON_SHORT: Record<string, string> = { kill: "KILL", headshot: "HEAD SHOT", assist: "ASSIST", buy: "", sell: "SOLD", reset: "" };
 
-export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, onChooseTeam, onVotePlan, shop, chat, radar }: Props) {
+export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, onChooseTeam, onVotePlan, shop, chat, radar, dormant = false }: Props) {
   const h = useHud();
   // The flash overlay and cook ring need a smooth clock; everything else is fine at 4 Hz.
   const fast = h.flashUntil > performance.now() || h.cookingKind !== "";
@@ -121,6 +127,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   }, [onResume]);
 
   useEffect(() => {
+    if (dormant) return;
     const down = (e: KeyboardEvent) => {
       if (h.chatOpen) return; // the chat box owns the keyboard (drop 5)
       // Tab is the scoreboard in play, but plain focus navigation inside the pause card / shop.
@@ -139,7 +146,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
-  }, [h.shopOpen, h.chatOpen, paused, resume, onPause]);
+  }, [h.shopOpen, h.chatOpen, paused, resume, onPause, dormant]);
 
   // Escape releases pointer lock (browser) → show pause overlay; clicking resume re-locks.
   // The shop and the chat box release / hold the lock on purpose, so they never count as a pause.
@@ -219,7 +226,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   const teamWinner = MODES[h.mode].winner === "team";
 
   return (
-    <div className={`hud ${lowHealth ? "low-health" : ""}`} data-testid="hud">
+    <div className={`hud ${lowHealth ? "low-health" : ""} ${dormant ? "dormant" : ""}`} data-testid="hud" aria-hidden={dormant || undefined}>
       {h.smokeOpacity > 0 && <div className="smoke-screen" data-testid="smoke-screen" style={{ opacity: h.smokeOpacity }} />}
       {h.bomb && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && <div className={`bomb-hud ${h.bomb.stage === "planted" ? "armed" : ""}`} data-testid="bomb-hud">
         <b>ROUND {h.bomb.round} / 12 · {h.bomb.attackTeam === h.myTeam ? "ATTACK" : "DEFEND"} · FIRST TO 7</b>
@@ -229,7 +236,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           : h.bomb.carrier === h.myId ? "YOU HAVE THE BOMB · HOLD T AT A / B TO PLANT"
           : h.bomb.attackTeam !== h.myTeam ? "PROTECT SITES A / B"
           : h.bomb.stage === "dropped" ? "BOMB DROPPED · WALK OVER IT TO PICK UP" : "ESCORT THE BOMB CARRIER"}</span>
-        {h.bomb.actor && <><div className="bomb-progress"><i style={{ width: `${h.bomb.progress * 100}%` }} /></div><small>{h.bomb.actor === h.myId ? "KEEP HOLDING T · STAND STILL" : h.bomb.stage === "planted" ? "DEFUSING" : "PLANTING"}</small></>}
+        {h.bomb.actor && <><div className="bomb-progress"><i style={{ "--v": h.bomb.progress } as React.CSSProperties} /></div><small>{h.bomb.actor === h.myId ? "KEEP HOLDING T · STAND STILL" : h.bomb.stage === "planted" ? "DEFUSING" : "PLANTING"}</small></>}
       </div>}
       {/* Ostrzyżeni (drop D): the round, how many heads are left, and which side the clock favours. */}
       {infection && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && (
@@ -251,7 +258,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
         <div
           className={`crosshair ch-${ch.style} ${ch.outline ? "outlined" : ""} ${hitAge < 180 ? (h.hitKill ? "kill" : h.hitHead ? "head" : h.hitArmor ? "armor" : "hit") : ""} ${protectedNow ? "shield" : ""}`}
           data-testid="crosshair"
-          style={{ "--gap": `${gap}px`, "--len": `${ch.size}px`, "--w": `${ch.thickness}px`, "--ch-color": ch.color } as React.CSSProperties}
+          style={{ "--gap": `${gap}px`, "--len": `${ch.size}px`, "--gap-n": gap, "--len-n": ch.size, "--w": `${ch.thickness}px`, "--ch-color": ch.color } as React.CSSProperties}
         >
           {ch.style !== "dot" && ch.style !== "circle" && <><span className="ch-top" /><span className="ch-bottom" /><span className="ch-left" /><span className="ch-right" /></>}
           {ch.style === "circle" && <span className="ch-circle" />}
@@ -269,7 +276,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       )}
       {/* Tactical sprint budget (drop 4): only while it is running or refilling */}
       {h.alive && h.pointerLocked && (h.tacOn || h.tac < 0.98) && (
-        <div className={`tac-meter ${h.tacOn ? "on" : ""} ${h.tac <= 0.01 ? "empty" : ""}`} data-testid="tac"><div className="tac-fill" style={{ width: `${Math.round(h.tac * 100)}%` }} /></div>
+        <div className={`tac-meter ${h.tacOn ? "on" : ""} ${h.tac <= 0.01 ? "empty" : ""}`} data-testid="tac"><div className="tac-fill" style={{ "--v": h.tac } as React.CSSProperties} /></div>
       )}
       {/* Scope (drop 3): black mask with a round window, a reticle, breath meter.
           Drop B / D-B2: the SR-50 keeps the full tube; the M-1 gets a light ring that leaves most
@@ -280,7 +287,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           <div className="scope-mask" />
           <div className={`scope-reticle ${hitAge < 180 ? "hit" : ""}`}><span className="v" /><span className="hz" /><span className="dot" /></div>
           {h.scopeStyle === "tube" && (
-            <div className="scope-breath"><div className="scope-breath-fill" style={{ width: `${Math.round(h.breath * 100)}%` }} /><span>{h.breath <= 0 ? "WINDED" : "SHIFT · HOLD BREATH"}</span></div>
+            <div className="scope-breath"><div className="scope-breath-fill" style={{ "--v": h.breath } as React.CSSProperties} /><span>{h.breath <= 0 ? "WINDED" : "SHIFT · HOLD BREATH"}</span></div>
           )}
         </div>
       )}
@@ -311,7 +318,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           {h.flags.map((f, i) => (
             <div key={f.id} className={`flag own${f.owner} cap${f.capTeam} ${f.contested ? "contested" : ""} ${h.inFlag === i ? "here" : ""}`} title={f.name} data-testid={`flag-${f.id}`} data-owner={f.owner}>
               {f.id}
-              {f.capTeam !== -1 && <span className="flag-cap" style={{ width: `${Math.round(f.cap * 100)}%` }} />}
+              {f.capTeam !== -1 && <span className="flag-cap" style={{ "--v": f.cap } as React.CSSProperties} />}
             </div>
           ))}
         </div>
@@ -322,7 +329,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {h.alive && here && (
         <div className={`capture ${here.contested ? "contested" : ""} ${here.capTeam !== -1 && here.capTeam !== h.myTeam ? "enemy" : ""}`} data-testid="capture">
           {captureText}
-          {here.capTeam !== -1 && !here.contested && <div className="capture-bar"><div className="capture-fill" style={{ width: `${Math.round(here.cap * 100)}%` }} /></div>}
+          {here.capTeam !== -1 && !here.contested && <div className="capture-bar"><div className="capture-fill" style={{ "--v": here.cap } as React.CSSProperties} /></div>}
         </div>
       )}
 
@@ -345,9 +352,12 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       </ul>
 
       {/* Bottom-left: health */}
-      <div className="health" data-testid="health">
-        <div className="health-bar"><div className="health-fill" style={{ width: `${100 * h.health / maxHealth}%` }} />{h.armor > 0 && <div className="armor-fill" style={{ width: `${h.armor}%` }} />}</div>
+      <div className={`health hp-${h.health / maxHealth > 0.6 ? "ok" : h.health / maxHealth > 0.3 ? "hurt" : "critical"}`} data-testid="health">
         <div className="health-num">{h.health}</div>
+        <div className="health-bars">
+          <div className="health-bar"><div className="health-fill" style={{ "--v": h.health / maxHealth } as React.CSSProperties} /></div>
+          {h.armor > 0 && <div className="armor-bar"><div className="armor-fill" style={{ "--v": h.armor / 100 } as React.CSSProperties} /></div>}
+        </div>
         {(h.armor > 0 || brokeAge < 900) && <div className={`armor-num ${brokeAge < 900 ? "broke" : ""}`} data-testid="armor">🛡 {brokeAge < 900 && h.armor === 0 ? "BROKEN" : h.armor}</div>}
       </div>
       {activePerks.length > 0 && (
@@ -366,7 +376,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
                 <span className="perk-glyph">{p.glyph}</span>
                 <span className="perk-name">{p.name.toUpperCase()}</span>
                 <span className="perk-time">{timed ? `${Math.max(0, Math.ceil(leftMs / 1000))}s` : "ARMED"}</span>
-                <span className="perk-bar" style={{ width: `${Math.round(frac * 100)}%` }} />
+                <span className="perk-bar" style={{ "--v": frac } as React.CSSProperties} />
               </div>
             );
           })}
@@ -456,7 +466,9 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       )}
 
       {/* First-run hints: one short line, once each, never blocking (2.4) */}
-      {!paused && <Hints h={h} />}
+      {/* NOT while dormant: a hint is shown once ever and then remembered, so letting the timer
+          run behind an invisible HUD would burn them all before the player saw one. */}
+      {!paused && !dormant && <Hints h={h} />}
 
       {/* Living arena: the round's plan vote, or what is in force (2.4) */}
       {!h.shopOpen && <PlanPanel h={h} onVote={onVotePlan} />}
