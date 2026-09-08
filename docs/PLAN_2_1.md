@@ -229,6 +229,8 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 
 | 2026-09-08 | D | drop/d-modes (after PR #16 merged) | Owner: *"zrób tak aby zrobić to co miałeś robić i żeby działało w grze wszystko"* — so, the two things that did not work. **(1) Fullscreen was hiding the whole UI.** Drop I's Play-button immersion fullscreens the CANVAS HOST; a fullscreen element is promoted to the browser's top layer and everything outside it stops being painted and stops taking clicks, so from the ENTER MATCH click onwards a player had no HUD, no buy menu, no chat, no pause card and no result screen — in the state the game puts every player into. MEASURED: a screenshot at an open buy menu shows the barbershop and nothing else; `document.fullscreenElement` was `DIV.game-canvas-host`; Playwright reported `<canvas class="game-canvas"> … intercepts pointer events` for a click on a BUY button. Fullscreen now goes on `.app`, which holds the canvas AND the overlays, and `startup.spec.ts` asserts that whatever is fullscreen contains the HUD. **(2) Ostrzyżeni was not a game.** The OWNER DECISION WANTED entry answered as option (b), measured not guessed: a chaser returns ON THE HUNT (nearest spawn ≥ 14 m from a living survivor, where every other rule maximises that distance) and carries `shavedHealth` 220 — no damage change, no armour, no new field, nothing gated. Eight seeded 90 s rounds of five: 9 conversions of 40 with THREE blank rounds → 14–22 of 40 with at most one blank, survivors still usually holding the clock. The HUD health bar now scales to what the player can hold, so a 220 HP chaser does not draw a bar twice its box. Room tests (k) and (l) added. NO playtest evidence is claimed anywhere in this drop: the owner declined to fill `docs/PLAYTEST_TEMPLATE.md`. Also fixed on the way: the stale shop e2e (tab clicks that the one-screen shop replaced with aisles) and a suite that must run at 1280×720 where it opens the shop. | screenshots and numbers quoted in the two Decisions entries of this date; `apps/client/e2e/out/d/**` regenerates per `e2e/tools/README-drop-d.md` | typecheck ✓ test ✓ (584: shared 180, client 249, server 155) build ✓ check:weapons ✓ (19/19) **e2e ✓ 15/15** (7.8 min, freshly started server) | review |
 
+| 2026-09-08 | E | drop/e-shave | **The shave and haircuts, whole drop, mechanic done and art NOT accepted.** `shared/haircuts.ts`: a clippers kill FROM BEHIND is a shave (`isShave`, reusing the `isBackstab` the melee swing already runs — no new geometry, no client claim); the victim's head is written once, on the death, and they wear it for the rest of the match. **One schema field**, `PlayerState.haircut`, a string `"<id>"` / `"<id>#<n>"` carrying the equipped cosmetic AND the shave count together, so the chosen look survives being done and the count stays exact for the award (Decisions). Written on join, equip and a shave death, never per tick — verified by the reviewer against `step`/`spawn`/`beginInfectionRound`/the rung reset. HUD: a razor SVG replaces the weapon's name in the kill feed (there was no icon system at all — three text spans and some perk emoji), a razor column on the scoreboard parsed from the field rather than tallied from events a late joiner never saw, and "Najgorsza fryzura" on the summary from a pure shared `worstHaircut`. Nine haircuts unlocked off lifetime counters, owned DERIVED not stored, equipped in the lobby picker (locked ones shown with what earns them), carried on the join like the nickname. Bots wear the catalog. Reviewer (separate agent) found 3 real things, all fixed: **IROKEZ rendered as its own inverse** (a mohawk written as a `track` is a bald strip with hair at the temples — and the view test had asserted that shape rather than questioned it), a scoreboard CSS rule that could never fire, and an unreachable `C2S.Haircut` handler (deleted — the picker is pre-match, so the join option IS the equip path). **Art: three rounds, two of them valid, and the drop's headline claim FAILED both.** At 8 m the head is ~12 px and no shave stage read as a bad haircut; round 2 also found the escalation inverted (RUINA read as a CLEAN bald head). Two responses shipped — hair coverage now falls monotonically instead of a groove widening, and the shaved scalp got its own raw-red material because at 12 px only tone survives — but neither has been judged: round 3's set was invalidated by a harness regression of mine (moving the camera got true ranges and lost the subject; 17 of 37 frames had nobody in them) and is reverted. | apps/client/e2e/out/haircuts/*.png (regenerate: dev servers up, `node apps/client/e2e/tools/haircut-shots.mjs`); art verdicts quoted in the Decisions entries of this date | typecheck ✓ test ✓ (646: shared 196, client 287, server 163) build ✓ check:weapons ✓ (19/19) e2e — (not run) | blocked: art — a shaved head does not read at gameplay range; needs a human on a real GPU, or a different idea |
+
 Status vocabulary reminder: these rows are `review` because the full e2e path was not run here.
 
 ## Decisions log (append-only)
@@ -382,7 +384,48 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   the player a look at their own head needs a profile/preview screen; PR #14 deleted the one that
   existed. (lead)
 
+- 2026-09-08 — **Drop E, art: the shave does not read at gameplay range, and that is the drop's own
+  headline claim failing.** Two art reviewers who did not build it, looking at two independently
+  captured sets, agreed: at 8 m the character's head is about TWELVE PIXELS, and at that size no
+  shave stage was distinguishable from an ordinary haircut. Round 2 added that the escalation ran
+  backwards — RUINA read as a CLEAN bald head, less ruined than the patchy stage before it, under a
+  tall block that read as "a chimney or a render fault". Two things were changed in response and
+  NEITHER has been judged: hair coverage now falls monotonically across the stages (the first cut
+  escalated a *groove's width*, which left the worst stage with more hair standing than the one
+  before it), and the shaved scalp got its own raw-red material distinct from Drop D's pale stubble,
+  on the reasoning that at twelve pixels geometry is gone and only TONE survives — a pale bald head
+  is a look somebody might choose, a red one is something done to them. The owner's call is whether
+  a red scalp on a night map is the right answer or whether the mechanic needs a different carrier
+  entirely (a marker over the head, a kill-feed-only tell, a bigger head). Do not read the code as
+  settled art. (lead)
+- 2026-09-08 — Drop E, harness: `haircut-shots.mjs` pins the SUBJECT in front of the camera, so its
+  "4m" / "8m" filenames are NOMINAL — the game's own `RemotePlayer.update` writes the remote's
+  position from interpolation on the same frame, and the rendered range drifts toward wherever the
+  server has them. The obvious fix, teleporting the camera to a true stand-off instead, was built,
+  measured and REVERTED: bots walk, so it got true ranges and lost the subject — 17 of 37 frames came
+  back with nobody in them. Holding a bot still needs a dev hook that does not exist. Until then the
+  set proves "a head, near and far", not "a head at exactly 8 m". (lead)
+- 2026-09-08 — Drop E: two harness faults cost most of this session and are worth writing down so the
+  next tool does not repeat them. (1) The client joins with `deferSpawn: true` and does not put you
+  in the world until ENTER MATCH is clicked (Drop D/I's connect → ready → deploy); without the click
+  `hud.alive` is false forever and every shutter reports a death that never happened. Drop A's
+  `weapon-shots.mjs` predates that gate, so copying its recipe is not enough. (2) The photographed
+  subject must be a TEAMMATE — an enemy bot shoots the camera between the pose and the shutter, every
+  time. (lead)
+
 ## Deferred (things noticed, deliberately not done)
+
+- **Drop E, the open item: make a shave read at 8 m.** Not done, and not for want of trying — see the
+  Decisions entry. The unexplored options, cheapest first: a bolder scalp colour or an outline; the
+  shave changing something LARGER than the head (the apron, a towel round the neck); a HUD tell on
+  the shaved player rather than on their model; or accepting that the shave is a kill-feed-and-
+  scoreboard mechanic that you read on the summary screen rather than across a street. The last is
+  not a defeat — the award and the razor column already work — but it is a design decision, not a
+  bug fix, so it is the owner's.
+- Drop E: art review round 2 found `bowl` ≈ `curtains` and `pompadour` ≈ `taper` at a glance, and
+  buzz/taper/pompadour identical in profile. Nine haircuts built from crown/sides/fringe boxes do not
+  give nine silhouettes; separating them needs either more shape vocabulary (partings, volume,
+  asymmetry) or colour, which is Drop C's problem solved for weapons and not yet for heads.
 
 - **Drop E: a player cannot see their own haircut.** There is no mirror, no third-person camera and
   no profile preview (PR #14 deleted `ui/Profile.tsx` and `ui/Armoury.tsx`), so the reward a player

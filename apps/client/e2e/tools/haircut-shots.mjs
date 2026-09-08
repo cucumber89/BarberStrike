@@ -10,6 +10,15 @@
  * haircut that only reads from 60 cm is not a mechanic, it is a texture.
  *
  *   fp_<id>_4m.png / fp_<id>_8m.png   the head at gameplay distance, through the camera
+ *
+ * THE DISTANCES ARE NOMINAL, NOT MEASURED. The subject is a live remote player pinned in front of
+ * the camera every frame by an `onBeforeRender` observable, and the game's own `RemotePlayer.update`
+ * writes `root.position` from interpolation on the same frame — so the rendered range drifts towards
+ * wherever the server has the subject standing. A version of this tool that teleported the CAMERA
+ * instead got true ranges and lost the subject entirely: bots walk, and 17 of 37 frames came back
+ * with nobody in them (art review round 3). Pinning at least guarantees a subject in every frame.
+ * Until a dev hook can hold a bot still, treat "4m"/"8m" as "near"/"far" and judge the fine question
+ * — does a shave read at gameplay range — on real hardware.
  *   tp_<id>_front.png / tp_<id>_side.png   the character close up, front and profile
  *
  * RESOLUTION. The acceptance asks whether a bad haircut reads at 1080p; these are shot at 1280x720,
