@@ -1467,6 +1467,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private pay(p: PlayerState, delta: number, reason: MoneyEvent["reason"]): void {
     if (delta === 0 || this.noShop) return; // drop D: no economy, the wallet stays at 0
+    // Drop D: a shaved chaser has no shop, so paying them is a "+$300" they can never spend and a
+    // wallet the next round would have to clear anyway.
+    if (MODES[this.mode].shop === "survivors" && p.shaved) return;
     p.money = Math.max(0, Math.min(ECONOMY.maxMoney, p.money + delta));
     this.clientOf(p.id)?.send(S2C.Money, { delta, reason, total: p.money } satisfies MoneyEvent);
   }

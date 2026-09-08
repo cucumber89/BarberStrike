@@ -807,4 +807,89 @@ test.describe("two clients", () => {
       await ca.close(); await cb.close();
     }
   });
+
+
+  /**
+   * Drop D: the conversion, in two real browsers — the rule the mode is built on and the one visual
+   * claim that cannot be checked from a unit test (a shaved head, on somebody else's screen).
+   *
+   * The chaser is whoever the room shaved; the test finds out rather than assuming, teleports them
+   * onto the other client and swings. What it asserts is what a player would see: the victim
+   * changes sides, is holding the clippers, has no money, and the HUD's round line counts one
+   * fewer unshaved head.
+   */
+  test("ostrzyzeni: a clippers kill converts the victim, and the shaved head shows on both screens", async ({ browser }) => {
+    test.setTimeout(300_000);
+    const room = `${ROOM}-inf`;
+    const ca = await browser.newContext(ctxOpts);
+    const cb = await browser.newContext(ctxOpts);
+    try {
+      for (const c of [ca, cb]) {
+        await c.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), LOW_SETTINGS);
+        await c.addInitScript(() => { localStorage.setItem("fb_mode", "ostrzyzeni"); localStorage.setItem("fb_bots", "0"); });
+      }
+      const a = await ca.newPage(), b = await cb.newPage();
+      await joinRoom(a, "GOLIBRODA", room);
+      await joinRoom(b, "KLIENT", room);
+      await fakeLock(a); await fakeLock(b);
+      await expect.poll(async () => (await hud(a)).mode, { timeout: 10_000 }).toBe("ostrzyzeni");
+      // The buy window opens for the survivors in Prep, and the round line names the round.
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 60_000 }).toBe("prep");
+      await expect(a.getByTestId("infection-line")).toContainText("RUNDA 1 / 5");
+      // Two players: one of them is the chaser, so one head is left to shave.
+      await expect(a.getByTestId("infection-line")).toContainText("1 NIEOSTRZYŻONYCH");
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 60_000 }).toBe("playing");
+
+      const sideOf = (p: Page, id: string) => p.evaluate((pid) => {
+        const st = (window.__fb.game as unknown as { conn: { state: { players: { get(id: string): { x: number; y: number; z: number; shaved: boolean; team: number; weapon: string; money: number; alive: boolean } } } } }).conn.state.players.get(pid);
+        return { x: st.x, y: st.y, z: st.z, shaved: !!st.shaved, team: st.team, weapon: st.weapon, money: st.money, alive: st.alive };
+      }, id);
+      const idA = (await hud(a)).myId, idB = (await hud(b)).myId;
+      // Whoever the room shaved does the hunting; the other one is the head.
+      const aShaved = (await sideOf(a, idA)).shaved;
+      const [hunter, prey] = aShaved ? [a, b] : [b, a];
+      const preyId = aShaved ? idB : idA;
+      expect((await sideOf(hunter, aShaved ? idA : idB)).weapon, "the chaser holds the clippers").toBe("clippers");
+      expect((await sideOf(hunter, aShaved ? idA : idB)).money, "…and no money").toBe(0);
+      expect((await sideOf(hunter, preyId)).shaved).toBe(false);
+
+      const teleport = (p: Page, x: number, y: number, z: number) =>
+        p.evaluate(([x, y, z]) => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x, y, z }), [x, y, z]);
+      let converted = false;
+      for (let attempt = 0; attempt < 10 && !converted; attempt++) {
+        const t = await sideOf(hunter, preyId);
+        if (!t.alive) break;
+        const ang = attempt * Math.PI / 4;
+        await teleport(hunter, t.x + Math.sin(ang) * 1.2, t.y, t.z + Math.cos(ang) * 1.2);
+        await hunter.waitForTimeout(350);
+        for (let swing = 0; swing < 10 && !converted; swing++) {
+          await lookAt(hunter, t.x, t.z, t.y + 1.1);
+          await hunter.mouse.down(); await waitForFrames(hunter, 2); await hunter.mouse.up(); await waitForFrames(hunter, 2);
+          converted = (await sideOf(hunter, preyId)).shaved;
+        }
+      }
+      expect(converted, "a clippers kill should shave the victim onto the chasers' side").toBe(true);
+
+      // What the victim is now, read from the OTHER client's replicated state: same side as the
+      // chaser, clippers in hand, nothing to spend.
+      const after = await sideOf(hunter, preyId);
+      expect(after.team).toBe(1);
+      expect(after.weapon).toBe("clippers");
+      expect(after.money).toBe(0);
+      await hunter.screenshot({ path: "e2e/out/d/ostrzyzeni/converted-hunter-view.png" });
+      await prey.screenshot({ path: "e2e/out/d/ostrzyzeni/converted-victim-view.png" });
+      // With only two players that conversion was the last head: the round is the shaved side's,
+      // and the break is followed by a fresh round with exactly one chaser again.
+      await expect.poll(async () => (await hud(a)).scoreB, { timeout: 15_000 }).toBe(1);
+      expect((await hud(a)).scoreA).toBe(0);
+      await expect.poll(async () => (await hud(a)).phase, { timeout: 20_000 }).toBe("prep");
+      await expect.poll(async () => {
+        const [x, y] = [await sideOf(a, idA), await sideOf(a, idB)];
+        return [x.shaved, y.shaved].filter(Boolean).length;
+      }, { timeout: 30_000, message: "a new round shaves exactly one player again" }).toBe(1);
+      await expect(a.getByTestId("infection-line")).toContainText("RUNDA 2 / 5");
+    } finally {
+      await ca.close(); await cb.close();
+    }
+  });
 });
