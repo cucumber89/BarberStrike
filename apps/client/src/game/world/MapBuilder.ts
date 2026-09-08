@@ -29,6 +29,14 @@ export interface MapInstance {
   lights: Light[];
   /** Registers a dynamic mesh (character, weapon) as a shadow caster. */
   addCaster(mesh: AbstractMesh): void;
+  /**
+   * Solids named in `opts.toggleable`, kept OUT of the per-material merge so a tactical plan can
+   * switch them off for a round. Merged geometry cannot be hidden a piece at a time, which is the
+   * whole reason they are built separately.
+   */
+  toggles: Map<string, Mesh[]>;
+  /** Show/hide one named solid. Unknown names are ignored — the plan table is the authority. */
+  setSolidVisible(name: string, visible: boolean): void;
   setShadowQuality(quality: "off" | "medium" | "high"): void;
   dispose(): void;
 }
@@ -43,6 +51,8 @@ export interface MapBuildOptions {
   propSources?: Map<string, Mesh>;
   shadows: boolean;
   shadowMapSize: number;
+  /** Solid names a tactical plan may remove; built standalone so they can be toggled. */
+  toggleable?: ReadonlySet<string>;
 }
 
 /**
@@ -84,8 +94,26 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
     byMat.set(key, entry);
   };
 
+  const toggles = new Map<string, Mesh[]>();
   for (const s of map.solids) {
     if (s.invisible) continue;
+    if (s.name && opts.toggleable?.has(s.name)) {
+      // Standalone, unmerged, and NOT a shadow caster: the moon shadow map is rendered once for a
+      // static world (see below), so a mesh that can vanish mid-match must not be baked into it —
+      // its shadow would stay on the ground after the wall it belongs to was taken away.
+      const b = s.box;
+      const m = MeshBuilder.CreateBox(s.name, { width: b.maxX - b.minX, height: b.maxY - b.minY, depth: b.maxZ - b.minZ }, scene);
+      m.position.set((b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, (b.minZ + b.maxZ) / 2);
+      applyWorldUVs(m, b.maxX - b.minX, b.maxY - b.minY, b.maxZ - b.minZ, b.minX, b.minY, b.minZ);
+      m.material = materials.get(s.mat);
+      m.isPickable = false;
+      m.receiveShadows = true;
+      m.freezeWorldMatrix();
+      const list = toggles.get(s.name) ?? [];
+      list.push(m);
+      toggles.set(s.name, list);
+      continue;
+    }
     if (s.look) {
       // Drop 6: a glTF from the manifest (instanced, async) beats the procedural dressing.
       if (opts.models?.has(s.look)) { void opts.models.place(s); continue; }
@@ -226,10 +254,14 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
 
   return {
     root, shadowGenerators, materials, lights, setShadowQuality,
+    toggles,
+    setSolidVisible(name, visible) { for (const m of toggles.get(name) ?? []) m.setEnabled(visible); },
     // The moon shadow map is rendered once (static map only); dynamic casters are accepted for API
     // stability but intentionally not added — see the refreshRate note above.
     addCaster(_mesh) { /* static shadow map */ },
     dispose() {
+      for (const list of toggles.values()) for (const m of list) m.dispose();
+      toggles.clear();
       for (const g of shadowGenerators) g.dispose();
       for (const l of lights) l.dispose();
       for (const m of root) m.dispose();

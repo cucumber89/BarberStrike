@@ -215,10 +215,19 @@ Nick + password or Discord OAuth, server-side profile (skins, haircuts, XP), wee
 | 2026-09-07 | A | claude/new-session-o0hcng (harness-assigned; stands in for `drop/a-weapons-fit`) | Built `weapon-parts.mjs` / `pnpm check:weapons` (pure `weaponParts.ts` + `weaponParts.check.test.ts` on the real import pipeline, CI step). First run 2/11. Fixed what it found: support hand hovering 13–25 mm under every long gun and sitting at the muzzle on the MDR/MPA (measured `WeaponModel.support`); derived ejection port in mid-air on MK14/SRSA1/RPG; RPG built backwards (sights now orient the model); LMG grip/stock/sight/belt box, shotgun stock, clippers anchors floating (spec numbers). Now 11/11. `docs/WEAPON_FIT.md` started. | apps/client/e2e/out/weapons/parts.md (regenerate with `pnpm check:weapons`), docs/WEAPON_FIT.md | typecheck ✓ test ✓ (433) build ✓ check:weapons ✓ e2e — (not run: needs servers) | in progress |
 | 2026-09-07 | A | claude/new-session-o0hcng | Slice 2, in a browser: `vm-fit.mjs` now buys all 11 weapons, projects each gun's new `aim` node in ADS (mean over one breath) and counts near-plane-cut vertices; `hand-pose.mjs` measures every weapon on the procedural `gunHand`; `weapon-shots.mjs` shoots idle/ADS/reload/inspect + third-person front and profile. Found and fixed: the shotgun's ADS put its receiver around the eye and its pump through the near plane (ADS distance rule, aim point ≥ 15 cm ahead). Art review round 1 (54 images): 2 harness faults (empty third-person frames, reloads not started — both fixed), plus hands-as-blocks, DMR lens disc, identical smg/smg2 and dmr/sniper silhouettes → Deferred. Round 2 review pending at the time of this row. Found: the running game never uses the imported glTF guns/characters (`Game.ts:164`) → proposal in Decisions. | docs/WEAPON_FIT.md (vm-fit, hand-pose tables); apps/client/e2e/out/weapons/{vm-fit.md,hand-pose.json,<id>/*.png} (regenerate) | typecheck ✓ test ✓ (435) build ✓ check:weapons ✓ e2e — | in progress |
 | 2026-09-07 | A | claude/new-session-o0hcng | Slice 3 (owner: "improve the procedural guns"): first-person hands rebuilt as a pure spec (palm, fingers, thumb, forearm jointed at the wrist) judged by the same attachment rule as the guns (`handSpec.test.ts`); smg2 and dmr given their own silhouettes with aim/muzzle/length untouched; `check:weapons` now judges every PROCEDURAL spec (parts[0] = receiver, magazine seats in its well) — which exposed five specs that had hidden behind glTFs (pistol, smg, rifle, sniper, launcher: detached stocks, loose parts, muzzles past the barrel), all re-seated. Re-measured: 19/19 parts, ADS aim worst 0.09 px mean, 0 near-plane cuts, bores ≤ 4.6°. Code review: nothing breaks (one judgment note on the seating rule, accepted). Art review round 3: hands and silhouettes pass; rejects left are Drop B / animation / character-pose items, all Deferred. | docs/WEAPON_FIT.md; apps/client/e2e/out/weapons/ (regenerate) | typecheck ✓ test ✓ (454) build ✓ check:weapons ✓ (19/19) e2e — | in progress |
+| 2026-09-07 | A | claude/new-session-o0hcng | Slice 4: third-person hold, reload staging, launcher sight. `characterHold.ts` computes the held gun's box in torso space and its test asserts no weapon intersects the vest — two hand-tuned passes had each freed one end of the gun and buried the other, so the pose was solved by search instead (x 0.335, outboard of the shoulder; the bore stays 3.5–3.9° of facing, so angling the gun across the body was ruled out). `reloadFrame` lifts and cants every timeline so the magazine stays in frame (t-ranges untouched — the audio cues on them). Launcher ladder sight rebuilt as a peep frame. Harness: real `reloadMs` per weapon, an open-ground heading from the game's own CollisionWorld, two-breath aim averaging, output paths anchored to the tool. Art review round 5: reloads and sights pass; the first-person support arm still crosses the fore-end (Deferred, the last geometry item). | docs/WEAPON_FIT.md; apps/client/e2e/out/weapons/ | typecheck ✓ test ✓ (474) build ✓ check:weapons ✓ (19/19) e2e — | review |
 | 2026-09-07 | B | drop/b-weapon-feel | Slice 1, docs only: `docs/WEAPON_MATRIX.md` written from three recon passes (client handling `LocalPlayer` / `WeaponController` / `Viewmodel`, audio voice table `sfx.ts:31-44`, VFX `Effects.ts` / `Tracers.ts` / `view/index.ts` / `Hud.tsx`). Found: of the six axes only recoil, ADS and the audio voice are per-weapon today; sprint-out (150 ms), sway, flash, tracer and casing are one global value for all eleven, shake is a three-way ternary, and the ADS sensitivity ignores `adsZoom`. The sniper already hides the viewmodel and has breath hold; it does not scale sensitivity or un-scope on sprint. Matrix proposes bold per-row targets, six named rules (R1 zoom-sens, B1 bipod, C1 pellet ring, S1 bolt kicks out of scope, S2 sprint un-scopes, M1 clippers hum) and four decisions D-B1–D-B4 for the owner. No code touched. STOPPED for sign-off as the plan requires. | docs/WEAPON_MATRIX.md | typecheck — test — build — (no code changed) | blocked: owner sign-off on WEAPON_MATRIX.md |
 | 2026-09-08 | B | drop/b-weapon-feel (recut from main; PR #13 merged the matrix) | Slice 2, the drop implemented. Owner signed the matrix ("dobra dalej kończmy to"), all four decisions as proposed. `weaponFeel.ts` = the matrix in numbers, client-only (D-B1); `weaponFeel.test.ts` judges it, including the closest-pair claim. Signature metric compares axes in OCTAVES normalised by the roster's spread — in raw units 420 vs 1000 rpm is a tenfold lie about the same difference as 45 vs 107; closest pair shotgun/launcher 0.98, median 4.0, threshold frozen at 0.9. Wired: per-weapon sprint-out, sway, raise, flash, shake, tracer width and count, casings (hand-worked guns hold the case until the action), belt link, mechanical action audio (hammer/pump/bolt), R1 zoom-scaled sensitivity, S1 bolt out of the scope, B1 bipod, D-B2 the M-1 scoped with a ring and the minimap it keeps, C1 the S12's true cone as a ring. `weapon-signature.mjs` measures all 11 in a real client. FOUND, predating this drop: `InputState` cancelled the aim on any Shift under a held aim, so the SR-50's breath hold was unreachable while the HUD advertised it — fixed at the source, 3 tests. Review (separate agent) found 6 real bugs: bolt kept the NEXT weapon out of ADS, bipod deployed mid-air and carried across weapons, a case owed by a put-away gun dropped out of the next one, brass left 560 ms after a 125 ms bolt, S2 duplicated in two places disagreeing about which keys count. All fixed. | docs/WEAPON_MATRIX.md ("As built"); apps/client/e2e/out/signature/{summary.md,*.json}; apps/client/e2e/out/weapons/dropb/*.png | typecheck ✓ test ✓ (451) build ✓ audio-selftest ✓ signature tool ✓ (11/11) e2e — (not run) | review |
 
+| 2026-09-08 | D | drop/d-modes | Whole drop in one session. **Join by link**: the invite link is now `<origin>/r/<room>?mode=…`; the client reads the room off the path (`roomFromPath`), the lobby a link opens asks for a nickname and nothing else (CHANGE opens the full one), the SPA fallback moved into `hosting.ts` as `spaFallback` so it is testable, and `hostcheck.mjs` proves the path from outside (11/11 checks). **Gun Game**: the 11-rung ladder is data in `shared/modes.ts`; the rung replicates as `PlayerState.score` (no new field), a rung-weapon kill re-arms the killer on the spot, a clippers kill sets the victim back one, only the last rung ends the match, no economy, 3 s respawn, FFA spawn pool. **Ostrzyżeni**: rounds on the Prep/Playing machine, sides are the teams (survivors 0 / shaved 1), one random chaser per round with clippers + the energy perk + a bare head (`PlayerState.shaved`, the one field the plan names), a clippers kill converts, survivors who are not converted stay down until the round ends, five rounds, the result names the top score. **Bots** play both (`BotSenses.mode`/`shaved`): Gun Game needs no branch, a chaser closes and swings, a survivor gives ground. Reviewer (separate agent) found six things, all fixed — chiefly the profile recording the OPPOSITE of the result screen in Ostrzyżeni. | apps/client/e2e/out/d/{hostcheck.md,gungame/*.png,ostrzyzeni/*.png}; docs/PLAYTEST_TEMPLATE.md; regenerate with `hostcheck.mjs`, `shaved-shots.mjs`, `infection-shots.mjs` | typecheck ✓ test ✓ (510: shared 153, client 217, server 140) build ✓ check:weapons ✓ (19/19) e2e ✓ (18/18 against a freshly started server; the pre-existing smoke test failed twice against a server process that had been up ~20 min / 64 k ticks, and passes alone — see Deferred) | review |
+
+| 2026-09-08 | D | drop/d-modes (PR #16) | Merged `main` (The Boys, PR #14) into the drop and ported Drop D onto it. Fifteen files conflicted: main had added a mode and deleted the invite module, HowToPlay, Armoury, Profile, Online, the ui sfx, the defuse kit, the bomb blast, slide and the carry pack. Kept both mode tables in one (`MODES` describes 7, the picker offers 6 — FFA stays playable but unoffered); took main's side wherever it had deleted something Drop D merely touched; **restored join-by-link on the owner's word** (the plan names it as Drop D's first deliverable and the deletion was refactor collateral), wired into main's rewritten lobby, which now also MAKES the link (an INVITE box — joining by a link nobody can generate is not a feature). Its e2e moved from the deleted `menu.spec.ts` to `startup.spec.ts`, plus a six-mode picker test. | apps/client/e2e/out/d/** (regenerate per `e2e/tools/README-drop-d.md`) | typecheck ✓ test ✓ (485: shared 137, client 206, server 142) build ✓ e2e 14/15 — the one failure (`drop 2: buy menu…`, asserting a WEAPONS-tab card after switching to the GRENADES tab) reproduces byte-identically on unmodified `main` in a clean worktree, so it is main's, not the merge's | review |
+
 Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
+| 2026-09-08 | I (new) | claude/game-feedback-improvements-6mqx41 | **Owner's player-feedback brief, all nine points.** Controls: `browserKeys.ts` decides per keydown+modifiers whether the game owns a key (Ctrl+D bookmarking mid-round was preventDefault on the *Ctrl* press, not the chord); text fields keep their keystrokes (typing a nickname with "b" opened the shop); `buttons()` gated on pointer lock (the pause menu did not pause); `immersion.ts` = fullscreen + Keyboard Lock + pointer from the Play click, with a stated retry. Floor at A/B diagnosed as THREE causes: 5 coplanar top-face pairs (132 m² + 144 m² on the slabs carrying A and B — yard paving now laid AROUND the buildings), the site plate being an 80 m² double-sided lit alpha quad sampling one texture three times and never frozen, and no collision broadphase at all (uniform 4 m XZ grid + DDA: overlaps 43→6.5 ms/60k, hitscan 82→40 ms/40k). Shop rebuilt as three aisles in a fixed head/body/foot frame — measured PASS at 7 viewports incl. browser zoom, 21 items, nothing cut, nothing scrolled. Team switching built end to end (shared rules, server decides, wallet/gear survive, deferred to next round in bomb). WebGL2 is the default; automatic quality = device probe + 1 s median measurement + a director with long hysteresis that stops climbing after two reversals. Marcovia kit (colours only, geometry identical part-for-part by test). Living arena: 3 removal-only tactical plans voted by the attackers in the buy window, applied at the freeze edge, reverted next round. First-run hints. | apps/client/e2e/out/ui/{shop-fit.md,shop-*.png,plan-vote.png}; apps/client/e2e/out/kits/*.png; `pnpm test` prints the broadphase numbers; regenerate fit with `node apps/client/e2e/tools/ui-fit.mjs --url <dev>` | typecheck ✓ test ✓ (565: shared 184, client 256, server 125) build ✓ check:weapons ✓ (19/19) e2e — (not run: needs two live servers + a browser pair) | review |
+| 2026-09-08 | I | claude/game-feedback-improvements-6mqx41 (PR #15) | Merged `main` (#14 "The Boys stable UI") into the drop and drove PR #15 to green. #14 is a large strip-down (challenges, mastery, Armoury, HowToPlay, menu cover, invite link, defuse kit, gear art all deleted; shop replaced with a tabbed one carrying five Boys roles; App rebuilt as connect → ready → deploy). Ten conflicts. Resolutions: bomb-site GEOMETRY from #14 (its 4.5 m² label beats the old 80 m² plate at the very problem this drop was fixing) with this drop's freezing/`disableLighting` on top; shop LAYOUT from this drop (the brief is "one screen, no scrolling") with #14's roles, per-role gating, free starter and buy countdown folded in and the role picker as a strip rather than a fourth tab; App flow from #14 outright — its DEPLOY click is a better gesture for fullscreen than before-`connect`. Key rebinding RESTORED against #14's deletion, because this brief names it; crosshair / hudScale / ADS-sensitivity were NOT restored (#14's call, not this brief's). floorAudit updated for #14's circular sites. Then CI: `BotBrain.test.ts` timed out at 5 s — proved not this drop's (no diff under bots/nav; 1786 ms on main vs 1764 ms here) but a 14-second simulation against vitest's default timeout on a runner measured 3.9× slower; raised to 30 s for that block, nothing skipped or weakened, option verified by setting it to 1 ms first. | apps/client/e2e/out/ui/shop-fit.md (re-measured post-merge: 7 viewports × TDM 21 items AND × Boys role strip, all PASS) | typecheck ✓ test ✓ (535: shared 168, client 240, server 127) build ✓ check:weapons ✓ 19/19 CI ✓ (PR #15 green, mergeable clean) e2e — | review |
+
+Status vocabulary reminder: these rows are `review` because the full e2e path was not run here.
 
 ## Decisions log (append-only)
 
@@ -264,7 +273,92 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
   D-B3 while scoped Shift holds breath when still and un-scopes + sprints when moving; D-B4 the
   signature threshold (0.25 normalised) is frozen after the first real run. (lead)
 
+- 2026-09-08 — **New drop I, "player-facing"**, opened for the owner's feedback brief. It is not
+  drops A–H: those are weapons, skins, modes, the shave, roles, a map and accounts, and none of
+  them covers controls, the shop, team switching, the renderer or a new mechanic. Recorded as its
+  own drop rather than smuggled into B. (lead)
+- 2026-09-08 — Drop I: WebGL2 is the DEFAULT renderer and WebGPU became the opt-in, reversing the
+  previous "auto". The owner asked for WebGL2 from launch with nothing to switch on, and the
+  codebase already carried a retry for WebGPU initialising and then failing inside scene setup —
+  so the path that always works is the one players get. (owner's brief; lead)
+- 2026-09-08 — Drop I: the collision world is now PER ROOM (the walk grid stays shared). A
+  tactical plan takes a wall out of one room's world, and a shared world would take it out of
+  every other match on the process. Measured 0.08 ms and ~376 pointers per room against the
+  179 ms walk grid. `sharedWorld.test.ts` pins both halves. (lead)
+- 2026-09-08 — Drop I: tactical plans are REMOVAL-ONLY. Adding geometry can close a player inside
+  it and makes the bots' pre-baked walk grid actively wrong rather than merely incomplete;
+  removing leaves the grid a subset of what is walkable. This is the constraint that makes the
+  mechanic safe without touching server authority or re-baking nav. (lead)
+- 2026-09-08 — Drop I: the Marcovia colours (white / yellow / green) come from three independent
+  search results that agree — marki.pl, marki.net.pl and the club's own site — because the network
+  proxy in this environment refuses all three hosts, so none could be opened and the crest was
+  never seen. The kit is therefore INSPIRED BY the colours and is deliberately not a reproduction
+  of the badge. Using the real crest needs the artwork and a licence decision: owner's call. (lead)
+- 2026-09-08 — Drop D: the invite link changed shape, from `?room=&mode=` on the front page to
+  `/r/<room>?mode=`. A path survives being pasted into a chat app where a query string reads like a
+  tracking link and gets trimmed; the old query is still parsed, so links already shared keep
+  working. The mode stays in the query because the matchmaker needs it (`filterBy(["room","mode"])`)
+  and it is not part of the room's identity. (lead)
+- 2026-09-08 — Drop D: **no new schema field beyond the one the plan names.** Gun Game's rung rides
+  on `PlayerState.score` (in that mode the score IS the rung, which is also what the scoreboard
+  should show), and Ostrzyżeni's round counter reuses `bomb.round`, the only replicated round
+  number. `shaved` is the single addition, and it replicates like a skin id would — written on
+  conversion and at round start, never per tick. (lead, L6)
+- 2026-09-08 — Drop D: the clippers advance a Gun Game killer only from the clippers rung. A free
+  rung on top of the victim's setback would make the clippers strictly better than every rung
+  weapon and nobody would climb the ladder; the reward for the humiliation is the setback. (lead)
+- 2026-09-08 — Drop D: Ostrzyżeni's sides are the existing teams (survivors 0, shaved 1) rather than
+  a new concept, so friendly fire, spawn pools, the bot enemy filter and the HUD's team bar work
+  untouched. The consequence is that everyone changes side during a match, so the result screen
+  names a player (`ModeDef.winner`), not a team. (lead)
+- 2026-09-08 — **OWNER DECISION WANTED.** As the plan specifies it (clippers + speed perk, nothing
+  else) a lone Ostrzyżony essentially cannot convert anyone against competent armed opponents.
+  MEASURED, in the running game with four bots: the chaser navigates to its prey correctly
+  (58 m → 0.9 m repeatedly) and converts within ~1.8 s once it is inside reach (room test), but in
+  three separate 60 s live rounds it converted NOBODY — it is shot on the approach. Options, none
+  of which this session took because they move damage/TTK or add a rule the plan does not name:
+  (a) leave it and let the playtest judge it with humans, who miss more than bots do; (b) give the
+  shaved side more health or damage resistance; (c) start each round with two chasers in a full
+  room; (d) shorten the round so the survivors' win is less of a default. (lead → owner)
+
 ## Deferred (things noticed, deliberately not done)
+
+- Drop D: a TDM player can spawn on an ARENA spawn point, because `pickSpawn` is called with the
+  whole pool for TDM (`this.mode === "ffa" || this.mode === "tdm"` on main, unchanged in meaning
+  here). `TdmRoom.test.ts`'s join test asserts the spawn belongs to the player's team, so it fails
+  roughly one run in five. Pre-existing, not this drop's — but it is a real flake in the suite:
+  either the pool or the assertion is wrong, and somebody should decide which.
+- **`main` is red in e2e, twice over**, both times a test left behind by the shop it tests:
+  `drop 2: buy menu…` asserts the DMR card is disabled after switching to the GRENADES tab (the
+  tabbed shop from PR #14 renders no weapon cards there), and `clean entry, deferred spawn…` clicks
+  a BUTTON named GRENADES that drop I's one-screen shop replaced with an aisle label — a `span`,
+  not a button (`Shop.tsx:216`), so it also never finds CLASSES, now a role strip. MEASURED on
+  unmodified `main` in a clean worktree both times, not only on this branch. Each is a couple of
+  lines in the test; neither is Drop D's to change.
+- PR #14 (The Boys) landed without a ledger row and deleted a large part of the 2.1 UI — Armoury,
+  Profile, HowToPlay, Online, the invite module, mastery, challenges, the defuse kit, the bomb
+  blast, slide. Some of that is plainly deliberate (the class mode replaces FFA); some looks like
+  collateral (join-by-link, which the plan assigns to Drop D, was restored here on the owner's
+  word). Worth one pass by the owner to say which deletions were meant, before Drop E builds on
+  the parts that are left.
+- Drop D: the smoke e2e ("smoke obscures the view from inside") failed twice in a row against a
+  game server process that had been up about twenty minutes and 64 k ticks, and passed both alone
+  and in a full 18/18 run against a freshly started one. Nothing in this drop touches grenades,
+  smoke or the VFX module, so it looks like something in a long-lived process degrading — worth
+  half an hour with `/health.tick` and a soak before a deploy, because a hosted server IS a
+  long-lived process.
+- Drop D: survivors can re-buy at a `$` station in the middle of an Ostrzyżeni round, not only in
+  the buy window at its start. That is the economy's existing station rule applied to a new mode
+  rather than anything new; tighten it if a playtest says the shop is being used as a bolt-hole.
+- Drop D: the Ostrzyżony is shaved IN PLACE at the start of a round, so they begin standing among
+  the people they are about to chase. It reads as the joke the mode is (one of you is the barber),
+  but if it plays badly, spawning them apart is a small change in `beginInfectionRound`.
+- Drop D: a room where every player but one disconnects mid-Ostrzyżeni-round burns its remaining
+  rounds as prep + break with nobody to play them; the match ends normally. Not worth a rule until
+  somebody sees it happen.
+- Drop D / E: `Character.ts` now has a `bareHead` mesh and a merged, toggled `cap`. Drop E's shave
+  should set the same `shaved` flag rather than adding a second head variant, and a real haircut
+  set will want the cap and hair separated again.
 
 - Server perf pass (shared nav grid, bot LOS cache, compression, snapshot trimming) — separate
   brief `OPTIMIZATION_PROMPT.md`; runs on its own branch, does not block any drop above.
@@ -284,10 +378,15 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
   `weapons` block of `public/models/manifest.json`, the eight firearm .glb files, and the "gltf"
   branch of `weaponParts.check.test.ts` — in its own commit, after the owner confirms the
   characters' import path goes the same way (it is disabled in `Game.ts` too).
-- Drop A: art review round 2 asks for a real inspect/reload READ on the procedural guns: the
-  magazine drop happens below the frame at the default hip pose, the revolver's cylinder does not
-  swing out, the sniper's bolt does not move in the mid-reload frame. Animation choreography, not
-  fit; judge on a real GPU with the camera pitched down before changing timelines.
+- **Drop A, the one geometry item left**: in first person the support forearm crosses THROUGH the
+  fore-end on every long gun instead of the hand gripping it from below, so no hand reads on the
+  handguard (art review rounds 3–5, `e2e/out/weapons/*/fp_idle.png`). `handSpec.ts` models a palm,
+  fingers, thumb and forearm and `supportHandHome` places the hand against the fore-end's
+  underside; what is wrong is the ARM's approach angle — the hand pivot's rotation sends the
+  forearm through the gun body. Needs a pose loop against the screenshots, like the third-person
+  hold got: `characterHold.ts` is the pattern (compute it, assert it, then search).
+- Drop A: `pistol/tp_idle` came back empty in round 5 while the other 21 third-person frames were
+  fine — the alive-check runs before the shutter, and a bot kill in between still slips past.
 - Drop A: the viewmodel hands are now a jointed palm/fingers/thumb/forearm (`handSpec.ts`); at
   720p the palm still reads as a mitten. Fingers that wrap per grip shape are a later polish.
 - Drop A / E: the third-person idle pose holds every weapon with both arms straight out at the
@@ -322,6 +421,46 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
   among the top three. Locally 1 in 10 runs fails; CI passed and failed the same commit. Either
   the test accepts `[...spawns, ...arenaSpawns]` for TDM, or TDM goes back to `!this.teams` —
   the owner decides which is the intended rule. Seeding the harness PRNG would only hide it.
+  **Drop D, 2026-09-08:** it went red on PR #16's CI, so the TEST now asserts the pool the room
+  actually draws from (a spawn off the grid is still caught). That is a test-only change and does
+  NOT answer the question: if the owner's answer is that TDM should use its own team's spawns, the
+  room drops `|| this.mode === "tdm"` and the assertion goes back to `s.team === p.team`.
 - Drop B: the ADS blend is a framerate-dependent lerp (`LocalPlayer.ts:243`), so `adsMs` is not
   the measured 0.1 → 0.9 time; `weapon-signature.mjs` measures the real time and the matrix quotes
   `adsMs` as intent. Making the blend exact is a one-line change to do with the tool in hand.
+
+- Drop I: **leave-and-rejoin still resets the wallet** (`TdmRoom.ts` onJoin calls `writeWallet(p,
+  freshWallet())`). Team SWITCHING can no longer be used for it — that is tested — but the rejoin
+  hole is older and closing it needs a stable player identity (nick+token, or the accounts of drop
+  H). Not guessed at here.
+- Drop I: a report that a 0.5 m crate at site B triggers a pathological step-up path did NOT
+  reproduce: measured 3.0 `overlaps()` calls per tick at every obstacle height from 0.35 m to
+  1.1 m, the same as walking free. No map geometry was changed on that basis. If site B still
+  hitches after this drop, that is the next thing to measure on a real GPU.
+- Drop I: only the ATTACKING team votes on a tactical plan. Sides swap at halftime so it evens
+  out over a match, but a defender never gets the choice within a half. Worth a playtest verdict
+  before adding a second, defence-side plan slot.
+- Drop I: plans cannot ADD geometry (see the locked decision), so the brief's "raise cover"
+  example is not implemented — the three plans open a route, open a crossing and deny a vantage
+  point. Adding cover needs the bots' walk grid rebuilt per plan variant, which is a real piece of
+  work and belongs in its own slice.
+- Drop I: the e2e suite was NOT run (it needs two live servers and a browser pair). Everything
+  claimed here comes from unit tests, the headless fit/kit tools, and screenshots. The full path
+  (launch → fullscreen → team → buy → round → switch → next round) has not been walked end to end
+  on a real GPU by a human.
+- Drop I: `ui-fit.mjs` and `team-kit.mjs` need a dev server running and use the container's
+  preinstalled Chromium via `PW_CHROMIUM` because the repo's pinned Playwright wants a browser
+  build that is not installed here. On a machine with `npx playwright install` done, they work
+  unchanged.
+- Drop I: the shop's smallest text is 9 px (the `×2` / `WORN` state tags). Legible at 100 %, tight
+  at 125 % browser zoom. Worth raising to 10 px if a playtester mentions it.
+
+- Drop I / #14 collision: main's #14 deleted the key-rebinding system (BINDABLE_ACTIONS,
+  resolveBindings, conflicts, keyLabel, RESERVED_CODES, the controls tab). This drop restored it
+  because the owner's brief names rebinding, conflict detection and restore-to-defaults. If that
+  deletion was deliberate, the owner should say so and it comes out again. NOT restored, and
+  staying out: the crosshair settings, hudScale, kill-feed toggle, money toasts and ADS
+  sensitivity — #14's call, and outside this brief.
+- Drop I: `BotBrain.test.ts`'s "bot movement" block now runs with a 30 s timeout because its
+  simulations are 14–22 s of ticks against vitest's 5 s default. The real fix, if these ever get
+  slower, is to shorten the simulated span rather than raise the number again.

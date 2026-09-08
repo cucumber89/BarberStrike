@@ -139,9 +139,11 @@ from today; plain values are today's numbers kept on purpose.
 
 ## Sign-off
 
-Owner: **signed, 2026-09-08.** All four decisions taken as proposed (D-B1 client-only table, D-B2
-the M-1 becomes scoped with a ring, D-B3 Shift = breath when still / sprint when moving, D-B4 the
-threshold frozen from the first real run). R1 applies to every weapon, not only scoped ones.
+Owner: _Aleksander_Ogorek_  Date: 8.09.2026  "signed" / changes requested: ___yes_
+
+All four decisions taken as proposed (D-B1 client-only table, D-B2 the M-1 becomes
+scoped with a ring, D-B3 Shift = breath when still / sprint when moving, D-B4 the threshold frozen
+from the first real run). R1 applies to every weapon, not only scoped ones.
 
 ## As built
 

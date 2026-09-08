@@ -14,7 +14,11 @@
  */
 import { chromium } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
-const OUT = process.env.OUT ?? "e2e/out/weapons";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+// Relative to THIS tool, not to the shell's cwd: run from the repo root and a bare
+// "e2e/out" lands outside the ignored directory and shows up as untracked files.
+const OUT = process.env.OUT ? resolve(process.env.OUT) : resolve(dirname(fileURLToPath(import.meta.url)), "../out/weapons");
 const W = 960, H = 540;
 const SET = JSON.stringify({ graphics: { preset: "medium", renderer: "webgl2", renderScale: 1, shadows: "medium", postProcessing: false, effects: 0.7, antialiasing: false, importedModels: true } });
 const b = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || "/opt/pw-browsers/chromium", args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
@@ -127,10 +131,12 @@ for (const id of WEAPONS) {
   await frames(10);
   const adsR = await measure();
   // The viewmodel breathes (±2.5 mm at 1.4 rad/s, halved in ADS), which alone is ±1.3 px at this
-  // viewport. So the alignment claim is the MEAN over one breath (4.5 s); the peak is reported too.
+  // viewport. So the alignment claim is the MEAN over two breaths (9 s); the peak is reported too.
+  // Two, not one: under CPU contention SwiftShader drops to 2–4 fps, and a single period sampled
+  // 15 times reads 0.5–0.9 px of pure breath where an idle run reads 0.1.
   const samples = [];
   const t0 = Date.now();
-  while (Date.now() - t0 < 4600) { await frames(1); const m = await measure(); if (m?.aimPx) samples.push(m.aimPx); }
+  while (Date.now() - t0 < 9200) { await frames(1); const m = await measure(); if (m?.aimPx) samples.push(m.aimPx); }
   if (samples.length) {
     const mean = [samples.reduce((a, s) => a + s[0], 0) / samples.length, samples.reduce((a, s) => a + s[1], 0) / samples.length].map((v) => +v.toFixed(2));
     const peak = +Math.max(...samples.map((s) => Math.hypot(s[0], s[1]))).toFixed(2);
@@ -155,7 +161,7 @@ for (const r of out) {
 const worst = Math.max(...out.filter((r) => r.ads?.aimPxMean).map((r) => Math.hypot(...r.ads.aimPxMean)));
 const peak = Math.max(...out.filter((r) => r.ads?.aimPxPeak).map((r) => r.ads.aimPxPeak));
 const cut = out.filter((r) => !r.error && (r.hip.nearCut > 0 || r.ads?.nearCut > 0)).map((r) => `${r.weapon}[hip ${r.hip.nearCut} ads ${r.ads?.nearCut ?? 0}]`);
-const summary = `vm-fit: ${out.filter((r) => !r.error).length}/${out.length} measured; worst mean ADS aim offset ${Number.isFinite(worst) ? worst.toFixed(2) : "?"} px over one breath (acceptance ±1 px), worst instantaneous ${Number.isFinite(peak) ? peak.toFixed(2) : "?"} px; near-plane cuts: ${cut.length ? cut.join(" ") : "none"}`;
+const summary = `vm-fit: ${out.filter((r) => !r.error).length}/${out.length} measured; worst mean ADS aim offset ${Number.isFinite(worst) ? worst.toFixed(2) : "?"} px over two breaths (acceptance ±1 px), worst instantaneous ${Number.isFinite(peak) ? peak.toFixed(2) : "?"} px; near-plane cuts: ${cut.length ? cut.join(" ") : "none"}`;
 writeFileSync(`${OUT}/vm-fit.md`, [`# vm-fit — ${new Date().toISOString()}`, "", summary, "", `Viewport ${W}×${H}, camera space: +x right, +y up, +z forward, metres.`, "", ...rows].join("\n"));
 console.log(summary);
 for (const r of rows) console.log(r);

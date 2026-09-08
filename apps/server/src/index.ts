@@ -1,12 +1,11 @@
 import http from "node:http";
-import path from "node:path";
 import express from "express";
 import cors from "cors";
 import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { GAME_VERSION, MAX_PLAYERS } from "@frankibarber/shared";
 import { TdmRoom } from "./rooms/TdmRoom";
-import { cacheControlFor, clientDir, hostBanner, serveClient } from "./hosting";
+import { clientDir, hostBanner, serveClient, spaFallback } from "./hosting";
 import { tickStats } from "./stats";
 
 const PORT = Number(process.env.PORT ?? 2567);
@@ -50,10 +49,7 @@ const CLIENT_DIR = clientDir();
 if (CLIENT_DIR) {
   // Precompressed assets and one Cache-Control per response (performance pass, task 3): see hosting.ts.
   app.use(serveClient(CLIENT_DIR));
-  app.get(/^\/(?!health$|rooms$).*/, (_req, res) => {
-    res.setHeader("Cache-Control", cacheControlFor("/index.html"));
-    res.sendFile(path.join(CLIENT_DIR, "index.html"));
-  });
+  app.use(spaFallback(CLIENT_DIR)); // `/r/<room>` and friends land on the game (Drop D, join by link)
 }
 
 const httpServer = http.createServer(app);

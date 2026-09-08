@@ -17,6 +17,16 @@ import {
 import { BotBrain, type BotSenses } from "./BotBrain";
 
 /**
+ * These are closed-loop simulations: hundreds of ticks through the real mover on the real map,
+ * with real A* searches over the real walk grid. MEASURED on the development box: the longest is
+ * 1.4–2.0 s, comfortably inside vitest's 5 s default — but a shared CI runner is several times
+ * slower, and `keeps its destination…` timed out there at 5 s while passing here in 1.36 s. The
+ * budget is what was wrong, not the test: it is raised rather than the simulation shortened,
+ * because the number of ticks IS the thing under test.
+ */
+vi.setConfig({ testTimeout: 30_000 });
+
+/**
  * Drop 6d: how a bot MOVES, driven through the real mover on the real map.
  *
  * These are closed-loop: the brain's buttons go into `simulateBody` and the resulting position
@@ -86,6 +96,126 @@ describe("weapon-aware combat", () => {
   });
 });
 
+describe("Drop D: the two Ostrzyżeni roles", () => {
+  /** A chaser: the clippers in hand, on the shaved side, with a survivor in view. */
+  const hunterSenses = (enemyZ: number): BotSenses => {
+    const s = sensesFor(1000, createBody(0, 0, 0), [], [{ id: "prey", team: 0, x: 0, y: 0, z: enemyZ, crouching: false }]);
+    s.me.weapon = "clippers"; s.me.team = 1; s.mode = "ostrzyzeni"; s.shaved = true;
+    return s;
+  };
+
+  it("a chaser closes on a survivor it can see, at every distance, and never backs off", () => {
+    for (const z of [30, 12, 4, 1.5, 0.8]) {
+      const d = new BotBrain("normal", walk, () => 0.5).think(hunterSenses(z));
+      expect(d.input.buttons & Btn.Forward).toBe(Btn.Forward);
+      expect(d.input.buttons & Btn.Back).toBe(0);
+    }
+  });
+
+  it("a chaser sprints while it is out of reach and stops sprinting once it is on top of them", () => {
+    expect(new BotBrain("normal", walk, () => 0.5).think(hunterSenses(20)).input.buttons & Btn.Sprint).toBe(Btn.Sprint);
+    expect(new BotBrain("normal", walk, () => 0.5).think(hunterSenses(1.2)).input.buttons & Btn.Sprint).toBe(0);
+  });
+
+  it("a chaser swings once it is within the clippers' reach, and not before", () => {
+    // Far: turned onto them, closing, but no swing. Close: the swing lands.
+    const far = hunterSenses(9);
+    const brainFar = new BotBrain("normal", walk, () => 0.5);
+    let firedFar = false;
+    for (let t = 1000; t < 3000; t += TICK_MS) { far.now = t; if (brainFar.think(far).fire) firedFar = true; }
+    expect(firedFar).toBe(false);
+    const near = hunterSenses(1.4);
+    const brainNear = new BotBrain("normal", walk, () => 0.5);
+    let firedNear = false;
+    for (let t = 1000; t < 3000; t += TICK_MS) { near.now = t; if (brainNear.think(near).fire) firedNear = true; }
+    expect(firedNear).toBe(true);
+  });
+
+  it("a chaser keeps heading for a survivor who moves, without stopping where they used to be", () => {
+    const brain = new BotBrain("normal", walk, () => 0.5);
+    const b = createBody(start.x, start.y, start.z);
+    const goal = pointNear(start, 14);
+    let prev = 0, sawForward = 0;
+    for (let t = 0; t < 200; t++) {
+      const s = sensesFor(t * TICK_MS, b, [], []);       // out of sight: this is the navigation half
+      s.mode = "ostrzyzeni"; s.shaved = true; s.me.weapon = "clippers";
+      s.objective = goal;                                 // the room re-points it at the prey each tick
+      const d = brain.think(s);
+      if (d.input.buttons & Btn.Forward) sawForward++;
+      simulateBody(world, b, d.input, 1, prev);
+      prev = d.input.buttons;
+    }
+    // It walked, and it ended nearer the prey than it started — no arrival spin, no roaming off.
+    expect(sawForward).toBeGreaterThan(60);
+    expect(Math.hypot(b.x - goal.x, b.z - goal.z)).toBeLessThan(Math.hypot(start.x - goal.x, start.z - goal.z) - 4);
+  });
+
+  it("a survivor retreats from a chaser its weapon would otherwise have it charge, and fights normally beyond the flee range", () => {
+    // Six metres with a SHOTGUN is the discriminating distance: it sits inside that weapon's own
+    // dead band (preferred range 7.2 m), so a bot in any other mode stands its ground and works
+    // the angles. A survivor must give ground instead — the thing in front of it kills by touch.
+    const preyAt = (z: number) => {
+      const s = sensesFor(1000, createBody(0, 0, 0), [], [{ id: "chaser", team: 1, x: 0, y: 0, z, crouching: false }]);
+      s.me.weapon = "shotgun";
+      return s;
+    };
+    const plain = preyAt(6);
+    expect(new BotBrain("normal", walk, () => 0.5).think(plain).input.buttons & (Btn.Forward | Btn.Back)).toBe(0);
+    const fleeing = preyAt(6);
+    fleeing.mode = "ostrzyzeni"; fleeing.shaved = false;
+    const brain = new BotBrain("normal", walk, () => 0.5);
+    let fired = false, backed = false;
+    for (let t = 1000; t < 3000; t += TICK_MS) {
+      fleeing.now = t;
+      const d = brain.think(fleeing);
+      if (d.fire) fired = true;
+      if (d.input.buttons & Btn.Back) backed = true;
+      expect(d.input.buttons & Btn.Forward).toBe(0);   // never towards the clippers
+    }
+    expect(backed, "a survivor gives ground").toBe(true);
+    expect(fired, "…while still shooting back").toBe(true);
+    // Beyond the flee range the mode stops mattering: the shotgun closes, as it does for anyone.
+    const far = preyAt(FLEE_RANGE_M + 4);
+    far.mode = "ostrzyzeni"; far.shaved = false;
+    expect(new BotBrain("normal", walk, () => 0.5).think(far).input.buttons & Btn.Forward).toBe(Btn.Forward);
+    expect(new BotBrain("normal", walk, () => 0.5).think(preyAt(FLEE_RANGE_M + 4)).input.buttons & Btn.Forward).toBe(Btn.Forward);
+  });
+
+  it("a hunter that cannot reach anybody goes back to roaming instead of standing still", () => {
+    // The objective is a survivor on an unreachable spot (off the walk grid). Before the back-off
+    // the brain re-pointed the goal at it every tick, the plan failed every time, and the bot stood
+    // where it was — MEASURED at 30 s frozen with a survivor 6.6 m away.
+    const brain = new BotBrain("normal", walk, prng(4));
+    const b = createBody(start.x, start.y, start.z);
+    const roam = [pointNear(start, 18)];
+    let prev = 0, moved = 0;
+    for (let t = 0; t < 400; t++) {
+      const s = sensesFor(t * TICK_MS, b, roam, []);
+      s.mode = "ostrzyzeni"; s.shaved = true; s.me.weapon = "clippers";
+      s.objective = { x: 9999, y: 0, z: 9999 };        // nowhere the grid can reach
+      const before = { x: b.x, z: b.z };
+      const d = brain.think(s);
+      simulateBody(world, b, d.input, 1, prev);
+      prev = d.input.buttons;
+      if (Math.hypot(b.x - before.x, b.z - before.z) > 0.01) moved++;
+    }
+    expect(moved, "a blocked hunter keeps moving").toBeGreaterThan(120);
+    expect(Math.hypot(b.x - start.x, b.z - start.z), "…and gets somewhere").toBeGreaterThan(3);
+  });
+
+  it("Gun Game needs no role at all: the bot fights with whatever rung it was handed", () => {
+    const s = sensesFor(1000, createBody(0, 0, 0), [], [{ id: "enemy", team: 0, x: 0, y: 0, z: 18, crouching: false }]);
+    s.mode = "gungame";
+    s.me.weapon = "shotgun";
+    expect(new BotBrain("normal", walk, () => 0.5).think(s).input.buttons & Btn.Forward).toBe(Btn.Forward);
+    s.me.weapon = "rifle";
+    expect(new BotBrain("normal", walk, () => 0.5).think(s).input.buttons & Btn.Forward).toBe(0);
+  });
+});
+
+/** `FLEE_RANGE` in BotBrain.ts; duplicated here so the test says what distance it means. */
+const FLEE_RANGE_M = 9;
+
 /** A senses object with no enemies: pure navigation towards a single roam point. */
 function sensesFor(now: number, b: BodyState, roam: NavPoint[], enemies: BotSenses["enemies"] = []): BotSenses {
   return {
@@ -144,7 +274,18 @@ function prng(seed: number): () => number {
 const spawn = NIGHT_DISTRICT.spawns[0];
 const start: NavPoint = { x: spawn.x, y: standHeight(walk, spawn.x, spawn.z, spawn.y)!, z: spawn.z };
 
-describe("bot movement", () => {
+/**
+ * These run whole simulations — 14 to 22 seconds of ticks each, through the real mover and the real
+ * path search — against vitest's DEFAULT 5 s timeout, which was never chosen with that in mind.
+ * MEASURED: "keeps its destination" is 1.77 s on a dev machine and 3.9x slower on a GitHub runner
+ * (its siblings ran 818 ms → 3502 ms in the same job), which lands it either side of 5 s depending
+ * on how loaded the runner is. It failed CI for that reason and nothing else.
+ *
+ * The timeout is raised rather than the work reduced or the assertion loosened: every test here
+ * still runs in full and still asserts exactly what it did. 30 s is ~8x the slowest observed run,
+ * so a genuine hang is still caught — it just is not caught by a stopwatch set for a unit test.
+ */
+describe("bot movement", { timeout: 30_000 }, () => {
   it("walks off immediately instead of standing still to turn round", () => {
     // The goal is placed BEHIND the bot's starting facing, the case the old code handled worst: it
     // pressed nothing until the body was within 0.6 rad, so an easy bot (3.2 rad/s) stood for a

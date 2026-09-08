@@ -11,7 +11,11 @@
  */
 import { chromium } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
-const OUT = process.env.OUT ?? "e2e/out/weapons";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+// Relative to THIS tool, not to the shell's cwd: run from the repo root and a bare
+// "e2e/out" lands outside the ignored directory and shows up as untracked files.
+const OUT = process.env.OUT ? resolve(process.env.OUT) : resolve(dirname(fileURLToPath(import.meta.url)), "../out/weapons");
 const WEAPONS = process.env.WEAPONS ? process.env.WEAPONS.split(",") : ["pistol", "revolver", "smg", "smg2", "rifle", "lmg", "shotgun", "dmr", "sniper", "launcher", "clippers"];
 const SET = JSON.stringify({ graphics: { preset: "medium", renderer: "webgl2", renderScale: 1, shadows: "off", postProcessing: false, effects: 0.3, antialiasing: false, importedModels: true } });
 const b = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });

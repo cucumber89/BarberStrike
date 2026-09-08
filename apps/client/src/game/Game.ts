@@ -4,9 +4,9 @@ import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import { type GameMode, MODES,
-  dequantAngle, boysClass, Btn, C2S, S2C, CHAT, ECONOMY, INTERP_DELAY_MS, MAPS, MARK, DEFAULT_MAP_ID, PERK_ORDER, RESPAWN_DELAY_MS, TEAM_NAMES, MatchPhase, buildCollisionWorld, buyWindowLeft, inFlagZone, isShopItemId, isWeaponId, makeRayHit, noPerks, packInput, perkSpeedScale,
+  dequantAngle, boysClass, Btn, C2S, S2C, CHAT, ECONOMY, INTERP_DELAY_MS, MAPS, MARK, DEFAULT_MAP_ID, PERK_ORDER, RESPAWN_DELAY_MS, TEAM_NAMES, MatchPhase, buildCollisionWorld, rebuildWorldInto, applyPlan, planById, PLANS, buyWindowLeft, inFlagZone, isShopItemId, isWeaponId, makeRayHit, noPerks, packInput, perkSpeedScale,
   type BoomEvent, type ChatEvent, type CollisionWorld, type DamagedEvent, type FlagEvent, type FlashedEvent, type GrenadeId, type HitEvent, type KillEvent, type MapDef, type MarkEvent, type MarkMessage, type MatchEventMessage, type MoneyEvent,
-  type PerkTimes, type ShopItemId, type ShopResult, type ShotEvent, type SpawnEvent, type Team, type ThrowEvent, type WeaponId,
+  type PerkTimes, type PlanEvent, type ShopItemId, type ShopResult, type ShotEvent, type SpawnEvent, type Team, type TeamResult, type ThrowEvent, type WeaponId,
 } from "@frankibarber/shared";
 import { createEngine, type RendererKind } from "./engine";
 import { InputState } from "./input/InputState";
@@ -85,6 +85,8 @@ export class Game {
   /** Character containers, in flight while the map is built. Null when the manifest lists none. */
   private charactersReady: Promise<(AssetContainer | null)[]> | null = null;
   private mapDef!: MapDef;
+  /** Living arena: the plan this client's world is currently shaped by (0 = none). */
+  private planId = 0;
   private shopOpen = false;
   private toastKey = 0;
   private lethalWasHeld = false;
@@ -111,8 +113,13 @@ export class Game {
   private payMatch(e: MatchEventMessage): void {
     const h = hud.get();
     const row = h.players.find((p) => p.id === h.myId);
-    const teams = MODES[h.mode as GameMode]?.teams ?? true;
-    const result = matchResult(teams, h.myTeam, e.winner, e.winnerId ?? "", h.myId);
+    // Drop D: what counts as a win is the mode's `winner`, not whether it has sides. Ostrzyżeni has
+    // both — teams for the round score and a named player on the result screen — and reading
+    // `teams` here wrote the OPPOSITE of what the player was just shown into their profile
+    // whenever they finished the match on the losing side (code review). The HUD and the profile
+    // must agree, so both ask the same question.
+    const byTeam = (MODES[h.mode as GameMode]?.winner ?? "team") === "team";
+    const result = matchResult(byTeam, h.myTeam, e.winner, e.winnerId ?? "", h.myId);
     const stats = this.tracker.finish(row, result, h.mode as GameMode);
     const { profile, reward } = applyMatch(loadProfile(), stats, this.tracker.clipperKills);
     saveProfile(profile);
@@ -167,7 +174,9 @@ export class Game {
     const models = Object.keys(assets.models).length ? new ModelLibrary(scene, assets.models) : undefined;
     const propSources = await this.prepareAssets(scene, assets);
     if (this.disposed) throw new Error("Startup cancelled");
-    this.map = buildMap(scene, mapDef, { shadows: this.settings.graphics.shadows !== "off", shadowMapSize: this.settings.graphics.shadows === "high" ? 2048 : 1024, models, propSources });
+    // Everything any tactical plan can remove is built as its own mesh rather than merged, so a
+    // plan can switch it off for a round (see plans.ts / MapBuilder's `toggleable`).
+    this.map = buildMap(scene, mapDef, { shadows: this.settings.graphics.shadows !== "off", shadowMapSize: this.settings.graphics.shadows === "high" ? 2048 : 1024, models, propSources, toggleable: PLAN_SOLIDS });
 
     this.input.attach(this.opts.canvas);
     this.local = new LocalPlayer(scene, world, this.input, {
@@ -364,6 +373,12 @@ export class Game {
       hud.set({ shopResult: { ...e, at: performance.now() } });
       this.events.emit("shop", e);
     }));
+    this.unsubs.push(c.onMessage<TeamResult>(S2C.TeamResult, (e) => {
+      if (!this.disposed) hud.set({ teamResult: { ...e, at: performance.now() } });
+    }));
+    this.unsubs.push(c.onMessage<PlanEvent>(S2C.Plan, (e) => {
+      if (!this.disposed) hud.set({ plan: { ...e, at: performance.now() } });
+    }));
     c.onReconnecting((active) => { if (!this.disposed) hud.set({ reconnecting: active }); });
     c.onLeave((code) => { if (!this.disposed) this.opts.onLeave(code === 1000 ? "left" : "Connection to the server was lost."); });
     c.onError((_code, message) => { if (!this.disposed) this.opts.onLeave(message ?? "Connection error."); });
@@ -454,8 +469,26 @@ export class Game {
   }
 
   /** Called after every applied state patch (~SNAPSHOT_RATE Hz). */
+  /**
+   * The living arena. `planId` is replicated, and BOTH ends run the identical pure filter over the
+   * identical shared `mapDef.solids` — so the collision world the client predicts against and the
+   * one the server simulates cannot drift apart. The world is mutated IN PLACE because the local
+   * player and the game context hold it by reference.
+   */
+  private applyPlanId(id: number): void {
+    if (id === this.planId) return;
+    const before = planById(this.planId);
+    this.planId = id;
+    const plan = planById(id);
+    rebuildWorldInto(this.world, applyPlan(this.mapDef.solids, id));
+    for (const name of before?.removes ?? []) this.map.setSolidVisible(name, true);
+    for (const name of plan?.removes ?? []) this.map.setSolidVisible(name, false);
+    hud.set({ planId: id });
+  }
+
   private onSnapshot(s: NetState): void {
     if (this.disposed) return;
+    if (s.planId !== this.planId) this.applyPlanId(s.planId);
     const t = s.t;
     s.players.forEach((p, id) => {
       if (id === this.conn.sessionId) {
@@ -550,11 +583,11 @@ export class Game {
     const s = this.conn.state;
     const me = this.conn.me();
     const rows: ScoreRow[] = [];
-    s.players.forEach((p) => rows.push({ boysClass: s.mode === "boys" ? p.boysClass : undefined, id: p.id, name: p.name, team: p.team as Team, kills: p.kills, deaths: p.deaths, score: p.score, ping: p.ping, alive: p.alive, connected: p.connected, assists: p.assists ?? 0, money: p.money, bot: !!p.bot }));
+    s.players.forEach((p) => rows.push({ boysClass: s.mode === "boys" ? p.boysClass : undefined, id: p.id, name: p.name, team: p.team as Team, kills: p.kills, deaths: p.deaths, score: p.score, ping: p.ping, alive: p.alive, connected: p.connected, assists: p.assists ?? 0, money: p.money, bot: !!p.bot, shaved: !!p.shaved }));
     rows.sort((a, b) => b.score - a.score || b.kills - a.kills);
     const near = this.nearStation();
     const windowLeft = me ? buyWindowLeft({ now: this.conn.serverNow(), spawnedAt: me.spawnedAt ?? 0, phase: s.phase, alive: me.alive, nearStation: near,
-      bombBuying: s.mode === "bomb" ? s.phase === MatchPhase.Prep && s.bomb.stage === "buy" : undefined, releaseAt: s.phaseEndsAt }) : 0;
+      bombBuying: s.mode === "bomb" ? s.phase === MatchPhase.Prep && s.bomb.stage === "buy" : undefined, releaseAt: s.phaseEndsAt, mode: (s.mode ?? "tdm") as GameMode, shaved: !!me.shaved }) : 0;
     const cur = hud.get();
     const scope = this.local.scopeState();
     // Drop 4: flags (Domination) and which zone we stand in.
@@ -582,6 +615,7 @@ export class Game {
       bomb: s.mode === "bomb" && s.bomb ? { round: s.bomb.round, attackTeam: s.bomb.attackTeam, stage: s.bomb.stage, carrier: s.bomb.carrier,
         site: s.bomb.site, x: s.bomb.x, y: s.bomb.y, z: s.bomb.z, endsAt: s.bomb.endsAt, roundEndsAt: s.bomb.roundEndsAt,
         actor: s.bomb.actor, progress: s.bomb.progress, result: s.bomb.result } : null,
+      round: s.bomb?.round ?? 0,
       tac: this.local.tacFraction, tacOn: this.local.isTacSprinting(),
       // Drop 5: expired chat lines (unless the box is open) and marks drop out here.
       chat: !cur.chatOpen && cur.chat.some((l) => now - l.seen > CHAT.showMs) ? cur.chat.filter((l) => now - l.seen <= CHAT.showMs) : cur.chat,
@@ -623,7 +657,7 @@ export class Game {
     if (!me.alive) return;
     const state = this.conn.state;
     const left = buyWindowLeft({ now: this.conn.serverNow(), spawnedAt: me.spawnedAt ?? 0, phase: state.phase, alive: me.alive, nearStation: this.nearStation(),
-      bombBuying: state.mode === "bomb" ? state.phase === MatchPhase.Prep && state.bomb.stage === "buy" : undefined, releaseAt: state.phaseEndsAt });
+      bombBuying: state.mode === "bomb" ? state.phase === MatchPhase.Prep && state.bomb.stage === "buy" : undefined, releaseAt: state.phaseEndsAt, mode: (state.mode ?? "tdm") as GameMode, shaved: !!me.shaved });
     if (left <= 0) { hud.set({ shopResult: { ok: false, item: "", reason: "closed", at: performance.now() } }); return; }
     this.setShopOpen(true);
   }
@@ -658,6 +692,18 @@ export class Game {
   sell(item: WeaponId): void {
     if (!isWeaponId(item)) return;
     this.conn.send(C2S.Sell, { item });
+  }
+
+  /** Vote for one of this round's plans. Sends an index; the server tallies and decides. */
+  votePlan(plan: number): void {
+    if (!Number.isInteger(plan) || plan <= 0) return;
+    this.conn.send(C2S.Vote, { plan });
+  }
+
+  /** Ask to change sides. The server decides and answers with S2C.TeamResult; nothing changes here. */
+  chooseTeam(team: Team): void {
+    if (team !== 0 && team !== 1) return;
+    this.conn.send(C2S.Team, { team });
   }
 
   get shopIsOpen(): boolean { return this.shopOpen; }
@@ -754,6 +800,9 @@ export class Game {
   }
 
   requestPointerLock(): void { this.input.requestPointerLock(); }
+  /** Resolves to whether the pointer is actually locked, so the pause card can offer a retry. */
+  requestPointerLockAsync(): Promise<boolean> { return this.input.requestPointerLockAsync(); }
+  releasePointerLock(): void { this.input.exitPointerLock(); }
   get inputState(): InputState { return this.input; }
   get localPlayer(): LocalPlayer { return this.local; }
   get remotePlayers(): ReadonlyMap<string, RemotePlayer> { return this.remotes; }
@@ -797,3 +846,6 @@ export class Game {
 
   }
 }
+
+/** Every solid any tactical plan can remove — built unmerged so it can be switched off. */
+export const PLAN_SOLIDS: ReadonlySet<string> = new Set(PLANS.flatMap((p) => p.removes));

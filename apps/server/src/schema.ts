@@ -61,6 +61,12 @@ export class PlayerState extends Schema {
   // ---- drop 5: scoreboard v2 assists; bots are flagged so the HUD can tag them.
   @type("uint16") assists = 0;
   @type("boolean") bot = false;
+  /**
+   * Drop D: a visibly shaved head. Ostrzyżeni sets it on the shaved side for the round; Drop E's
+   * shave will set it for the match. Cosmetic and replicated like a skin would be — it changes on
+   * conversion and at round start, never per tick.
+   */
+  @type("boolean") shaved = false;
 }
 
 /** Domination flag (drop 4). `owner` / `capTeam` are -1 for neutral / nobody. */
@@ -102,6 +108,12 @@ export class MatchState extends Schema {
    * respawn waves arrived: the HUD's match clock reads this, the wave countdown reads phaseEndsAt.
    */
   @type("float64") matchEndsAt = 0;
+  /**
+   * THE LIVING ARENA: which tactical plan is in force this round (0 = none). One byte, changing at
+   * most once a round, against a 12 kB/s snapshot budget. The plan TABLE lives in shared code on
+   * both ends, so only the index travels — a client can never send geometry.
+   */
+  @type("uint8") planId = 0;
   @type("uint16") scoreA = 0;
   @type("uint16") scoreB = 0;
   @type("int8") winner = -1;

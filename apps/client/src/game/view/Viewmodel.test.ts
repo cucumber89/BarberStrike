@@ -72,7 +72,8 @@ describe("reloadFrame", () => {
       for (let t = 0; t <= 1; t += 0.005) peak = Math.max(peak, reloadFrame(w, t).handL);
       if (w === "clippers") { expect(peak).toBe(0); continue; }
       expect(peak, `${w} handL peak`).toBeGreaterThan(0.4);
-      expect(peak, `${w} handL peak`).toBeLessThanOrEqual(0.75);
+      // The revolver's peak is exactly 0.45 + 0.3; give the float sum a hair of room.
+      expect(peak, `${w} handL peak`).toBeLessThanOrEqual(0.75 + 1e-9);
     }
   });
 

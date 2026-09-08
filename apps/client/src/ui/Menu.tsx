@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { BOYS_CLASSES, BOYS, WEAPONS, BOT_LEVELS, BOT_PRESETS, GAME_VERSION, MAX_BOTS, MAX_NAME_LENGTH, MODES, MODE_ORDER, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { useEffect, useMemo, useState } from "react";
+import { BOYS_CLASSES, BOYS, WEAPONS, BOT_LEVELS, BOT_PRESETS, GAME_VERSION, MAX_BOTS, MAX_NAME_LENGTH, MODES, MODE_ORDER, isGameMode, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { copyText, inviteLink, parseInvite } from "./invite";
 import { Connection, defaultServerUrl, type RoomListing } from "../game/net/Connection";
 import type { Settings } from "../settings";
 import { SettingsPanel } from "./SettingsPanel";
@@ -28,12 +29,20 @@ const touchOnly = (): boolean =>
   typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(pointer: fine)").matches;
 
 export function Menu({ settings, onSettings, connecting, error, onPlay }: Props) {
-  const [panel, setPanel] = useState<Panel>("main");
+  // Drop D, join by link: what `/r/<room>?mode=…` asks for, read once at load.
+  const invite = useMemo(() => parseInvite(typeof location !== "undefined" ? location.search : "", typeof location !== "undefined" ? location.pathname : ""), []);
+  const [panel, setPanel] = useState<Panel>(() => (invite.room ? "lobby" : "main"));
+  // A link was sent by a friend, so the lobby asks for a nickname and nothing else — the room and
+  // the mode are the link's. CHANGE opens the full lobby.
+  const [linkJoin, setLinkJoin] = useState(invite.viaLink && invite.room.length > 0);
+  const [showInvite, setShowInvite] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [mobile] = useState(() => touchOnly());
   const [name, setName] = useState(settings.nickname || "");
-  const [roomName, setRoomName] = useState("");
+  const [roomName, setRoomName] = useState(invite.room);
   const [gameMode, setGameMode] = useState<GameMode>(() => {
-    try { const m = localStorage.getItem("fb_mode"); return m === "boys" || m === "dom" || m === "bomb" ? m : "tdm"; } catch { return "tdm"; }
+    if (invite.mode) return invite.mode;
+    try { const m = localStorage.getItem("fb_mode"); return isGameMode(m) && m !== "ffa" ? m : "tdm"; } catch { return "tdm"; }
   });
   const [boysClass, setBoysClass] = useState(() => { try { return Number(localStorage.getItem("fb_boys_class")) || 1; } catch { return 1; } });
   const pickClass = (id: number) => { setBoysClass(id); try { localStorage.setItem("fb_boys_class", String(id)); } catch { /* private mode */ } };
@@ -67,6 +76,9 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
     if (n !== settings.nickname) onSettings({ ...settings, nickname: n });
     return n;
   };
+  const play = (mode: "auto" | "create") => onPlay(commitName(), roomName.trim(), mode, undefined, gameMode, bots);
+  /** The address to send a friend: this page, the room in the path, the mode in the query. */
+  const link = typeof location !== "undefined" ? inviteLink(location.href, roomName, gameMode) : "";
 
   return (
     <div className="menu" data-testid="menu">
@@ -92,7 +104,31 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
           </nav>
         )}
 
-        {panel === "lobby" && (
+        {panel === "lobby" && linkJoin && (
+          <section className="panel lobby" data-testid="link-join">
+            <div className="link-join">
+              <div className="link-join-room">
+                <span>YOU WERE INVITED TO</span>
+                <b data-testid="link-room">{roomName}</b>
+                <span className={`room-mode m-${gameMode}`} data-testid="link-mode" title={MODES[gameMode].name}>{MODES[gameMode].short}</span>
+                <button type="button" className="link" onClick={() => setLinkJoin(false)} data-testid="btn-link-edit">CHANGE</button>
+              </div>
+              <div className="muted mode-blurb">{MODES[gameMode].blurb}</div>
+              <label className="field">
+                <span>NICKNAME</span>
+                <input value={name} maxLength={MAX_NAME_LENGTH} onChange={(e) => setName(e.target.value)} placeholder="2–16 characters" autoFocus data-testid="input-name" onKeyDown={(e) => { if (e.key === "Enter" && nameOk && !connecting) play("auto"); }} />
+              </label>
+              <div className="row">
+                <button className="menu-btn primary" disabled={!nameOk || connecting} onClick={() => play("auto")} data-testid="btn-quickplay">
+                  {connecting ? "CONNECTING…" : "JOIN"}
+                </button>
+              </div>
+              {!nameOk && <small className="muted">Enter a nickname of at least two characters to join.</small>}
+            </div>
+          </section>
+        )}
+
+        {panel === "lobby" && !linkJoin && (
           <section className="panel lobby">
             <h2>LOBBY</h2>
             <label className="field">
@@ -100,9 +136,23 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
               <input value={name} maxLength={MAX_NAME_LENGTH} onChange={(e) => setName(e.target.value)} placeholder="2–16 characters" autoFocus data-testid="input-name" />
             </label>
             <label className="field">
-              <span>ROOM NAME (optional)</span>
-              <input value={roomName} maxLength={24} onChange={(e) => setRoomName(e.target.value)} placeholder="e.g. late-shift" data-testid="input-room" />
+              <span>ROOM NAME <em className="muted">optional · the code your friends type</em></span>
+              <div className="row tight">
+                <input value={roomName} maxLength={24} onChange={(e) => setRoomName(e.target.value)} placeholder="e.g. late-shift" data-testid="input-room" />
+                <button type="button" className={`menu-btn small ${showInvite ? "" : "ghost"}`} onClick={() => setShowInvite((v) => !v)} data-testid="btn-invite">INVITE</button>
+              </div>
             </label>
+            {/* Drop D: the link that opens straight into this room. Joining by one is useless if
+                nobody can make one, so the lobby that creates the room is where it lives. */}
+            {showInvite && (
+              <div className="invite-box" data-testid="invite-box">
+                <div className="copy-row">
+                  <input readOnly value={link} data-testid="invite-link" onFocus={(e) => e.currentTarget.select()} />
+                  <button type="button" className="menu-btn small" onClick={() => { void copyText(link).then((ok) => { setCopied(ok); window.setTimeout(() => setCopied(false), 1500); }); }}>{copied ? "COPIED" : "COPY"}</button>
+                </div>
+                <small className="muted">Whoever opens this lands in your room, and is only asked for a nickname.</small>
+              </div>
+            )}
             <div className="field">
               <span>MODE</span>
               <div className="seg" role="radiogroup" data-testid="mode-picker">

@@ -122,4 +122,45 @@ describe("game input transitions", () => {
     emit(win, "keydown", { code: "ShiftLeft", repeat: false });
     expect(input.buttons() & Btn.Tac).toBe(Btn.Tac);
   });
+
+  it("reports no buttons at all while the pointer is unlocked (the pause menu really pauses)", () => {
+    emit(win, "keydown", { code: "KeyW" });
+    expect(input.buttons() & Btn.Forward).toBe(Btn.Forward);
+    // Escape: the browser releases the lock and the pause card comes up.
+    input.pointerLocked = false;
+    expect(input.buttons()).toBe(0);
+    // A key pressed WHILE paused must not bank movement for the moment play resumes either.
+    emit(win, "keydown", { code: "KeyA" });
+    input.pointerLocked = true;
+    expect(input.buttons() & Btn.Left).toBe(Btn.Left);
+  });
+
+  /** `Event.target` is a read-only getter, so a fake source has to be defined, not assigned. */
+  function keydown(values: Record<string, unknown>, target?: unknown) {
+    const e = new Event("keydown", { cancelable: true });
+    Object.assign(e, values);
+    if (target !== undefined) Object.defineProperty(e, "target", { value: target, configurable: true });
+    win.dispatchEvent(e);
+    return e;
+  }
+
+  it("leaves a keystroke aimed at a text field to the text field", () => {
+    // Typing a nickname containing "b" used to toggle the buy menu, and Tab could not move between
+    // form fields: the shop key is read before the `enabled` check, so only a target test stops it.
+    const field = { tagName: "INPUT", type: "text" };
+    keydown({ code: "KeyW" }, field);
+    keydown({ code: "KeyB" }, field);
+    keydown({ code: "Tab" }, field);
+    expect(input.buttons()).toBe(0);
+    expect(input.shopToggleRequested).toBe(false);
+    expect(input.scoreboardHeld).toBe(false);
+  });
+
+  it("takes Ctrl+D away from the browser while playing and gives it back when not", () => {
+    // Crouch is Ctrl and strafe-right is D, so crouch-strafing right IS Ctrl+D.
+    expect(keydown({ code: "KeyD", ctrlKey: true }).defaultPrevented).toBe(true);
+    input.pointerLocked = false;
+    expect(keydown({ code: "KeyD", ctrlKey: true }).defaultPrevented).toBe(false);
+  });
+
 });

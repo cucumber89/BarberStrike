@@ -5,9 +5,22 @@ import type { Solid, MaterialTag, PropHint, LightHint, SpawnPoint } from "./map"
 export function expandDistrict(solids: Solid[], props: PropHint[], lights: LightHint[]): SpawnPoint[] {
   const s = (name: string, x: number, y: number, z: number, w: number, h: number, d: number, mat: MaterialTag) =>
     solids.push({ name, box: boxFrom(x, y, z, w, h, d), mat });
+  // The buildings' own floor slabs (see `room`) sit at exactly y = 0, so the yard paving is laid
+  // AROUND them, not under them. Laying one 18 × 67 slab across the whole side put two surfaces on
+  // the same plane over the depot (132 m²) and the cafe (144 m²) — on the very slabs that carry
+  // bomb sites A and B. Coplanar faces cannot be ordered by a depth buffer, so which one wins
+  // flips per pixel and per frame as the camera moves; that crawling shimmer is what the report of
+  // "the floor at A and B lags" describes. `floorAudit.test.ts` gates it.
+  const ground = (side: number, name: string, x: number, z: number, w: number, d: number) =>
+    s(`extension_ground_${side}${name}`, x, -1, z, w, 1, d, "floor_concrete");
   for (const side of [-1, 1]) {
     const x = side < 0 ? -45 : 35;
-    s(`extension_ground_${side}`, x, -1, -22, 18, 1, 67, "floor_concrete");
+    // Footprint of the building on this side (depot at x -43..-32 z 0..12, cafe at x 38..50 z 1..13).
+    const [bx0, bz0, bw, bd] = side < 0 ? [-43, 0, 11, 12] : [38, 1, 12, 12];
+    ground(side, "_s", x, -22, 18, bz0 + 22);
+    ground(side, "_n", x, bz0 + bd, 18, 45 - (bz0 + bd));
+    ground(side, "_w", x, bz0, bx0 - x, bd);
+    ground(side, "_e", bx0 + bw, bz0, x + 18 - (bx0 + bw), bd);
     s(`extension_south_${side}`, x, 0, -22.3, 18, 7, .3, "wall_sand");
     s(`extension_north_${side}`, x, 0, 45, 18, 7, .3, "wall_teal");
     s(`extension_edge_${side}`, side < 0 ? -45.3 : 53, 0, -22, .3, 7, 67, side < 0 ? "wall_sand" : "wall_teal");

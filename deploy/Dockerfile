@@ -25,6 +25,7 @@ FROM deps AS build
 ARG VITE_SERVER_URL=""
 ENV VITE_SERVER_URL=$VITE_SERVER_URL
 ENV NODE_OPTIONS=--max-old-space-size=2048
+COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
 COPY apps/server/src apps/server/src
 COPY apps/server/build.mjs apps/server/tsconfig.json apps/server/
