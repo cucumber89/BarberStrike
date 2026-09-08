@@ -245,6 +245,8 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
 
 | 2026-09-08 | I | claude/menu-fps-style-ui-uxgo6m | **The menu, rebuilt to the owner's brief** ("zmienić menu … ładnie jak w grach tego typu … proste ale ładne … lepiej widoczne serwery"). The diagnosis, not a taste call: everything lived in ONE 560 px column in DOM order — nickname, room, invite, six three-letter mode chips, maps, nine haircuts, bots, the buttons, and only then the open matches, below the fold on a 1080p screen. A column cannot say what matters, because every row in it is the same width and the same weight. Four rules, written into `menu.css`: **SHAPE** — the lobby is three zones (setup left, the SERVER BROWSER a full-height column of its own on the right, one launch bar pinned at the bottom saying what is about to start), each scrolling inside itself so the page never does; **RANK** — what you choose is a card with a picture, what you tune is a row, what you read is a line; **STATE** — selection is a brass border, brass ink and a corner tab, never "the slightly lighter one"; **ANSWER** — "is anyone playing?" is answered on the title screen by a live-match panel and a status pill, polled there as well as in the lobby. `menuArt.tsx` gives the six modes and the two maps inline-SVG glyphs in `currentColor` (there was no icon system at all, so six modes were six identical boxes of three capital letters): no download, no manifest entry, no licence row. Rooms sort joinable-first then fullest-first, full ones say FULL, the list has explicit empty / unreachable states and a manual refresh, and a click with no nickname typed sends the caret to the field instead of greying out the half of the lobby the player came for. **MEASURED** with a new `menu-fit.mjs` (the ui-fit pattern): 5 viewports including browser zoom, PASS on all — the browser holds 24–29 % of the screen with 4–6 of six matches readable without scrolling, nothing off screen, no page scroll, no text under 9 px. It found the first cut folding to one column at 125 % zoom and putting the rows below the fold — the exact fault the brief is about — so the two columns now hold to 900 px and the server column's width gives first. **Found on the way, not this drop's work but this drop's to fix**: the dormant HUD (mounted behind the loading screen from READY on) armed the pause overlay 300 ms in, and `startup.spec.ts`'s "no pause card on the ready screen" was passing only by beating that timer — proven by probing both trees, pause present in BOTH. Gated on `dormant` like the keyboard effect above it. | `apps/client/e2e/out/menu/{menu-fit.md,title-*.png,lobby-*.png,servers-empty.png,servers-offline.png,mode-boys.png,controls.png,settings.png,link-join.png}` — regenerate with `pnpm --filter @frankibarber/client dev` then `node apps/client/e2e/tools/menu-fit.mjs` | typecheck ✓ test ✓ (686: shared 220, client 298, server 168) build ✓ check:weapons ✓ (19/19) menu-fit ✓ (5/5) **e2e ✓ 15/15** | review |
 
+| 2026-09-08 | C | drop/c-skins | Slices 1–4, stopped at the requested six-skin owner gate. Root-space box UVs (including magazine rest transforms); two deterministic generators and six recipes; refcounted scene material cache, first/third-person runtime and isolated 3D preview; profile migration/ownership/equip and one bounded `skins` join field. Four implementation commits. Owner then requested GitHub publication of only these changes: draft PR #24, not a production deployment. Independent art review accepted all six model directions after retracting the flat Warsztat rejection; pistol ADS openings remain visible, but factory contrast comparison is outstanding and the distant observer art frames were rejected as too small/front-facing. Two actual clients nevertheless prove the replicated field reaches the remote weapon materials. No draw-call increase in the six in-game swaps; preview closes/reopens 10 times with zero retained engines on close. Crates, quests, full Armoury and Skin Studio are not in this tranche. | docs/SKINS.md; apps/client/e2e/out/skins/{contact-sheet.png,art-review.md,preview/verification.json,shots/verification.json,slice-1-*.log,slice-2-*.log,slice-3-*.log,slice-4-*.log,build.log}; regenerate with skin-batch.mjs, skin-preview.mjs, skin-shots.mjs | typecheck ✓ test ✓ (702: shared 224, skins 2, client 307, server 169; maxWorkers=4) build ✓ check:weapons ✓ (19/19, unchanged geometry) targeted skin e2e ✓; full Playwright suite — (not run; no merge) | review — six-skin art gate; GitHub draft PR #24 |
+
 ## Decisions log (append-only)
 
 - 2026-09-07 — Plan created from the owner's brief: weapons structure + feel, procedural skins with
@@ -495,7 +497,30 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   gated on `dormant`, as the keyboard effect beside it already was), not by moving the assertion.
   (lead)
 
+- **2026-09-08, Drop C slices 1–4 (owner brief; implementation by Codex).** The new brief supersedes
+  the stale glTF skin path: textures apply to the procedural `weaponMeshes.ts` models. The existing
+  `mulberry32` was found in `shared/hitscan.ts`; `rng.ts` re-exports it rather than altering combat.
+  `meshesByMat` stores arrays because magazines/actions repeat material keys; their UVs include the
+  rest transform. The 12-set cache target is soft only while all sets are referenced; invisible guns
+  restore factory pointers and release their leases. Steel, brass and lens stay factory because the
+  first two include sight blades. Operation hashes are pinned; cross-browser raster pixel identity
+  is not claimed. Colour arrays are scalar comma-separated recipe parameters. (implementation)
+- **2026-09-08, Drop C publication (owner).** After requesting the full brief's slice-4 art gate,
+  the owner asked to publish only the prepared changes and clarified the destination as GitHub.
+  Publish slices 1–4 as draft PR #24 on `drop/c-skins`; no merge or production deploy was requested.
+  Independent review allows six model directions for owner review, not final gameplay acceptance.
+  Fifth rarity, daily seeds/grants and crude-art defaults remain later-slice decisions; no crate or
+  purchase code exists in this tranche. The weapon preview does not close the Deferred head preview.
+
 ## Deferred (things noticed, deliberately not done)
+
+- Drop C before art acceptance: compare painted metal sight housings/notches against a factory ADS
+  reference (the post, steel and brass are preserved, the surrounding metal is painted). The 3 m/12 m
+  observer frames are too small/front-facing for pattern review; replace them with valid side views.
+- Drop C next slices: bot cosmetic assignment; choose how duplicate-instance wear is equipped and
+  replicated before crates ship (the present one-field contract carries recipe IDs only). Preview
+  `data-ready` can settle early under rapid consecutive selections; bind that diagnostic to the
+  current model when extending the standalone preview into Armoury. None affects skin ownership.
 
 - Drop B: `weapon-signature.mjs` drives the client at ~2 fps, where a 500 ms frame swallows every
   ADS blend in the roster (a clean run measured 2257 ms for the R-44's 120). Dropping the graphics
