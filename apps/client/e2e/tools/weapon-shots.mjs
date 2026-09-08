@@ -20,12 +20,31 @@ const WEAPONS = process.env.WEAPONS ? process.env.WEAPONS.split(",") : ["pistol"
 const TP_ONLY = !!process.env.TP_ONLY;
 const FP_ONLY = !!process.env.FP_ONLY;
 const RELOAD_MS = { pistol: 1200, revolver: 2300 };
-const SET = JSON.stringify({ graphics: { preset: "medium", renderer: "webgl2", renderScale: 1, shadows: "medium", postProcessing: false, effects: 0.7, antialiasing: false, importedModels: true } });
+// Overridable: SwiftShader on a shared runner cannot always keep a 1280x720 medium preset moving,
+// and a frame that never renders is a 60 s timeout rather than a screenshot. PRESET=low RENDER=0.5
+// still answers "does this weapon read correctly", which is what a reviewer looks at these for.
+const SET = JSON.stringify({ graphics: { preset: process.env.PRESET || "medium", renderer: "webgl2", renderScale: +(process.env.RENDER || 1), shadows: process.env.PRESET === "low" ? "off" : "medium", postProcessing: false, effects: 0.7, antialiasing: false, importedModels: true } });
 const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || "/opt/pw-browsers/chromium", args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-webgl", "--disable-gpu-sandbox"] });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
 await ctx.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), SET);
 const page = await ctx.newPage();
 page.on("pageerror", (e) => console.log("PAGEERROR", e.message));
+// The spawn is DEFERRED since drop I: the client joins with `deferSpawn: true` and the READY screen
+// sends `C2S.Ready` when the player clicks ENTER MATCH. Without that click nobody spawns, every buy
+// is refused and the first `frames()` call times out after 60 s — which is what this tool had been
+// doing since that drop landed. Sending the message by hand is NOT enough: the click is also what
+// takes the ready card off the canvas.
+//
+// It does put the CANVAS HOST into fullscreen, and a fullscreen element hides its siblings — the
+// HUD is one — so a screenshot taken from inside it shows the world with no HUD at all. Leaving
+// fullscreen here is what keeps the ammo counter, the crosshair and the scope overlay in frame.
+const deploy = async () => {
+  await page.getByRole("button", { name: /ENTER MATCH/i }).click({ timeout: 30000 });
+  await page.waitForFunction(() => window.__fb.hud.get().alive === true, null, { timeout: 60000 });
+  await page.evaluate(() => document.fullscreenElement && document.exitFullscreen());
+  await page.waitForTimeout(800);
+};
+
 await page.goto("http://localhost:5174/");
 await page.getByTestId("btn-play").click();
 await page.getByTestId("input-name").fill("SHOTS");
@@ -34,6 +53,7 @@ await page.getByTestId("input-room").fill(`shots-${Date.now()}`);
 // wherever it stands. The third-person subject gets its own room below.
 await page.getByTestId("btn-quickplay").click();
 await page.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().myId !== "" && window.__fb.hud.get().loadStage === "ready", null, { timeout: 90000 });
+await deploy();
 await page.evaluate(() => { const c = document.querySelector("canvas"); Object.defineProperty(document, "pointerLockElement", { get: () => c, configurable: true }); document.dispatchEvent(new Event("pointerlockchange")); });
 await page.waitForTimeout(3000);
 const frames = async (n) => { const s = await page.evaluate(() => window.__fb.game.frameCount); await page.waitForFunction((t) => window.__fb.game.frameCount >= t, s + n, { timeout: 60000 }); };
@@ -106,6 +126,7 @@ await page.getByTestId("input-room").fill(`shots-tp-${Date.now()}`);
 await page.getByTestId("bots-range").evaluate((el) => { const s = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set; s.call(el, "1"); el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); });
 await page.getByTestId("btn-quickplay").click();
 await page.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().myId !== "" && window.__fb.hud.get().loadStage === "ready", null, { timeout: 90000 });
+await deploy();
 await page.evaluate(() => { const c = document.querySelector("canvas"); Object.defineProperty(document, "pointerLockElement", { get: () => c, configurable: true }); document.dispatchEvent(new Event("pointerlockchange")); });
 await page.waitForFunction(() => window.__fb.game.remotes.size > 0, null, { timeout: 30000 });
 await page.waitForTimeout(3000);
