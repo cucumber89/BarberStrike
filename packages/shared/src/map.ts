@@ -600,6 +600,16 @@ export const MAPS: Record<string, MapDef> = { [NIGHT_DISTRICT.id]: NIGHT_DISTRIC
 export const DEFAULT_MAP_ID = NIGHT_DISTRICT.id;
 
 /** Builds the static collision world for a map (used by both server and client prediction). */
+/**
+ * Replaces a world's boxes in place. The client's local player and the game context both hold the
+ * CollisionWorld BY REFERENCE, so a tactical plan has to mutate the one they have rather than hand
+ * out a new one. Clears the broadphase with it (`addBoxes` already invalidates the grid).
+ */
+export function rebuildWorldInto(w: CollisionWorld, solids: readonly Solid[]): void {
+  w.boxes.length = 0;
+  w.addBoxes(solids.map((s) => s.box));
+}
+
 export function buildCollisionWorld(map: MapDef): CollisionWorld {
   const w = new CollisionWorld();
   w.addBoxes(map.solids.map((s) => s.box));

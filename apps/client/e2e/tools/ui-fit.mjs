@@ -89,6 +89,15 @@ for (const size of SIZES) {
   await page.screenshot({ path: `${OUT}/shop-${size.name}.png` });
   await page.close();
 }
+// The living arena's vote panel, at the smallest supported size.
+{
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  await page.goto(`${BASE}/ui-fit.html?panel=plan`, { waitUntil: "networkidle" });
+  await page.waitForSelector(".plan");
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: `${OUT}/plan-vote.png` });
+  await page.close();
+}
 await browser.close();
 
 const md = [

@@ -9,6 +9,8 @@
 import { createRoot } from "react-dom/client";
 import { MatchPhase, type ShopItemId } from "@frankibarber/shared";
 import { Shop } from "./ui/Shop";
+import { PlanPanel } from "./ui/PlanPanel";
+import { PLANS, planOffer } from "@frankibarber/shared";
 import type { HudState } from "./game/store";
 
 /** A wallet mid-match: enough for some of the list and not enough for the rest, which is the
@@ -22,8 +24,20 @@ const state = {
 
 const api = { buy: (i: ShopItemId) => console.log("buy", i), sell: (i: string) => console.log("sell", i), close: () => console.log("close") };
 
+/** `?panel=plan` renders the living-arena vote instead of the shop. */
+const which = new URLSearchParams(location.search).get("panel");
+const planState = {
+  ...state,
+  myTeam: 1,
+  plan: { options: planOffer(2), tally: [2, 1], chosen: 0, appliesAt: 112000, votingTeam: 1, round: 2, at: 0 },
+  planId: 0,
+} as unknown as HudState;
+
 createRoot(document.getElementById("root")!).render(
   <div className="app" style={{ background: "#0b0b0d" }}>
-    <Shop h={state} api={api as never} now={100000} />
+    {which === "plan"
+      ? <PlanPanel h={planState} onVote={(id) => console.log("vote", id)} />
+      : <Shop h={state} api={api as never} now={100000} />}
   </div>,
 );
+void PLANS;

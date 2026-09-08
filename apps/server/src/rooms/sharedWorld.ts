@@ -22,6 +22,18 @@ export function sharedCollisionWorld(): CollisionWorld {
   return (world ??= buildCollisionWorld(NIGHT_DISTRICT));
 }
 
+/**
+ * A collision world this ROOM owns, so a tactical plan (see `plans.ts`) can take a wall out of it
+ * for one round without every other match on the process losing that wall too.
+ *
+ * Costs one array of ~376 pointers and 0.03 ms to build. The walk grid stays shared and is NOT
+ * rebuilt: plans only ever REMOVE geometry, so a stale grid is a subset of what is walkable —
+ * bots ignore the new route rather than walking into a wall that is no longer there.
+ */
+export function roomCollisionWorld(map = NIGHT_DISTRICT): CollisionWorld {
+  return buildCollisionWorld(map);
+}
+
 /** The walk grid with its nav index built and the search warmed (see `prepareNav`). */
 export function sharedWalk(): Walk {
   if (!walk) { walk = walkable(NIGHT_DISTRICT); prepareNav(walk); }

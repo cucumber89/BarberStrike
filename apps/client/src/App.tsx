@@ -132,6 +132,7 @@ export function App() {
             return ok;
           }}
           onChooseTeam={(t) => gameRef.current?.chooseTeam(t)}
+          onVotePlan={(id) => gameRef.current?.votePlan(id)}
           shop={shopApi} chat={chatApi} radar={radar}
         />
       )}

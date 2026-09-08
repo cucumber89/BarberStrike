@@ -625,3 +625,33 @@ button { font-family: inherit; }
 .teams-answer { margin: 2px 0 0; font-size: 11px; line-height: 1.4; }
 .teams-answer.ok { color: #7dff9a; }
 .teams-answer.err { color: #f0a49a; }
+
+/* ---------- The living arena (2.4) ---------- */
+/* Sits under the round timer during the buy window, where a player is already looking. Both teams
+   see it: a map change the defence cannot read would be a random event, not a tactic. */
+.plan { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); width: min(680px, 92vw);
+  background: rgba(11,11,13,.92); border: 1px solid var(--line); border-top: 2px solid var(--brass);
+  padding: 10px 12px; pointer-events: auto; animation: slide-in 180ms ease-out; }
+.plan-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.plan-title { font-family: var(--font-display); font-size: 16px; letter-spacing: 0.2em; color: var(--brass); }
+.plan-sub { font-size: 11px; color: var(--tx-2); }
+.plan-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.plan-option { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "key name" "gain gain" "cost cost" "votes votes";
+  gap: 3px 8px; text-align: left; padding: 8px 10px; cursor: pointer;
+  background: var(--bg-2); border: 1px solid var(--line); color: var(--tx); font-family: var(--font-ui); }
+.plan-option:hover:not(:disabled) { border-color: var(--brass); }
+.plan-option:disabled { cursor: default; opacity: .82; }
+.plan-option.chosen { border-color: var(--brass); background: #17150f; }
+.plan-key { grid-area: key; font-family: var(--font-mono); font-size: 10px; padding: 2px 5px; border: 1px solid var(--line); color: var(--tx-2); }
+.plan-option.chosen .plan-key { background: var(--brass); border-color: var(--brass); color: #141008; }
+.plan-name { grid-area: name; font-family: var(--font-display); font-size: 16px; letter-spacing: 0.12em; align-self: center; }
+.plan-gain { grid-area: gain; font-size: 11px; line-height: 1.35; color: var(--tx-2); }
+/* The cost is not small print: an option without one is not a choice. */
+.plan-cost { grid-area: cost; font-size: 11px; line-height: 1.35; color: #e0b07a; }
+.plan-votes { grid-area: votes; margin-top: 2px; font-size: 10px; letter-spacing: 0.14em; color: var(--brass); }
+.plan-foot { margin: 8px 0 0; font-size: 10px; letter-spacing: 0.06em; color: var(--tx-3); }
+.plan-active { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
+  background: rgba(11,11,13,.72); border-left: 2px solid var(--brass); padding: 4px 10px; font-size: 11px; }
+.plan-tag { font-size: 9px; letter-spacing: 0.2em; color: var(--tx-3); }
+.plan-active-name { font-family: var(--font-display); font-size: 14px; letter-spacing: 0.14em; color: var(--brass); }
+@media (max-width: 760px) { .plan-options { grid-template-columns: 1fr; } }
