@@ -602,3 +602,26 @@ button { font-family: inherit; }
 .pause-card .tabs { position: sticky; top: 0; background: var(--bg); z-index: 1; }
 .pause-invite { display: flex; flex-direction: column; gap: 4px; }
 .pause-invite small { font-size: 10px; letter-spacing: 0.18em; color: var(--tx-3); }
+
+/* ---------- Team picker (2.4) ---------- */
+/* Both sides, their colours, their sizes and which one you are on — all visible at once, because
+   the report was that choosing a side was not discoverable, not that it was slow. */
+.teams { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); padding: 10px; background: var(--bg-2); }
+.teams-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 10px; letter-spacing: 0.2em; color: var(--tx-3); }
+.teams-note { letter-spacing: 0.06em; color: var(--brass); text-transform: none; font-size: 10px; }
+.teams-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.team-card { display: grid; grid-template-columns: 10px 1fr; grid-template-areas: "sw name" "sw count" "state state";
+  gap: 2px 8px; align-items: center; text-align: left; padding: 8px 10px; cursor: pointer;
+  background: var(--bg-3); border: 1px solid var(--line); color: var(--tx); font-family: var(--font-ui); }
+.team-card:hover:not(:disabled) { border-color: var(--team); }
+.team-card.mine { border-color: var(--team); background: color-mix(in srgb, var(--team) 12%, var(--bg-3)); }
+.team-card:disabled { cursor: default; }
+.team-card:disabled:not(.mine) { opacity: .55; }
+.team-swatch { grid-area: sw; align-self: stretch; background: var(--team); }
+.team-name { grid-area: name; font-family: var(--font-display); font-size: 18px; letter-spacing: 0.14em; }
+.team-count { grid-area: count; font-size: 11px; color: var(--tx-2); }
+.team-state { grid-area: state; margin-top: 4px; font-size: 10px; letter-spacing: 0.12em; color: var(--tx-3); }
+.team-card.mine .team-state { color: var(--team); }
+.teams-answer { margin: 2px 0 0; font-size: 11px; line-height: 1.4; }
+.teams-answer.ok { color: #7dff9a; }
+.teams-answer.err { color: #f0a49a; }

@@ -115,10 +115,22 @@ export const C2S = {
   Mark: "mark",
   /** Bomb Plant (2.2): the carrier lets go of the charge for a teammate (no payload). */
   DropBomb: "dropbomb",
+  /** Ask to change sides: { team } (2.4). The server decides, and may defer it to the next round. */
+  Team: "team",
 } as const;
 
 /** Drop 5: chat limits (the server enforces them, the client mirrors them in the box). */
 export const CHAT = { maxLen: 120, minIntervalMs: 700, history: 8, showMs: 9000 } as const;
+
+/** What the server says about a team change (2.4). `deferred` means it lands next round. */
+export interface TeamResult {
+  ok: boolean;
+  /** Why not, when `ok` is false: "same" | "mode" | "balance" | "cooldown" | "ended". */
+  reason?: string;
+  /** The team the player is on (refusal) or is going to (acceptance). */
+  team: Team;
+  deferred?: boolean;
+}
 /** Drop 5: mark limits. A "go" mark lives ttlMs; a "spot" (enemy) mark spotTtlMs. */
 export const MARK = { minIntervalMs: 1200, ttlMs: 8000, spotTtlMs: 4500, maxRange: 60 } as const;
 
@@ -151,6 +163,8 @@ export const S2C = {
   Money: "money",
   /** Result of a buy/sell request: ShopResult. */
   Shop: "shop",
+  /** Answer to a team-change request: TeamResult (2.4). */
+  TeamResult: "teamres",
   /** Domination: a flag changed hands: FlagEvent (drop 4). */
   Flag: "flag",
   /** Text chat line: ChatEvent (drop 5). */

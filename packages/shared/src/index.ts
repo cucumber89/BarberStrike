@@ -6,6 +6,7 @@ export * from "./movement";
 export * from "./map";
 export * from "./hitscan";
 export * from "./spawn";
+export * from "./teams";
 export * from "./util";
 export * from "./grenades";
 export * from "./economy";

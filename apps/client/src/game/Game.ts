@@ -6,7 +6,7 @@ import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import { type GameMode, MODES,
   Btn, C2S, S2C, CHAT, ECONOMY, INTERP_DELAY_MS, MAPS, MARK, DEFAULT_MAP_ID, PERK_ORDER, RESPAWN_DELAY_MS, TEAM_NAMES, MatchPhase, buildCollisionWorld, buyWindowLeft, inFlagZone, isShopItemId, isWeaponId, makeRayHit, noPerks, packInput, perkSpeedScale,
   type BoomEvent, type ChatEvent, type CollisionWorld, type DamagedEvent, type FlagEvent, type FlashedEvent, type GrenadeId, type HitEvent, type KillEvent, type MapDef, type MarkEvent, type MarkMessage, type MatchEventMessage, type MoneyEvent,
-  type PerkTimes, type ShopItemId, type ShopResult, type ShotEvent, type SpawnEvent, type Team, type ThrowEvent, type WeaponId,
+  type PerkTimes, type ShopItemId, type ShopResult, type ShotEvent, type SpawnEvent, type Team, type TeamResult, type ThrowEvent, type WeaponId,
 } from "@frankibarber/shared";
 import { createEngine, type RendererKind } from "./engine";
 import { InputState } from "./input/InputState";
@@ -350,6 +350,9 @@ export class Game {
       hud.set({ shopResult: { ...e, at: performance.now() } });
       this.events.emit("shop", e);
     }));
+    this.unsubs.push(c.onMessage<TeamResult>(S2C.TeamResult, (e) => {
+      hud.set({ teamResult: { ...e, at: performance.now() } });
+    }));
     c.onReconnecting((active) => hud.set({ reconnecting: active }));
     c.onLeave((code) => { if (!this.disposed) this.opts.onLeave(code === 1000 ? "left" : "Connection to the server was lost."); });
     c.onError((_code, message) => { if (!this.disposed) this.opts.onLeave(message ?? "Connection error."); });
@@ -641,6 +644,12 @@ export class Game {
   sell(item: WeaponId): void {
     if (!isWeaponId(item)) return;
     this.conn.send(C2S.Sell, { item });
+  }
+
+  /** Ask to change sides. The server decides and answers with S2C.TeamResult; nothing changes here. */
+  chooseTeam(team: Team): void {
+    if (team !== 0 && team !== 1) return;
+    this.conn.send(C2S.Team, { team });
   }
 
   get shopIsOpen(): boolean { return this.shopOpen; }

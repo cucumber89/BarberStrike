@@ -18,9 +18,10 @@ import {
   type Projectile, type Wallet, type ThrowMessage, type ThrowEvent, type BoomEvent, type FlashedEvent, type MoneyEvent,
   type ShopResult, type GrenadeId, type Box, type BuyContext, type PerkTimes, type GameMode, type FlagSim, type FlagEvent,
   type MatchEventMessage, type BotLevel, type ChatEvent, type MarkEvent, type MarkKind, type Walk, type NavPoint, type ShopItemId,
+  canSwitchTeam, teamForNewPlayer, teamSizes, type TeamMember,
 } from "@frankibarber/shared";
 import { FlagState, MatchState, PlayerState } from "../schema";
-import { nextPhase, teamForNewPlayer } from "../match";
+import { nextPhase } from "../match";
 import { sharedCollisionWorld, sharedWalk } from "./sharedWorld";
 import { recordTick } from "../stats";
 import { BotBrain, type BotSenses, type BotView } from "../bots/BotBrain";
@@ -87,6 +88,13 @@ class Session {
   lastKilledBy = "";
   /** Highest input seq accepted so far; anything <= this is a replay / reorder and is ignored (ack never goes backwards). */
   lastSeq = 0;
+  /**
+   * Team switching (2.4). `pendingTeam` is a switch accepted mid-wave: it lands at the top of the
+   * next prep window rather than teleporting the player out of a live fight. `lastSwitchAt` is the
+   * cooldown anchor, so sides cannot be flipped every few seconds.
+   */
+  pendingTeam: Team | null = null;
+  lastSwitchAt = -Infinity;
   // ---- drop 2: economy + grenades
   spawnedAt = 0;
   lastThrowAt = 0;
@@ -189,6 +197,17 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   /** Team modes (TDM, Domination) keep friendly fire off and score per team; FFA does neither. */
   private get teams(): boolean { return MODES[this.mode].teams; }
 
+  /**
+   * The room's roster in the shape the shared team rules take. A disconnected player still sits in
+   * `state.players` for a few seconds before cleanup; counting those ghosts used to send the next
+   * joiner to the wrong side, so `connected` is derived from whether the session is still live.
+   */
+  private roster(): TeamMember[] {
+    const out: TeamMember[] = [];
+    for (const [id, q] of this.state.players) out.push({ team: q.team as Team, connected: q.bot || this.sessions.has(id), bot: q.bot });
+    return out;
+  }
+
   override onCreate(options: TdmJoinOptions): void {
     this.state.mapId = this.map.id;
     this.state.roomName = typeof options?.room === "string" ? options.room.slice(0, 24) : "";
@@ -235,6 +254,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.onMessage(C2S.Buy, this.guarded((client, msg) => this.onBuy(client, msg, false)));
     this.onMessage(C2S.Sell, this.guarded((client, msg) => this.onBuy(client, msg, true)));
     this.onMessage(C2S.Throw, this.guarded((client, msg) => this.onThrow(client, msg)));
+    this.onMessage(C2S.Team, this.guarded((client, msg) => this.onTeam(client, msg)));
 
     // Development-only test hooks (never registered unless FB_DEV_TOOLS=1): teleport a player to a free
     // spot; set a wallet balance (screenshot/e2e tooling for the shop).
@@ -329,7 +349,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.id = id;
     p.name = BOT_NAMES[n % BOT_NAMES.length];
     p.bot = true;
-    p.team = this.teams ? teamForNewPlayer(Array.from(this.state.players.values()).map((q) => q.team as Team)) : 0;
+    p.team = this.teams ? teamForNewPlayer(this.roster()) : 0;
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
     this.state.players.set(id, p); this.connectedCount++;
@@ -436,7 +456,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     const p = new PlayerState();
     p.id = client.sessionId;
     p.name = name;
-    p.team = this.teams ? teamForNewPlayer(Array.from(this.state.players.values()).map((q) => q.team as Team)) : 0;
+    p.team = this.teams ? teamForNewPlayer(this.roster()) : 0;
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
     this.state.players.set(client.sessionId, p); this.connectedCount++;
@@ -800,6 +820,67 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   // ---------------------------------------------------------------- spawning
 
+  /**
+   * A player asks to change sides (2.4).
+   *
+   * Rules are the shared `canSwitchTeam`, so the picker's greyed-out buttons and the server's
+   * answer can never disagree. What this must NOT do is hand out a fresh wallet: money, weapons,
+   * grenades, armour, kit and perks all survive a switch, or changing sides becomes a way to
+   * refill an empty wallet. Kills, deaths and assists stay with the player; the team scores stay
+   * with the team that earned them.
+   */
+  private onTeam(client: Client, msg: unknown): void {
+    const s = this.sessions.get(client.sessionId);
+    const p = this.state.players.get(client.sessionId);
+    if (!s || !p || this.rateLimited(s, "other")) return;
+    const to = (msg && typeof msg === "object" ? (msg as { team?: unknown }).team : undefined);
+    if (to !== 0 && to !== 1) return;
+    const from = p.team as Team;
+    const now = this.now();
+    const verdict = canSwitchTeam(from, to as Team, teamSizes(this.roster()), {
+      teamsMode: this.teams,
+      // Bomb runs in rounds and swaps attack/defend at halftime, so a side change lands between
+      // rounds. Every other team mode is a continuous wave and can move a player at once.
+      roundBased: this.mode === "bomb",
+      frozen: this.state.phase === MatchPhase.Waiting || this.state.phase === MatchPhase.Countdown || this.state.phase === MatchPhase.Prep,
+      matchEnded: this.state.phase === MatchPhase.Ended,
+      now, lastSwitchAt: s.lastSwitchAt,
+    });
+    if (!verdict.ok) {
+      client.send(S2C.TeamResult, { ok: false, reason: verdict.reason, team: from });
+      return;
+    }
+    s.lastSwitchAt = now;
+    if (verdict.deferred) {
+      s.pendingTeam = to as Team;
+      client.send(S2C.TeamResult, { ok: true, deferred: true, team: to });
+      return;
+    }
+    s.pendingTeam = null;
+    this.applyTeam(client.sessionId, to as Team);
+    client.send(S2C.TeamResult, { ok: true, deferred: false, team: to });
+  }
+
+  /** Move a player to a side and put them at one of its spawns. Their kit is untouched. */
+  private applyTeam(id: string, team: Team): void {
+    const p = this.state.players.get(id);
+    if (!p || p.team === team) return;
+    p.team = team;
+    // A live player standing in what is now enemy territory has to be moved; a dead one respawns
+    // on the new side by the normal path.
+    if (p.alive) this.spawn(id);
+  }
+
+  /** Apply switches that were held over, at the moment a new wave / round is about to start. */
+  private flushPendingTeams(): void {
+    for (const [id, s] of this.sessions) {
+      if (s.pendingTeam === null) continue;
+      const team = s.pendingTeam;
+      s.pendingTeam = null;
+      this.applyTeam(id, team);
+    }
+  }
+
   private spawn(id: string): void {
     const p = this.state.players.get(id);
     const s = this.sessions.get(id);
@@ -822,7 +903,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         this.world.raycast(ax, ay, az, dx / l, dy / l, dz / l, l, worldHit);
         return !worldHit.hit;
       },
-    }, this.mode === "ffa" || this.mode === "tdm");
+      // FFA alone ignores sides. TDM used to be in here too, which let a TDM player spawn on the
+      // enemy's points or an arena point — the coin toss that made TdmRoom.test.ts:53 flaky, and
+      // the thing that would make a team switch land the player back where they came from.
+    }, this.mode === "ffa");
     const b = s.body;
     b.x = sp.x; b.y = sp.y; b.z = sp.z; b.vx = b.vy = b.vz = 0; b.grounded = true; b.crouching = false;
     s.inputs.length = 0;
@@ -921,6 +1005,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     st.phaseEndsAt = now + BOMB.buyMs;
     st.bomb.stage = "buy";
     st.bomb.attackTeam = bombAttackTeam(st.bomb.round + 1);
+    // Side changes asked for during the last round land here, BEFORE the wave respawns, so the
+    // switcher comes back on their new side rather than being teleported out of a live fight.
+    this.flushPendingTeams();
     this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
     if (st.bomb.round === BOMB.halfRounds) {
       this.bombLosses = [0, 0];

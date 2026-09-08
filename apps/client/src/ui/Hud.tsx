@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { BOMB, GAME_VERSION, GRENADES, MATCH, MODES, MatchPhase, PERKS, PERK_ORDER, TEAM_NAMES, WEAPONS, BADGES, killerName, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
+import { TeamPicker } from "./TeamPicker";
 import type { MatchReward } from "../game/progression/profile";
 import { CROSSHAIR_COLORS, keyLabel, resolveBindings, type Settings } from "../settings";
 import { SettingsPanel } from "./SettingsPanel";
@@ -21,6 +22,8 @@ interface Props {
   onPause: () => void;
   /** Toggle fullscreen; resolves to whether the game is fullscreen afterwards. */
   onFullscreen: () => Promise<boolean>;
+  /** Ask the server to move you to a side; it decides and answers. */
+  onChooseTeam: (t: import("@frankibarber/shared").Team) => void;
   /** Drop 2: shop actions routed to the game (buy/sell go to the server, close re-locks the pointer). */
   shop: ShopApi;
   /** Drop 5: chat send / close, and the minimap's per-frame feed. */
@@ -84,7 +87,7 @@ const money = (n: number) => `$${n.toLocaleString("en-US")}`;
 const carrierName = (h: ReturnType<typeof useHud>): string => h.players.find((p) => p.id === h.bomb?.carrier)?.name ?? "THE CARRIER";
 const REASON_SHORT: Record<string, string> = { kill: "KILL", headshot: "HEAD SHOT", assist: "ASSIST", buy: "", sell: "SOLD", reset: "" };
 
-export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, shop, chat, radar }: Props) {
+export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, onChooseTeam, shop, chat, radar }: Props) {
   const h = useHud();
   // The flash overlay and cook ring need a smooth clock; everything else is fine at 4 Hz.
   const fast = h.flashUntil > performance.now() || h.cookingKind !== "";
@@ -401,6 +404,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
               {fullscreen ? "LEAVE FULLSCREEN" : "GO FULLSCREEN"}
             </button>
             <button className="menu-btn" onClick={() => setPauseSettings((v) => !v)} data-testid="btn-pause-settings">{pauseSettings ? "HIDE SETTINGS" : "SETTINGS"}</button>
+            {!pauseSettings && <TeamPicker h={h} onChoose={onChooseTeam} />}
             {pauseSettings && <SettingsPanel settings={settings} onChange={onSettings} />}
             {!pauseSettings && (
               <div className="pause-invite">

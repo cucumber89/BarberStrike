@@ -131,6 +131,7 @@ export function App() {
             if (ok) void lockKeyboard();
             return ok;
           }}
+          onChooseTeam={(t) => gameRef.current?.chooseTeam(t)}
           shop={shopApi} chat={chatApi} radar={radar}
         />
       )}
