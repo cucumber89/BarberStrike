@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { GUN_GAME, MODES, MODE_ORDER, OSTRZYZENI, convertsOnKill, infectionRoundWinner, ladderAfterKill, ladderDone, ladderRung, ladderWeapon, pickFirstShaved } from "./modes";
-import { GAME_MODES } from "./types";
+import { GAME_MODES, isGameMode } from "./types";
 import { WEAPONS, WEAPON_ORDER } from "./weapons";
 
 describe("Drop D modes are in every list the lobby and the matchmaker read", () => {
   it("names every mode once, in the picker order", () => {
+    // The picker's list and the matchmaker's list are the same list.
     expect([...MODE_ORDER].sort()).toEqual([...GAME_MODES].sort());
-    expect(Object.keys(MODES).sort()).toEqual([...GAME_MODES].sort());
+    // `MODES` also has to describe every mode a room can still be in, which is a superset: The
+    // Boys replaced FFA in the picker (PR #14) without making FFA unplayable, so a room asking
+    // for it — an old link, a saved preference — must still find a name and a score limit.
+    for (const m of GAME_MODES) expect(MODES[m]).toBeDefined();
+    expect(Object.keys(MODES).sort()).toEqual([...GAME_MODES, "ffa"].sort());
+    expect(MODE_ORDER).not.toContain("ffa");
+    expect(isGameMode("ffa"), "still playable, just not offered").toBe(true);
+    expect(MODES.boys.teams, "main's mode survived the merge").toBe(true);
     expect(MODES.gungame.teams).toBe(false);
     expect(MODES.gungame.shop).toBe("none");
     expect(MODES.ostrzyzeni.teams).toBe(true);

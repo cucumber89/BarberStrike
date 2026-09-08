@@ -1,4 +1,4 @@
-import { MatchPhase, type MatchStats, type GameMode, type Team, type WeaponKills } from "@frankibarber/shared";
+import { MatchPhase, type MatchStats, type GameMode, type Team } from "@frankibarber/shared";
 
 /**
  * Counts one match for the progression profile.
@@ -17,8 +17,6 @@ export class MatchTracker {
   captures = 0;
   clipperKills = 0;
   wavesSurvived = 0;
-  /** 2.1: kills per weapon or grenade this match, for mastery and the daily challenges. */
-  weaponKills: WeaponKills = {};
   /** Deaths seen live, used only as a fallback when the scoreboard row has gone (a disconnect). */
   private deathsSeen = 0;
 
@@ -28,7 +26,6 @@ export class MatchTracker {
     this.captures = 0;
     this.clipperKills = 0;
     this.wavesSurvived = 0;
-    this.weaponKills = {};
     this.deathsSeen = 0;
   }
 
@@ -37,7 +34,6 @@ export class MatchTracker {
     if (e.killer !== this.myId || e.victim === this.myId) return; // suicides pay nothing
     if (e.headshot) this.headshots += 1;
     if (e.weapon === "clippers") this.clipperKills += 1;
-    this.weaponKills[e.weapon] = (this.weaponKills[e.weapon] ?? 0) + 1;
   }
 
   /** A Domination flag changed hands; `by` are the names that captured it. */

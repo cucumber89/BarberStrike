@@ -9,6 +9,8 @@ export class PlayerState extends Schema {
   @type("string") id = "";
   @type("string") name = "";
   @type("uint8") team = 0;
+  @type("uint8") boysClass = 1;
+  @type("uint8") nextClass = 1;
 
   @type("float32") x = 0;
   @type("float32") y = 0;
@@ -51,16 +53,11 @@ export class PlayerState extends Schema {
 
   // ---- drop 3: plate points and active perks (perk id → server time the buff ends).
   @type("uint8") armor = 0;
-  /** Bomb Plant (2.2): a defuse kit is carried until death or halftime. */
-  @type("boolean") kit = false;
   @type({ map: "float64" }) perks = new MapSchema<number>();
 
   // ---- drop 4: lean (-1 / 0 / 1) and tactical sprint, for the third-person pose.
   @type("int8") lean = 0;
   @type("boolean") tac = false;
-  /** Slide (2.3): ms left / cooldown, replicated so the predicting client reconciles the same body. */
-  @type("uint16") slide = 0;
-  @type("uint16") slideCd = 0;
   // ---- drop 5: scoreboard v2 assists; bots are flagged so the HUD can tag them.
   @type("uint16") assists = 0;
   @type("boolean") bot = false;
@@ -96,8 +93,6 @@ export class BombState extends Schema {
   @type("string") actor = "";
   @type("float32") progress = 0;
   @type("string") result = "";
-  @type("string") droppedBy = "";
-  @type("float64") droppedAt = 0;
 }
 
 export class MatchState extends Schema {

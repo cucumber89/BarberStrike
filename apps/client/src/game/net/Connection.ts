@@ -1,10 +1,10 @@
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
-import { resolveServerUrl } from "./serverUrl";
 import type { ArraySchema, MapSchema } from "@colyseus/schema";
 import { C2S, S2C, MatchPhase, type BombData, type BotLevel, type GameMode, type WelcomeMessage } from "@frankibarber/shared";
 
 /** Client-side mirror of the server's PlayerState schema (read-only). */
 export interface NetPlayer {
+  boysClass?: number; nextClass?: number;
   id: string; name: string; team: number;
   x: number; y: number; z: number; yaw: number; pitch: number;
   /** Quantised on the wire (task 5): yaw/pitch in 0.1 mrad, velocities in cm/s — read through dequantAngle / dequantVel. */
@@ -17,12 +17,8 @@ export interface NetPlayer {
   armor: number; perks: { get(id: string): number | undefined };
   /** Drop 4: lean (-1/0/1) and tactical sprint, for the third-person pose. */
   lean: number; tac: boolean;
-  /** Slide (2.3): ms left and cooldown, for reconciliation and the remote pose. */
-  slide: number; slideCd: number;
   /** Drop 5: scoreboard assists; server-driven bot. */
   assists: number; bot: boolean;
-  /** Bomb Plant (2.2): defuse kit carried. */
-  kit: boolean;
   /** Drop D: a visibly shaved head (Ostrzyżeni's shaved side; Drop E's shave). */
   shaved: boolean;
 }
@@ -124,6 +120,7 @@ export class Connection {
     for (let attempt = 0; attempt < 4 && !this.disposed; attempt++) {
       try {
         const room = await client.reconnect<NetState>(token);
+        if (this.disposed) { await room.leave(); return; }
         this.room = room;
         this.bindRoom(room);
         this.reconnecting = false;
@@ -141,21 +138,6 @@ export class Connection {
   private reconnectHandlers: ((active: boolean) => void)[] = [];
   onReconnecting(cb: (active: boolean) => void): void { this.reconnectHandlers.push(cb); }
 
-  /** 2.1: the server's health line, for the menu. Resolves `ok: false` rather than throwing. */
-  static async health(url: string): Promise<{ ok: boolean; version?: string; players?: number; rooms?: number }> {
-    try {
-      const ctl = new AbortController();
-      const t = window.setTimeout(() => ctl.abort(), 4000);
-      const res = await fetch(`${httpUrl(url)}/health`, { signal: ctl.signal });
-      window.clearTimeout(t);
-      if (!res.ok) return { ok: false };
-      const j = (await res.json()) as { ok?: boolean; version?: string; players?: number; rooms?: number };
-      return { ok: j.ok === true, version: j.version, players: j.players, rooms: j.rooms };
-    } catch {
-      return { ok: false };
-    }
-  }
-
   static async listRooms(url: string): Promise<RoomListing[]> {
     const res = await fetch(`${httpUrl(url)}/rooms`);
     if (!res.ok) throw new Error(`rooms: ${res.status}`);
@@ -164,13 +146,14 @@ export class Connection {
 
   static async connect(opts: ConnectOptions): Promise<Connection> {
     const client = new Client(opts.url);
-    const joinOpts = { name: opts.name, room: opts.roomName ?? "", mode: opts.gameMode ?? "tdm", bots: opts.bots ?? 0, botLevel: opts.botLevel ?? "normal" };
+    let selectedClass = 1; try { selectedClass = Number(localStorage.getItem("fb_boys_class")) || 1; } catch { /* private mode */ }
+    const joinOpts = { deferSpawn: true, boysClass: selectedClass, name: opts.name, room: opts.roomName ?? "", mode: opts.gameMode ?? "tdm", bots: opts.bots ?? 0, botLevel: opts.botLevel ?? "normal" };
     let room: Room<NetState>;
     if (opts.mode === "create") room = await client.create<NetState>("tdm", joinOpts);
     else if (opts.mode === "join" && opts.roomId) room = await client.joinById<NetState>(opts.roomId, joinOpts);
     else room = await client.joinOrCreate<NetState>("tdm", joinOpts);
     const conn = new Connection(room, opts.url);
-    await conn.awaitWelcome();
+    try { await conn.awaitWelcome(); } catch (error) { await conn.leave(); throw error; }
     conn.startPing();
     return conn;
   }
@@ -262,7 +245,26 @@ export function httpUrl(wsUrl: string): string {
   return wsUrl.replace(/^ws/, "http").replace(/\/$/, "");
 }
 
-/** The server endpoint for this page — see `serverUrl.ts` for the three cases. */
+/**
+ * Resolves the server endpoint from env or the current page location.
+ *
+ * Three cases, in the order they are decided:
+ *
+ *  1. `VITE_SERVER_URL` — a hosted deployment where the client and the game live apart. It wins
+ *     over everything, because only the person who built it knows where the server went.
+ *  2. Dev — Vite serves the page on 5174 and is NOT the game server; the game is on 2567 beside it.
+ *  3. A production build on a non-standard port — that is the player-hosted flow (2.0): the game
+ *     server is serving this very page, so it is the same origin, whatever port it chose.
+ *
+ * The final fallback keeps the old behaviour for a static host on 80/443 with the game beside it on
+ * 2567, which is how a deployment without `VITE_SERVER_URL` used to work.
+ */
 export function defaultServerUrl(): string {
-  return resolveServerUrl(location, import.meta.env.VITE_SERVER_URL as string | undefined, import.meta.env.DEV);
+  const env = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim();
+  if (env) return env;
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const host = location.hostname || "localhost";
+  if (import.meta.env.DEV) return `${proto}://${host}:2567`;
+  if (location.port && location.port !== "80" && location.port !== "443") return `${proto}://${location.host}`;
+  return `${proto}://${host}:2567`;
 }

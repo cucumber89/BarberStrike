@@ -29,6 +29,7 @@ export interface ModeDef {
 /** Drop 4 + Drop D: the modes. FFA scores personal kills; Domination scores held flags. */
 export const MODES: Record<GameMode, ModeDef> = {
   tdm: { id: "tdm", name: "TEAM DEATHMATCH", short: "TDM", blurb: `FADE vs TAPER · first to ${MATCH.scoreLimit} kills`, teams: true, scoreLimit: MATCH.scoreLimit, shop: "all", winner: "team" },
+  boys: { id: "boys", name: "THE BOYS", short: "BOYS", blurb: "5 classes · capture A / B / C · first to 100 points · B to buy / change class", teams: true, scoreLimit: DOM.scoreLimit, shop: "all", winner: "team" },
   ffa: { id: "ffa", name: "FREE FOR ALL", short: "FFA", blurb: "Everyone for themselves · first to 30 kills", teams: false, scoreLimit: 30, shop: "all", winner: "player" },
   dom: { id: "dom", name: "DOMINATION", short: "DOM", blurb: `Hold A / B / C · first to ${DOM.scoreLimit} points`, teams: true, scoreLimit: DOM.scoreLimit, shop: "all", winner: "team" },
   bomb: { id: "bomb", name: "BOMB PLANT", short: "BOMB", blurb: "Tactical rounds · B to buy · T to plant / defuse · first to 7 · sides swap after 6", teams: true, scoreLimit: BOMB.wins, shop: "all", winner: "team" },
@@ -36,7 +37,8 @@ export const MODES: Record<GameMode, ModeDef> = {
   ostrzyzeni: { id: "ostrzyzeni", name: "OSTRZYŻENI", short: "OSTRZ", blurb: "One shaved barber with clippers hunts the rest · a clippers kill shaves you onto their side · survive the clock", teams: true, scoreLimit: 5, shop: "survivors", winner: "player" },
 };
 
-export const MODE_ORDER: readonly GameMode[] = ["tdm", "ffa", "dom", "bomb", "gungame", "ostrzyzeni"];
+export const MODE_ORDER: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni"];
+
 
 // ---------------------------------------------------------------- Gun Game (Drop D)
 

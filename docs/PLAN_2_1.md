@@ -215,6 +215,7 @@ Nick + password or Discord OAuth, server-side profile (skins, haircuts, XP), wee
 | 2026-09-07 | A | claude/new-session-o0hcng (harness-assigned; stands in for `drop/a-weapons-fit`) | Built `weapon-parts.mjs` / `pnpm check:weapons` (pure `weaponParts.ts` + `weaponParts.check.test.ts` on the real import pipeline, CI step). First run 2/11. Fixed what it found: support hand hovering 13–25 mm under every long gun and sitting at the muzzle on the MDR/MPA (measured `WeaponModel.support`); derived ejection port in mid-air on MK14/SRSA1/RPG; RPG built backwards (sights now orient the model); LMG grip/stock/sight/belt box, shotgun stock, clippers anchors floating (spec numbers). Now 11/11. `docs/WEAPON_FIT.md` started. | apps/client/e2e/out/weapons/parts.md (regenerate with `pnpm check:weapons`), docs/WEAPON_FIT.md | typecheck ✓ test ✓ (433) build ✓ check:weapons ✓ e2e — (not run: needs servers) | in progress |
 | 2026-09-07 | A | claude/new-session-o0hcng | Slice 2, in a browser: `vm-fit.mjs` now buys all 11 weapons, projects each gun's new `aim` node in ADS (mean over one breath) and counts near-plane-cut vertices; `hand-pose.mjs` measures every weapon on the procedural `gunHand`; `weapon-shots.mjs` shoots idle/ADS/reload/inspect + third-person front and profile. Found and fixed: the shotgun's ADS put its receiver around the eye and its pump through the near plane (ADS distance rule, aim point ≥ 15 cm ahead). Art review round 1 (54 images): 2 harness faults (empty third-person frames, reloads not started — both fixed), plus hands-as-blocks, DMR lens disc, identical smg/smg2 and dmr/sniper silhouettes → Deferred. Round 2 review pending at the time of this row. Found: the running game never uses the imported glTF guns/characters (`Game.ts:164`) → proposal in Decisions. | docs/WEAPON_FIT.md (vm-fit, hand-pose tables); apps/client/e2e/out/weapons/{vm-fit.md,hand-pose.json,<id>/*.png} (regenerate) | typecheck ✓ test ✓ (435) build ✓ check:weapons ✓ e2e — | in progress |
 | 2026-09-07 | A | claude/new-session-o0hcng | Slice 3 (owner: "improve the procedural guns"): first-person hands rebuilt as a pure spec (palm, fingers, thumb, forearm jointed at the wrist) judged by the same attachment rule as the guns (`handSpec.test.ts`); smg2 and dmr given their own silhouettes with aim/muzzle/length untouched; `check:weapons` now judges every PROCEDURAL spec (parts[0] = receiver, magazine seats in its well) — which exposed five specs that had hidden behind glTFs (pistol, smg, rifle, sniper, launcher: detached stocks, loose parts, muzzles past the barrel), all re-seated. Re-measured: 19/19 parts, ADS aim worst 0.09 px mean, 0 near-plane cuts, bores ≤ 4.6°. Code review: nothing breaks (one judgment note on the seating rule, accepted). Art review round 3: hands and silhouettes pass; rejects left are Drop B / animation / character-pose items, all Deferred. | docs/WEAPON_FIT.md; apps/client/e2e/out/weapons/ (regenerate) | typecheck ✓ test ✓ (454) build ✓ check:weapons ✓ (19/19) e2e — | in progress |
+| 2026-09-07 | B | drop/b-weapon-feel | Slice 1, docs only: `docs/WEAPON_MATRIX.md` written from three recon passes (client handling `LocalPlayer` / `WeaponController` / `Viewmodel`, audio voice table `sfx.ts:31-44`, VFX `Effects.ts` / `Tracers.ts` / `view/index.ts` / `Hud.tsx`). Found: of the six axes only recoil, ADS and the audio voice are per-weapon today; sprint-out (150 ms), sway, flash, tracer and casing are one global value for all eleven, shake is a three-way ternary, and the ADS sensitivity ignores `adsZoom`. The sniper already hides the viewmodel and has breath hold; it does not scale sensitivity or un-scope on sprint. Matrix proposes bold per-row targets, six named rules (R1 zoom-sens, B1 bipod, C1 pellet ring, S1 bolt kicks out of scope, S2 sprint un-scopes, M1 clippers hum) and four decisions D-B1–D-B4 for the owner. No code touched. STOPPED for sign-off as the plan requires. | docs/WEAPON_MATRIX.md | typecheck — test — build — (no code changed) | blocked: owner sign-off on WEAPON_MATRIX.md |
 
 | 2026-09-08 | D | drop/d-modes | Whole drop in one session. **Join by link**: the invite link is now `<origin>/r/<room>?mode=…`; the client reads the room off the path (`roomFromPath`), the lobby a link opens asks for a nickname and nothing else (CHANGE opens the full one), the SPA fallback moved into `hosting.ts` as `spaFallback` so it is testable, and `hostcheck.mjs` proves the path from outside (11/11 checks). **Gun Game**: the 11-rung ladder is data in `shared/modes.ts`; the rung replicates as `PlayerState.score` (no new field), a rung-weapon kill re-arms the killer on the spot, a clippers kill sets the victim back one, only the last rung ends the match, no economy, 3 s respawn, FFA spawn pool. **Ostrzyżeni**: rounds on the Prep/Playing machine, sides are the teams (survivors 0 / shaved 1), one random chaser per round with clippers + the energy perk + a bare head (`PlayerState.shaved`, the one field the plan names), a clippers kill converts, survivors who are not converted stay down until the round ends, five rounds, the result names the top score. **Bots** play both (`BotSenses.mode`/`shaved`): Gun Game needs no branch, a chaser closes and swings, a survivor gives ground. Reviewer (separate agent) found six things, all fixed — chiefly the profile recording the OPPOSITE of the result screen in Ostrzyżeni. | apps/client/e2e/out/d/{hostcheck.md,gungame/*.png,ostrzyzeni/*.png}; docs/PLAYTEST_TEMPLATE.md; regenerate with `hostcheck.mjs`, `shaved-shots.mjs`, `infection-shots.mjs` | typecheck ✓ test ✓ (510: shared 153, client 217, server 140) build ✓ check:weapons ✓ (19/19) e2e ✓ (18/18 against a freshly started server; the pre-existing smoke test failed twice against a server process that had been up ~20 min / 64 k ticks, and passes alone — see Deferred) | review |
 
@@ -252,6 +253,17 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
   15 cm ahead of the eye (`Viewmodel.ts`). Measured cause: the shotgun's bead-at-the-muzzle aim
   point put its receiver around the camera and its pump through the near plane. Changes only the
   shotgun and the LMG; the sight alignment (±1 px) is unchanged. (lead)
+- 2026-09-07 — Drop B: branch `drop/b-weapon-feel` is cut from the Drop A tip
+  (`claude/new-session-o0hcng`, commit 2f7c405), not from `main` — the remote has no `main` yet and
+  Drop B targets the procedural guns Drop A just rebuilt. Merge order stays A then B. (lead)
+- 2026-09-07 — Drop B: `equipMs` is treated as a locked gameplay number alongside damage and rpm,
+  because the server gates firing on it (`TdmRoom.ts:538`). Handling weight is expressed in
+  client-only numbers (sway multiplier, sprint-out, raise fraction) instead. (lead; matrix D-B1)
+- 2026-09-07 — **PROPOSALS, owner to sign with the matrix** (`docs/WEAPON_MATRIX.md`): D-B1 new
+  per-weapon presentation numbers live in a client-only `weaponFeel.ts` table, no `WeaponDef` or
+  schema field; D-B2 the DMR becomes `scoped` with a lighter ring overlay and no breath hold;
+  D-B3 while scoped Shift holds breath when still and un-scopes + sprints when moving; D-B4 the
+  signature threshold (0.25 normalised) is frozen after the first real run. (lead)
 
 - 2026-09-08 — Drop D: the invite link changed shape, from `?room=&mode=` on the front page to
   `/r/<room>?mode=`. A path survives being pasted into a chat app where a query string reads like a
@@ -347,3 +359,21 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 - Drop A: `weaponRig` has no `receiver` / `foregrip` roles; `weaponParts.pickReceiver` names the
   receiver by regex-then-volume instead. Fine for this pack; revisit if a model has a named
   handguard the support hand should be told about.
+- Drop B (recon): remote players eject no casings and get a fixed 0.30 flash (`view/index.ts:100`);
+  the other player's view of a weapon is not on the six axes and stays as it is until a playtest
+  asks for it.
+- Drop B (recon): the `clippers` row of the audio voice table is dead (melee routes to
+  `meleeSwing`, `sfx.ts:42-43`); harmless, remove when the table is next edited.
+- Drop B (recon): reload audio has exactly two shapes (shotgun shell-feed vs mag-out / mag-in /
+  bolt, `sfx.ts:252-274`); the matrix's per-weapon mechanical sounds (hammer, pump, bolt,
+  break-open, belt) will replace this if the matrix is signed.
+- Server (found by PR #13 CI, not Drop B's to fix): `TdmRoom.test.ts:53` "assigns balanced teams
+  and spawns each player alive at a map spawn point" is a coin toss on `main` since the ChatGPT
+  merge (8bc1256): `TdmRoom.ts:825` passes `anyTeam` to `pickSpawn` for TDM as well as FFA, so a
+  TDM join can land on the other team's point or an arena point, and `pickSpawn` picks at random
+  among the top three. Locally 1 in 10 runs fails; CI passed and failed the same commit. Either
+  the test accepts `[...spawns, ...arenaSpawns]` for TDM, or TDM goes back to `!this.teams` —
+  the owner decides which is the intended rule. Seeding the harness PRNG would only hide it.
+- Drop B: the ADS blend is a framerate-dependent lerp (`LocalPlayer.ts:243`), so `adsMs` is not
+  the measured 0.1 → 0.9 time; `weapon-signature.mjs` measures the real time and the matrix quotes
+  `adsMs` as intent. Making the blend exact is a one-line change to do with the tool in hand.
