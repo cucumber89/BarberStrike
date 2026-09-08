@@ -231,6 +231,8 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 
 Status vocabulary reminder: these rows are `review` because the full e2e path was not run here.
 
+| 2026-09-08 | G | drop/g-map-2 | Slice 1, docs only, the gate the drop names: `docs/MAP_2.md`. Four recon passes first (map data model; the validity suite; what each of the seven modes needs from a map; what the client pipeline gives a new map for free). **Theme decided and argued, not offered as a menu: the upstairs flat, not the delivery yard** — NIGHT_DISTRICT already contains an alley and a loading yard (`map.ts:113-116`), so a second yard is a re-skin of the same fight. MEASURED, 400 k eye-to-eye pairs over its 24 751 walkable cells: NIGHT_DISTRICT's median clear sight line is **24.0 m**, 36.6 % of clear lines exceed 30 m, longest 111 m. GÓRA is drawn at 34 × 18 m, ≈ 544 m², longest line 20 m, first contact 3.6 s (vs 8.0 s) and a bomb rotation 2.3 s (vs a measured 10.9 s). Two rings around a solid stair core and an open light well; spawns, three buy stations, three dom flags and two bomb sites placed for all seven modes. Rotation times come from the real `simulateBody` via a new `map-rotation.ts`; the ASCII plan is RENDERED from the extents table by `map-plan.ts` so the picture cannot drift from the numbers. Found while drawing: (a) `map.test.ts:107` demands buy stations spread > 30 m in x — a NIGHT_DISTRICT-shaped rule in a generic test, and the reason the flat is 34 m wide rather than 26; (b) `BOMB_SITES` is a module global (`bomb.ts:6`), so bomb cannot run on a second map without per-map sites; (c) `huntSpawnMinM` 14 m (`modes.ts:142`) is proportionally 3× as far on a 39 m diagonal as on a 121 m one; (d) corners and stairs cost **zero** time in this movement model, so height must be priced in exposure. Six decisions D-G1…D-G6 for the owner. No code touched; STOPPED for sign-off as the plan requires. | docs/MAP_2.md; `apps/client/e2e/tools/{map-rotation,map-plan}.ts` → `apps/client/e2e/out/g/{rotation.md,plan.txt}` (gitignored, regenerate with the command in each tool header) | typecheck ✓ test ✓ (shared 180/180) check:weapons ✓ (19/19) build — test:client/server — e2e — (no game code changed) | blocked: owner sign-off on docs/MAP_2.md |
+
 ## Decisions log (append-only)
 
 - 2026-09-07 — Plan created from the owner's brief: weapons structure + feel, procedural skins with
@@ -343,6 +345,22 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   nothing else, and Playwright reported `<canvas class="game-canvas"> intercepts pointer events`
   for a click meant for a BUY button. `startup.spec.ts` now asserts that whatever is fullscreen
   contains the HUD (a browser that refuses fullscreen outright stays fine). (lead)
+
+- 2026-09-08 — **Drop G: the second map is the upstairs flat, not the delivery yard.** The plan
+  offers either; the flat is the one that changes the game rather than the wallpaper. NIGHT_DISTRICT
+  already has an alley and a loading yard (`map.ts:113-116`), and its measured median clear sight
+  line is 24.0 m with 36.6 % of clear lines over 30 m — a lane map where the long guns own
+  everything. GÓRA's longest line is 20 m and its median is room-scale, which puts the S12, the K-7
+  and the clippers back in the roster Drop B tuned and gives the SR-50 exactly two lanes, both
+  flankable. It is also the shop's own upstairs, which is what the vision paragraph asks a map to
+  be. (lead → owner, D-G1)
+- 2026-09-08 — **PROPOSALS, owner to sign with `docs/MAP_2.md`**: D-G1 the flat over the yard;
+  D-G2 build to the 30 m buy-station spread rather than change the test that demands it;
+  D-G3 `huntSpawnMinM` becomes per-map (8 m on GÓRA) instead of a global 14 m; D-G4 bomb sites on
+  the centre line so both halves of a match are identical, not in the wings where the attacker gets
+  a 1.2 s free plant; D-G5 the light well is a real hole with `killY` under it (5 m across against a
+  measured 4.43 m sprint jump, so it cannot be crossed); D-G6 GÓRA ships with no tactical plans in
+  its first cut. (lead)
 
 ## Deferred (things noticed, deliberately not done)
 
@@ -494,3 +512,22 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   "waiting for 6000 ms of live wave" — neither test touching anything either process did, and both
   passing on the same tree once the strays were killed. Check for stray servers before believing a
   red suite. Worth a `pretest` that refuses to run while something else is holding the CPU.
+
+- Drop G: `map.test.ts:107` asserts the buy stations span **more than 30 m in x**. It reads as a
+  generic "spread across lanes" rule but the number is NIGHT_DISTRICT's (100 m of bounds); on a
+  small map it is a footprint requirement in disguise, and it is why GÓRA is drawn 34 m wide instead
+  of the 26 m the rooms want. "Spread > 60 % of the bounds width" is what the rule means. Not
+  changed here: it is a test on `main` and the owner's call (D-G2).
+- Drop G: `BOMB_SITES` (`bomb.ts:6`), `siteLoad` / `siteOf` (`floorAudit.ts:92,103`), the shared
+  world and walk-grid caches (`sharedWorld.ts:22,33,39`) and `PLANS[].removes` (`plans.ts:40`) are
+  all written against exactly one map. None of it is hard to generalise, but all of it has to be
+  done before a second map is playable in bomb, and none of it was touched by this docs-only slice.
+- Drop G: `floorAudit.test.ts`, `districtExpansion.test.ts`, `nav.test.ts`, `navPerf.test.ts` and
+  `spawn.test.ts` import `NIGHT_DISTRICT` directly, so they stay that map's tests. GÓRA needs its
+  own floor-audit and nav coverage in the same shape — that is geometry-slice work, not a rewrite of
+  the existing files.
+- Drop G (measured, useful beyond this drop): a 90° corner and a flight of stairs cost **zero** time
+  in the movement model — 20 m is 2.62 s straight and 2.60 s with a right angle in it, and 11 m
+  including a 3.0 m climb takes exactly as long as 11 m of floor. Any map's verticality is therefore
+  priced in exposure and audibility only. If height is ever meant to cost time, that is a movement
+  change (L6-adjacent) and not a map one.
