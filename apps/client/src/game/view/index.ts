@@ -101,12 +101,32 @@ export const installView: GameModule = (ctx) => {
         const distance = shotHit.hit ? shotHit.t : WEAPONS[s.weapon].rangeMax;
         tmpB.set(s.origin[0] + s.dir[0] * distance, s.origin[1] + s.dir[1] * distance, s.origin[2] + s.dir[2] * distance);
         tracers.spawn(m, tmpB, density(), feel.tracer);
+        // A pellet gun throws its whole pattern: one line down the middle is what made the S12 look
+        // like a very loud rifle. The spread here is presentation only — the pellets that decide the
+        // damage were traced by the server from its own cone.
+        if (feel.tracerCount > 1) {
+          // The S12's cone is constant (spreadPerShot 0), so its base spread IS its pattern width.
+          const cone = WEAPONS[s.weapon].spread * distance;
+          for (let i = 1; i < feel.tracerCount; i++) {
+            const a = (i / (feel.tracerCount - 1)) * Math.PI * 2;
+            const r = cone * (0.35 + Math.random() * 0.65);
+            tmpB.set(
+              s.origin[0] + s.dir[0] * distance + Math.cos(a) * r,
+              s.origin[1] + s.dir[1] * distance + Math.sin(a) * r * 0.8,
+              s.origin[2] + s.dir[2] * distance + Math.sin(a) * r,
+            );
+            tracers.spawn(m, tmpB, density(), feel.tracer);
+          }
+        }
       }
       // A gun that cycles itself throws its brass now; one worked by hand (revolver, pump, bolt)
       // holds on to it until the action is worked, which is where the eye expects to see it.
       if (feel.casings > 0) {
         const ej = viewmodel.ejectNode; ej.computeWorldMatrix(true);
         for (let i = 0; i < feel.casings; i++) effects.eject(tmpC.copyFrom(ej.getAbsolutePosition()), ctx.local.yaw, feel.casingScale, feel.ejectDown);
+        // A belt gun throws the spent link with the case — two objects a second is most of why an
+        // MG-4 firing looks like machinery rather than a rifle with a big magazine.
+        if (feel.beltLink) effects.eject(tmpC.copyFrom(ej.getAbsolutePosition()), ctx.local.yaw, 0.55, true);
       } else if (feel.actionMs > 0) {
         // At the peak of the VISIBLE action, which is a tenth of a second, not at the end of the
         // rhythm the shooter feels — the bolt is open for 125 ms and the SR-50's `actionMs` is 700.

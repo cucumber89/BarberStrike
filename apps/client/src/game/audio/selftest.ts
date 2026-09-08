@@ -10,6 +10,7 @@ import type { GameContext } from "../context";
 import type { AudioEngine } from "./engine";
 import * as sfx from "./sfx";
 import { sharedBuffers, type Graph } from "./synth";
+import { WEAPON_FEEL } from "../combat/weaponFeel";
 
 export interface OfflineResult { name: string; peakDb: number; ok: boolean; seconds: number; }
 export interface SelfTestReport {
@@ -29,6 +30,7 @@ function catalogue(): [string, sfx.SoundFn][] {
     list.push([`gunshot:${w}`, sfx.gunshot(w)]);
     list.push([`gunshot:${w}:distant`, sfx.gunshot(w, true)]);
     list.push([`reload:${w}`, sfx.reload(w, WEAPONS[w].reloadMs)]);
+    if (WEAPON_FEEL[w].actionMs > 0) list.push([`action:${w}`, sfx.weaponAction(w, WEAPON_FEEL[w].actionMs)]);
     list.push([`equip:${w}`, sfx.equip(WEAPONS[w].equipMs)]);
   }
   list.push(["dryFire", sfx.dryFire]);

@@ -254,6 +254,47 @@ function swish(g: Graph, at: number, from: number, to: number, len: number, leve
   env(nG.gain, at, level, len * 0.35, len * 0.5);
 }
 
+/**
+ * Drop B, axis 2: the action a gun makes the shooter work between shots. The report says what the
+ * weapon is; this says what kind of machine it is — a hammer cocked, a pump run, a bolt lifted and
+ * pushed home. `actionMs` is the rhythm the shooter feels (the feel table's number), and the sounds
+ * are placed inside it rather than at its end.
+ */
+export function weaponAction(weapon: WeaponId, actionMs: number): SoundFn {
+  return (g) => {
+    const t = g.t;
+    const A = actionMs / 1000;
+    if (weapon === "revolver") {
+      // Single-action lockwork: the hammer rides back and drops into the notch.
+      click(g, t + A * 0.35, 2600, 0.26, 0.008);
+      click(g, t + A * 0.75, 3100, 0.18, 0.006);
+      return A + 0.1;
+    }
+    if (weapon === "shotgun") {
+      // Pump: the fore-end runs back (the hull comes out here) and slams forward.
+      click(g, t + A * 0.18, 1500, 0.34, 0.016);
+      swish(g, t + A * 0.22, 900, 420, 0.10, 0.09);
+      thud(g, t + A * 0.30, 150, 0.20, 0.05);
+      click(g, t + A * 0.62, 1250, 0.38, 0.018);
+      thud(g, t + A * 0.66, 130, 0.26, 0.06);
+      return A + 0.15;
+    }
+    if (weapon === "sniper") {
+      // Bolt: handle up, back, forward, down. Four sounds is what makes it read as a bolt gun.
+      click(g, t + A * 0.10, 2000, 0.30, 0.014);
+      swish(g, t + A * 0.20, 1100, 380, 0.12, 0.11);
+      click(g, t + A * 0.34, 1700, 0.22, 0.012);
+      swish(g, t + A * 0.55, 1000, 360, 0.11, 0.10);
+      click(g, t + A * 0.72, 1900, 0.34, 0.016);
+      thud(g, t + A * 0.78, 160, 0.18, 0.05);
+      return A + 0.2;
+    }
+    // Everything else cycles itself: a slide running is part of the report, not a second event.
+    click(g, t + A * 0.4, 2800, 0.12, 0.006);
+    return A + 0.05;
+  };
+}
+
 /** Mag out → mag in → bolt, spread across the weapon's reload time. */
 export function reload(weapon: WeaponId, reloadMs: number): SoundFn {
   return (g) => {

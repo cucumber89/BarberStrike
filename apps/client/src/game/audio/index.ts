@@ -14,6 +14,7 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { GameContext, GameModule } from "../context";
 import { loadSettings, type Settings } from "../../settings";
 import { AudioEngine, Priority } from "./engine";
+import { feelOf } from "../combat/weaponFeel";
 import { Ambience } from "./ambience";
 import { Music } from "./music";
 import { RemoteAudio } from "./remotes";
@@ -76,7 +77,13 @@ export const installAudio: GameModule = (ctx) => {
   let countdownTimers: number[] = [];
   const clearCountdown = () => { for (const t of countdownTimers) window.clearTimeout(t); countdownTimers = []; };
 
-  on("localShot", (e) => play(WEAPONS[e.weapon].kind === "melee" ? sfx.meleeSwing(false) : sfx.gunshot(e.weapon), Priority.gunshot, 0.9));
+  on("localShot", (e) => {
+    play(WEAPONS[e.weapon].kind === "melee" ? sfx.meleeSwing(false) : sfx.gunshot(e.weapon), Priority.gunshot, 0.9);
+    // Drop B, axis 2: the machine the shooter works between shots. Quieter than the report and
+    // priced as a reload, so a burst never spends gunshot voices on lockwork.
+    const action = feelOf(e.weapon).actionMs;
+    if (action > 0) play(sfx.weaponAction(e.weapon, action), Priority.reload, 0.5);
+  });
   on("remoteShot", (e) => {
     if (WEAPONS[e.event.weapon].kind === "melee") eng.play(sfx.meleeSwing(e.event.k.length > 0), { priority: Priority.movement, gain: 0.7, position: at(e.event.o[0], e.event.o[1], e.event.o[2]), maxDistance: 18 });
     else remotes.shot(e.player, e.event.weapon, e.event.o);

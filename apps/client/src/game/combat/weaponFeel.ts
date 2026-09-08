@@ -39,6 +39,13 @@ export interface WeaponFeel {
   /** Drops its brass out of the bottom instead of throwing it right (the VZ-9's magazine well). */
   ejectDown: boolean;
   /**
+   * Tracers drawn per shot. The S12 throws its whole pattern, which is the only way the spray reads
+   * as a spray; a belt gun draws one but a fat one (see `tracer`).
+   */
+  tracerCount: number;
+  /** Throws a spent belt link with the case (the MG-4 alone). */
+  beltLink: boolean;
+  /**
    * Mechanical action worked after each shot (ms): the revolver's hammer, the shotgun's pump, the
    * sniper's bolt. 0 = the gun cycles itself. The sniper's bolt also drops it out of the scope (S1).
    */
@@ -61,67 +68,67 @@ export const WEAPON_FEEL: Record<WeaponId, WeaponFeel> = {
   // Snappy, polite. Back on target before the next shot; the slide is the only moving part.
   pistol: {
     sway: 0.6, sprintOutMs: 90, raise: 0.6,
-    flash: 0.18, shake: 0.003, tracer: 1.0, casings: 1, casingScale: 0.8, ejectDown: false,
+    flash: 0.18, shake: 0.003, tracer: 1.0, casings: 1, casingScale: 0.8, ejectDown: false, tracerCount: 1, beltLink: false,
     actionMs: 60, scope: null, breath: false, scopeDrift: 0, bipod: false,
   },
   // A hammer blow, then a slow arc back. Six cases drop together at the reload, none per shot.
   revolver: {
     sway: 1.0, sprintOutMs: 140, raise: 0.9,
-    flash: 0.30, shake: 0.008, tracer: 1.15, casings: 0, casingScale: 1.0, ejectDown: false,
+    flash: 0.30, shake: 0.008, tracer: 1.15, casings: 0, casingScale: 1.0, ejectDown: false, tracerCount: 1, beltLink: false,
     actionMs: 120, scope: null, breath: false, scopeDrift: 0, bipod: false,
   },
   // Sewing machine. The brass fountain is the picture; the tail never overlaps the next shot.
   smg: {
     sway: 0.8, sprintOutMs: 110, raise: 0.7,
-    flash: 0.16, shake: 0.003, tracer: 0.9, casings: 1, casingScale: 0.8, ejectDown: false,
+    flash: 0.16, shake: 0.003, tracer: 0.9, casings: 1, casingScale: 0.8, ejectDown: false, tracerCount: 1, beltLink: false,
     actionMs: 0, scope: null, breath: false, scopeDrift: 0, bipod: false,
   },
   // Screams. Fastest handling in the game and the lightest sway; ejects downward, not right.
   smg2: {
     sway: 0.5, sprintOutMs: 80, raise: 0.5,
-    flash: 0.14, shake: 0.002, tracer: 0.85, casings: 1, casingScale: 0.7, ejectDown: true,
+    flash: 0.14, shake: 0.002, tracer: 0.85, casings: 1, casingScale: 0.7, ejectDown: true, tracerCount: 1, beltLink: false,
     actionMs: 0, scope: null, breath: false, scopeDrift: 0, bipod: false,
   },
   // The reference rifle: every other row is louder, heavier or lighter than this one.
   rifle: {
     sway: 1.0, sprintOutMs: 150, raise: 0.8,
-    flash: 0.22, shake: 0.004, tracer: 1.0, casings: 1, casingScale: 1.0, ejectDown: false,
+    flash: 0.22, shake: 0.004, tracer: 1.0, casings: 1, casingScale: 1.0, ejectDown: false, tracerCount: 1, beltLink: false,
     actionMs: 0, scope: null, breath: false, scopeDrift: 0, bipod: false,
   },
   // Heavy, wide, then it settles. Slowest to bring up, and the only gun that gets a bipod.
   lmg: {
     sway: 1.6, sprintOutMs: 260, raise: 1.0,
-    flash: 0.30, shake: 0.005, tracer: 1.5, casings: 1, casingScale: 1.0, ejectDown: false,
+    flash: 0.30, shake: 0.005, tracer: 1.5, casings: 1, casingScale: 1.0, ejectDown: false, tracerCount: 1, beltLink: true,
     actionMs: 0, scope: null, breath: false, scopeDrift: 0, bipod: true,
   },
   // One heavy shove, brought back by the pump — which is also when the red shell comes out.
   shotgun: {
     sway: 1.2, sprintOutMs: 180, raise: 0.9,
-    flash: 0.40, shake: 0.012, tracer: 0.8, casings: 0, casingScale: 1.6, ejectDown: false,
+    flash: 0.40, shake: 0.012, tracer: 0.8, casings: 0, casingScale: 1.6, ejectDown: false, tracerCount: 9, beltLink: false,
     actionMs: 250, scope: null, breath: false, scopeDrift: 0, bipod: false,
   },
   // Heavy, precise, slow to settle. D-B2: a light ring the eye can see past, and no breath hold.
   dmr: {
     sway: 1.1, sprintOutMs: 200, raise: 0.9,
-    flash: 0.26, shake: 0.010, tracer: 1.3, casings: 1, casingScale: 1.2, ejectDown: false,
+    flash: 0.26, shake: 0.010, tracer: 1.3, casings: 1, casingScale: 1.2, ejectDown: false, tracerCount: 1, beltLink: false,
     actionMs: 0, scope: "ring", breath: false, scopeDrift: 0.5, bipod: false,
   },
   // Cannon. The bolt kicks it out of the scope for most of a second (S1) and drops the case then.
   sniper: {
     sway: 1.0, sprintOutMs: 300, raise: 1.0,
-    flash: 0.45, shake: 0.014, tracer: 1.6, casings: 0, casingScale: 1.8, ejectDown: false,
+    flash: 0.45, shake: 0.014, tracer: 1.6, casings: 0, casingScale: 1.8, ejectDown: false, tracerCount: 1, beltLink: false,
     actionMs: 700, scope: "tube", breath: true, scopeDrift: 1.0, bipod: false,
   },
   // Thump. The shell is its own tracer, and the case comes out at the break-open reload.
   launcher: {
     sway: 1.3, sprintOutMs: 220, raise: 1.0,
-    flash: 0.35, shake: 0.014, tracer: 0, casings: 0, casingScale: 1.0, ejectDown: false,
+    flash: 0.35, shake: 0.014, tracer: 0, casings: 0, casingScale: 1.0, ejectDown: false, tracerCount: 1, beltLink: false,
     actionMs: 0, scope: null, breath: false, scopeDrift: 0, bipod: false,
   },
   // A nudge. Nothing fires, so nothing flashes, traces or ejects.
   clippers: {
     sway: 0.4, sprintOutMs: 60, raise: 0.4,
-    flash: 0, shake: 0.002, tracer: 0, casings: 0, casingScale: 1.0, ejectDown: false,
+    flash: 0, shake: 0.002, tracer: 0, casings: 0, casingScale: 1.0, ejectDown: false, tracerCount: 1, beltLink: false,
     actionMs: 0, scope: null, breath: false, scopeDrift: 0, bipod: false,
   },
 };
