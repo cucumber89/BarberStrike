@@ -1,3 +1,4 @@
+import { MatchPhase } from "@frankibarber/shared";
 import type { GameModule } from "../context";
 import { hud } from "../store";
 import { DynamicScale } from "./dynamicScale";
@@ -12,6 +13,13 @@ import { applyQualityPreset } from "../../settings";
  *   than from a menu the player has to find. A short startup measurement sets the opening level
  *   (see deviceProbe.ts), then `AutoQuality` moves it one step at a time with long hysteresis and
  *   gives up climbing after two reversals, so it settles instead of flapping;
+ *
+ *   WHEN it applies matters as much as what it picks, and getting that wrong is what made the game
+ *   hitch a second or two after the player pressed DEPLOY. Changing quality rebuilds shadow maps
+ *   and post-processing — it costs frames by definition — so a change is only ever applied at a
+ *   moment where losing a couple of frames costs nothing: before the player has deployed, while
+ *   they are dead, or during a buy window. Anywhere else it waits. A player in a gunfight never
+ *   pays for the director's opinion;
  * - dynamic render scale (the finer, faster safety valve underneath it — see dynamicScale.ts);
  * - telemetry (dev only): FPS, frame time, worst frame, draw calls, active meshes, particles,
  *   prediction corrections and network state, published to the hud store twice a second.
@@ -63,8 +71,24 @@ export const installPerf: GameModule = (ctx) => {
    */
   let probeFrames: number[] | null = ctx.settings.graphics.auto ? [] : null;
   let probeStart = 0;
+
+  /**
+   * Is this a moment where losing a frame or two is free? Before the player has deployed the HUD
+   * still reads "not ready"; after that, being dead or inside a buy window are the safe windows.
+   */
+  const safeToRestyle = (): boolean => {
+    const h = hud.get();
+    if (h.loadStage !== "ready" || !h.connected) return true;   // still on the loading / deploy screen
+    return !h.alive || h.phase !== MatchPhase.Playing;
+  };
+
+  /** A tier the director wants but could not apply yet, held until a safe moment arrives. */
+  let pending: { tier: AutoTier; why: string } | null = null;
+
   const applyTier = (tier: AutoTier, why: string) => {
-    if (tier === ctx.settings.graphics.preset) return;
+    if (tier === ctx.settings.graphics.preset) { pending = null; return; }
+    if (!safeToRestyle()) { pending = { tier, why }; return; }
+    pending = null;
     const next = applyQualityPreset(ctx.settings.graphics, tier);
     ctx.settings.graphics = { ...next, auto: true };
     console.info(`[quality] ${why} → ${tier}`);
@@ -80,6 +104,8 @@ export const installPerf: GameModule = (ctx) => {
     acc += dt; frames++;
     if (dt > worst) worst = dt;
     if (ctx.settings.graphics.auto && ready) {
+      // A change the director asked for while the player was alive lands the moment it is free.
+      if (pending && safeToRestyle()) applyTier(pending.tier, pending.why);
       if (probeFrames) {
         if (probeStart === 0) probeStart = now;
         // Discard the first second outright, then take one second of frames.
