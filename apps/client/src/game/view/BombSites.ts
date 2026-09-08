@@ -4,7 +4,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import type { Scene } from "@babylonjs/core/scene";
-import { BOMB, BOMB_SITES, type BombData } from "@frankibarber/shared";
+import { BOMB, sitesOf, type BombData, type MapDef } from "@frankibarber/shared";
 
 /** Physical, occluded site markings and an in-world procedural charge. */
 export class BombSites {
@@ -12,14 +12,19 @@ export class BombSites {
   private materials: StandardMaterial[] = [];
   private charge: Mesh;
   private led: StandardMaterial;
-  constructor(scene: Scene) {
+  /**
+   * The sites belong to the MAP, not to the module: a second map (GÓRA) plants in its own rooms.
+   * The map the round is running is the one the context already resolved (`Game.start`), so it is
+   * passed in rather than imported — importing one would paint NIGHT_DISTRICT's pair on every map.
+   */
+  constructor(scene: Scene, map: MapDef) {
     const mat = (name: string, hex: string) => {
       const m = new StandardMaterial(name, scene); m.diffuseColor = Color3.FromHexString(hex);
       m.emissiveColor = m.diffuseColor.scale(0.3); m.specularColor = Color3.Black();
       this.materials.push(m); return m;
     };
     const yellow = mat("site_paint", "#e5ae52");
-    for (const site of BOMB_SITES) {
+    for (const site of sitesOf(map)) {
       // main's #14 replaced an 80 m² hazard-striped plate with a ring and a 3 × 1.5 m label. That is
       // a better answer to the overdraw this branch set out to fix — 4.5 m² of alpha instead of 80 —
       // so its geometry is what survives the merge. What this branch adds back is the discipline the

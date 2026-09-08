@@ -70,7 +70,7 @@ export function App() {
     try { if (g) await g.dispose(); else await c?.leave(); } catch (error) { console.warn("[app] cleanup", error); }
   }, []);
 
-  const play = useCallback(async (name: string, roomName: string, mode: "auto" | "create" | "join", roomId: string | undefined, gameMode: GameMode, bots: { count: number; level: BotLevel }) => {
+  const play = useCallback(async (name: string, roomName: string, mode: "auto" | "create" | "join", roomId: string | undefined, gameMode: GameMode, bots: { count: number; level: BotLevel }, mapId: string) => {
     if (starting.current || gameRef.current) return;
     starting.current = true;
     const token = ++attempt.current;
@@ -78,7 +78,7 @@ export function App() {
     setScreen({ kind: "connecting" });
     const timeout = window.setTimeout(() => { if (attempt.current === token) void leave("Loading took too long. Please try again or lower graphics settings."); }, 90000);
     const startWith = async (s: Settings): Promise<void> => {
-      const connection = await Connection.connect({ url: defaultServerUrl(), name, roomName, mode, roomId, gameMode, bots: bots.count, botLevel: bots.level });
+      const connection = await Connection.connect({ url: defaultServerUrl(), name, roomName, mode, roomId, gameMode, mapId, bots: bots.count, botLevel: bots.level });
       if (attempt.current !== token) { await connection.leave(); return; }
       connectionRef.current = connection;
       const game = new Game({ canvas: freshCanvas(), connection, settings: s, onLeave: reason => { if (attempt.current === token) void leave(reason); } });
