@@ -23,7 +23,11 @@ html, body, #root { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--tx); font-family: var(--font-ui); overflow: hidden; -webkit-font-smoothing: antialiased; }
 button { font-family: inherit; }
 .app { position: relative; width: 100%; height: 100%; }
-.game-canvas-host { position: absolute; inset: 0; }
+/* The canvas host and the HUD are both absolutely positioned. Left on `z-index: auto` the painting
+   order is DOM order — and entering a match appends a FRESH canvas (App.tsx `freshCanvas()`), which
+   lands after the HUD and covers it completely: no crosshair, no health, no ammo, just the game.
+   Stacking them explicitly is what stops that being a coin toss on how the mount ordered. */
+.game-canvas-host { position: absolute; inset: 0; z-index: 0; }
 .game-canvas { position: absolute; inset: 0; width: 100%; height: 100%; outline: none; display: block; touch-action: none; }
 
 /* ---------- Menu ---------- */
@@ -88,21 +92,38 @@ button { font-family: inherit; }
 .settings { max-height: 60vh; overflow: auto; padding-right: 6px; }
 
 /* ---------- HUD ---------- */
-.hud { position: absolute; inset: 0; pointer-events: none; user-select: none; font-family: var(--font-ui); }
+.hud { position: absolute; inset: 0; z-index: 1; pointer-events: none; user-select: none; font-family: var(--font-ui); }
 .hud > * { pointer-events: none; }
 .hud.low-health::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 120px rgba(217, 74, 58, 0.45); animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
 .damage-dir { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
 .damage-dir::before { content: ""; position: absolute; left: -60px; top: -180px; width: 120px; height: 40px; background: radial-gradient(ellipse at 50% 100%, rgba(217, 74, 58, 0.9), transparent 70%); }
 
-.crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
-.crosshair span { position: absolute; background: #fff; box-shadow: 0 0 2px rgba(0,0,0,.9); }
-.crosshair { --gap: 5px; }
-.ch-top { left: -1px; top: calc(-1 * var(--gap) - 6px); width: 2px; height: 6px; }
-.ch-bottom { left: -1px; top: var(--gap); width: 2px; height: 6px; }
-.ch-left { left: calc(-1 * var(--gap) - 6px); top: -1px; width: 6px; height: 2px; }
-.ch-right { left: var(--gap); top: -1px; width: 6px; height: 2px; }
+/* The crosshair is drawn from the player's own settings: --len arm length, --w thickness,
+   --gap the resting gap, --ch-color the colour. The outline is a shadow rather than a border so a
+   1 px arm keeps its exact width against a bright wall. */
+.crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --gap: 5px; --len: 8px; --w: 2px; --ch-color: #fff; }
+.crosshair span { position: absolute; background: var(--ch-color); }
+.crosshair.outlined span { box-shadow: 0 0 0 1px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.9); }
+.ch-top { left: calc(-1 * var(--w) / 2); top: calc(-1 * var(--gap) - var(--len)); width: var(--w); height: var(--len); }
+.ch-bottom { left: calc(-1 * var(--w) / 2); top: var(--gap); width: var(--w); height: var(--len); }
+.ch-left { left: calc(-1 * var(--gap) - var(--len)); top: calc(-1 * var(--w) / 2); width: var(--len); height: var(--w); }
+.ch-right { left: var(--gap); top: calc(-1 * var(--w) / 2); width: var(--len); height: var(--w); }
+.ch-dot { left: calc(-1 * var(--w) / 2); top: calc(-1 * var(--w) / 2); width: var(--w); height: var(--w); border-radius: 50%; }
+.ch-circle { left: calc(-1 * var(--gap) - var(--len) / 2); top: calc(-1 * var(--gap) - var(--len) / 2);
+  width: calc(2 * var(--gap) + var(--len)); height: calc(2 * var(--gap) + var(--len));
+  border: var(--w) solid var(--ch-color); border-radius: 50%; background: none !important; }
+.crosshair.outlined .ch-circle { box-shadow: 0 0 0 1px rgba(0,0,0,.85), inset 0 0 0 1px rgba(0,0,0,.85); }
 .crosshair span { transition: left 60ms linear, top 60ms linear; }
+/* Settings: the crosshair on a strip of the game's own darkness, so the choice is made against
+   roughly what it will sit on in play. */
+.ch-preview { position: relative; height: 84px; margin: 6px 0 10px; border: 1px solid var(--line);
+  background: linear-gradient(135deg, #14161a 0%, #1d2026 45%, #2a2f37 100%); overflow: hidden; }
+.ch-preview .crosshair { left: 50%; top: 50%; }
+.ch-colors { display: flex; align-items: center; gap: 6px; }
+.ch-swatch { width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 2px; cursor: pointer; padding: 0; }
+.ch-swatch.active { outline: 2px solid var(--tx-1); outline-offset: 1px; }
+.ch-colors input[type="color"] { width: 26px; height: 22px; padding: 0; border: 1px solid var(--line); background: none; cursor: pointer; }
 /* C1: the pellet cone drawn at its true radius, which the four-line gap caps out well below. */
 .crosshair .ch-ring { --r: 30px; left: calc(-1 * var(--r)); top: calc(-1 * var(--r)); width: calc(2 * var(--r)); height: calc(2 * var(--r)); border: 1px solid rgba(255,255,255,.55); border-radius: 50%; background: none; box-shadow: 0 0 2px rgba(0,0,0,.9); transition: none; }
 .crosshair.head .hitmarker::before, .crosshair.head .hitmarker::after { background: var(--brass); }
@@ -355,7 +376,12 @@ button { font-family: inherit; }
 .perk-flask .perk-bar { background: #d9a441; } .perk-roids .perk-bar { background: #7dff9a; } .perk-energy .perk-bar { background: #8fd3ff; } .perk-fade .perk-bar { background: var(--purple); }
 .crosshair.armor span { background: #8fd3ff; }
 .flask-haze { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 140px 40px rgba(217,164,65,.22); backdrop-filter: blur(0px); }
-.scope { position: absolute; inset: 0; pointer-events: none; }
+/* `contain: paint` + its own layer keeps the full-viewport gradient below from being re-rasterised
+   with every HUD re-render (the HUD re-renders each frame: fps, timer, breath).
+   NOT measured as a win here: SwiftShader is CPU-bound at 2-5 fps, and hiding this overlay entirely
+   changed the frame rate by nothing, so any compositor cost is invisible on this machine. It is
+   cheap insurance for a real GPU running at 144, not a fix for a diagnosed problem. */
+.scope { position: absolute; inset: 0; pointer-events: none; contain: paint; will-change: opacity; }
 .scope-mask { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, transparent 0, transparent min(34vw, 34vh), rgba(0,0,0,.96) calc(min(34vw, 34vh) + 3px), #000 100%); }
 .scope-reticle { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
 .scope-reticle span { position: absolute; background: rgba(0,0,0,.9); }

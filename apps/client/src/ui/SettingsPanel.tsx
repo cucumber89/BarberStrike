@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import {
-  BINDABLE_ACTIONS, QUALITY_MODES, RESERVED_CODES, applyQualityMode, applyQualityPreset, bindingConflicts,
+  BINDABLE_ACTIONS, CROSSHAIR_STYLES, QUALITY_MODES, RESERVED_CODES, applyQualityMode, applyQualityPreset, bindingConflicts,
   defaultSettings, isCustomGraphics, keyLabel, qualityMode, resolveBindings,
   type BindableAction, type QualityPreset, type Settings,
 } from "../settings";
+
+/** Six that stay legible against this map at night; the picker next to them takes anything. */
+const CROSSHAIR_COLORS = ["#ffffff", "#00ff88", "#00e5ff", "#ffd23f", "#ff4d4d", "#ff44cc"] as const;
 
 interface Props { settings: Settings; onChange: (s: Settings) => void }
 
@@ -25,11 +28,54 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
   );
 }
 
+/**
+ * A live crosshair on the settings panel's own background. Every number below changes something a
+ * player can only judge by looking at it, and making them close the menu, shoot, and come back to
+ * try 2 px wider is how a crosshair menu becomes a thing nobody touches.
+ */
+function CrosshairPreview({ c }: { c: Settings["hud"]["crosshair"] }) {
+  const vars = { "--gap": `${c.gap}px`, "--len": `${c.size}px`, "--w": `${c.thickness}px`, "--ch-color": c.color } as React.CSSProperties;
+  return (
+    <div className="ch-preview" data-testid="crosshair-preview">
+      <div className={`crosshair ch-${c.style} ${c.outline ? "outlined" : ""}`} style={vars}>
+        {c.style !== "dot" && c.style !== "circle" && <><span className="ch-top" /><span className="ch-bottom" /><span className="ch-left" /><span className="ch-right" /></>}
+        {c.style === "circle" && <span className="ch-circle" />}
+        {(c.style === "dot" || c.style === "cross-dot") && <span className="ch-dot" />}
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPanel({ settings, onChange }: Props) {
   const g = settings.gameplay, gr = settings.graphics, a = settings.audio;
+  const hud = settings.hud, c = hud.crosshair;
   const set = (patch: Partial<Settings>) => onChange({ ...settings, ...patch });
+  const setCh = (patch: Partial<Settings["hud"]["crosshair"]>) => set({ hud: { ...hud, crosshair: { ...c, ...patch } } });
   return (
     <div className="settings">
+      <h3>CROSSHAIR</h3>
+      <CrosshairPreview c={c} />
+      <label className="field"><span>Shape</span>
+        <div className="segmented">{CROSSHAIR_STYLES.map((s) => (
+          <button key={s.id} type="button" className={c.style === s.id ? "active" : ""} onClick={() => setCh({ style: s.id })}>{s.label}</button>
+        ))}</div>
+      </label>
+      <Slider label="Size" value={c.size} min={2} max={24} step={1} onChange={(v) => setCh({ size: v })} format={(v) => `${v} px`} />
+      <Slider label="Thickness" value={c.thickness} min={1} max={6} step={1} onChange={(v) => setCh({ thickness: v })} format={(v) => `${v} px`} />
+      <Slider label="Gap" value={c.gap} min={0} max={20} step={1} onChange={(v) => setCh({ gap: v })} format={(v) => `${v} px`} />
+      <label className="field"><span>Colour</span>
+        <div className="ch-colors">
+          {CROSSHAIR_COLORS.map((hex) => (
+            <button key={hex} type="button" className={`ch-swatch ${c.color.toLowerCase() === hex ? "active" : ""}`}
+              style={{ background: hex }} aria-label={hex} onClick={() => setCh({ color: hex })} />
+          ))}
+          <input type="color" value={c.color} onChange={(e) => setCh({ color: e.target.value })} aria-label="Custom crosshair colour" />
+        </div>
+      </label>
+      <Toggle label="Opens with the weapon's spread" value={c.dynamic} onChange={(v) => setCh({ dynamic: v })} />
+      <Toggle label="Dark outline (readable on light walls)" value={c.outline} onChange={(v) => setCh({ outline: v })} />
+      <Toggle label="Show frame rate and ping" value={hud.fps} onChange={(v) => set({ hud: { ...hud, fps: v } })} />
+
       <h3>GAMEPLAY</h3>
       <Slider label="Mouse sensitivity" value={g.sensitivity} min={0.3} max={8} step={0.1} onChange={(v) => set({ gameplay: { ...g, sensitivity: v } })} format={(v) => v.toFixed(1)} />
       <Slider label="Field of view" value={g.fov} min={70} max={110} step={1} onChange={(v) => set({ gameplay: { ...g, fov: v } })} format={(v) => `${v}°`} />

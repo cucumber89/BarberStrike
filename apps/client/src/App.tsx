@@ -155,7 +155,14 @@ export function App() {
             const el = canvasHost.current;
             if (isFullscreen()) { exitImmersion(); return false; }
             const ok = el ? await enterFullscreen(el) : false;
-            if (ok) void lockKeyboard();
+            if (ok) {
+              void lockKeyboard();
+              // Entering fullscreen drops the pointer lock, and everything the player reads while
+              // playing — the crosshair, the tactical meter — is gated on holding it, so without
+              // this you land in fullscreen with the pause menu open and no HUD. Taking it back is
+              // what "go fullscreen" was always supposed to mean.
+              await gameRef.current?.requestPointerLockAsync();
+            }
             return ok;
           }}
           onChooseTeam={(t) => gameRef.current?.chooseTeam(t)}

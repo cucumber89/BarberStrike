@@ -49,7 +49,40 @@ export const BINDABLE_ACTIONS: readonly { id: BindableAction; label: string }[] 
   { id: "leanRight", label: "Lean right" },
 ];
 
+/**
+ * Crosshair shapes. Four is the whole list on purpose: the brief asks for a SIMPLER interface, not
+ * a poorer one, and a shape picker with twenty entries is the poorer kind of rich.
+ */
+export type CrosshairStyle = "cross" | "cross-dot" | "dot" | "circle";
+export const CROSSHAIR_STYLES: readonly { id: CrosshairStyle; label: string }[] = [
+  { id: "cross", label: "CROSS" },
+  { id: "cross-dot", label: "CROSS + DOT" },
+  { id: "dot", label: "DOT" },
+  { id: "circle", label: "CIRCLE" },
+];
+
 export interface Settings {
+  /**
+   * What the player sees over the game. Restored after #14 removed the crosshair block: a shooter
+   * without a crosshair the player can size, colour and read against their own monitor is missing
+   * the one piece of UI they look at every single second.
+   */
+  hud: {
+    /** Frame counter and ping, top left. Was DEV-only, so a built game could never show it. */
+    fps: boolean;
+    crosshair: {
+      style: CrosshairStyle;
+      /** Arm length and thickness in px, and the gap from the centre. */
+      size: number;
+      thickness: number;
+      gap: number;
+      /** Opens with the weapon's real spread instead of standing still. */
+      dynamic: boolean;
+      /** Dark outline, so the reticle survives a light wall behind it. */
+      outline: boolean;
+      color: string;
+    };
+  };
   gameplay: {
     sensitivity: number; // 0.5 .. 10 (radians per pixel × 1000 → 1.0 ≈ 0.001 rad/px)
     invertY: boolean;
@@ -107,6 +140,10 @@ export const PRESETS: Record<QualityPreset, Settings["graphics"]> = {
 };
 
 export const defaultSettings = (): Settings => ({
+  hud: {
+    fps: false,
+    crosshair: { style: "cross", size: 8, thickness: 2, gap: 5, dynamic: true, outline: true, color: "#ffffff" },
+  },
   gameplay: { sensitivity: 2.2, invertY: false, fov: 90, headBob: 0.6, cameraShake: 0.7 },
   // AUTOMATIC out of the box: the device is probed at startup and the first seconds of real
   // frames decide the level, so nobody has to find a graphics menu to get a playable game. MEDIUM
@@ -166,7 +203,23 @@ export function isCustomGraphics(g: Settings["graphics"]): boolean {
 export function repairSettings(input: unknown, base = defaultSettings()): Settings {
   const parsed = (input && typeof input === "object" ? input : {}) as Partial<Settings>;
   const g = parsed.gameplay ?? base.gameplay, audio = parsed.audio ?? base.audio;
+  const hud = parsed.hud ?? base.hud;
+  const ch = hud.crosshair ?? base.hud.crosshair;
   return {
+    hud: {
+      fps: bool(hud.fps, base.hud.fps),
+      crosshair: {
+        style: CROSSHAIR_STYLES.some((s) => s.id === ch.style) ? ch.style : base.hud.crosshair.style,
+        size: num(ch.size, base.hud.crosshair.size, 2, 24),
+        thickness: num(ch.thickness, base.hud.crosshair.thickness, 1, 6),
+        gap: num(ch.gap, base.hud.crosshair.gap, 0, 20),
+        dynamic: bool(ch.dynamic, base.hud.crosshair.dynamic),
+        outline: bool(ch.outline, base.hud.crosshair.outline),
+        // A stored colour goes straight into a CSS custom property, so it is checked against a
+        // literal hex shape rather than trusted — anything else falls back to the default.
+        color: typeof ch.color === "string" && /^#[0-9a-fA-F]{6}$/.test(ch.color) ? ch.color : base.hud.crosshair.color,
+      },
+    },
     gameplay: { sensitivity: num(g.sensitivity, base.gameplay.sensitivity, .3, 8), invertY: bool(g.invertY, base.gameplay.invertY),
       fov: num(g.fov, base.gameplay.fov, 70, 110), headBob: num(g.headBob, base.gameplay.headBob, 0, 1), cameraShake: num(g.cameraShake, base.gameplay.cameraShake, 0, 1) },
     graphics: repairGraphics(parsed.graphics, base.graphics),

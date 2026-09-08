@@ -161,7 +161,9 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   const dmgAge = performance.now() - h.damageAt;
   const lowHealth = h.alive && h.health <= 30;
   // Crosshair gap grows with the effective spread (radians → px at the current FOV). Clamped for readability.
-  const gap = Math.round(Math.min(34, 5 + h.crosshairSpread * 900));
+  const ch = settings.hud.crosshair;
+  // The gap is the player's own resting gap, opened by the real spread when they asked for that.
+  const gap = ch.dynamic ? Math.round(Math.min(34, ch.gap + h.crosshairSpread * 900)) : ch.gap;
   // C1 (matrix): pellet weapons show the true cone as a ring, uncapped — the gap above stops at
   // 34 px, and the S12's cone is roughly 50.
   const spreadRing = pelletRing(h.weapon as WeaponId) ? Math.round(h.crosshairSpread * 900) : null;
@@ -237,10 +239,18 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {/* Damage vignette / direction */}
       {dmgAge < 600 && <div className="damage-dir" style={{ transform: `rotate(${h.damageAngle}rad)`, opacity: 1 - dmgAge / 600 }} />}
 
-      {/* Crosshair (hidden in ADS and while a grenade is in the hand: the cook ring takes its place) */}
+      {/* Crosshair (hidden in ADS and while a grenade is in the hand: the cook ring takes its place).
+          Shape, size, thickness, gap and colour come from the player's own settings — this is the
+          one piece of UI they look at every second of the match. */}
       {h.alive && h.pointerLocked && !h.aiming && h.cookingKind === "" && (
-        <div className={`crosshair ${hitAge < 180 ? (h.hitKill ? "kill" : h.hitHead ? "head" : h.hitArmor ? "armor" : "hit") : ""} ${protectedNow ? "shield" : ""}`} data-testid="crosshair" style={{ "--gap": `${gap}px` } as React.CSSProperties}>
-          <span className="ch-top" /><span className="ch-bottom" /><span className="ch-left" /><span className="ch-right" />
+        <div
+          className={`crosshair ch-${ch.style} ${ch.outline ? "outlined" : ""} ${hitAge < 180 ? (h.hitKill ? "kill" : h.hitHead ? "head" : h.hitArmor ? "armor" : "hit") : ""} ${protectedNow ? "shield" : ""}`}
+          data-testid="crosshair"
+          style={{ "--gap": `${gap}px`, "--len": `${ch.size}px`, "--w": `${ch.thickness}px`, "--ch-color": ch.color } as React.CSSProperties}
+        >
+          {ch.style !== "dot" && ch.style !== "circle" && <><span className="ch-top" /><span className="ch-bottom" /><span className="ch-left" /><span className="ch-right" /></>}
+          {ch.style === "circle" && <span className="ch-circle" />}
+          {(ch.style === "dot" || ch.style === "cross-dot") && <span className="ch-dot" />}
           {/* C1: a pellet gun's cone is far wider than the 34 px the four lines can open to, so the
               S12 draws the real radius as a ring. Four lines that stopped growing told the player
               nothing about where nine pellets were actually going. */}
@@ -474,10 +484,12 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
         </div>
       )}
 
-      {/* Debug overlay (dev only) */}
-      {import.meta.env.DEV && (
+      {/* Frame counter. The player can turn this on in a built game now — it used to be DEV-only,
+          so the one number anybody asks for ("what fps am I getting?") did not exist outside a dev
+          server. The F3 telemetry table stays a development thing. */}
+      {(settings.hud.fps || import.meta.env.DEV) && (
         <div className="debug" data-testid="debug">
-          v{GAME_VERSION} · {h.fps} fps · {h.ping} ms{!telemetry && " · F3"}
+          v{GAME_VERSION} · {h.fps} fps · {h.ping} ms{!telemetry && import.meta.env.DEV && " · F3"}
           {telemetry && (
             <table className="telemetry"><tbody>
               {Object.entries(h.telemetry).map(([k, v]) => <tr key={k}><td>{k}</td><td>{v}</td></tr>)}
