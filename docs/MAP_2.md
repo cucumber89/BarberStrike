@@ -416,7 +416,7 @@ the two that matter (the well and the balcony).
 
 ## Sign-off
 
-Owner: ______________________  Date: ____________  "signed" / changes requested: ______________
+Owner: _Aelksander Ogorek  Date: ____8.09.2026________  "signed" / changes requested: ________signed yes______
 
-D-G1 theme ____  D-G2 width ____  D-G3 hunt spawn ____  D-G4 bomb sites ____  D-G5 the fall ____
+D-G1 theme _x___  D-G2 width ____  D-G3 hunt spawn ____  D-G4 bomb sites __x__  D-G5 the fall __x__
 D-G6 no plans ____
