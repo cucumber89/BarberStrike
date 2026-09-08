@@ -1,6 +1,10 @@
 # MAP_2 — GÓRA, the flat above the shop (Drop G)
 
-**Status: drafted, awaiting the owner's sign-off. No geometry has been written.**
+**Status: signed off by the owner 2026-09-08 ("już") and BUILT.**
+The draft below is the intent; `packages/shared/src/gora.ts` is the same layout in solids, and the
+generic map suite (`map.test.ts`, `mapFlags.test.ts`, `floorAudit.test.ts`, all of which loop
+`Object.values(MAPS)`) judges it. **See "As built" at the end** for every place the geometry left
+the drawing and why — including the two things the drawing got wrong and the real geometry caught.
 
 `PLAN_2_1.md` Drop G says: *"Layout drafted as a top-down diagram in `docs/MAP_2.md` and approved
 before geometry."* This is that draft, in the shape `docs/WEAPON_MATRIX.md` took for Drop B: the
@@ -53,14 +57,14 @@ chaser gets shot (`PLAN_2_1.md`, Decisions 2026-09-08).
 |---|---|---|
 | id / name | `night_district` · Night District | `gora` · GÓRA (THE FLAT) |
 | Footprint | 62 × 68 m outdoor block | **34 × 18 m**, one floor + a roof |
-| Walkable area | 6 188 m² (24 751 cells) | **≈ 544 m²** (≈ 2 180 cells) |
+| Walkable grid | 24 751 cells (5 110 m² reachable) | **2 253 cells** (254 m² reachable) |
 | Levels | street, mezzanine, gantry, container stack | floor (y 0) and roof (y 3.0) |
 | Ceiling | 3.6 m shop / 6.0 m industrial / open sky | **2.8 m** indoors |
 | Players | up to 12 | **2–6** |
-| Median clear sight line | **24.0 m** (measured) | ≈ 8 m (drawn; measurable once built) |
-| Longest sight line | **111 m** (measured) | **20 m** (the balcony) |
-| Spawn → spawn | 8.0 s | **3.6 s** |
-| Bomb A ↔ B rotation | 10.9 s | **2.3 s** |
+| Median clear sight line | **24.0 m** | **5.0 m** (both measured on the built geometry) |
+| Longest sight line | **111 m** | **31.5 m** (drafted 20; see "As built") |
+| Spawn → spawn | 8.0 s | **5.0 s** |
+| Bomb A ↔ B rotation | 10.9 s | **2.2 s** |
 
 ---
 
@@ -90,22 +94,28 @@ z= -6  | #                  #         #          #         #                  # 
 z= -7  | #                  #          ##########          #                  # |
 z= -8  |  ##################                                ##################  |
 
-LEVEL +1 — DACH, the roof over the east wing (deck y = 3.0, parapet 1.1)
+LEVEL +1 — DACH, the roof over the east wing (deck y = 3.0, parapet 1.2). / = the fire escape up from the balcony and the loft-stair opening down into the SKŁAD.
          x=-15     x=-10      x=-5      x=0      x=5     x=10     x=15
-z= 11  |                                                        ########        |
-z= 10  |                                                       #/SCHODY/#       |
-z=  9  |                                                       #////////#       |
-z=  8  |                                                ##########//////######  |
-z=  7  |                                               #                      # |
-z=  6  |                                               #                      # |
-z=  5  |                                               #                      # |
-z=  4  |                                               #                      # |
-z=  3  |                                               #      DACH  y=3.0     # |
+z= 11  |                                                        ##########      |
+z= 10  |                                                       #//SCHODY//#     |
+z=  9  |                                                ########////////// ###  |
+z=  8  |                                               #                      # |
+z=  7  |                                               #               ////   # |
+z=  6  |                                               #              STRYCH  # |
+z=  5  |                                               #               ////   # |
+z=  4  |                                               #               ////   # |
+z=  3  |                                               #  DACH  y=3.0  ////   # |
 z=  2  |                                               #                      # |
 z=  1  |                                               #                      # |
 z=  0  |                                               #                      # |
 z= -1  |                                               #                      # |
-z= -2  |                                                ######################  |
+z= -2  |                                               #                      # |
+z= -3  |                                                ######################  |
+z= -4  |                                                                        |
+z= -5  |                                                                        |
+z= -6  |                                                                        |
+z= -7  |                                                                        |
+z= -8  |                                                                        |
 ```
 
 Two rings around a solid middle. The **inner ring** is the south hall → a 2 m passage beside the
@@ -416,7 +426,84 @@ the two that matter (the well and the balcony).
 
 ## Sign-off
 
-Owner: ______________________  Date: ____________  "signed" / changes requested: ______________
+Owner: _Aleksander_Ogórek_  Date: 8.09.2026  "signed" / changes requested: _"już"_ — signed, build it.
 
-D-G1 theme ____  D-G2 width ____  D-G3 hunt spawn ____  D-G4 bomb sites ____  D-G5 the fall ____
-D-G6 no plans ____
+All six decisions taken as proposed: D-G1 the flat, D-G2 build to the 30 m station spread (the test
+is not changed), D-G3 `huntSpawnMinM` becomes per-map and is 8 m on GÓRA, D-G4 bomb sites on the
+centre line, D-G5 the light well is a real fall, D-G6 no tactical plans in the first cut.
+
+---
+
+## As built (2026-09-08)
+
+`packages/shared/src/gora.ts`, 129 solids, 35 props, 14 lights, 12 team spawns + 8 arena spawns.
+Registered in `MAPS`, so every generic invariant in §8 now runs against it on every `pnpm test`.
+The numbers below are re-measured on the REAL geometry and the REAL walk grid (§6 of
+`apps/client/e2e/out/g/rotation.md`), not on the drafted polylines.
+
+### What the real geometry changed
+
+- **The sight lines came out shorter than the draft, and one came out much longer.** Measured over
+  1 016 reachable standing surfaces with 400 000 eye-to-eye samples: **median 5.0 m**, p90 11.1 m,
+  p99 24.5 m, 13.7 % of clear lines over 10 m, 2.8 % over 20 m. NIGHT_DISTRICT measured the same
+  way is median 24.0 m with 36.6 % over 30 m — the compression the theme paragraph promised is a
+  factor of five, and it is now a measurement rather than a drawing.
+  The exception: the longest clear line is **31.5 m**, not the drafted 20 m, and it runs
+  (15.5, −0.5) → (−16, −1) — the SALON's far corner to the SYPIALNIA's far corner, straight down
+  the south hall through both 2 m doors, which are aligned because the hall is 2 m deep and the
+  doors are on its axis. Kept deliberately: it is the map's one long lane, it needs the player to
+  stand in the open on the hall's centre line to use it, and no spawn point lies on it (the
+  spawn-to-spawn test is what proves that, and it passes). Breaking it would mean 1 m doorways,
+  which the 0.5 m walk grid cannot leave a legal standing cell in — a fix that would cost the bots
+  the map.
+- **Rotations came out longer than the drawn polylines**, because a route through rooms is not a
+  straight line: spawn → the near site 2.4 s (drafted 1.8), spawn → the far site 3.5 s (2.7),
+  site ↔ site **2.2 s** (2.3 — the one the design turns on, unchanged), spawn → spawn 5.0 s (3.6),
+  spawn → the enemy's dom flag 4.2 s. Against NIGHT_DISTRICT, still measured on its own geometry:
+  10.9 s site ↔ site and 8.0 s spawn → spawn.
+- **The well does what it was drawn to do.** KUCHNIA → SKŁAD is 26 m apart and **46.8 m on foot**:
+  the two north chambers do not connect, so crossing the back of the map means the balcony or the
+  whole way round the core.
+- **Walkable area: 2 253 cells against NIGHT_DISTRICT's 24 751** — an eleventh of the map, which is
+  the "small" the plan asked for. 1 016 surfaces (254 m²) are reachable from a spawn; the rest are
+  the tops of walls and of the ceiling slab, which is 1.4 m above the roof deck precisely so that a
+  crouch-jump (max 1.25 m) cannot get onto the rest of the roof.
+
+### Three things the drawing had wrong, which only the built geometry could show
+
+1. **The sideboard stood in the salon → kitchen doorway.** A 1.0 m tall dressed solid across the
+   1.5 m gap: over the walk grid's 0.88 m jump-up, so the whole west wing was cut off from the map.
+   Moved west along the same wall.
+2. **A 0.9 m bin closed the balcony.** The gallery is 2 m deep; a 0.7 m body needs the rest, so any
+   object deeper than ~0.6 m is a wall. Balcony furniture is now shallow and flush to the wall.
+3. **The loft stair landed in the SYPIALNIA → SKŁAD doorway**, and the fire escape arrived at a
+   0.45 m gap in the roof parapet — narrower than a player. The stair moved east (x 13.5…15.7, and
+   the deck's opening with it) and the fire escape now ends on a 1.2 m landing with the parapet
+   opened for exactly that landing. Both were found by flood-filling the walk grid from spawn 0 and
+   printing what was cut off; none of them is visible on a drawing.
+
+### Other deviations from the draft
+
+- **KLATKA and PRZEDPOKÓJ are side rooms, not through-routes.** Each is entered from the south hall
+  and from its passage by a door, with a solid north wall; the 2 m passage beside the core is the
+  through-route. The draft implied all of it was one open vestibule; this gives the map two small
+  rooms with cover and keeps the passage a genuine slot.
+- **The DACH is 11 × 11 m (x 6…17, z −2…9)** rather than the drafted x 6…17, z −2…8, so the fire
+  escape can reach it without a separate landing strip.
+- **Bomb site B's geometry budget is 28 of 30** (site A is 21). Getting there meant deleting the
+  floor panels under the permanently solid south band, merging the hall's two floor panels into one
+  and merging the hall's two strip lights — exactly the pressure §8 predicted an interior map would
+  feel, and the reason the sites are the balcony and the hall rather than two rooms.
+- **The wardrobe-run doorways are 1.5 m**, not the 1.2 m the doors table drafted: 1.2 m leaves the
+  0.5 m walk grid no legal standing cell once a 0.7 m body is centred in it.
+
+### What is still not proven
+
+- **Nothing has been rendered.** Every claim above is geometry and simulation. The lighting budget,
+  the readability of a 2.8 m ceiling in first person, and whether the roof reads as a place worth
+  climbing to all need a real GPU and the owner's eyes.
+- **No playtest.** 2–6 players is the intent; six spawn points a side means the map will accept 6v6
+  at one player per 42 m² of reachable floor, against NIGHT_DISTRICT's one per 426 m². Whether 4v4
+  is already too many is a question for humans, not for a test.
+- **Ostrzyżeni's hunt spawn on this map is 8 m** (`MapDef.huntSpawnMinM`, D-G3) and that number has
+  not been played, only reasoned from the map's 39 m diagonal against NIGHT_DISTRICT's 121 m.

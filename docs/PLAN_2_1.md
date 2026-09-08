@@ -232,6 +232,7 @@ Status vocabulary: `planned`, `in progress`, `blocked: <why>`, `review`, `done`.
 Status vocabulary reminder: these rows are `review` because the full e2e path was not run here.
 
 | 2026-09-08 | G | drop/g-map-2 | Slice 1, docs only, the gate the drop names: `docs/MAP_2.md`. Four recon passes first (map data model; the validity suite; what each of the seven modes needs from a map; what the client pipeline gives a new map for free). **Theme decided and argued, not offered as a menu: the upstairs flat, not the delivery yard** — NIGHT_DISTRICT already contains an alley and a loading yard (`map.ts:113-116`), so a second yard is a re-skin of the same fight. MEASURED, 400 k eye-to-eye pairs over its 24 751 walkable cells: NIGHT_DISTRICT's median clear sight line is **24.0 m**, 36.6 % of clear lines exceed 30 m, longest 111 m. GÓRA is drawn at 34 × 18 m, ≈ 544 m², longest line 20 m, first contact 3.6 s (vs 8.0 s) and a bomb rotation 2.3 s (vs a measured 10.9 s). Two rings around a solid stair core and an open light well; spawns, three buy stations, three dom flags and two bomb sites placed for all seven modes. Rotation times come from the real `simulateBody` via a new `map-rotation.ts`; the ASCII plan is RENDERED from the extents table by `map-plan.ts` so the picture cannot drift from the numbers. Found while drawing: (a) `map.test.ts:107` demands buy stations spread > 30 m in x — a NIGHT_DISTRICT-shaped rule in a generic test, and the reason the flat is 34 m wide rather than 26; (b) `BOMB_SITES` is a module global (`bomb.ts:6`), so bomb cannot run on a second map without per-map sites; (c) `huntSpawnMinM` 14 m (`modes.ts:142`) is proportionally 3× as far on a 39 m diagonal as on a 121 m one; (d) corners and stairs cost **zero** time in this movement model, so height must be priced in exposure. Six decisions D-G1…D-G6 for the owner. No code touched; STOPPED for sign-off as the plan requires. | docs/MAP_2.md; `apps/client/e2e/tools/{map-rotation,map-plan}.ts` → `apps/client/e2e/out/g/{rotation.md,plan.txt}` (gitignored, regenerate with the command in each tool header) | typecheck ✓ test ✓ (shared 180/180) check:weapons ✓ (19/19) build — test:client/server — e2e — (no game code changed) | blocked: owner sign-off on docs/MAP_2.md |
+| 2026-09-08 | G | drop/g-map-2 | Slice 2, the drop built. Owner signed the layout ("już"), all six decisions as proposed. `packages/shared/src/gora.ts` = the doc in solids: 129 solids, 35 props, 14 lights, 12 team + 8 arena spawns, 34 × 18 m, two rings around a boarded stair core with an open light well, a back balcony and a roof over the east wing. **Registered in `MAPS`, which is what makes it real**: `map.test`, `mapFlags.test` and `floorAudit.test` all loop `Object.values(MAPS)`, so every invariant NIGHT_DISTRICT is held to now judges GÓRA on every run. Two new optional `MapDef` fields carry what a second map needs — `sites` (bomb sites were a module constant in `bomb.ts:6`; `sitesOf()` falls back to it, `stepBomb` takes them as an argument) and `huntSpawnMinM` (8 m here against 14 on a map with three times the diagonal). Server: the room takes its map from options, `filterBy(["room","mode","map"])`, `sharedWorld`'s two global caches keyed by map id (Drop I's per-room world intact), the bomb and the bots read `sitesOf(this.map)`, tactical plans are off on any map but the district (their `removes` names district solids). Client: the district's `buildArchitecture`/`buildStreetscape` added **206 meshes** of shopfront and street inside the flat — now gated and counted by a test; bomb markers follow the map; the lobby picks the map, remembers it and puts it in the invite link. **What the built geometry caught that the drawing could not**: a 1.0 m sideboard standing in the salon→kitchen doorway (over the walk grid's 0.88 m jump-up) cut the whole west wing off the map; a 0.9 m bin closed the 2 m balcony; the loft stair landed in the stock-room doorway and the fire escape ended at a 0.45 m gap in the parapet — all four found by flood-filling the walk grid from spawn 0 and printing what was unreachable. Also found and fixed BY ME, not by the suite: `arenaSpawns` (the FFA / Gun Game / Ostrzyżeni pool) was never judged by any test, and GÓRA's north roof spawn sat over the loft-stair opening — a three-metre drop on arrival. That check is now a generic test for every map. MEASURED on the built geometry (400 k eye-to-eye samples over the reachable standing surfaces): median clear sight line **5.0 m** vs NIGHT_DISTRICT's **24.0 m**, bomb rotation **2.2 s** vs **10.9 s**, first contact 5.0 s vs 8.0 s, and KUCHNIA→SKŁAD 26 m apart but 46.8 m on foot because the well splits the north half. | docs/MAP_2.md ("As built"); `apps/client/e2e/tools/{map-rotation,map-plan}.ts` → `apps/client/e2e/out/g/{rotation.md,plan.txt}` (gitignored; regenerate with the command in each tool header) | typecheck ✓ test ✓ (636: shared 194, client 282, server 160) build ✓ check:weapons ✓ (19/19) e2e — (not run: needs two live servers and a browser pair) | review |
 
 ## Decisions log (append-only)
 
@@ -361,6 +362,18 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   a 1.2 s free plant; D-G5 the light well is a real hole with `killY` under it (5 m across against a
   measured 4.43 m sprint jump, so it cannot be crossed); D-G6 GÓRA ships with no tactical plans in
   its first cut. (lead)
+
+- 2026-09-08 — **Owner signed `docs/MAP_2.md` ("już")**, all six decisions as proposed, and the map
+  was built the same session. Two of them cost geometry rather than argument: D-G2 (build to the
+  30 m buy-station spread instead of changing the test) is why the flat is 34 m wide, and D-G4
+  (bomb sites on the centre line) is why they are the balcony and the hall rather than the two end
+  rooms — a wing layout would have handed the attacking side a 1.2 s free plant. D-G3 became a
+  `MapDef` field rather than a global edit, so NIGHT_DISTRICT's 14 m is untouched. (lead)
+- 2026-09-08 — Drop G: **`MapDef` gained exactly two optional fields, `sites` and `huntSpawnMinM`,
+  and no schema field.** Both are map DATA that used to be module constants pinned to one map
+  (`bomb.ts:6`, `modes.ts:142`); both default to today's value, so NIGHT_DISTRICT and every test
+  that names it behave identically. The replicated state gained nothing — `mapId` was already there
+  (`TdmRoom.ts:252`) and the client already resolved it (`Game.ts:164`). L6 untouched. (lead)
 
 ## Deferred (things noticed, deliberately not done)
 
@@ -531,3 +544,23 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   including a 3.0 m climb takes exactly as long as 11 m of floor. Any map's verticality is therefore
   priced in exposure and audibility only. If height is ever meant to cost time, that is a movement
   change (L6-adjacent) and not a map one.
+
+- Drop G: GÓRA's longest clear sight line is **31.5 m**, not the 20 m the draft predicted: the
+  SALON's far corner sees the SYPIALNIA's far corner straight down the south hall, because the hall
+  is 2 m deep and both doors sit on its axis. Kept — it is the map's one long lane, no spawn point
+  lies on it, and the obvious fix (1 m doorways) leaves the 0.5 m walk grid no legal standing cell,
+  which would cost the bots the map. If a playtest calls it a spawn-peek, the fix is a jog in the
+  hall's centre, not narrower doors.
+- Drop G: GÓRA ships with **no tactical plans** (D-G6). Three candidates are written up in
+  `docs/MAP_2.md` §7.5 (board over the light well; force the roof hatch; take out the balcony's
+  middle railing). Judge them after the map has been played once.
+- Drop G: bomb site B on GÓRA holds **28 of the 30** solids+props the floor audit allows within
+  7.5 m (site A holds 21). Anyone dressing the south hall or the bathroom further will fail
+  `floorAudit.test.ts` — which is the test doing its job on an interior map, not a false positive.
+- Drop G: `districtExpansion.test.ts`, `nav.test.ts`, `navPerf.test.ts` and `spawn.test.ts` remain
+  NIGHT_DISTRICT-only by design (they are that map's tests), so GÓRA has **no pathfinding-perf
+  coverage**: nothing asserts that `findPath` across the flat stays inside a server tick. It is a
+  ninth of the district's grid so it should be comfortable, but nobody has measured it.
+- Drop G: the map has never been RENDERED. Lighting (14 practicals, two shadow casters), whether a
+  2.8 m ceiling reads in first person, and whether the roof is worth climbing to all need a real GPU
+  and the owner's eyes; and no e2e path (join → pick GÓRA → play a round) has been walked.
