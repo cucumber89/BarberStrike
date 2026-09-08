@@ -1,10 +1,11 @@
+import { WEAPON_PRICES } from "@frankibarber/shared";
 import { Room, type Client } from "@colyseus/core";
 import {
   Btn, C2S, S2C, DEFAULT_WEAPON, HEADSHOT_MULTIPLIER, LAG_COMP_MAX_MS, MATCH, MAX_INPUT_BATCH, MAX_INPUT_DT_MS,
   MAX_INPUT_QUEUE, MAX_INPUT_RATE, MAX_OTHER_MSG_RATE, MAX_PLAYERS, MatchPhase, NIGHT_DISTRICT, PLAYER,
   RESPAWN_DELAY_MS, SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER,
   isLive, isFrozen, maskInput, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
-  BOMB, BOMB_SITES, KIT_ITEM, bombAttackTeam, dropBomb, blastDamage, resetBomb, stepBomb, type BombPlayer,
+  BOMB, BOMB_SITES, bombAttackTeam, resetBomb, stepBomb, type BombPlayer,
   createBody, quantAngle, quantVel, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
   makeRayHit, mulberry32, pickSpawn, sanitizeName, simulateBody, spreadDirection, traceBullet, unpackInput,
   ECONOMY, GRENADES, THROW_INTERVAL_MS, FIRE_DPS, applyBuy, applySell, buyWindowOpen, giveGrenade, takeGrenade, killReward, weaponForSlot,
@@ -21,6 +22,7 @@ import {
   canSwitchTeam, teamForNewPlayer, teamSizes, type TeamMember,
   applyPlan, planOffer, tallyVotes, rebuildWorldInto, type PlanEvent,
 } from "@frankibarber/shared";
+import { boysClass, isBoysClass, boysHealRate, boysMedicGoal, BOYS_SUPPORT } from "@frankibarber/shared";
 import { FlagState, MatchState, PlayerState } from "../schema";
 import { nextPhase } from "../match";
 import { roomCollisionWorld, sharedWalk } from "./sharedWorld";
@@ -44,6 +46,7 @@ const isFireMessage = (v: unknown): v is FireMessage =>
 
 /** Server-private per-player data (never replicated). */
 class Session {
+  ready = true;
   body: BodyState = createBody();
   inputs: PlayerInput[] = [];
   prevButtons = 0;
@@ -142,7 +145,7 @@ const isThrowMessage = (v: unknown): v is ThrowMessage =>
 const boxTmp: Box = { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 };
 
 export interface TdmJoinOptions {
-  name?: string; room?: string; mode?: string; bots?: number; botLevel?: string; seed?: number;
+  deferSpawn?: boolean; boysClass?: number; name?: string; room?: string; mode?: string; bots?: number; botLevel?: string; seed?: number;
 }
 
 const isChatMessage = (v: unknown): v is { text: string; team: boolean } => isRecord(v) && typeof v.text === "string";
@@ -221,7 +224,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.state.roomName = typeof options?.room === "string" ? options.room.slice(0, 24) : "";
     this.mode = isGameMode(options?.mode) ? options.mode : "tdm";
     this.state.mode = this.mode;
-    if (this.mode === "dom") {
+    if ((this.mode === "dom" || this.mode === "boys")) {
       for (const f of this.map.flags) { const fs = new FlagState(); fs.id = f.id; this.state.flags.push(fs); this.flagSims.push(neutralFlag()); }
     }
     // Drop 5: bots requested at creation (clamped so humans always have room), with a difficulty.
@@ -243,21 +246,27 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       if (!s || this.mode !== "bomb" || typeof msg !== "boolean" || this.rateLimited(s, "other")) return;
       s.objectiveUntil = msg ? this.now() + 400 : 0;
     }));
-    // Bomb Plant (2.2): the carrier hands the charge over by dropping it a step ahead.
-    this.onMessage(C2S.DropBomb, this.guarded((client) => {
-      const s = this.sessions.get(client.sessionId);
-      const p = this.state.players.get(client.sessionId);
-      if (!s || !p || !p.alive || this.mode !== "bomb" || this.state.phase !== MatchPhase.Playing || this.rateLimited(s, "other")) return;
-      dropBomb(this.state.bomb, p.id, this.now(), [Math.sin(s.lastYaw), Math.cos(s.lastYaw)]);
-    }));
     for (let i = 0; i < this.botCount; i++) this.addBot(i);
 
     // Every handler validates its payload AND is wrapped: a hostile message must never take the room down.
+    this.onMessage("boys:class", this.guarded((client, value) => {
+      const p = this.state.players.get(client.sessionId), s = this.sessions.get(client.sessionId);
+      if (this.mode !== "boys" || !p || !s || !isBoysClass(value) || this.rateLimited(s, "other")) return;
+      p.nextClass = value;
+    }));
     this.onMessage(C2S.Input, this.guarded((client, msg) => this.onInput(client, msg)));
     this.onMessage(C2S.Fire, this.guarded((client, msg) => this.onFire(client, msg)));
     this.onMessage(C2S.Equip, this.guarded((client, slot) => this.onEquip(client, slot)));
     this.onMessage(C2S.Reload, this.guarded((client) => this.onReload(client)));
     this.onMessage(C2S.Ping, this.guarded((client, msg) => this.onPing(client, msg)));
+    this.onMessage(C2S.Ready, this.guarded((client) => {
+      const p = this.state.players.get(client.sessionId), s = this.sessions.get(client.sessionId);
+      if (!p || !s || s.ready || this.rateLimited(s, "other")) return;
+      s.ready = true;
+      this.spawn(p.id);
+      if (this.mode === "bomb" && this.state.phase === MatchPhase.Playing) { p.alive = false; p.health = 0; }
+      this.maybeStartCountdown();
+    }));
     this.onMessage(C2S.Rematch, () => { /* handled by the phase timer; kept for future vote logic */ });
     this.onMessage(C2S.Buy, this.guarded((client, msg) => this.onBuy(client, msg, false)));
     this.onMessage(C2S.Sell, this.guarded((client, msg) => this.onBuy(client, msg, true)));
@@ -358,6 +367,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.id = id;
     p.name = BOT_NAMES[n % BOT_NAMES.length];
     p.bot = true;
+    p.boysClass = p.nextClass = (n % 5) + 1;
+    // `roster()` rather than a bare team list: it excludes players who have disconnected but not
+    // yet been cleaned up, which used to send the next joiner to the side about to be short.
     p.team = this.teams ? teamForNewPlayer(this.roster()) : 0;
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
@@ -396,10 +408,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       // No fire on the map (the usual case) means no filter, no allocation.
       hazards: this.fires.length === 0 ? NO_HAZARDS : this.fires.filter(f => f.until > now && Math.hypot(p.x - f.x, p.z - f.z) < f.radius + 3
         && !this.losBlocked(p.x, p.y + 1, p.z, f.x, f.y + 0.3, f.z)),
-      flags: this.mode === "dom" ? this.flagSims.map((f, i) => ({ x: this.map.flags[i].x, y: this.map.flags[i].y, z: this.map.flags[i].z, owner: f.owner, contested: this.state.flags[i]?.contested ?? false })) : [],
+      flags: (this.mode === "dom" || this.mode === "boys") ? this.flagSims.map((f, i) => ({ x: this.map.flags[i].x, y: this.map.flags[i].y, z: this.map.flags[i].z, owner: f.owner, contested: this.state.flags[i]?.contested ?? false })) : [],
       roamPoints: this.roamPoints,
       mayPlan: this.navTick % MAX_BOTS === s.planPhase,
-      objective: this.mode === "bomb" && this.state.phase === MatchPhase.Playing ? this.bombGoal(p, s) : undefined,
+      objective: this.mode === "bomb" && this.state.phase === MatchPhase.Playing ? this.bombGoal(p, s) : this.mode === "boys" ? boysMedicGoal(p, this.state.players.values()) : undefined,
     };
     const d = brain.think(senses);
     if (senses.objective && !d.fire && !senses.blinded && !senses.hazards?.length && Math.hypot(p.x - senses.objective.x, p.z - senses.objective.z) < 1.9) {
@@ -464,6 +476,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     const name = sanitizeName(options?.name) ?? `PLAYER${Math.floor(Math.random() * 900 + 100)}`;
     const p = new PlayerState();
     p.id = client.sessionId;
+    p.boysClass = p.nextClass = isBoysClass(options?.boysClass) ? options.boysClass : 1;
     p.name = name;
     p.team = this.teams ? teamForNewPlayer(this.roster()) : 0;
     p.weapon = DEFAULT_WEAPON;
@@ -471,6 +484,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.state.players.set(client.sessionId, p); this.connectedCount++;
 
     const s = new Session();
+    s.ready = options?.deferSpawn !== true;
     this.sessions.set(client.sessionId, s);
     if (NET_STATS) this.instrumentClient(client);
     client.send(S2C.Welcome, { id: client.sessionId, serverTime: this.now(), tickRate: 1000 / TICK_MS } satisfies WelcomeMessage);
@@ -789,7 +803,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     victim.alive = false;
     victim.reloading = false;
     victim.armor = 0; // plates do not survive death
-    if (this.mode === "bomb") { this.writeWallet(victim, { ...freshWallet(), money: victim.money }); victim.kit = false; }
+    if (this.mode === "bomb") this.writeWallet(victim, { ...freshWallet(), money: victim.money });
     // A fresh fade (drop 3) is spent here: quicker respawn and a longer shield on the next spawn.
     const fade = perkActive(this.perksOf(victim), "fade", this.now());
     if (fade) { victim.perks.set("fade", 0); vs.fadeShield = true; }
@@ -946,7 +960,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private spawn(id: string): void {
     const p = this.state.players.get(id);
     const s = this.sessions.get(id);
-    if (!p || !s) return;
+    if (!p || !s || !s.ready) return;
     const enemies: { x: number; y: number; z: number }[] = [];
     const allies: { x: number; y: number; z: number }[] = [];
     for (const [qid, q] of this.state.players) {
@@ -977,8 +991,16 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     s.lean = 0; s.tac = false; p.lean = 0; p.tac = false;
     for (const w of WEAPON_ORDER) { s.ammo[w] = WEAPONS[w].magazine; s.reserve[w] = WEAPONS[w].reserve; }
     s.reloadEndsAt = 0; s.equipEndsAt = this.now() + 200; s.spread = 0;
-    p.x = sp.x; p.y = sp.y; p.z = sp.z; p.yaw = sp.yaw; p.pitch = 0;
-    p.health = PLAYER.maxHealth; p.alive = true; p.reloading = false;
+    p.x = sp.x; p.y = sp.y; p.z = sp.z; p.yaw = quantAngle(sp.yaw); p.pitch = 0;
+    if (this.mode === "boys") {
+      if (p.boysClass !== p.nextClass) {
+        p.boysClass = p.nextClass;
+        const fresh = freshWallet(); fresh.money = p.money; this.writeWallet(p, fresh);
+      }
+      if (!primaryOf(this.walletOf(p))) p.owned.push(boysClass(p.boysClass).starter);
+      if (p.boysClass === 2 && p.lethalCount === 0) { p.lethal = "frag"; p.lethalCount = 1; }
+    }
+    p.health = this.mode === "boys" ? boysClass(p.boysClass).health : PLAYER.maxHealth; p.alive = true; p.reloading = false;
     const wallet = this.walletOf(p);
     p.weapon = primaryOf(wallet) ?? secondaryOf(wallet);
     // A shield granted inside the frozen preparation window would be spent standing still, before
@@ -997,15 +1019,23 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // Drop 5: a bot shops in its spawn window like anyone else — a primary it can afford.
     if (s.brain) {
       s.brain.onSpawn(sp.yaw);
-      const item = s.brain.pickBuy(p.money, Array.from(p.owned));
+      const item = this.mode === "boys"
+        ? boysClass(p.boysClass).weapons.find(w => w !== boysClass(p.boysClass).starter && primaryOf(this.walletOf(p)) === boysClass(p.boysClass).starter && WEAPON_PRICES[w] <= p.money)
+        : s.brain.pickBuy(p.money, Array.from(p.owned));
       if (item) this.buyItem(p, s, item);
     }
   }
 
   // ---------------------------------------------------------------- match flow
 
+  private readyPlayerCount(): number {
+    let count = this.connectedCount;
+    for (const p of this.state.players.values()) if (p.connected && !this.sessions.get(p.id)?.ready) count--;
+    return count;
+  }
+
   private maybeStartCountdown(): void {
-    const connected = this.connectedCount;
+    const connected = this.readyPlayerCount();
     if (this.state.phase === MatchPhase.Waiting && connected >= MATCH.minPlayers) {
       this.state.phase = MatchPhase.Countdown;
       this.state.phaseEndsAt = this.now() + MATCH.countdownMs;
@@ -1039,7 +1069,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private bombPlayers(): BombPlayer[] {
     return Array.from(this.state.players.values(), p => {
       const s = this.sessions.get(p.id);
-      return { id: p.id, team: p.team, alive: p.alive, connected: p.connected, kit: p.kit,
+      return { id: p.id, team: p.team, alive: p.alive, connected: p.connected && !!s?.ready,
         x: p.x, y: p.y, z: p.z, using: !!s && s.objectiveUntil > this.now()
           && s.body.grounded && Math.hypot(s.body.vx, s.body.vz) < 0.4 && !p.reloading
           && this.now() > Math.max(s.equipEndsAt, s.lastFireAt + 350, s.lastThrowAt + 700, s.lastDamageAt + 500, s.blindedUntil) };
@@ -1077,10 +1107,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
     if (st.bomb.round === BOMB.halfRounds) {
       this.bombLosses = [0, 0];
-      for (const p of st.players.values()) { this.writeWallet(p, { ...freshWallet(), money: BOMB.startMoney }); p.kit = false; }
+      for (const p of st.players.values()) this.writeWallet(p, { ...freshWallet(), money: BOMB.startMoney });
     }
     if (respawn) for (const [id, p] of st.players) if (p.connected) this.spawn(id);
-    resetBomb(st.bomb, now, this.bombPlayers(), this.rand);
+    resetBomb(st.bomb, now, this.bombPlayers());
     st.bomb.stage = "buy"; st.bomb.roundEndsAt = st.phaseEndsAt + BOMB.roundMs;
     this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Prep, winner: -1, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
     // Announced to BOTH teams, not only the one voting: a change the defence cannot see coming is
@@ -1102,34 +1132,24 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private stepBombMode(now: number): void {
     if (this.mode !== "bomb" || this.state.phase !== MatchPhase.Playing) return;
-    const carrier = this.state.bomb.carrier, plantedBefore = this.state.bomb.stage === "planted", actorBefore = this.state.bomb.actor;
+    const carrier = this.state.bomb.carrier, plantedBefore = this.state.bomb.stage === "planted";
     const winner = stepBomb(this.state.bomb, this.bombPlayers(), now, TICK_MS,
       (p, q) => !this.losBlocked(p.x, p.y + 1, p.z, q.x, q.y + 0.3, q.z));
     if (!plantedBefore && this.state.bomb.stage === "planted") {
       const planter = this.state.players.get(carrier);
-      if (planter) { this.pay(planter, BOMB.plantMoney, "capture"); planter.score += 200; }
+      if (planter) { this.pay(planter, 300, "capture"); planter.score += 200; }
     }
     if (winner === null) return;
-    if (this.state.bomb.result === "BOMB DEFUSED") {
-      const defuser = this.state.players.get(actorBefore);
-      if (defuser) { this.pay(defuser, BOMB.defuseMoney, "capture"); defuser.score += 300; }
-    }
     if (this.state.bomb.result === "BOMB DETONATED") {
       const b = this.state.bomb;
-      this.broadcast(S2C.Boom, { id: this.nextProjectileId++, kind: "c4", x: b.x, y: b.y + 0.15, z: b.z,
+      this.broadcast(S2C.Boom, { id: this.nextProjectileId++, kind: "frag", x: b.x, y: b.y + 0.15, z: b.z,
         nx: 0, ny: 1, nz: 0, effectMs: 0 } satisfies BoomEvent);
-      // 2.3: the blast is real. Anyone near the site dies, either side; the edge of it hurts.
-      for (const p of this.state.players.values()) {
-        if (!p.alive || !p.connected) continue;
-        const dmg = blastDamage(Math.hypot(p.x - b.x, p.y - b.y, p.z - b.z));
-        if (dmg > 0) this.blastHit(p, dmg, b.x, b.z);
-      }
     }
     if (winner === 0) this.state.scoreA++; else this.state.scoreB++;
     const loser = 1 - winner;
     this.bombLosses[winner] = Math.max(0, this.bombLosses[winner] - 1);
     this.bombLosses[loser] = Math.min(5, this.bombLosses[loser] + 1);
-    for (const p of this.state.players.values()) if (p.connected) this.pay(p,
+    for (const p of this.state.players.values()) if (p.connected && this.sessions.get(p.id)?.ready) this.pay(p,
       p.team === winner ? BOMB.winMoney : 1400 + (this.bombLosses[loser] - 1) * 500, "capture");
     if (Math.max(this.state.scoreA, this.state.scoreB) >= BOMB.wins || this.state.bomb.round >= BOMB.maxRounds) { this.endMatch(); return; }
     this.state.phase = MatchPhase.Prep;
@@ -1174,8 +1194,27 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   }
 
   /** Occupants per team, captures, capture rewards and the score tick. Runs every tick while playing. */
+  private nextBoysHealAt = 0;
+  private stepBoys(now: number): void {
+    if (this.mode !== "boys" || this.state.phase !== MatchPhase.Playing || now < this.nextBoysHealAt) return;
+    this.nextBoysHealAt = now + 1000;
+    const players = Array.from(this.state.players.values()).filter(p => p.alive && p.connected);
+    for (const target of players) {
+      const session = this.sessions.get(target.id)!;
+      const max = boysClass(target.boysClass).health;
+      if (target.health >= max) continue;
+      const medic = players.find(p => p.id !== target.id && p.team === target.team && p.boysClass === 4 &&
+        Math.hypot(p.x - target.x, p.y - target.y, p.z - target.z) <= BOYS_SUPPORT.radius &&
+        !this.losBlocked(p.x, p.y + 1, p.z, target.x, target.y + 1, target.z));
+      const regen = target.boysClass === 5 && now - session.lastDamageAt >= 4000 ? 5 : 0;
+      const healed = Math.min(max - target.health, medic ? boysHealRate(now - session.lastDamageAt) : regen);
+      target.health += healed;
+      if (medic && healed > 0) { medic.score += healed; this.pay(medic, healed * 2, "assist"); }
+    }
+  }
+
   private stepFlags(now: number): void {
-    if (this.mode !== "dom" || this.state.phase !== MatchPhase.Playing) return;
+    if ((this.mode !== "dom" && this.mode !== "boys") || this.state.phase !== MatchPhase.Playing) return;
     const inZone: PlayerState[] = [];
     for (let i = 0; i < this.flagSims.length; i++) {
       const def = this.map.flags[i], f = this.flagSims[i];
@@ -1186,7 +1225,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         const qs = this.sessions.get(id);
         if (!qs || !inFlagZone(def, qs.body.x, qs.body.y, qs.body.z)) continue;
         inZone.push(q);
-        if (q.team === 0) n0++; else n1++;
+        const weight = this.mode === "boys" && q.boysClass === 1 ? 2 : 1;
+        if (q.team === 0) n0 += weight; else n1 += weight;
       }
       const captured = stepFlag(f, n0, n1, TICK_MS);
       this.syncFlag(i, n0 > 0 && n1 > 0);
@@ -1203,6 +1243,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (now >= this.nextDomTickAt) {
       this.nextDomTickAt += DOM.tickMs;
       const [a, b] = domTick(this.flagSims);
+      if (this.mode === "boys") for (const p of this.state.players.values()) {
+        if (p.connected && this.sessions.get(p.id)?.ready) this.pay(p, (p.team === 0 ? a : b) * 10, "capture");
+      }
       this.state.scoreA = Math.min(65535, this.state.scoreA + a);
       this.state.scoreB = Math.min(65535, this.state.scoreB + b);
       if (this.state.scoreA >= DOM.scoreLimit || this.state.scoreB >= DOM.scoreLimit) this.endMatch();
@@ -1212,7 +1255,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private updatePhase(): void {
     const st = this.state;
     const now = this.now();
-    const connected = this.connectedCount;
+    const connected = this.readyPlayerCount();
     if (this.mode === "bomb" && connected > 0 && (st.phase === MatchPhase.Playing || st.phase === MatchPhase.Prep)) {
       if (now >= st.matchEndsAt) this.endMatch();
       else if (st.phase === MatchPhase.Prep && now >= st.phaseEndsAt) {
@@ -1285,9 +1328,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
       // Drop 3: the roids perk regenerates health after a pause in the damage.
       const perks = this.perksOf(p);
-      if (p.health < PLAYER.maxHealth && perkActive(perks, "roids", now) && now - s.lastDamageAt >= PERK_EFFECT.roidsDelayMs) {
+      if (p.health < (this.mode === "boys" ? boysClass(p.boysClass).health : PLAYER.maxHealth) && perkActive(perks, "roids", now) && now - s.lastDamageAt >= PERK_EFFECT.roidsDelayMs) {
         s.regenAcc += PERK_EFFECT.roidsRegenPerSec * (TICK_MS / 1000);
-        if (s.regenAcc >= 1) { const heal = Math.floor(s.regenAcc); s.regenAcc -= heal; p.health = Math.min(PLAYER.maxHealth, p.health + heal); }
+        if (s.regenAcc >= 1) { const heal = Math.floor(s.regenAcc); s.regenAcc -= heal; p.health = Math.min(this.mode === "boys" ? boysClass(p.boysClass).health : PLAYER.maxHealth, p.health + heal); }
       }
 
       // Drop 5: a bot decides here, then its input goes through the same queue as a human's.
@@ -1297,7 +1340,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       if (s.brain && botsThink) this.stepBot(p, s, now);
       // Movement: spend the time bank on queued inputs.
       s.bank = Math.min(s.bank + TICK_MS, 120);
-      const mobility = WEAPONS[p.weapon as WeaponId].mobility;
+      const mobility = WEAPONS[p.weapon as WeaponId].mobility * (this.mode === "boys" ? boysClass(p.boysClass).speed : 1);
       let processed = 0;
       while (s.inputs.length > 0 && processed < 4) {
         const inp = s.inputs[0];
@@ -1325,9 +1368,6 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       p.x = b.x; p.y = b.y; p.z = b.z;
       p.vx = quantVel(b.vx); p.vy = quantVel(b.vy); p.vz = quantVel(b.vz);
       p.grounded = b.grounded; p.crouch = b.crouching;
-      const sl = Math.round(b.slide), scd = Math.round(b.slideCd);
-      if (p.slide !== sl) p.slide = sl;
-      if (p.slideCd !== scd) p.slideCd = scd;
       const qy = quantAngle(s.lastYaw), qp = quantAngle(s.lastPitch);
       if (p.yaw !== qy) p.yaw = qy;
       if (p.pitch !== qp) p.pitch = qp;
@@ -1343,6 +1383,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     }
     this.stepProjectiles(now);
     this.stepFires(now);
+    this.stepBoys(now);
     this.stepFlags(now);
     this.stepBombMode(now);
   }
@@ -1358,7 +1399,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private walletOf(p: PlayerState): Wallet {
     return {
       money: p.money, owned: Array.from(p.owned) as WeaponId[], lethal: p.lethal as GrenadeId | "", lethalCount: p.lethalCount,
-      tactical: p.tactical as GrenadeId | "", tacticalCount: p.tacticalCount, armor: p.armor, perks: this.perksOf(p), kit: p.kit,
+      tactical: p.tactical as GrenadeId | "", tacticalCount: p.tacticalCount, armor: p.armor, perks: this.perksOf(p),
     };
   }
 
@@ -1367,7 +1408,6 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (p.owned.length !== w.owned.length || w.owned.some((id, i) => p.owned[i] !== id)) { p.owned.clear(); for (const id of w.owned) p.owned.push(id); }
     p.lethal = w.lethal; p.lethalCount = w.lethalCount; p.tactical = w.tactical; p.tacticalCount = w.tacticalCount;
     p.armor = w.armor;
-    p.kit = !!w.kit;
     for (const id of PERK_ORDER) if ((p.perks.get(id) ?? 0) !== w.perks[id]) p.perks.set(id, w.perks[id]);
   }
 
@@ -1386,8 +1426,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private buyContext(p: PlayerState, s: Session): BuyContext {
     return {
+      boysClass: this.mode === "boys" ? p.boysClass : undefined,
       bombBuying: this.mode === "bomb" ? this.state.phase === MatchPhase.Prep && this.state.bomb.stage === "buy" : undefined,
-      bombDefender: this.mode === "bomb" && p.team !== this.state.bomb.attackTeam,
       now: this.now(), spawnedAt: s.spawnedAt, phase: this.state.phase as MatchPhase, alive: p.alive,
       nearStation: this.nearStation(s.body),
       releaseAt: this.state.phase === MatchPhase.Prep ? this.state.phaseEndsAt : 0,
@@ -1420,7 +1460,6 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   /** The purchase itself (humans via `onBuy`, bots at spawn): rules, wallet, equip, money event. */
   private buyItem(p: PlayerState, s: Session, item: ShopItemId): ShopResult {
     if (this.mode === "bomb" && (isPerkId(item) || item === "launcher")) return { ok: false, item, reason: "closed" };
-    if (this.mode !== "bomb" && item === KIT_ITEM) return { ok: false, item, reason: "closed" };
     const w = this.walletOf(p);
     const v = applyBuy(w, item, this.buyContext(p, s));
     if (!v.ok) return { ok: false, item, reason: v.reason };
@@ -1604,29 +1643,6 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         if (qs.burnAcc >= 5) { const d = Math.floor(qs.burnAcc); qs.burnAcc -= d; this.applyDamage(owner, id, d, false, undefined, "molotov"); }
       }
     }
-  }
-
-  /** The charge's blast (2.3): straight through plates, a hit vignette towards the site, a "C4" death. */
-  private blastHit(p: PlayerState, amount: number, bx: number, bz: number): void {
-    const s = this.sessions.get(p.id);
-    if (!s) return;
-    p.health = Math.max(0, p.health - amount);
-    s.lastDamageAt = this.now();
-    const client = this.clientOf(p.id);
-    if (client) {
-      let dx = bx - p.x, dz = bz - p.z; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
-      client.send(S2C.Damaged, { from: "", amount, dx, dz, health: p.health, armor: p.armor, broke: false } satisfies DamagedEvent);
-    }
-    if (p.health > 0) return;
-    p.alive = false; p.reloading = false; p.armor = 0;
-    if (this.mode === "bomb") { this.writeWallet(p, { ...freshWallet(), money: p.money }); p.kit = false; }
-    s.respawnAt = this.now() + RESPAWN_DELAY_MS;
-    s.inputs.length = 0; s.history.length = 0;
-    p.deaths += 1;
-    this.broadcast(S2C.Kill, {
-      killer: p.id, killerName: p.name, killerTeam: p.team as Team,
-      victim: p.id, victimName: p.name, victimTeam: p.team as Team, weapon: "c4", headshot: false,
-    } satisfies KillEvent);
   }
 
   private fallDeath(p: PlayerState, s: Session): void {

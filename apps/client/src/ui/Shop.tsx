@@ -1,15 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { MatchPhase,
-  ARMOR, ARMOR_ORDER, BOMB, ECONOMY, GRENADES, GRENADE_ORDER, KIT_ITEM, PERKS, PERK_ORDER, PRIMARY_ORDER, SECONDARY_ORDER, WEAPONS, WEAPON_PRICES,
+  ARMOR, ARMOR_ORDER, BOYS, BOYS_CLASSES, ECONOMY, GRENADES, GRENADE_ORDER, PERKS, PERK_ORDER, PRIMARY_ORDER, SECONDARY_ORDER, WEAPONS, WEAPON_PRICES,
+  boysAllows, boysClass,
   canBuy, canSell, perkActive, primaryOf, secondaryOf,
   type GrenadeId, type ShopItemId, type Wallet, type WeaponId,
 } from "@frankibarber/shared";
 import type { HudState } from "../game/store";
 import { uiSound } from "../game/audio";
-import { ArmorArt, GrenadeArt, KitArt, PerkArt, WeaponArt } from "./art/GearArt";
-import { GRENADE_BLURB, WEAPON_BLURB } from "./gearText";
 
 export interface ShopApi {
+  /** "The Boys" mode: pick the role you respawn as. */
+  selectClass?(id: number): void;
   buy(item: ShopItemId): void;
   sell(item: WeaponId): void;
   close(): void;
@@ -30,6 +31,7 @@ const REASONS: Record<string, string> = {
   pistol: "Free kit, always yours",
   none: "Not carried",
   unknown: "Unknown item",
+  class: "Not for your role",
 };
 
 const money = (n: number) => `$${n.toLocaleString("en-US")}`;
@@ -40,7 +42,7 @@ const CATS: { id: CatId; label: string; note: string }[] = [
   { id: 1, label: "PRIMARY", note: "slot 1 · swapping refunds " },
   { id: 2, label: "SIDEARM", note: "slot 2 · clippers are always slot 3 (V)" },
   { id: 3, label: "GRENADES", note: "lethal G · tactical 4" },
-  { id: 4, label: "EQUIPMENT", note: "armour, kit and perks" },
+  { id: 4, label: "EQUIPMENT", note: "armour and perks" },
 ];
 
 /**
@@ -57,9 +59,11 @@ const CATS: { id: CatId; label: string; note: string }[] = [
  * addition that does not fit fails loudly instead of quietly hiding CLOSE again.
  */
 export function Shop({ h, api, now }: Props) {
-  const wallet: Wallet = { money: h.money, owned: h.owned, lethal: h.lethal, lethalCount: h.lethalCount, tactical: h.tactical, tacticalCount: h.tacticalCount, armor: h.armor, perks: h.perks, kit: h.kit };
-  const bombDefender = h.mode === "bomb" && !!h.bomb && h.bomb.attackTeam !== h.myTeam;
-  const ctx = { now: h.serverNow, spawnedAt: -1e9, phase: h.phase, alive: h.alive, nearStation: true, bombDefender }; // window state comes from `buyWindowLeft` already
+  const wallet: Wallet = { money: h.money, owned: h.owned, lethal: h.lethal, lethalCount: h.lethalCount, tactical: h.tactical, tacticalCount: h.tacticalCount, armor: h.armor, perks: h.perks };
+  const boys = h.mode === "boys";
+  const ctx = { boysClass: boys ? h.boysClass : undefined, now: h.serverNow, spawnedAt: -1e9, phase: h.phase, alive: h.alive, nearStation: true }; // window state comes from `buyWindowLeft` already
+  /** "The Boys": a role only carries its own list, so the rest of the shop is not its to buy from. */
+  const allowed = (id: string) => !boys || boysAllows(h.boysClass, id);
   const open = h.buyWindowLeft > 0;
   const primary = primaryOf(wallet);
   const secondary = secondaryOf(wallet);
@@ -69,19 +73,23 @@ export function Shop({ h, api, now }: Props) {
   /** First key of a two-key buy: aisle, then position. Shown on every row as e.g. "1·4". */
   const [aisle, setAisle] = useState<CatId | null>(null);
 
-  const verdict = (item: ShopItemId) => (open ? canBuy(wallet, item, ctx) : { ok: false as const, reason: "closed" as const });
+  const verdict = (item: ShopItemId) =>
+    !allowed(item) ? { ok: false as const, reason: "class" as const }
+    : open ? canBuy(wallet, item, ctx)
+    : { ok: false as const, reason: "closed" as const };
   const click = (fn: () => void) => () => { uiSound("click"); fn(); };
 
   /** What each aisle holds, in shortcut order. Built once per render; the keyboard uses the same list. */
   const aisles = useMemo(() => {
-    const gear: ShopItemId[] = [...ARMOR_ORDER, ...(bombDefender ? [KIT_ITEM] : []), ...(h.mode === "bomb" ? [] : PERK_ORDER)] as ShopItemId[];
+    const gear = ([...ARMOR_ORDER, ...(h.mode === "bomb" ? [] : PERK_ORDER)] as ShopItemId[])
+      .filter((id) => !boys || boysAllows(h.boysClass, id));
     return {
-      1: PRIMARY_ORDER.filter((id) => h.mode !== "bomb" || id !== "launcher") as ShopItemId[],
-      2: [...SECONDARY_ORDER] as ShopItemId[],
-      3: [...GRENADE_ORDER] as ShopItemId[],
+      1: PRIMARY_ORDER.filter((id) => (h.mode !== "bomb" || id !== "launcher") && (!boys || boysAllows(h.boysClass, id))) as ShopItemId[],
+      2: SECONDARY_ORDER.filter((id) => !boys || boysAllows(h.boysClass, id)) as ShopItemId[],
+      3: GRENADE_ORDER.filter((id) => !boys || boysAllows(h.boysClass, id)) as ShopItemId[],
       4: gear,
     } as Record<CatId, ShopItemId[]>;
-  }, [h.mode, bombDefender]);
+  }, [h.mode, boys, h.boysClass]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -131,28 +139,29 @@ export function Shop({ h, api, now }: Props) {
 
   const weaponRow = (cat: CatId) => (id: WeaponId, i: number) => {
     const w = WEAPONS[id];
+    const starter = boys && id === boysClass(h.boysClass).starter;
     const carried = id === secondary || id === primary;
     const v = verdict(id);
     const sellable = carried && open && canSell(wallet, id, ctx).ok;
     const swapping = w.slot === 1 ? primary : secondary !== "pistol" ? secondary : null;
-    return row(id, cat, i + 1, <WeaponArt id={id} />,
+    return row(id, cat, i + 1, null,
       <>{w.name}{w.scoped && <span className="shop-slot">SCOPE</span>}</>,
-      WEAPON_PRICES[id],
+      starter ? 0 : WEAPON_PRICES[id],
       w.kind === "launcher"
         ? <>BLAST {GRENADES.shell.damage} · R {GRENADES.shell.radius} m · MAG {w.magazine}</>
         : <>DMG {w.damage}{w.pellets > 1 ? `×${w.pellets}` : ""} · RPM {w.rpm} · MAG {w.magazine}</>,
-      WEAPON_BLURB[id],
+      w.name,
       {
         carried, verdict: v,
         tag: carried ? `SLOT ${w.slot}` : undefined,
         // The old label read "SWAP $-620" whenever the gun being replaced refunded more than the
         // new one costs. A negative price is not a thing; that case is money BACK, so the price
         // cell says so and the button just names the action.
-        price: swapping && v.ok && v.refund > 0
+        price: !starter && swapping && v.ok && v.refund > 0
           ? (() => { const net = WEAPON_PRICES[id] - v.refund;
               return <><s>{money(WEAPON_PRICES[id])}</s>{net >= 0 ? money(net) : <span className="credit">+{money(-net)}</span>}</>; })()
           : undefined,
-        label: carried ? "OWNED" : v.ok ? (swapping && v.refund > 0 ? "SWAP" : "BUY") : v.reason === "money" ? "TOO POOR" : "—",
+        label: carried ? "OWNED" : v.ok ? (starter ? "FREE" : swapping && v.refund > 0 ? "SWAP" : "BUY") : v.reason === "money" ? "TOO POOR" : "—",
         onBuy: () => api.buy(id),
         // The refund is in its own span so a narrow column can drop it and keep the button whole;
         // at 1024 px (a 1280 screen at 125 % zoom) the full "SELL $1,820" was being clipped.
@@ -169,11 +178,11 @@ export function Shop({ h, api, now }: Props) {
     const g = GRENADES[id];
     const count = g.slot === "lethal" ? (wallet.lethal === id ? wallet.lethalCount : 0) : (wallet.tactical === id ? wallet.tacticalCount : 0);
     const v = verdict(id);
-    return row(id, 3, i + 1, <GrenadeArt id={id} />,
+    return row(id, 3, i + 1, null,
       <>{g.name}<span className={`shop-slot ${g.slot}`}>{g.slot === "lethal" ? "G" : "4"}</span></>,
       g.price,
       <>{g.damage > 0 ? `DMG ${g.damage} · R ${g.radius} m` : `R ${g.radius} m`}{g.slot === "lethal" ? " · cook with G" : ""}</>,
-      GRENADE_BLURB[id],
+      g.name,
       {
         carried: count > 0, verdict: v, tag: count > 0 ? `×${count}` : undefined,
         label: v.ok ? (count > 0 ? "+1" : "BUY") : v.reason === "money" ? "TOO POOR" : v.reason === "full" ? "FULL" : v.reason === "slot" ? "SLOT TAKEN" : "—",
@@ -187,20 +196,13 @@ export function Shop({ h, api, now }: Props) {
     const out: React.ReactNode[] = [];
     for (const id of ARMOR_ORDER) {
       const a = ARMOR[id]; const worn = h.armor >= a.armor; const v = verdict(id); pos++;
-      out.push(row(id, 4, pos, <ArmorArt id={id} />, a.name, a.price, <>PLATE {a.armor} · halves every hit</>, a.blurb,
+      out.push(row(id, 4, pos, null, a.name, a.price, <>PLATE {a.armor} · halves every hit</>, a.blurb,
         { carried: worn, verdict: v, tag: worn ? "WORN" : undefined, label: v.ok ? (h.armor > 0 ? "TOP UP" : "BUY") : v.reason === "money" ? "TOO POOR" : "—", onBuy: () => api.buy(id) }));
-    }
-    if (bombDefender) {
-      const v = verdict(KIT_ITEM); pos++;
-      out.push(row("kit", 4, pos, <KitArt />, "Defuse kit", BOMB.kitPrice,
-        <>DEFUSE {BOMB.defuseKitMs / 1000}s (was {BOMB.defuseMs / 1000}s)</>,
-        "Cuts the defuse in half. Lost on death, kept between rounds while you live.",
-        { carried: !!h.kit, verdict: v, tag: h.kit ? "CARRIED" : undefined, label: v.ok ? "BUY" : v.reason === "money" ? "TOO POOR" : h.kit ? "OWNED" : "—", onBuy: () => api.buy(KIT_ITEM) }));
     }
     if (h.mode !== "bomb") for (const id of PERK_ORDER) {
       const p = PERKS[id]; const active = perkActive(wallet.perks, id, h.serverNow); const v = verdict(id); pos++;
       const leftS = active && p.durationMs > 0 ? Math.ceil((wallet.perks[id] - h.serverNow) / 1000) : null;
-      out.push(row(id, 4, pos, <PerkArt id={id} />, p.name, p.price, <>{p.blurb}</>, p.blurb,
+      out.push(row(id, 4, pos, null, p.name, p.price, <>{p.blurb}</>, p.blurb,
         { carried: active, verdict: v, tag: active ? (leftS !== null ? `RUNNING ${leftS}s` : "ARMED") : undefined, label: v.ok ? "USE" : v.reason === "money" ? "TOO POOR" : active ? "ACTIVE" : "—", onBuy: () => api.buy(id) }));
     }
     return out;
@@ -224,16 +226,43 @@ export function Shop({ h, api, now }: Props) {
           <div className="shop-head-left">
             <div className="shop-title">BUY MENU</div>
             <div className="shop-sub">{
-              h.nearStation ? "At the counter · open"
+              !h.alive ? "Spectating · role changes apply next spawn"
+                : !open ? "Shop closed · find a buy station"
+                : h.nearStation ? "At the counter · open"
                 : left !== null ? `Spawn window · ${left}s left`
+                // Prep is not warm-up: it is a countdown inside a running match, and telling the
+                // player otherwise is telling them the match has not started.
                 : h.phase === MatchPhase.Prep ? "Prepare · open until the wave"
                 : "Warm-up · open"}</div>
           </div>
           <div className="shop-head-right">
+            <div className={`shop-countdown ${left !== null && left <= 5 ? "urgent" : ""}`} data-testid="shop-countdown">
+              <small>BUY TIME</small><strong>{!open ? "CLOSED" : left === null ? "OPEN" : `${left}s`}</strong>
+            </div>
             <div className="shop-wallet" data-testid="shop-money">{money(h.money)}</div>
             <button className="shop-btn ghost" onClick={click(api.close)} data-testid="shop-close">CLOSE · ESC</button>
           </div>
         </div>
+
+        {boys && (
+          <section className="boys-strip" data-testid="boys-picker">
+            <span className="boys-strip-label">YOUR ROLE<small>changes on respawn · cash stays</small></span>
+            <div className="boys-strip-row">
+              {BOYS_CLASSES.map((id) => {
+                const c = BOYS[id];
+                const mates = h.players.filter((p) => p.connected && p.team === h.myTeam && p.boysClass === id).length;
+                return (
+                  <button key={id} className={`boys-chip ${h.nextClass === id ? "on" : ""}`} aria-pressed={h.nextClass === id}
+                    data-testid={`boys-class-${id}`} title={c.blurb}
+                    onClick={() => { uiSound("click"); api.selectClass?.(id); }}>
+                    <b>{c.name}</b>
+                    <span>{h.boysClass === id ? "ACTIVE" : h.nextClass === id ? "NEXT SPAWN" : `${mates} on team`}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         <div className="shop-body">
           <section className="shop-aisle">
@@ -247,7 +276,7 @@ export function Shop({ h, api, now }: Props) {
             {(aisles[3] as GrenadeId[]).map(grenadeRow)}
           </section>
           <section className="shop-aisle">
-            {aisleHead(4, h.mode === "bomb" ? <>no perks in bomb mode</> : <>armour, kit and perks</>)}
+            {aisleHead(4, h.mode === "bomb" ? <>no perks in bomb mode</> : <>armour and perks</>)}
             {gearRows()}
           </section>
         </div>
@@ -274,6 +303,5 @@ function nameOf(item: string): string {
   if (item in GRENADES) return GRENADES[item as GrenadeId].name;
   if (item in PERKS) return PERKS[item as keyof typeof PERKS].name;
   if (item in ARMOR) return ARMOR[item as keyof typeof ARMOR].name;
-  if (item === KIT_ITEM) return "Defuse kit";
   return item;
 }

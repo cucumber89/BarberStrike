@@ -4,9 +4,9 @@ import type { GrenadeId } from "./grenades";
 export type Team = 0 | 1;
 
 /** Drop 4: game modes. TDM and Domination are team modes; FFA puts everyone on team 0 with no friendly checks. */
-export type GameMode = "tdm" | "ffa" | "dom" | "bomb";
-export const GAME_MODES: readonly GameMode[] = ["tdm", "ffa", "dom", "bomb"] as const;
-export const isGameMode = (v: unknown): v is GameMode => v === "tdm" || v === "ffa" || v === "dom" || v === "bomb";
+export type GameMode = "tdm" | "ffa" | "dom" | "bomb" | "boys";
+export const GAME_MODES: readonly GameMode[] = ["tdm", "boys", "dom", "bomb"] as const;
+export const isGameMode = (v: unknown): v is GameMode => v === "tdm" || v === "ffa" || v === "dom" || v === "bomb" || v === "boys";
 
 export enum MatchPhase {
   Waiting = "waiting",
@@ -90,9 +90,6 @@ export interface BodyState {
   jumpCooldown: number;
   /** Tactical sprint budget left (ms); drains while tac-sprinting, refills otherwise (drop 4). */
   tac: number;
-  /** Slide (2.3): ms of slide left (0 = not sliding) and ms before the next one may start. */
-  slide: number;
-  slideCd: number;
 }
 
 /** Client→server message names. */
@@ -113,8 +110,6 @@ export const C2S = {
   Chat: "chat",
   /** Ping / mark a spot or an enemy for the team: MarkMessage (drop 5). */
   Mark: "mark",
-  /** Bomb Plant (2.2): the carrier lets go of the charge for a teammate (no payload). */
-  DropBomb: "dropbomb",
   /** Ask to change sides: { team } (2.4). The server decides, and may defer it to the next round. */
   Team: "team",
   /** Living arena (2.4): vote for one of the plans on offer this round: { plan }. */
@@ -252,8 +247,8 @@ export interface KillEvent {
   victim: string;
   victimName: string;
   victimTeam: Team;
-  /** Weapon or grenade that killed (see `killerName()` in economy.ts for display); "c4" is the charge. */
-  weapon: WeaponId | GrenadeId | "c4";
+  /** Weapon or grenade that killed (see `killerName()` in economy.ts for display). */
+  weapon: WeaponId | GrenadeId;
   headshot: boolean;
 }
 
@@ -280,8 +275,7 @@ export interface ThrowEvent {
 
 export interface BoomEvent {
   id: number;
-  /** A grenade kind, or "c4": the planted charge going off (2.3). */
-  kind: GrenadeId | "c4";
+  kind: GrenadeId;
   x: number; y: number; z: number;
   /** Surface normal for stuck knives / resting orientation. */
   nx: number; ny: number; nz: number;

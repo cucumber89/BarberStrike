@@ -1,5 +1,5 @@
 import { NIGHT_DISTRICT, type Solid } from "./map";
-import { BOMB_SITES, type BombSite } from "./bomb";
+import { BOMB, BOMB_SITES } from "./bomb";
 
 /**
  * Floor audit — the diagnosis behind the report that "the floor at A and B lags".
@@ -77,21 +77,29 @@ export function coplanarTopFaces(solids: readonly Solid[] = NIGHT_DISTRICT.solid
 
 export interface SiteLoad { site: "A" | "B"; name: string; areaM2: number; solids: number; props: number }
 
-const inside = (x: number, z: number, s: BombSite, pad = 0): boolean =>
-  x >= s.x - s.hw - pad && x <= s.x + s.hw + pad && z >= s.z - s.hd - pad && z <= s.z + s.hd + pad;
+/**
+ * A plantable site is a CIRCLE of `BOMB.useRadius` around its point (main's #14 replaced the old
+ * 10 x 8 rectangles). The load figures below use a wider disc than that — a player watching a site
+ * stands off it, so the geometry that costs them frames is the geometry around it, not only the
+ * few metres they can plant in.
+ */
+const SITE_LOAD_RADIUS = BOMB.useRadius + 5;
+
+const inside = (x: number, z: number, s: { x: number; z: number }, radius: number): boolean =>
+  Math.hypot(x - s.x, z - s.z) <= radius;
 
 /** How much geometry sits inside each plant zone — the frame-rate half of the diagnosis. */
 export function siteLoad(map = NIGHT_DISTRICT): SiteLoad[] {
   return BOMB_SITES.map((s) => ({
     site: s.id,
     name: s.name,
-    areaM2: s.hw * 2 * s.hd * 2,
-    solids: map.solids.filter((v) => inside((v.box.minX + v.box.maxX) / 2, (v.box.minZ + v.box.maxZ) / 2, s)).length,
-    props: (map.props ?? []).filter((p) => inside(p.x, p.z, s)).length,
+    areaM2: Math.round(Math.PI * SITE_LOAD_RADIUS * SITE_LOAD_RADIUS),
+    solids: map.solids.filter((v) => inside((v.box.minX + v.box.maxX) / 2, (v.box.minZ + v.box.maxZ) / 2, s, SITE_LOAD_RADIUS)).length,
+    props: (map.props ?? []).filter((p) => inside(p.x, p.z, s, SITE_LOAD_RADIUS)).length,
   }));
 }
 
-/** The bomb site a coplanar pair sits in or beside (6 m of slack: a shimmer is seen from outside). */
+/** The bomb site a coplanar pair sits in or beside — a shimmer is seen from well outside the site. */
 export function siteOf(x: number, z: number): "A" | "B" | null {
-  return BOMB_SITES.find((s) => inside(x, z, s, 6))?.id ?? null;
+  return BOMB_SITES.find((s) => inside(x, z, s, SITE_LOAD_RADIUS + 6))?.id ?? null;
 }

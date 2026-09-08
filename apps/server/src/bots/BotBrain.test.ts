@@ -144,10 +144,6 @@ function prng(seed: number): () => number {
 const spawn = NIGHT_DISTRICT.spawns[0];
 const start: NavPoint = { x: spawn.x, y: standHeight(walk, spawn.x, spawn.z, spawn.y)!, z: spawn.z };
 
-// These walk the real map through the real mover for 14–22 simulated seconds: ~2.5 s here, over
-// 5 s on a shared CI runner (measured: 5.5–5.8 s on GitHub's ubuntu-latest), so the default
-// 5 s vitest timeout is not a statement about the bots.
-const WALK_TEST_MS = 30000;
 describe("bot movement", () => {
   it("walks off immediately instead of standing still to turn round", () => {
     // The goal is placed BEHIND the bot's starting facing, the case the old code handled worst: it
@@ -162,7 +158,7 @@ describe("bot movement", () => {
     // 167 ms of accelerating from a standstill: MEASURED at 0.48 m, against 0 m for a bot that
     // waits to finish turning. The threshold only has to tell those two apart.
     expect(Math.hypot(out.body.x - start.x, out.body.z - start.z)).toBeGreaterThan(0.3);
-  }, WALK_TEST_MS);
+  });
 
   it("actually arrives, on the real map through the real mover", () => {
     const goal = pointNear(start, 30);
@@ -171,7 +167,7 @@ describe("bot movement", () => {
     // 20 s of ticks: a 30 m walk at ~5 m/s has a lot of room, and anything that gets stuck fails.
     const out = run(brain, start, [goal], Math.round(20000 / TICK_MS));
     expect(Math.hypot(out.body.x - goal.x, out.body.z - goal.z), JSON.stringify({ start, goal, at: out.body, route: findPath(walk, start, goal) })).toBeLessThan(3);
-  }, WALK_TEST_MS);
+  });
 
   it("keeps its destination instead of changing its mind every couple of seconds", () => {
     // Four roam points spread round the spawn. A bot that re-picks its GOAL on a timer turns round
@@ -183,7 +179,7 @@ describe("bot movement", () => {
     brain.onSpawn(0);
     const out = run(brain, start, roam, Math.round(14000 / TICK_MS));
     expect(Math.hypot(out.body.x - start.x, out.body.z - start.z)).toBeGreaterThan(18);
-  }, WALK_TEST_MS);
+  });
 
   it("fights, then carries on, without spending the tick budget on searches", () => {
     // An enemy is in sight for two seconds in the middle of the walk. The bot fights, then carries
@@ -204,7 +200,7 @@ describe("bot movement", () => {
         : []);
     expect(Math.hypot(out.body.x - goal.x, out.body.z - goal.z)).toBeLessThan(3);
     expect(out.searches).toBeLessThanOrEqual(8);
-  }, WALK_TEST_MS);
+  });
 
   it("stops asking for a route to somewhere it cannot reach", () => {
     // The enemy is off the walk grid entirely, so the chase goal has no route. The chase branch set

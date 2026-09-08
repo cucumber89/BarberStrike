@@ -1,150 +1,77 @@
-# Hosting — jak grać przez internet (2.1)
+# Hosting a game (2.0)
 
-BARBERSTRIKE to jeden proces: serwer gry (Colyseus) serwuje też zbudowanego klienta. Kto otworzy
-adres serwera w przeglądarce, ten gra na tym serwerze — nie ma nic do konfigurowania po stronie
-znajomych. (Dlaczego to musi być jeden proces: patrz `apps/server/src/hosting.ts`.)
-
-Są trzy sposoby, od najprostszego dla „raz na wieczór” do „stały adres na zawsze”:
-
-| Sposób | Koszt | Kiedy | Adres |
-|---|---|---|---|
-| **A. Hostuj z własnego PC** (`pnpm host` + tunel) | 0 zł | jeden wieczór | zmienia się co uruchomienie |
-| **B. Render** (Docker, plan Free) | 0 zł | na stałe, hobbystycznie | `https://barberstrike.onrender.com` |
-| **C. Koyeb / Fly.io / Railway / VPS** | od 0 zł | na stałe, więcej kontroli | własna domena |
-
-Wszystkie używają tego samego `Dockerfile` w katalogu głównym repo (B i C) albo `pnpm host` (A).
-
-> **Hugging Face Spaces** — od 2026 typ Space „Docker” jest oznaczony jako **Paid** (na zrzucie z
-> formularza: Static i Gradio darmowe, Docker płatny). Static nie uruchomi serwera, a Gradio to
-> Python, więc dla tej gry HF przestał być darmową opcją. Workflow `sync-to-hf.yml` zostaje w repo
-> na wypadek płatnego planu; nie robi nic, dopóki nie ustawisz zmiennej `HF_SPACE`.
-
----
-
-## A. Hostuj z własnego komputera
+You run the game on your machine, your friends open a link. No accounts, no server to rent, nothing
+to configure. Up to 10 players.
 
 ```bash
-pnpm install     # raz
-pnpm host        # buduje klienta i startuje serwer na :2567
+pnpm install     # once
+pnpm host        # builds the client, then starts the server
 ```
 
-Serwer wypisuje adresy. Osoby **na tym samym wi-fi** wchodzą pod `http://192.168.x.x:2567`.
+The server prints the links. Read out the one your friends can reach:
 
-Osoby **spoza sieci** potrzebują tunelu (zalecane, bo daje HTTPS i nic nie otwierasz w routerze):
+```
+Your friends open one of these in a browser:
+  http://localhost:2567    (you)
+  http://192.168.1.37:2567  (same wi-fi)
+
+Everyone types the SAME room name to land in the same match.
+```
+
+Everyone puts the **same room name** in the menu and presses PLAY. That is the whole join flow — the
+room name is the code.
+
+## Why one process serves both
+
+The game server also serves the page. That is not a convenience, it is the only arrangement a
+browser allows:
+
+- **A page on HTTPS cannot open a `ws://` socket to a home address.** So a friend on a public
+  deployment of the game can never join a match on your network, whatever you configure. Serving the
+  page from your machine over plain `http://` puts the page and the socket on the same origin, and
+  the rule does not apply.
+- **A page cannot broadcast on a local network**, so it cannot go looking for your game either.
+  "LAN discovery" is not something a browser can do; the link is the discovery.
+
+Side effect worth knowing: `pnpm host` needs the client built once. `pnpm host` does it for you, and
+prints a plain instruction rather than an address that leads to nothing if the build is missing.
+
+## Playing with someone who is not on your wi-fi
+
+Your machine is behind a router, so nobody outside can reach it by default. Two ways:
+
+**A tunnel (recommended).** No router settings, works from anywhere, gives an HTTPS address — and
+because it serves the page too, the mixed-content rule above is satisfied.
 
 ```bash
+pnpm host                                    # leave running
 cloudflared tunnel --url http://localhost:2567
-# drukuje np. https://mild-fox-1234.trycloudflare.com  ← to jest link do wysłania
+# prints something like https://mild-fox-1234.trycloudflare.com — that is the link to share
 ```
 
-`ngrok http 2567` robi to samo. Cloudflared do pobrania: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+`ngrok http 2567` does the same job.
 
-W menu gry: **PLAY ONLINE** pokazuje status serwera i link zaproszenia; w lobby przycisk **INVITE**
-robi link z nazwą pokoju (`?room=nazwa&mode=tdm`). Kto go otworzy, ma pokój wpisany.
+**Port forwarding.** Forward TCP 2567 on your router to your machine, then share
+`http://<your public IP>:2567`. It is free and it is permanent, but it is a hole in your router, it
+breaks whenever your ISP changes your address, and some ISPs (CGNAT) make it impossible. Use the
+tunnel unless you have a reason not to.
 
-Wady: gra działa tylko, gdy twój komputer i terminal są włączone; adres tunelu zmienia się przy
-każdym uruchomieniu.
+## Options
 
----
-
-## B. Render (darmowy, stały adres) — zalecane
-
-Render buduje nasz `Dockerfile` prosto z GitHuba i daje adres `https://<nazwa>.onrender.com` z HTTPS
-i WebSocketami. Plan **Free**: 750 godzin miesięcznie (starcza na jedną usługę non stop), usługa
-**usypia po 15 minutach bez ruchu** i budzi się przy pierwszym wejściu (30–60 s — pierwsza osoba
-poczeka, reszta wchodzi od razu). RAM 512 MB wystarcza na 12 graczy.
-
-### Konfiguracja (ok. 5 minut, karta nie jest wymagana)
-
-1. Zmerguj gałąź do `main` w GitHubie (Render buduje z gałęzi, którą wskażesz; `main` jest najprościej).
-2. Wejdź na https://dashboard.render.com i zaloguj się kontem GitHub.
-3. **New → Blueprint** → wybierz repo `cucumber89/BarberStrike` → Render sam czyta `render.yaml`
-   (usługa `barberstrike`, runtime Docker, plan free, health check `/health`) → **Apply**.
-   Alternatywnie **New → Web Service** → repo → Runtime: Docker → Instance type: Free → Create.
-4. Pierwszy build trwa 5–8 minut (widać log). Gdy status zmieni się na **Live**, adres gry to
-   **`https://barberstrike.onrender.com`** (albo z przyrostkiem, jeśli nazwa była zajęta — Render pokaże).
-
-Każdy kolejny push do `main` przebudowuje usługę automatycznie.
-
-### Region: Frankfurt, nie Oregon (ping)
-
-`render.yaml` ustawia `region: frankfurt`. Domyślny region Rendera to Oregon (USA) i z Polski daje to
-**ok. 200 ms** pingu (zmierzone na pierwszym wdrożeniu); Frankfurt daje 25–40 ms. Render **nie pozwala
-zmienić regionu istniejącej usługi**, więc jeśli usługa powstała przed tą zmianą:
-
-1. Dashboard → usługa `barberstrike` → **Settings** → na dole **Delete Web Service**.
-2. **New → Blueprint** → to samo repo → **Apply**. Nowa usługa powstanie już we Frankfurcie, pod tym
-   samym adresem (nazwa wraca do puli po usunięciu; jeśli Render doda przyrostek, po prostu wyślij
-   znajomym nowy link).
-
-W grze ping widać po F3 albo w tabeli wyników (Tab).
-
-### Sprawdzenie
-
-```
-https://barberstrike.onrender.com/health   → {"ok":true,"game":"BARBERSTRIKE","players":0,...}
-```
-
-W menu gry linia **ONLINE · N PLAYING** ma świecić na zielono, a panel **PLAY ONLINE** pokaże
-gotowy link do wysłania znajomym.
-
-### Żeby serwer nie usypiał w trakcie wieczoru
-
-Usypianie liczy się od ostatniego żądania HTTP, a gra po wejściu używa WebSocketu. Dopóki ktoś jest
-w menu lub w meczu, klient odpytuje `/health` (menu co 5 s) i utrzymuje socket, więc w praktyce
-usługa nie zasypia w trakcie grania. Jeśli chcesz, żeby budziła się szybciej dla pierwszej osoby,
-darmowy monitor typu UptimeRobot / cron-job.org odpytujący `/health` co 10 minut załatwia sprawę.
-
----
-
-## C. Koyeb / Fly.io / Railway / własny serwer
-
-Wszystkie budują ten sam obraz. Serwer czyta `PORT` ze środowiska; nic więcej nie trzeba ustawiać.
-
-**Koyeb** (plan Free: jedna usługa web, też usypia bez ruchu): https://app.koyeb.com → Create
-Service → GitHub → repo → Builder: **Dockerfile** → Instance: Free → Deploy. Adres: `https://<nazwa>-<login>.koyeb.app`.
-
-**Fly.io** (`fly.toml` jest w repo; region `waw` = Warszawa):
-
-```bash
-fly launch --copy-config --no-deploy    # nazwa aplikacji: barberstrike (lub własna)
-fly deploy
-fly open
-```
-
-**Railway**: New project → Deploy from GitHub → wykryje `Dockerfile`. Ustaw *Networking → Generate domain*.
-
-**VPS z Dockerem**:
-
-```bash
-docker build -t barberstrike .
-docker run -d --restart unless-stopped -p 80:2567 --name barberstrike barberstrike
-```
-
-Do HTTPS postaw przed tym Caddy (`caddy reverse-proxy --from gra.twojadomena.pl --to :80`) — Caddy
-przekazuje WebSockety bez konfiguracji.
-
----
-
-## Zmienne środowiskowe
-
-| Zmienna | Domyślnie | Co robi |
+| Variable | Default | What it does |
 |---|---|---|
-| `PORT` | 2567 | Port strony i gry (Render/Koyeb ustawiają własny, Fly: 8080). |
-| `BS_CLIENT_DIR` | auto | Gdzie leży zbudowany klient, jeśli nie obok serwera. |
-| `CORS_ORIGIN` | dowolny | Lista originów po przecinku, gdy strona jest serwowana z innego miejsca niż serwer (np. klient na Vercel). |
-| `FB_DEV_TOOLS` | wyłączone | Komunikaty deweloperskie (`dev:teleport`, `dev:endmatch`). **Nigdy** na publicznym serwerze. |
+| `PORT` | 2567 | Port for both the page and the game. |
+| `BS_CLIENT_DIR` | auto | Where the built client is, if it is not next to the server. |
+| `FB_DEV_TOOLS` | off | Dev-only room messages (`dev:teleport`, `dev:endmatch`). Never on a public server. |
+| `CORS_ORIGIN` | any | Comma-separated origins, for a deployment where the page lives elsewhere. |
 
-## Klient osobno (opcjonalnie)
-
-Klient to statyczne pliki (`apps/client/dist`), można je położyć na Vercel/Netlify z `VITE_SERVER_URL=wss://adres-serwera`
-i `CORS_ORIGIN` ustawionym na serwerze. Nie ma to sensu, dopóki serwer i tak serwuje stronę — jeden adres
-jest prostszy dla wszystkich.
-
-## Jak to sprawdzić lokalnie tak, jak zrobi to Docker
+## Checking it works
 
 ```bash
-pnpm build
-PORT=7860 node apps/server/dist/index.js     # otwórz http://localhost:7860
-curl -s http://localhost:7860/health
+curl -s http://localhost:2567/health     # {"ok":true,"game":"BARBERSTRIKE",...}
+HOST_URL=http://localhost:2567 node apps/client/e2e/tools/hostcheck.mjs
 ```
+
+`hostcheck` opens the page, joins a match and prints which origin the game's socket went to. It must
+be the port you are hosting on. Anything else means a friend on another machine would be talking to
+nothing — see `defaultServerUrl` in `apps/client/src/game/net/Connection.ts`.

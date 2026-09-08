@@ -27,10 +27,20 @@ const api = { buy: (i: ShopItemId) => console.log("buy", i), sell: (i: string) =
 const q = new URLSearchParams(location.search);
 /** `?panel=plan` renders the living-arena vote instead of the shop. */
 const which = q.get("panel");
-/** `?mode=tdm` is the WORST case for fit: 21 items rather than bomb's 17 (perks, and the launcher). */
-const shopState = q.get("mode") === "tdm"
-  ? ({ ...state, mode: "tdm", bomb: null, nearStation: true } as unknown as HudState)
-  : state;
+/**
+ * `?mode=tdm` is the worst case for the ITEM list (21 rows against bomb's 17). `?mode=boys` is the
+ * worst case for HEIGHT: main's #14 added a role strip above the aisles, so that case has to be
+ * measured too rather than assumed to still fit.
+ */
+const mode = q.get("mode") ?? "tdm";
+const shopState = mode === "boys"
+  ? ({
+      ...state, mode: "boys", bomb: null, nearStation: true, boysClass: 2, nextClass: 2,
+      players: [0, 1, 2, 3, 4].map((i) => ({ id: `p${i}`, name: `P${i}`, team: 0, connected: true, bot: false, boysClass: (i % 5) + 1, kills: 0, deaths: 0, score: 0, ping: 20, alive: true, assists: 0, money: 0 })),
+    } as unknown as HudState)
+  : mode === "tdm"
+    ? ({ ...state, mode: "tdm", bomb: null, nearStation: true } as unknown as HudState)
+    : state;
 const planState = {
   ...state,
   myTeam: 1,
