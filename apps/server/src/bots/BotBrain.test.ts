@@ -86,6 +86,92 @@ describe("weapon-aware combat", () => {
   });
 });
 
+describe("Drop D: the two Ostrzyżeni roles", () => {
+  /** A chaser: the clippers in hand, on the shaved side, with a survivor in view. */
+  const hunterSenses = (enemyZ: number): BotSenses => {
+    const s = sensesFor(1000, createBody(0, 0, 0), [], [{ id: "prey", team: 0, x: 0, y: 0, z: enemyZ, crouching: false }]);
+    s.me.weapon = "clippers"; s.me.team = 1; s.mode = "ostrzyzeni"; s.shaved = true;
+    return s;
+  };
+
+  it("a chaser closes on a survivor it can see, at every distance, and never backs off", () => {
+    for (const z of [30, 12, 4, 1.5, 0.8]) {
+      const d = new BotBrain("normal", walk, () => 0.5).think(hunterSenses(z));
+      expect(d.input.buttons & Btn.Forward).toBe(Btn.Forward);
+      expect(d.input.buttons & Btn.Back).toBe(0);
+    }
+  });
+
+  it("a chaser sprints while it is out of reach and stops sprinting once it is on top of them", () => {
+    expect(new BotBrain("normal", walk, () => 0.5).think(hunterSenses(20)).input.buttons & Btn.Sprint).toBe(Btn.Sprint);
+    expect(new BotBrain("normal", walk, () => 0.5).think(hunterSenses(1.2)).input.buttons & Btn.Sprint).toBe(0);
+  });
+
+  it("a chaser swings once it is within the clippers' reach, and not before", () => {
+    // Far: turned onto them, closing, but no swing. Close: the swing lands.
+    const far = hunterSenses(9);
+    const brainFar = new BotBrain("normal", walk, () => 0.5);
+    let firedFar = false;
+    for (let t = 1000; t < 3000; t += TICK_MS) { far.now = t; if (brainFar.think(far).fire) firedFar = true; }
+    expect(firedFar).toBe(false);
+    const near = hunterSenses(1.4);
+    const brainNear = new BotBrain("normal", walk, () => 0.5);
+    let firedNear = false;
+    for (let t = 1000; t < 3000; t += TICK_MS) { near.now = t; if (brainNear.think(near).fire) firedNear = true; }
+    expect(firedNear).toBe(true);
+  });
+
+  it("a chaser keeps heading for a survivor who moves, without stopping where they used to be", () => {
+    const brain = new BotBrain("normal", walk, () => 0.5);
+    const b = createBody(start.x, start.y, start.z);
+    const goal = pointNear(start, 14);
+    let prev = 0, sawForward = 0;
+    for (let t = 0; t < 200; t++) {
+      const s = sensesFor(t * TICK_MS, b, [], []);       // out of sight: this is the navigation half
+      s.mode = "ostrzyzeni"; s.shaved = true; s.me.weapon = "clippers";
+      s.objective = goal;                                 // the room re-points it at the prey each tick
+      const d = brain.think(s);
+      if (d.input.buttons & Btn.Forward) sawForward++;
+      simulateBody(world, b, d.input, 1, prev);
+      prev = d.input.buttons;
+    }
+    // It walked, and it ended nearer the prey than it started — no arrival spin, no roaming off.
+    expect(sawForward).toBeGreaterThan(60);
+    expect(Math.hypot(b.x - goal.x, b.z - goal.z)).toBeLessThan(Math.hypot(start.x - goal.x, start.z - goal.z) - 4);
+  });
+
+  it("a survivor backs away from a chaser inside its reach while still shooting, and holds ground when it is far off", () => {
+    const near = sensesFor(1000, createBody(0, 0, 0), [], [{ id: "chaser", team: 1, x: 0, y: 0, z: 5, crouching: false }]);
+    near.mode = "ostrzyzeni"; near.shaved = false;
+    const brain = new BotBrain("normal", walk, () => 0.5);
+    let fired = false, backed = false;
+    for (let t = 1000; t < 3000; t += TICK_MS) {
+      near.now = t;
+      const d = brain.think(near);
+      if (d.fire) fired = true;
+      if (d.input.buttons & Btn.Back) backed = true;
+      expect(d.input.buttons & Btn.Forward).toBe(0);   // never towards the clippers
+    }
+    expect(backed).toBe(true);
+    expect(fired).toBe(true);
+    // Beyond the flee range it fights like anyone else: the rifle band decides, not the mode.
+    const far = sensesFor(1000, createBody(0, 0, 0), [], [{ id: "chaser", team: 1, x: 0, y: 0, z: 20, crouching: false }]);
+    far.mode = "ostrzyzeni"; far.shaved = false;
+    expect(new BotBrain("normal", walk, () => 0.5).think(far).input.buttons & Btn.Back).toBe(0);
+  });
+
+  it("Gun Game needs no role at all: the bot fights with whatever rung it was handed", () => {
+    const s = sensesFor(1000, createBody(0, 0, 0), [], [{ id: "enemy", team: 0, x: 0, y: 0, z: 18, crouching: false }]);
+    s.mode = "gungame";
+    s.me.weapon = "shotgun";
+    expect(new BotBrain("normal", walk, () => 0.5).think(s).input.buttons & Btn.Forward).toBe(Btn.Forward);
+    s.me.weapon = "rifle";
+    expect(new BotBrain("normal", walk, () => 0.5).think(s).input.buttons & Btn.Forward).toBe(0);
+    // And it never shops: the room hands out the rung, so the brain is not asked.
+    expect(new BotBrain("normal", walk, () => 0.5).pickBuy(9000, ["shotgun"])).toBeNull();
+  });
+});
+
 /** A senses object with no enemies: pure navigation towards a single roam point. */
 function sensesFor(now: number, b: BodyState, roam: NavPoint[], enemies: BotSenses["enemies"] = []): BotSenses {
   return {

@@ -138,3 +138,25 @@ it("(f') eleven kills with the wrong weapon move nobody and do not end the match
   expect(h.state.phase).toBe(MatchPhase.Playing);
   expect(h.state.winnerId).toBe("");
 });
+
+it("(g) bots play the ladder: they are handed the rung weapon, never shop, and climb when they kill", async () => {
+  h = await RoomHarness.create({ room: "gungame-bots", mode: "gungame", bots: 2, seed: 5 });
+  const a = await h.join("Alpha");
+  await h.until(MatchPhase.Playing);
+  const bots = [...h.state.players.values()].filter((p) => p.bot);
+  expect(bots).toHaveLength(2);
+  for (const b of bots) {
+    expect(b.weapon).toBe(ladderWeapon(0));
+    expect([...b.owned]).toEqual(["pistol"]);
+    expect(b.money).toBe(0);
+  }
+  // A bot that kills climbs exactly like a human: the same kill path, the same table.
+  const victim = h.player(a.sessionId);
+  victim.protectedUntil = 0;
+  (h.room as unknown as Damage).applyDamage(bots[0], a.sessionId, 999, false, undefined, "pistol");
+  expect(bots[0].score).toBe(1);
+  expect(bots[0].weapon).toBe(ladderWeapon(1));
+  // And they keep playing without a shop: several seconds of real ticks, still no money.
+  await h.advance(4000);
+  for (const b of bots) expect(b.money).toBe(0);
+});

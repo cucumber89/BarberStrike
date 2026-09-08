@@ -399,7 +399,12 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       flags: this.mode === "dom" ? this.flagSims.map((f, i) => ({ x: this.map.flags[i].x, y: this.map.flags[i].y, z: this.map.flags[i].z, owner: f.owner, contested: this.state.flags[i]?.contested ?? false })) : [],
       roamPoints: this.roamPoints,
       mayPlan: this.navTick % MAX_BOTS === s.planPhase,
-      objective: this.mode === "bomb" && this.state.phase === MatchPhase.Playing ? this.bombGoal(p, s) : undefined,
+      objective: this.mode === "bomb" && this.state.phase === MatchPhase.Playing ? this.bombGoal(p, s)
+        : this.infection && p.shaved && this.state.phase === MatchPhase.Playing ? this.nearestSurvivor(p) : undefined,
+      // Drop D: the mode and this bot's side, for the one decision the brain cannot see — whether
+      // it is the one with the clippers.
+      mode: this.mode,
+      shaved: p.shaved,
     };
     const d = brain.think(senses);
     if (senses.objective && !d.fire && !senses.blinded && !senses.hazards?.length && Math.hypot(p.x - senses.objective.x, p.z - senses.objective.z) < 1.9) {
@@ -1097,6 +1102,21 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
           && s.body.grounded && Math.hypot(s.body.vx, s.body.vz) < 0.4 && !p.reloading
           && this.now() > Math.max(s.equipEndsAt, s.lastFireAt + 350, s.lastThrowAt + 700, s.lastDamageAt + 500, s.blindedUntil) };
     });
+  }
+
+  /**
+   * Drop D: where a shaved bot is going — the closest living unshaved head. Straight-line distance
+   * rather than path length: the chaser only needs to pick a direction, and a path search per bot
+   * per tick to rank them would cost far more than picking the occasional wrong one.
+   */
+  private nearestSurvivor(p: PlayerState): NavPoint | undefined {
+    let best: PlayerState | undefined, bestD = Infinity;
+    for (const q of this.state.players.values()) {
+      if (q.shaved || !q.alive || !q.connected) continue;
+      const d = Math.hypot(q.x - p.x, q.z - p.z);
+      if (d < bestD) { bestD = d; best = q; }
+    }
+    return best ? { x: best.x, y: best.y, z: best.z } : undefined;
   }
 
   private bombGoal(p: PlayerState, s: Session): NavPoint | undefined {

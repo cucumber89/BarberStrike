@@ -164,3 +164,20 @@ it("(h) the match is over after the mode's rounds, and the result names the top 
   expect(h.state.winnerId).toBe(star.id);
   expect(h.state.winnerName).toBe(star.name);
 });
+
+it("(i) bots play both sides: one can be the Ostrzyżony with the clippers, the rest survivors who bought", async () => {
+  h = await RoomHarness.create({ room: "infection-bots", mode: "ostrzyzeni", bots: 3, seed: 3 });
+  await h.join("Human");
+  await h.until(MatchPhase.Prep);
+  const bots = [...h.state.players.values()].filter((p) => p.bot);
+  expect(bots).toHaveLength(3);
+  expect(shaved()).toHaveLength(1);
+  for (const b of bots) {
+    if (b.shaved) { expect(b.weapon).toBe("clippers"); expect(b.money).toBe(0); expect(b.perks.get(OSTRZYZENI.speedPerk)).toBe(PERK_ARMED_MS); }
+    else expect(b.money).toBeLessThanOrEqual(OSTRZYZENI.roundMoney); // a survivor bot may have spent it
+  }
+  // The round runs with bots thinking on both sides: no crash, still exactly one side per player.
+  await h.until(MatchPhase.Playing);
+  await h.advance(5000);
+  for (const p of h.state.players.values()) expect(p.team).toBe(p.shaved ? OSTRZYZENI.shavedTeam : OSTRZYZENI.survivorTeam);
+});

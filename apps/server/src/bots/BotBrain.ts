@@ -1,6 +1,6 @@
 import {
   BOT_PRESETS, Btn, PLAYER, TICK_MS, WEAPONS, aimDirection, findPath, itemPrice, spreadDirection, wrapAngle,
-  type BotLevel, type BotPreset, type NavPoint, type PlayerInput, type Walk, type WeaponId,
+  type BotLevel, type BotPreset, type GameMode, type NavPoint, type PlayerInput, type Walk, type WeaponId,
 } from "@frankibarber/shared";
 
 /**
@@ -63,6 +63,18 @@ export interface BotSenses {
   blinded?: boolean;
   objective?: NavPoint;
   hazards?: { x: number; y: number; z: number; radius: number }[];
+  /**
+   * Drop D: which mode is being played, so a bot can want the right thing. The brain reads it for
+   * ONE decision — the Ostrzyżeni role below — and infers everything else from what it can see, as
+   * it did before. Gun Game needs no branch at all: the room hands out the rung weapon and the
+   * range bands already come from the weapon in hand.
+   */
+  mode?: GameMode;
+  /**
+   * Drop D: this bot is on the shaved side (Ostrzyżeni) — it hunts with the clippers instead of
+   * fighting at range, and its `objective` is the nearest survivor rather than a fixed point.
+   */
+  shaved?: boolean;
 }
 
 export interface BotDecision {
@@ -101,6 +113,12 @@ const WP_REACH = 0.55;
 const OFF_PATH = 6;
 /** After losing sight the bot still heads for the last known position for this long. */
 const CHASE_MS = 2500;
+/**
+ * Drop D, Ostrzyżeni: how much room a survivor bot tries to keep between itself and a chaser it can
+ * see. Comfortably outside the clippers' 2.1 m reach and outside the lunge a chaser with the speed
+ * perk can make in a reaction time, so backing off is a real answer rather than a delay.
+ */
+const FLEE_RANGE = 9;
 /** Standing this close to the last known spot counts as having looked: the chase ends. */
 const CHASE_ARRIVE = 2.5;
 /** sin(22.5°): the half-width of one of the eight movement octants. */
@@ -184,6 +202,10 @@ export class BotBrain {
     const engageRange = Math.min(p.engageRange, weapon.rangeMax);
     const preferredRange = Math.min(engageRange * 0.65, weapon.range * 0.8);
     const eyeY = me.y + (me.crouching ? PLAYER.crouchEyeHeight : PLAYER.eyeHeight);
+    // Drop D: the two Ostrzyżeni roles. A hunter has the clippers and must arrive; its quarry has a
+    // gun and must not let it. Everything else about the brain is unchanged in both.
+    const hunting = s.mode === "ostrzyzeni" && !!s.shaved;
+    const fleeing = s.mode === "ostrzyzeni" && !s.shaved;
     let buttons = 0;
     let fire: BotDecision["fire"] = null;
     let reload = false;
@@ -241,11 +263,22 @@ export class BotBrain {
       buttons |= this.strafe < 0 ? Btn.Left : Btn.Right;
       // The bands come from the weapon's own engage range, so a shotgun bot closes and a sniper bot
       // holds — with 16 m and 5 m fixed, both did the same thing.
-      if (me.ammo === 0 && me.reserve > 0) buttons |= Btn.Back;
+      if (hunting) {
+        // A chaser closes and keeps closing: with the clippers there is no band to hold, and
+        // backing off inside the reach (what the range rule below would do) is how a hunter reads
+        // as indecisive. Sprint too — the speed perk is the side's whole advantage.
+        buttons |= Btn.Forward;
+        if (seenD > weapon.range) buttons |= Btn.Sprint;
+      } else if (fleeing && seenD < FLEE_RANGE) {
+        // Keep the clippers off you while you shoot: away from the chaser, not merely "back".
+        buttons = (buttons & ~(Btn.Forward | Btn.Left | Btn.Right))
+          | this.strafeTo(Math.atan2(me.x - seen.x || 0.1, me.z - seen.z || -0.1));
+      } else if (me.ammo === 0 && me.reserve > 0) buttons |= Btn.Back;
       else if (seenD > preferredRange * 1.2) buttons |= Btn.Forward;
       else if (seenD < preferredRange * 0.65) buttons |= Btn.Back;
-      // Aiming slows movement and reduces the server's spread, just as it does for humans.
-      if (ready && seenD > 10 && me.ammo > 0) buttons |= Btn.Aim;
+      // Aiming slows movement and reduces the server's spread, just as it does for humans — but
+      // never while running for your life or after somebody.
+      if (ready && seenD > 10 && me.ammo > 0 && !hunting && !fleeing) buttons |= Btn.Aim;
       // The route is NOT thrown away here: see the note at the top of the file.
     } else {
       // ---- navigation
@@ -255,7 +288,12 @@ export class BotBrain {
       // finding nobody ENDS the chase; without that the bot arrives, the route completes, the chase
       // hands back the same spot, and it plans a one-waypoint route to its own feet on every tick
       // until the chase timer runs out.
-      if (s.objective) {
+      if (s.objective && hunting) {
+        // The hunter's objective is a PERSON, not a site: it moves, and arriving at where they were
+        // is not the end of anything. So no arrival spin and no waiting for the goal timer — the
+        // goal is re-pointed every tick and the route is re-planned when it drifts (`stale` below).
+        this.goal = s.objective;
+      } else if (s.objective) {
         if (Math.hypot(me.x - s.objective.x, me.z - s.objective.z) < 1.7) {
           this.goal = null; this.path = null; this.pathGoal = null;
           this.yaw = wrapAngle(this.yaw + TICK_MS / 1000 * 0.5);
