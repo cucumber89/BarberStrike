@@ -5,7 +5,8 @@ import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { PLAYER, TEAM_COLORS, WEAPONS, type Team, type WeaponId } from "@frankibarber/shared";
+import { PLAYER, WEAPONS, type Team, type WeaponId } from "@frankibarber/shared";
+import { TEAM_KITS } from "./teamKit";
 import { buildWeaponModel, createWeaponMaterials, forEachMesh, type WeaponMaterials, type WeaponModel } from "./weaponMeshes";
 import { beveledBox } from "./geometry";
 
@@ -71,7 +72,7 @@ export interface Pose {
   armR: number; armL: number; rootZ: number; rootX: number;
 }
 
-interface SharedMats { skin: PBRMaterial; cloth: PBRMaterial; vest: PBRMaterial; accent: PBRMaterial; boots: PBRMaterial; weapons: WeaponMaterials }
+interface SharedMats { skin: PBRMaterial; cloth: PBRMaterial; vest: PBRMaterial; accent: PBRMaterial; trim: PBRMaterial; boots: PBRMaterial; weapons: WeaponMaterials }
 
 const SHARED = new Map<Scene, Map<Team, SharedMats>>();
 
@@ -90,13 +91,17 @@ function teamMats(scene: Scene, team: Team): SharedMats {
     mat.freeze();
     return mat;
   };
-  const accentHex = TEAM_COLORS[team];
+  // The palette is data (see teamKit.ts), so a side's look is one table edit and cannot become a
+  // geometry change by accident. Roughness/metalness stay per ROLE — a shirt is a shirt whatever
+  // colour it is — which is what keeps the two sides reading as the same game.
+  const kit = TEAM_KITS[team];
   m = {
-    skin: mk("ch_skin", "#c39270", 0.7, 0, "#1b100b"),
-    cloth: mk("ch_cloth", team === 0 ? "#455e70" : "#705044", 0.85, 0, "#10151c"),
-    vest: mk("ch_vest", "#939990", 0.7, 0.05, "#181b19"),
-    accent: mk("ch_accent", accentHex, 0.45, 0.1, accentHex),
-    boots: mk("ch_boots", "#292e35", 0.6, 0, "#090c10"),
+    skin: mk("ch_skin", kit.skin, 0.7, 0, "#1b100b"),
+    cloth: mk("ch_cloth", kit.cloth, 0.85, 0, "#10151c"),
+    vest: mk("ch_vest", kit.vest, 0.7, 0.05, "#181b19"),
+    accent: mk("ch_accent", kit.accent, 0.45, 0.1, kit.accent),
+    trim: mk("ch_trim", kit.trim, 0.55, 0, "#141414"),
+    boots: mk("ch_boots", kit.boots, 0.6, 0, "#090c10"),
     weapons: createWeaponMaterials(scene),
   };
   byTeam.set(team, m);
@@ -178,10 +183,10 @@ export class Character {
     box("headset", this.head, 0.04, 0.085, 0.09, 0.125, 0.15, 0, M.boots);
     box("apron", this.torso, 0.31, 0.19, 0.025, 0, 0.035, 0.13, M.vest);
     box("back_team_panel", this.torso, 0.32, 0.17, 0.02, 0, 0.37, -0.145, M.accent);
-    box("chest_team_stripe", this.torso, 0.37, 0.055, 0.02, 0, 0.48, 0.145, M.accent);
+    box("chest_team_stripe", this.torso, 0.37, 0.055, 0.02, 0, 0.48, 0.145, M.trim);
     for (const x of [-0.13, 0, 0.13]) {
       box("ammo_pouch", this.torso, 0.1, 0.13, 0.065, x, 0.24, 0.155, M.boots);
-      box("pouch_buckle", this.torso, 0.028, 0.02, 0.014, x, 0.28, 0.193, M.vest);
+      box("pouch_buckle", this.torso, 0.028, 0.02, 0.014, x, 0.28, 0.193, M.trim);
     }
     this.perkBand = box("perkBand", this.head, 0.25, 0.03, 0.27, 0, 0.215, 0.01, M.accent);
     this.perkBand.setEnabled(false);
@@ -193,7 +198,7 @@ export class Character {
 
     this.armR = node("armR", this.torso, 0.3, 0.48, 0);
     box("upperR", this.armR, 0.11, 0.3, 0.11, 0, -0.15, 0, M.cloth);
-    box("bandR", this.armR, 0.125, 0.06, 0.125, 0, -0.1, 0, M.accent);
+    box("bandR", this.armR, 0.125, 0.06, 0.125, 0, -0.1, 0, M.trim);
     this.forearmR = node("forearmR", this.armR, 0, -0.3, 0);
     box("lowerR", this.forearmR, 0.09, 0.28, 0.09, 0, -0.14, 0, M.skin);
     box("handR", this.forearmR, 0.08, 0.08, 0.1, 0, -0.3, 0.02, M.boots);
