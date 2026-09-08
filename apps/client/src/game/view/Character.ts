@@ -6,6 +6,7 @@ import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { PLAYER, TEAM_COLORS, WEAPONS, type Team, type WeaponId } from "@frankibarber/shared";
+import { HOLD } from "./characterHold";
 import { buildWeaponModel, createWeaponMaterials, forEachMesh, type WeaponMaterials, type WeaponModel } from "./weaponMeshes";
 import { beveledBox } from "./geometry";
 
@@ -434,15 +435,12 @@ export class Character {
     // Tactical sprint: the gun comes up across the chest, muzzle high — readable from across the map.
     // Low-ready (art pass): the receiver sits beside the torso's right edge at chest height, a hair
     // nose-down; the bore must stay within 5° of facing (hand-pose oracle), so the tilt is small.
-    this.gunHand.rotation.x = 0.02 + aim * 0.5 - this.kick * 0.12 + 0.45 * sprint + 0.55 * tacB + armSwing * 0.5 + fl * 0.2 + 0.6 * throwing + 0.25 * melee - 0.9 * swingR;
-    this.gunHand.rotation.y = -0.06 + armSwing * 0.3 - 0.3 * throwing + 0.12 * oneHand - 0.4 * swingR;
+    this.gunHand.rotation.x = HOLD.pitch + aim * 0.5 - this.kick * 0.12 + 0.45 * sprint + 0.55 * tacB + armSwing * 0.5 + fl * 0.2 + 0.6 * throwing + 0.25 * melee - 0.9 * swingR;
+    this.gunHand.rotation.y = HOLD.yaw + armSwing * 0.3 - 0.3 * throwing + 0.12 * oneHand - 0.4 * swingR;
     this.gunHand.rotation.z = -0.35 * swingR;
-    this.gunHand.position.z = 0.10 - this.kick * 0.05 - 0.08 * throwing + 0.05 * oneHand + 0.08 * swingR;
-    // Out at the vest's right face (half-width 0.22), not on the chest centre: the receiver runs
-    // BACK from the grip, so a hold tucked inside the torso buries it — measured, the SMG's rear
-    // sat 6 cm inside the vest at x 0.14.
-    this.gunHand.position.x = 0.21 + 0.04 * oneHand + 0.02 * melee;
-    this.gunHand.position.y = 0.33 + 0.02 * oneHand - 0.08 * melee;
+    this.gunHand.position.z = HOLD.z - this.kick * 0.05 - 0.08 * throwing + 0.05 * oneHand + 0.08 * swingR;
+    this.gunHand.position.x = HOLD.x + 0.04 * oneHand + 0.02 * melee;
+    this.gunHand.position.y = HOLD.y + 0.02 * oneHand - 0.08 * melee;
     // Right arm: upper arm hangs by the ribs (elbow just behind the shoulder line), forearm folded
     // up to the grip. Throw: the arm goes back over the shoulder, then whips forward past horizontal.
     this.armR.rotation.x = 0.1 - aim * 0.25 - this.kick * 0.2 + idleSway + 0.35 * sprint - 0.35 * tacB + armSwing + fl * 0.25 - 1.6 * thr + 0.9 * thrSwing
