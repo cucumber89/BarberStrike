@@ -179,6 +179,8 @@ export class Viewmodel {
   private magazineHomes = new Map<WeaponId, number>();
   private models = new Map<WeaponId, WeaponModel>();
   private disposed = false;
+  private skinBinding: SkinBinding;
+  private skinIds: Partial<Record<WeaponId, string>> = {};
   /** Drop 6b: imported guns, and which ids have already had their turn. */
   private modelLib: WeaponModelLibrary | null = null;
   private upgraded = new Set<WeaponId>();
@@ -311,6 +313,7 @@ export class Viewmodel {
     this.gunPivot = new TransformNode("viewmodel_gun", scene);
     this.gunPivot.parent = this.root;
     this.mats = createWeaponMaterials(scene);
+    this.skinBinding = new SkinBinding(SkinRegistry.forScene(scene), this.mats);
     this.handMat = new PBRMaterial("vm_hand", scene);
     // Dark but READABLE gloves (handoff: hands were near-black under the night lights): a worn
     // brown-grey with a faint cool fill so they never vanish into the barrel.
@@ -440,6 +443,7 @@ export class Viewmodel {
   }
 
   setWeapon(id: WeaponId, animate = true): void {
+    void this.skinBinding.apply(this.models.get(id)!, id, this.skinIds[id] ?? "");
     // A sidearm is supported at the grip; the old universal 30 cm offset put the left
     // hand beyond its muzzle. Long weapons keep their support under the fore-end.
     // Measured against the gun's own parts (`supportHandHome`), so `pnpm check:weapons` can prove
@@ -694,10 +698,18 @@ export class Viewmodel {
 
   dispose(): void {
     this.disposed = true;
-    this.root.dispose(false, true);
+    this.skinBinding.clear();
+    this.root.dispose(false, false);
     this.grenadeNode.dispose(false, true);
     this.mats.dispose();
     this.handMat.dispose();
     this.grenadeMat.dispose(); this.grenadeMetalMat.dispose();
   }
+
+  /** Equip is a cosmetic event; hidden models keep their factory finish until brought forward. */
+  applySkin(id: WeaponId, skinId: string): Promise<void> {
+    this.skinIds[id] = skinId;
+    return id === this.current ? this.skinBinding.apply(this.models.get(id)!, id, skinId) : Promise.resolve();
+  }
 }
+import { SkinBinding, SkinRegistry } from "./skins";
