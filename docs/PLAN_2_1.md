@@ -570,6 +570,10 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   NIGHT_DISTRICT-only by design (they are that map's tests), so GÓRA has **no pathfinding-perf
   coverage**: nothing asserts that `findPath` across the flat stays inside a server tick. It is a
   ninth of the district's grid so it should be comfortable, but nobody has measured it.
+  **Measured, same day:** 40 of 40 paths between GÓRA's spawns, arena spawns and flags are found,
+  mean 0.97 ms against NIGHT_DISTRICT's 2.78 ms on the same harness, and the walk grid + nav build
+  takes 121 ms against 338 ms — comfortably inside the 16.7 ms tick. What is still missing is the
+  TEST: `navPerf.test.ts` names NIGHT_DISTRICT and nothing pins these numbers for GÓRA.
 - Drop G: the map has never been RENDERED. Lighting (14 practicals, two shadow casters), whether a
   2.8 m ceiling reads in first person, and whether the roof is worth climbing to all need a real GPU
   and the owner's eyes; and no e2e path (join → pick GÓRA → play a round) has been walked.
