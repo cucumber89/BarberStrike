@@ -1,5 +1,7 @@
 import { Scene } from "@babylonjs/core/scene";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
+import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
+import { boxProjectUvs } from "./skinUv";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
@@ -25,6 +27,8 @@ import { supportHandHome, type PartBox } from "./weaponFit";
  */
 
 export interface WeaponModel {
+  /** Moving assemblies can each contain the same material: retain every mesh, not just the last. */
+  meshesByMat: Map<MatKey, Mesh[]>;
   root: TransformNode;
   /** Muzzle position node (for flashes/tracers). */
   muzzle: TransformNode;
@@ -487,6 +491,13 @@ function buildParts(name: string, parts: Part[], mats: WeaponMaterials, scene: S
   const out: Mesh[] = [];
   for (const [mat, list] of byMat) {
     const merged = list.length === 1 ? list[0] : Mesh.MergeMeshes(list, true, true, undefined, false, false)!;
+    if (list.length === 1) merged.bakeCurrentTransformIntoVertices();
+    // Magazine vertices are local to their animated node; project at their rest position in root space.
+    const positions = Array.from(merged.getVerticesData(VertexBuffer.PositionKind)!);
+    for (let i = 0; i < positions.length; i += 3) {
+      positions[i] += parent.position.x; positions[i + 1] += parent.position.y; positions[i + 2] += parent.position.z;
+    }
+    merged.setVerticesData(VertexBuffer.UVKind, boxProjectUvs(positions, merged.getVerticesData(VertexBuffer.NormalKind)!), false);
     merged.name = `${name}_${mat}`;
     merged.material = mats[mat];
     merged.isPickable = false;
@@ -499,7 +510,7 @@ function buildParts(name: string, parts: Part[], mats: WeaponMaterials, scene: S
 export function buildWeaponModel(id: WeaponId, mats: WeaponMaterials, scene: Scene, name = `wpn_${id}`): WeaponModel {
   const spec = SPECS[id];
   const root = new TransformNode(name, scene);
-  buildParts(name, spec.parts, mats, scene, root);
+  const meshes = buildParts(name, spec.parts, mats, scene, root);
   const muzzle = new TransformNode(`${name}_muzzle`, scene);
   muzzle.position.set(...spec.muzzle);
   muzzle.parent = root;
@@ -514,15 +525,20 @@ export function buildWeaponModel(id: WeaponId, mats: WeaponMaterials, scene: Sce
     magazine = new TransformNode(`${name}_mag`, scene);
     magazine.position.set(...spec.magazinePos);
     magazine.parent = root;
-    buildParts(`${name}_mag`, spec.magazine, mats, scene, magazine);
+    meshes.push(...buildParts(`${name}_mag`, spec.magazine, mats, scene, magazine));
   }
   let action: TransformNode | null = null;
   if (spec.action) {
     action = new TransformNode(`${name}_action`, scene);
     action.parent = root;
-    buildParts(`${name}_action`, spec.action.parts, mats, scene, action);
+    meshes.push(...buildParts(`${name}_action`, spec.action.parts, mats, scene, action));
   }
-  return { root, muzzle, eject, aim, magazine, action, actionKind: spec.action?.kind ?? "none", aimPoint: spec.aimPoint, length: spec.length, support: proceduralParts(id).support };
+  const meshesByMat = new Map<MatKey, Mesh[]>();
+  for (const mesh of meshes) {
+    const mat = mesh.name.slice(mesh.name.lastIndexOf("_") + 1) as MatKey;
+    meshesByMat.set(mat, [...(meshesByMat.get(mat) ?? []), mesh]);
+  }
+  return { root, meshesByMat, muzzle, eject, aim, magazine, action, actionKind: spec.action?.kind ?? "none", aimPoint: spec.aimPoint, length: spec.length, support: proceduralParts(id).support };
 }
 
 /** Sets rendering group + shadow flags on every mesh of a model. */

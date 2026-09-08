@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { BADGES, DEFAULT_HAIRCUT, HAIRCUTS, XP, levelFor, xpToNext, type MatchStats } from "@frankibarber/shared";
-import { applyMatch, emptyProfile, loadProfile, ownedCuts, saveProfile, equipHaircut, equippedHaircut } from "./profile";
+import { applyMatch, emptyProfile, loadProfile, ownedCuts, saveProfile, equipHaircut, equippedHaircut, equipSkin, equippedSkins } from "./profile";
 
 const match = (over: Partial<MatchStats> = {}): MatchStats => ({
   kills: 0, headshots: 0, assists: 0, deaths: 0, captures: 0, wavesSurvived: 0, result: -1, mode: "tdm", ...over,
@@ -71,6 +71,22 @@ describe("haircuts in the profile", () => {
   });
   afterAll(() => { delete (globalThis as { localStorage?: unknown }).localStorage; });
   beforeEach(() => mem.clear());
+
+  it("migrates an old profile and repairs skin fields without losing progression", () => {
+    mem.set("bs_profile_v1", JSON.stringify({ xp: 123, life: { kills: 7 } }));
+    expect(loadProfile()).toMatchObject({ xp: 123, life: { kills: 7 }, skins: [], equip: {} });
+    mem.set("bs_profile_v1", JSON.stringify({ xp: 123, life: { kills: 7 }, skins: [null, 12, { skin: "removed" }, { skin: "osy", wear: 4, rolledAt: -1 }], equip: { rifle: "removed", pistol: "osy", smg: "talk" } }));
+    expect(loadProfile()).toMatchObject({ xp: 123, life: { kills: 7 }, skins: [{ skin: "osy", wear: 1, rolledAt: 0 }], equip: { pistol: "osy" } });
+  });
+
+  it("equips owned recipes only and preserves duplicate instances through a match", () => {
+    const skins = [{ skin: "osy", wear: .1, rolledAt: 1 }, { skin: "osy", wear: .8, rolledAt: 2 }];
+    saveProfile({ ...emptyProfile(), skins });
+    expect(equipSkin("rifle", "talk")).toBe(""); expect(equipSkin("rifle", "osy")).toBe("osy");
+    expect(equippedSkins()).toBe("rifle=osy");
+    expect(applyMatch(loadProfile(), match(), 0).profile).toMatchObject({ skins, equip: { rifle: "osy" } });
+    expect(equipSkin("rifle", "")).toBe(""); expect(equippedSkins()).toBe("");
+  });
 
   it("starts with the cap alone and hands out the first haircut for turning up once", () => {
     expect(ownedCuts(emptyProfile()).map((h) => h.id)).toEqual([DEFAULT_HAIRCUT]);

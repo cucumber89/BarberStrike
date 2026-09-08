@@ -3,6 +3,8 @@ import type { GameModule } from "../context";
 import type { RemotePlayer } from "../player/RemotePlayer";
 import { Tracers } from "../vfx/Tracers";
 import { Viewmodel } from "./Viewmodel";
+import { loadProfile } from "../progression/profile";
+import type { WeaponId } from "@frankibarber/shared";
 import { Effects } from "./Effects";
 import { Nameplates } from "./Nameplates";
 import { Grenades } from "./Grenades";
@@ -20,6 +22,7 @@ import { boysClass, INTERP_DELAY_MS, MatchPhase, WEAPONS, makeRayHit } from "@fr
 export const installView: GameModule = (ctx) => {
   const tracers = new Tracers(ctx.scene);
   const viewmodel = new Viewmodel(ctx.scene, ctx.camera, ctx.local);
+  for (const [weapon, skin] of Object.entries(loadProfile().equip)) void viewmodel.applySkin(weapon as WeaponId, skin);
   viewmodel.setWorld(ctx.world);
   // Drop 6b: upgrade to the imported guns in the background. Deliberately not awaited — the
   // procedural weapons are already up, and a slow or missing file must not delay the first frame.

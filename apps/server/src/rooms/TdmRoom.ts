@@ -154,6 +154,7 @@ export interface TdmJoinOptions {
   deferSpawn?: boolean; boysClass?: number; name?: string; room?: string; mode?: string; map?: string; bots?: number; botLevel?: string; seed?: number;
   /** Drop E: the haircut the player has equipped in their profile. Cosmetic; unknown ids fall back. */
   haircut?: string;
+  skins?: string;
 }
 
 const isChatMessage = (v: unknown): v is { text: string; team: boolean } => isRecord(v) && typeof v.text === "string";
@@ -533,6 +534,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // Drop E: the equipped haircut arrives with the join, like the nickname — it is a look, not a
     // loadout, so it needs no validation beyond "is it a haircut we can draw".
     p.haircut = encodeHaircut(isHaircutId(options?.haircut) ? options.haircut : DEFAULT_HAIRCUT, 0);
+    p.skins = sanitizeSkins(options?.skins);
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
     this.state.players.set(client.sessionId, p); this.connectedCount++;
@@ -2004,3 +2006,4 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     } satisfies KillEvent);
   }
 }
+import { sanitizeSkins } from "@frankibarber/shared";

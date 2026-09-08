@@ -48,6 +48,7 @@ export class RemotePlayer {
   vx = 0; vz = 0; reloading = false; weapon: WeaponId = "pistol";
   lean = 0; tac = false;
   private wasAlive = true;
+  private skinsValue = "";
   private input = { speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol" as WeaponId, moveDir: 0, perked: false, lean: 0, tac: false, shaved: false, haircut: "" };
 
   /**
@@ -68,6 +69,11 @@ export class RemotePlayer {
   get root() { return this.character.root; }
 
   pushFrom(p: NetPlayer, t: number): void {
+    const skins = p.skins ?? "";
+    if (skins !== this.skinsValue) {
+      this.skinsValue = skins;
+      void this.character.applySkins?.(decodeSkins(skins));
+    }
     const last = this.snaps[this.snaps.length - 1];
     if (last && last.t === t) { this.fill(last, p, t); return; }
     const s = this.pool.pop() ?? ({} as Snapshot);
@@ -159,3 +165,4 @@ export class RemotePlayer {
     this.character.dispose();
   }
 }
+import { decodeSkins } from "@frankibarber/shared";

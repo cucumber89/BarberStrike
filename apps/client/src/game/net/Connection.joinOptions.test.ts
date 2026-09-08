@@ -7,6 +7,10 @@ import { joinOptions } from "./Connection";
  * failure this covers: the pick has to be IN the join options, next to the mode.
  */
 describe("join options", () => {
+  it("takes skins as a pure parameter, with factory finish as the default", () => {
+    expect(joinOptions({ url: "ws://x", name: "frank" }, 1, "cap", "pistol=osy").skins).toBe("pistol=osy");
+    expect(joinOptions({ url: "ws://x", name: "frank" }, 1).skins).toBe("");
+  });
   it("carries the picked map to the room, next to the mode (Drop G)", () => {
     for (const mapId of MAP_ORDER) {
       const opts = joinOptions({ url: "ws://x", name: "frank", gameMode: "bomb", mapId }, 1);
@@ -19,7 +23,7 @@ describe("join options", () => {
     const opts = joinOptions({ url: "ws://x", name: "frank" }, 1);
     expect(opts.map).toBe(DEFAULT_MAP_ID);
     expect(opts.map).toBe("night_district");
-    expect(opts).toEqual({ deferSpawn: true, boysClass: 1, name: "frank", room: "", mode: "tdm", map: "night_district", bots: 0, botLevel: "normal", haircut: DEFAULT_HAIRCUT });
+    expect(opts).toEqual({ deferSpawn: true, boysClass: 1, name: "frank", room: "", mode: "tdm", map: "night_district", bots: 0, botLevel: "normal", haircut: DEFAULT_HAIRCUT, skins: "" });
   });
 
   it("carries the equipped haircut too, and wears the cap when nobody says otherwise (Drop E)", () => {

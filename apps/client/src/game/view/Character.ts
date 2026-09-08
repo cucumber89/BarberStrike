@@ -32,6 +32,7 @@ import { beveledBox } from "./geometry";
  * `RemotePlayer` or from the view modules; nothing else is shared between the two.
  */
 export interface CharacterLike {
+  applySkins?(skins: Partial<Record<WeaponId, string>>): Promise<void>;
   readonly root: TransformNode;
   readonly allMeshes: AbstractMesh[];
   onFire(): void;
@@ -205,6 +206,8 @@ export class Character {
   private legL: TransformNode; private shinL: TransformNode;
   private gunHand: TransformNode;
   private weapons = new Map<WeaponId, WeaponModel>();
+  private skinBinding: SkinBinding;
+  private skinIds: Partial<Record<WeaponId, string>> = {};
   private weaponMaterials: WeaponMaterials;
   private currentWeapon: WeaponId = "rifle";
   private phase = 0;
@@ -245,6 +248,7 @@ export class Character {
     const M = teamMats(scene, team);
     this.mats = M;
     this.weaponMaterials = M.weapons;
+    this.skinBinding = new SkinBinding(SkinRegistry.forScene(scene), this.weaponMaterials);
     this.root = new TransformNode(`char_${name}`, scene);
     const node = (n: string, parent: TransformNode, x: number, y: number, z: number) => {
       const t = new TransformNode(n, scene); t.position.set(x, y, z); t.parent = parent; return t;
@@ -457,6 +461,7 @@ export class Character {
       this.weapons.get(this.currentWeapon)?.root.setEnabled(false);
       this.currentWeapon = inp.weapon;
       this.weapons.get(inp.weapon)!.root.setEnabled(true);
+      void this.skinBinding.apply(this.weapons.get(inp.weapon)!, inp.weapon, this.skinIds[inp.weapon] ?? "");
     }
     if (this.fade < 1) { this.fade = Math.min(1, this.fade + dt * 3); for (const m of this.meshes) m.visibility = this.fade; }
     const perked = !!inp.perked && inp.alive;
@@ -612,9 +617,17 @@ export class Character {
   setEnabled(v: boolean): void { this.root.setEnabled(v); }
 
   dispose(): void {
+    this.skinBinding.clear();
     // Team clothing and weapon materials are shared by every body in this scene.
     this.root.dispose(false, false);
+  }
+
+  /** Called on cosmetic replication events, never to redraw a texture in the pose loop. */
+  applySkins(skins: Partial<Record<WeaponId, string>>): Promise<void> {
+    this.skinIds = { ...skins };
+    return this.skinBinding.apply(this.weapons.get(this.currentWeapon)!, this.currentWeapon, skins[this.currentWeapon] ?? "");
   }
 }
 
 export const CHARACTER_EYE = PLAYER.eyeHeight;
+import { SkinBinding, SkinRegistry } from "./skins";

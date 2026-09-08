@@ -1,0 +1,16 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`skin recipe contract > pins exact operation streams for three seeds per generator 1`] = `
+{
+  "solid": [
+    2094591131,
+    81674194,
+    466219573,
+  ],
+  "stripes": [
+    1602995416,
+    538694113,
+    336864072,
+  ],
+}
+`;
