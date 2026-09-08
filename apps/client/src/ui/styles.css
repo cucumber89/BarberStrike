@@ -643,3 +643,49 @@ button { font-family: inherit; }
 .bomb-hud.infection { border-top-color: var(--team1, #7fb2d8); color: #cfe3f2; }
 .bomb-hud.infection.shaved { border-top-color: #d8556a; color: #ffc9d1; }
 .result-rounds { color: var(--tx-2); font-family: var(--font-mono); font-size: 12px; }
+
+/* ---------------------------------------------------------------- Drop E: the shave */
+
+/* The razor in the kill feed sits on the text baseline of the weapon column it replaces, so a feed
+   of mixed lines does not jump. It inherits `currentColor`, which the feed already colours per row
+   (your own death red, your own kill gold), so the icon says WHOSE shave it was for free. */
+.kf-razor { vertical-align: -1px; }
+.killfeed .kf-weapon { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Scoreboard shave column: the same width as K/D/A, and the dot for "never done" is dimmed so the
+   eye lands on the numbers. */
+.sb-shaved { text-align: center; color: var(--razor, #e6b980); }
+td.sb-shaved { font-variant-numeric: tabular-nums; }
+tbody td.sb-shaved { opacity: 0.55; }
+tbody tr td.sb-shaved:not(:empty) { opacity: 1; }
+.sb-shaved svg { display: block; margin: 0 auto; }
+
+/* The match award. One row, the razor at the left, the name and what they are wearing at the right;
+   it sits above the badges because it is about the match, not about the local profile. */
+.summary-award {
+  display: flex; align-items: center; gap: 10px;
+  margin: 10px 0 2px; padding: 8px 12px;
+  border: 1px solid rgba(230, 185, 128, 0.45);
+  border-left: 3px solid #e6b980;
+  background: rgba(230, 185, 128, 0.08);
+  color: #e6b980;
+}
+.summary-award .award-icon { flex: 0 0 auto; width: 26px; height: 13px; }
+.summary-award > div { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.summary-award b { font-size: 12px; letter-spacing: 0.08em; }
+.summary-award span { font-size: 11px; color: #cbbfae; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.summary-badge.cut { border-color: rgba(230, 185, 128, 0.45); }
+
+/* Drop E: the wardrobe in the lobby. Locked cuts stay visible with what earns them — a cosmetic
+   nobody knows exists is not a reward, and showing it costs nothing when it is only a look. */
+.cut-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.cut {
+  display: flex; flex-direction: column; gap: 2px; padding: 7px 8px; min-width: 0;
+  background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #d8d2c8; text-align: left; cursor: pointer;
+}
+.cut b { font-size: 11px; letter-spacing: 0.06em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cut span { font-size: 10px; color: #8d857a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cut:hover:not(:disabled) { border-color: rgba(230, 185, 128, 0.5); }
+.cut.on { border-color: #e6b980; background: rgba(230, 185, 128, 0.12); color: #e6b980; }
+.cut.locked { opacity: 0.45; cursor: default; }

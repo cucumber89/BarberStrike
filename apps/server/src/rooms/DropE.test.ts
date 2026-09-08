@@ -80,15 +80,14 @@ describe("a clippers backstab is a shave", () => {
     expect(parseHaircut(h.player(b.sessionId).haircut).shaves).toBe(0);
 
     // A rifle round in the back kills without shaving: the clippers are the barber, not the angle.
+    // `faceOff` picks a spawn pair with real line of sight and sets the attacker's simulated aim to
+    // match the ray (the server checks every shot against it); turning the victim to face the same
+    // way makes it a shot in the BACK without inventing geometry the map may not have.
     await h.arm(a, "rifle");
-    const v = h.session(b.sessionId);
-    const fx = Math.sin(v.lastYaw), fz = Math.cos(v.lastYaw);
-    await h.place(a.sessionId, { x: v.body.x - fx * 3, y: v.body.y, z: v.body.z - fz * 3, yaw: v.lastYaw, team: 0 });
+    const aim = await h.faceOff(a.sessionId, b.sessionId);
+    h.session(b.sessionId).lastYaw = Math.atan2(aim.d[0], aim.d[2]);
     h.player(b.sessionId).health = 5;
-    const s = h.session(a.sessionId);
-    // Flat and level: `place` sets the attacker's pitch to 0 and the server checks every shot
-    // against the aim it last simulated, so a tilted ray here is a rejected shot, not a miss.
-    h.send(a, C2S.Fire, { seq: 9, weapon: "rifle", o: [s.body.x, s.body.y + 1.62, s.body.z], d: [fx, 0, fz], t: h.now() });
+    h.send(a, C2S.Fire, { seq: 9, weapon: "rifle", o: aim.o, d: aim.d, t: h.now() });
     await h.tick();
     expect(h.player(b.sessionId).alive).toBe(false);
     expect(lastKill()).toMatchObject({ weapon: "rifle", shave: false });

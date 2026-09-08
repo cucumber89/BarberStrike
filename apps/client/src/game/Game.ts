@@ -121,7 +121,7 @@ export class Game {
     const byTeam = (MODES[h.mode as GameMode]?.winner ?? "team") === "team";
     const result = matchResult(byTeam, h.myTeam, e.winner, e.winnerId ?? "", h.myId);
     const stats = this.tracker.finish(row, result, h.mode as GameMode);
-    const { profile, reward } = applyMatch(loadProfile(), stats, this.tracker.clipperKills);
+    const { profile, reward } = applyMatch(loadProfile(), stats, this.tracker.clipperKills, this.tracker.shaves);
     saveProfile(profile);
     hud.set({ reward, profile });
   }
@@ -583,7 +583,7 @@ export class Game {
     const s = this.conn.state;
     const me = this.conn.me();
     const rows: ScoreRow[] = [];
-    s.players.forEach((p) => rows.push({ boysClass: s.mode === "boys" ? p.boysClass : undefined, id: p.id, name: p.name, team: p.team as Team, kills: p.kills, deaths: p.deaths, score: p.score, ping: p.ping, alive: p.alive, connected: p.connected, assists: p.assists ?? 0, money: p.money, bot: !!p.bot, shaved: !!p.shaved }));
+    s.players.forEach((p) => rows.push({ boysClass: s.mode === "boys" ? p.boysClass : undefined, id: p.id, name: p.name, team: p.team as Team, kills: p.kills, deaths: p.deaths, score: p.score, ping: p.ping, alive: p.alive, connected: p.connected, assists: p.assists ?? 0, money: p.money, bot: !!p.bot, shaved: !!p.shaved, haircut: p.haircut ?? "" }));
     rows.sort((a, b) => b.score - a.score || b.kills - a.kills);
     const near = this.nearStation();
     const windowLeft = me ? buyWindowLeft({ now: this.conn.serverNow(), spawnedAt: me.spawnedAt ?? 0, phase: s.phase, alive: me.alive, nearStation: near,

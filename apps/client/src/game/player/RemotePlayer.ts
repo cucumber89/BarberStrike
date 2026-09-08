@@ -17,6 +17,8 @@ interface Snapshot {
   lean: number; tac: boolean;
   /** Drop D: a shaved head (Ostrzyżeni's shaved side). Replicated per player, like a skin id. */
   shaved: boolean;
+  /** Drop E: the haircut field, carried per snapshot so an equip or a shave lands on the next one. */
+  haircut: string;
 }
 
 const SNAP_BUFFER = 16;
@@ -46,7 +48,7 @@ export class RemotePlayer {
   vx = 0; vz = 0; reloading = false; weapon: WeaponId = "pistol";
   lean = 0; tac = false;
   private wasAlive = true;
-  private input = { speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol" as WeaponId, moveDir: 0, perked: false, lean: 0, tac: false, shaved: false };
+  private input = { speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol" as WeaponId, moveDir: 0, perked: false, lean: 0, tac: false, shaved: false, haircut: "" };
 
   /**
    * `displayTeam` (drop 4) is the side this player is DRAWN as: in FFA everyone is on team 0 for
@@ -84,6 +86,7 @@ export class RemotePlayer {
     s.perkUntil = until;
     s.lean = p.lean ?? 0; s.tac = !!p.tac;
     s.shaved = !!p.shaved;
+    s.haircut = p.haircut ?? "";
   }
 
   /** Teleport (spawn): rewrite the buffer so we don't interpolate across the map. */
@@ -133,6 +136,7 @@ export class RemotePlayer {
     inp.perked = b.perkUntil > renderT;
     inp.lean = this.lean; inp.tac = this.tac;
     inp.shaved = b.shaved;
+    inp.haircut = b.haircut;
     // Direction of travel relative to facing (for the strafe lean).
     inp.moveDir = this.speed > 0.3 ? Math.atan2(this.vx, this.vz) - this.yaw : 0;
     c.update(inp, dtMs);

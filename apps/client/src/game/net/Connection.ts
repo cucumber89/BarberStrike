@@ -1,6 +1,7 @@
 import { Client, getStateCallbacks, type Room } from "@colyseus/sdk";
 import type { ArraySchema, MapSchema } from "@colyseus/schema";
 import { C2S, S2C, MatchPhase, type BombData, type BotLevel, type GameMode, type WelcomeMessage } from "@frankibarber/shared";
+import { equippedHaircut } from "../progression/profile";
 
 /** Client-side mirror of the server's PlayerState schema (read-only). */
 export interface NetPlayer {
@@ -19,8 +20,10 @@ export interface NetPlayer {
   lean: number; tac: boolean;
   /** Drop 5: scoreboard assists; server-driven bot. */
   assists: number; bot: boolean;
-  /** Drop D: a visibly shaved head (Ostrzyżeni's shaved side; Drop E's shave). */
+  /** Drop D: a visibly shaved head (Ostrzyżeni's shaved side). */
   shaved: boolean;
+  /** Drop E: the haircut field — `"<id>"` or `"<id>#<n>"`. See shared/haircuts.ts. */
+  haircut: string;
 }
 
 /** Drop 4: a Domination flag as replicated. */
@@ -149,7 +152,10 @@ export class Connection {
   static async connect(opts: ConnectOptions): Promise<Connection> {
     const client = new Client(opts.url);
     let selectedClass = 1; try { selectedClass = Number(localStorage.getItem("fb_boys_class")) || 1; } catch { /* private mode */ }
-    const joinOpts = { deferSpawn: true, boysClass: selectedClass, name: opts.name, room: opts.roomName ?? "", mode: opts.gameMode ?? "tdm", bots: opts.bots ?? 0, botLevel: opts.botLevel ?? "normal" };
+    // Drop E: the equipped haircut travels with the join, like the nickname. Read here rather than
+    // threaded through `ConnectOptions` for the same reason the class is: it is a profile fact, and
+    // every caller would otherwise have to remember to pass it on.
+    const joinOpts = { deferSpawn: true, boysClass: selectedClass, name: opts.name, room: opts.roomName ?? "", mode: opts.gameMode ?? "tdm", bots: opts.bots ?? 0, botLevel: opts.botLevel ?? "normal", haircut: equippedHaircut() };
     let room: Room<NetState>;
     if (opts.mode === "create") room = await client.create<NetState>("tdm", joinOpts);
     else if (opts.mode === "join" && opts.roomId) room = await client.joinById<NetState>(opts.roomId, joinOpts);

@@ -16,6 +16,8 @@ export class MatchTracker {
   headshots = 0;
   captures = 0;
   clipperKills = 0;
+  /** Drop E: shaves GIVEN this match — clippers kills from behind, as the server flagged them. */
+  shaves = 0;
   wavesSurvived = 0;
   /** Deaths seen live, used only as a fallback when the scoreboard row has gone (a disconnect). */
   private deathsSeen = 0;
@@ -25,15 +27,18 @@ export class MatchTracker {
     this.headshots = 0;
     this.captures = 0;
     this.clipperKills = 0;
+    this.shaves = 0;
     this.wavesSurvived = 0;
     this.deathsSeen = 0;
   }
 
-  onKill(e: { killer: string; victim: string; weapon: string; headshot: boolean }): void {
+  onKill(e: { killer: string; victim: string; weapon: string; headshot: boolean; shave?: boolean }): void {
     if (e.victim === this.myId && e.killer !== this.myId) this.deathsSeen += 1;
     if (e.killer !== this.myId || e.victim === this.myId) return; // suicides pay nothing
     if (e.headshot) this.headshots += 1;
     if (e.weapon === "clippers") this.clipperKills += 1;
+    // The SERVER decided this was a shave (it owns the backstab geometry); the client only tallies.
+    if (e.shave) this.shaves += 1;
   }
 
   /** A Domination flag changed hands; `by` are the names that captured it. */
