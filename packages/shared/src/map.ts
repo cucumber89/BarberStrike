@@ -1,5 +1,7 @@
+import { BOMB_SITES, type BombSite } from "./bomb";
 import { type Box, boxFrom, CollisionWorld } from "./collision";
 import { expandDistrict } from "./districtExpansion";
+import { GORA } from "./gora";
 import type { Team } from "./types";
 
 /**
@@ -90,6 +92,17 @@ export interface MapDef {
   arenaSpawns?: SpawnPoint[];
   stations: Station[];
   flags: Flag[];
+  /**
+   * Bomb Plant sites. Optional so NIGHT_DISTRICT keeps the pair that used to be a module constant
+   * (`bomb.ts`, `BOMB_SITES`); `sitesOf(map)` is what every reader should call.
+   */
+  sites?: readonly BombSite[];
+  /**
+   * Ostrzyżeni: how far a returning chaser has to be from the nearest living survivor. It is a
+   * property of the map's size, not of the mode — 14 m on a 121 m diagonal is a different rule
+   * from 14 m on a 39 m one — so a small map may lower it. Defaults to `OSTRZYZENI.huntSpawnMinM`.
+   */
+  huntSpawnMinM?: number;
   /** Kill plane: falling below this respawns the player. */
   killY: number;
   bounds: Box;
@@ -588,8 +601,12 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   };
 })();
 
-export const MAPS: Record<string, MapDef> = { [NIGHT_DISTRICT.id]: NIGHT_DISTRICT };
+export const MAPS: Record<string, MapDef> = { [NIGHT_DISTRICT.id]: NIGHT_DISTRICT, [GORA.id]: GORA };
 export const DEFAULT_MAP_ID = NIGHT_DISTRICT.id;
+export const MAP_ORDER: readonly string[] = [NIGHT_DISTRICT.id, GORA.id];
+
+/** The map's bomb sites, or NIGHT_DISTRICT's pair for a map that predates the field. */
+export const sitesOf = (map: MapDef): readonly BombSite[] => map.sites ?? BOMB_SITES;
 
 /** Builds the static collision world for a map (used by both server and client prediction). */
 /**

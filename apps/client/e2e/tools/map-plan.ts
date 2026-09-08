@@ -37,9 +37,12 @@ const LEVEL0: Rect[] = [
 ];
 
 const LEVEL1: Rect[] = [
-  { x0: 6, x1: 17, z0: -2, z1: 8, fill: " ", label: "DACH  y=3.0" },
-  { x0: 11, x1: 14, z0: 8, z1: 9, fill: "/" },
-  { x0: 10, x1: 14, z0: 9, z1: 11, fill: "/", label: "SCHODY" },
+  { x0: 6, x1: 13.5, z0: -2, z1: 9, fill: " ", label: "DACH  y=3.0" },
+  { x0: 15.7, x1: 17, z0: -2, z1: 9, fill: " " },
+  { x0: 13.5, x1: 15.7, z0: -2, z1: 3.4, fill: " " },
+  { x0: 13.5, x1: 15.7, z0: 7.9, z1: 9, fill: " " },
+  { x0: 13.5, x1: 15.7, z0: 3.4, z1: 7.9, fill: "/", label: "STRYCH" },
+  { x0: 10, x1: 15.2, z0: 9, z1: 11, fill: "/", label: "SCHODY" },
 ];
 
 function render(rects: Rect[], title: string): void {
@@ -72,4 +75,4 @@ function render(rects: Rect[], title: string): void {
 }
 
 render(LEVEL0, "LEVEL 0 — the flat (floor y = 0, ceiling 2.8)   N ↑ (+Z)   E → (+X)   # wall/solid   : open shaft   / stair");
-render(LEVEL1, "LEVEL +1 — DACH, the roof over the east wing (deck y = 3.0, parapet 1.1)");
+render(LEVEL1, "LEVEL +1 — DACH, the roof over the east wing (deck y = 3.0, parapet 1.2). / = the fire escape up from the balcony and the loft-stair opening down into the SKŁAD.");

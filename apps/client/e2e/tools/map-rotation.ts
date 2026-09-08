@@ -18,7 +18,8 @@ import { PLAYER } from "../../../../packages/shared/src/constants";
 import { createBody, simulateBody, TAC, MOVE } from "../../../../packages/shared/src/movement";
 import { Btn } from "../../../../packages/shared/src/types";
 import { NIGHT_DISTRICT, buildCollisionWorld } from "../../../../packages/shared/src/map";
-import { walkable, WALK_GRID } from "../../../../packages/shared/src/mapWalk";
+import { GORA } from "../../../../packages/shared/src/gora";
+import { walkable, reachable, cellKey, WALK_GRID } from "../../../../packages/shared/src/mapWalk";
 import { prepareNav, findPath } from "../../../../packages/shared/src/nav";
 
 const DT = 1000 / 60;
@@ -191,7 +192,8 @@ for (const [name, from, to] of [
   clear.sort((p, q) => p - q);
   const pc = (f: number) => clear[Math.floor(clear.length * f)].toFixed(1);
   const over = (m: number) => ((clear.filter((c) => c >= m).length / clear.length) * 100).toFixed(1);
-  console.log(`\n**Sight lines.** ${walk.cells.size} walkable cells at ${WALK_GRID} m. ${N} random eye-to-eye pairs, ${clear.length} unobstructed (${((clear.length / N) * 100).toFixed(1)} %):`);
+  const ndReach = reachable(walk, NIGHT_DISTRICT.spawns[0]);
+  console.log(`\n**Sight lines.** ${walk.cells.size} walkable cells at ${WALK_GRID} m (${ndReach.size} surfaces reachable from spawn 0 = ${(ndReach.size * WALK_GRID * WALK_GRID).toFixed(0)} m²). ${N} random eye-to-eye pairs, ${clear.length} unobstructed (${((clear.length / N) * 100).toFixed(1)} %):`);
   console.log(`median **${pc(0.5)} m**, p90 ${pc(0.9)} m, p99 ${pc(0.99)} m, longest **${max.toFixed(1)} m**.`);
   console.log(`Of the clear lines, ${over(20)} % are over 20 m, ${over(30)} % over 30 m, ${over(50)} % over 50 m.\n`);
 }
@@ -236,3 +238,70 @@ for (const [name, a, b] of [
   ["across the SZYB (the light well)", [-2.5, 7], [2.5, 7]],
   ["ŁAZIENKA, door → far corner", [0.5, -1], [-2, -6]],
 ] as [string, P, P][]) console.log(`| ${name} | ${line(a, b).toFixed(1)} |`);
+
+// ---------------------------------------------------------------------------------------------
+// 6. GÓRA as BUILT. Sections 4 and 5 above are the drafted polylines that were signed off; this
+//    section re-measures the same routes on the real geometry and the real walk grid, so the doc's
+//    "As built" table is a measurement rather than a drawing.
+// ---------------------------------------------------------------------------------------------
+console.log(`\n## 6. GÓRA as built (real geometry, real walk grid)\n`);
+const gora = buildCollisionWorld(GORA);
+const gwalk = walkable(GORA);
+prepareNav(gwalk);
+const g0 = GORA.spawns.find((s) => s.team === 0)!;
+const g1 = GORA.spawns.find((s) => s.team === 1)!;
+const gsite = (id: string) => { const s = GORA.sites!.find((v) => v.id === id)!; return { x: s.x, y: 0, z: s.z }; };
+const gflag = (id: string) => { const f = GORA.flags.find((v) => v.id === id)!; return { x: f.x, y: 0, z: f.z }; };
+console.log(`| Rotation | Straight (m) | Path (m) | Sprint (s) |`);
+console.log(`|---|---|---|---|`);
+for (const [name, from, to] of [
+  ["T0 spawn → bomb B HOL", { x: g0.x, y: g0.y, z: g0.z }, gsite("B")],
+  ["T1 spawn → bomb B HOL", { x: g1.x, y: g1.y, z: g1.z }, gsite("B")],
+  ["T0 spawn → bomb A BALKON", { x: g0.x, y: g0.y, z: g0.z }, gsite("A")],
+  ["T1 spawn → bomb A BALKON", { x: g1.x, y: g1.y, z: g1.z }, gsite("A")],
+  ["bomb B HOL → bomb A BALKON", gsite("B"), gsite("A")],
+  ["T0 spawn → flag C BALKON", { x: g0.x, y: g0.y, z: g0.z }, gflag("C")],
+  ["T0 spawn → flag B SYPIALNIA (the far flag)", { x: g0.x, y: g0.y, z: g0.z }, gflag("B")],
+  ["T0 spawn → T1 spawn (first contact)", { x: g0.x, y: g0.y, z: g0.z }, { x: g1.x, y: g1.y, z: g1.z }],
+  ["KUCHNIA → SKŁAD (the well is in the way)", { x: -13, y: 0, z: 7 }, { x: 13, y: 0, z: 7 }],
+  ["BALKON → DACH (fire escape)", { x: 8, y: 0, z: 10 }, { x: 14, y: 3, z: 5 }],
+  ["SKŁAD → DACH (loft stair)", { x: 10, y: 0, z: 6 }, { x: 12, y: 3, z: 1.5 }],
+  ["DACH → flag C on the balcony", { x: 12, y: 3, z: 1.5 }, gflag("C")],
+] as [string, { x: number; y: number; z: number }, { x: number; y: number; z: number }][]) {
+  const path = findPath(gwalk, from, to, 60000);
+  if (!path) { console.log(`| ${name} | — | NO PATH | — |`); continue; }
+  const pts: P[] = path.map((p) => [p.x, p.z]);
+  const r = runRoute(gora, pts, from.y);
+  console.log(`| ${name} | ${Math.hypot(to.x - from.x, to.z - from.z).toFixed(1)} | ${polyLen(pts).toFixed(1)} | ${r.stuck ? (polyLen(pts) / 7.6).toFixed(1) + " (est)" : r.s.toFixed(1)} |`);
+}
+{
+  const cells: { x: number; z: number; y: number }[] = [];
+  for (const [key, ys] of gwalk.cells) {
+    const [cx, cz] = key.split(",").map(Number);
+    for (const y of ys) cells.push({ x: cx / 2, z: cz / 2, y });
+  }
+  // Only surfaces a player can actually stand on: the cell AND the height have to be reachable,
+  // or the tops of the ceiling slab (y 4.4, unreachable by design) pollute the sample.
+  const reach = reachable(gwalk, GORA.spawns[0]);
+  const live = cells.filter((c) => reach.has(`${cellKey(c.x, c.z)}@${c.y}`));
+  const rnd = rnd32(12345);
+  const clear: number[] = [];
+  let max = 0, pair = "";
+  const N = 400000;
+  for (let i = 0; i < N; i++) {
+    const a = live[(rnd() * live.length) | 0], b = live[(rnd() * live.length) | 0];
+    const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+    const len = Math.hypot(dx, dy, dz);
+    if (len < 1) continue;
+    if (!gora.raycast(a.x, a.y + PLAYER.eyeHeight, a.z, dx / len, dy / len, dz / len, len - 0.05, makeRayHit()).hit) {
+      clear.push(len);
+      if (len > max) { max = len; pair = `(${a.x},${a.y},${a.z}) → (${b.x},${b.y},${b.z})`; }
+    }
+  }
+  clear.sort((p, q) => p - q);
+  const pc = (f: number) => clear[Math.floor(clear.length * f)].toFixed(1);
+  const over = (m: number) => ((clear.filter((c) => c >= m).length / clear.length) * 100).toFixed(1);
+  console.log(`\n**Sight lines.** ${gwalk.cells.size} walkable cells (${live.length} surfaces reachable from spawn 0 = ${(live.length * WALK_GRID * WALK_GRID).toFixed(0)} m²). ${N} random eye-to-eye pairs, ${clear.length} unobstructed (${((clear.length / N) * 100).toFixed(1)} %):`);
+  console.log(`median **${pc(0.5)} m**, p90 ${pc(0.9)} m, p99 ${pc(0.99)} m, longest **${max.toFixed(1)} m** ${pair}.`);
+  console.log(`Of the clear lines, ${over(10)} % are over 10 m, ${over(20)} % over 20 m, ${over(30)} % over 30 m.\n`);
+}

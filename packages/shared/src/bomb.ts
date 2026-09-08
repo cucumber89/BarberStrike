@@ -3,6 +3,8 @@ import type { Team } from "./types";
 export const BOMB = { roundMs: 115000, fuseMs: 40000, plantMs: 3200, defuseMs: 10000, breakMs: 5000, buyMs: 30000,
   halfRounds: 6, maxRounds: 12, wins: 7, startMoney: 800, winMoney: 3250, useRadius: 2.5 } as const;
 export const bombAttackTeam = (round: number): Team => round <= BOMB.halfRounds ? 0 : 1;
+/** A plantable site. Lives on `MapDef.sites`; `BOMB_SITES` is NIGHT_DISTRICT's pair and the default. */
+export interface BombSite { id: string; name: string; x: number; y: number; z: number }
 export const BOMB_SITES = [
   { id: "A", name: "DEPOT", x: -35, y: 0, z: 24 },
   { id: "B", name: "COURTYARD", x: 43, y: 0, z: 24 },
@@ -28,7 +30,9 @@ const near = (p: BombPlayer, q: { x: number; y: number; z: number }, r: number) 
 
 /** Authoritative, deterministic objective rules. A single uninterrupted action is required. */
 export function stepBomb(b: BombData, players: readonly BombPlayer[], now: number, dt: number,
-  clear: (p: BombPlayer, q: { x: number; y: number; z: number }) => boolean = () => true): Team | null {
+  clear: (p: BombPlayer, q: { x: number; y: number; z: number }) => boolean = () => true,
+  /** The map's sites (`sitesOf(map)`); defaults to NIGHT_DISTRICT's pair. */
+  sites: readonly BombSite[] = BOMB_SITES): Team | null {
   if (b.stage === "idle" || b.stage === "buy" || b.stage === "resolved") return null;
   const atk = b.attackTeam as Team, def = (1 - atk) as Team;
   const alive = players.filter(p => p.alive && p.connected);
@@ -49,10 +53,10 @@ export function stepBomb(b: BombData, players: readonly BombPlayer[], now: numbe
     if (pickup) { b.carrier = pickup.id; b.stage = "carried"; }
   }
   let actor: BombPlayer | undefined;
-  let site: typeof BOMB_SITES[number] | undefined;
+  let site: BombSite | undefined;
   if (b.stage === "carried") {
     const c = alive.find(p => p.id === b.carrier && p.using);
-    if (c) { site = BOMB_SITES.find(s => near(c, s, BOMB.useRadius) && clear(c, s)); if (site) actor = c; }
+    if (c) { site = sites.find(s => near(c, s, BOMB.useRadius) && clear(c, s)); if (site) actor = c; }
   } else if (b.stage === "planted") {
     const eligible = alive.filter(p => p.team === def && p.using && near(p, b, BOMB.useRadius) && clear(p, b));
     actor = eligible.find(p => p.id === b.actor) ?? eligible[0];
