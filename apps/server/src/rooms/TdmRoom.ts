@@ -1201,9 +1201,13 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       const s = this.sessions.get(id);
       if (s) s.rung = 0; // drop D: everyone starts the ladder on the first rung
       this.writeWallet(p, freshWallet());
-      this.clientOf(id)?.send(S2C.Money, { delta: 0, reason: "reset", total: p.money } satisfies MoneyEvent);
       if (this.mode === "bomb") p.money = BOMB.startMoney;
       else if (!this.infection) this.spawn(id); // infection spawns everyone in `beginInfectionRound`
+      // AFTER the spawn, because the spawn is what decides the wallet in a mode that overrides it:
+      // Gun Game hands out a rung and no money, so announcing the fresh wallet first told those
+      // clients they had $2000 they were never going to have, and the HUD believed it until the
+      // next snapshot corrected it.
+      this.clientOf(id)?.send(S2C.Money, { delta: 0, reason: "reset", total: p.money } satisfies MoneyEvent);
     }
     if (this.mode === "bomb") this.beginBombRound(true);
     else if (this.infection) this.beginInfectionRound();

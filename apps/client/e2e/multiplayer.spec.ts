@@ -670,7 +670,7 @@ test.describe("two clients", () => {
 
       // The shop never opens in this mode, and nobody has a penny to spend in it.
       expect((await hud(a)).buyWindowLeft).toBe(0);
-      expect((await hud(a)).money).toBe(0);
+      await expect.poll(async () => (await hud(a)).money, { timeout: 10_000 }).toBe(0);
       await expect(a.getByTestId("ladder")).toHaveText(`1/${LADDER.length}`);
       expect((await hud(a)).weapon).toBe("pistol");
 
