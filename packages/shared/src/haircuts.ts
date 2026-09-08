@@ -51,6 +51,16 @@ export interface HaircutStyle {
   track: number;
   /** A stray clump left standing after the track went through. 0 = none. */
   tuft: number;
+  /**
+   * The clippers have been over this head: show the stubbled SCALP under whatever hair is left.
+   *
+   * This is the only thing about a shave that survives being 14 pixels tall. An art review of the
+   * first cut found that at 8 m no shave stage read as a bad haircut at all — the track was a groove
+   * on the crown, invisible from behind and about one pixel wide down the sights. A pale scalp under
+   * dark remnants flips the head's TONE and narrows its SILHOUETTE, and those are the two things
+   * that still read when the detail is gone.
+   */
+  scalp: boolean;
   /** Which of the three head tones the hair takes. */
   tone: "hair" | "bleach" | "stubble";
 }
@@ -73,7 +83,7 @@ export interface HaircutDef {
 export const FULL_CROWN = 0.222;
 
 const style = (s: Partial<HaircutStyle>): HaircutStyle =>
-  ({ cap: false, crown: 0, width: FULL_CROWN, sides: 0, fringe: 0, track: 0, tuft: 0, tone: "hair", ...s });
+  ({ cap: false, crown: 0, width: FULL_CROWN, sides: 0, fringe: 0, track: 0, tuft: 0, scalp: false, tone: "hair", ...s });
 
 /** The default look: the shop cap, which is what every character has worn until now. */
 export const DEFAULT_HAIRCUT = "cap";
@@ -134,27 +144,43 @@ const BY_ID = new Map(HAIRCUTS.map((h) => [h.id, h]));
  * ruined, so the visual saturates while the COUNT (the thing the award ranks) does not.
  */
 export const SHAVE_STAGES: readonly HaircutDef[] = [
+  // What escalates is HOW MUCH HAIR IS LEFT, and every stage shows the scalp under it. The first cut
+  // of these escalated the track's WIDTH instead, and an art review found the result unreadable at
+  // gameplay range and, at the worst stage, two pale slivers standing off the skull that read as
+  // horns rather than as a ruined head. Coverage down to nothing is the thing a player can see.
   {
     id: "shave-1", name: "PODCIĘCIE", requirement: "Ogolony raz",
-    style: style({ crown: 0.05, sides: 0.03, fringe: 0.02, track: 0.05, tone: "hair" }),
+    // Still a head of hair, with one gash taken out of it.
+    style: style({ crown: 0.05, sides: 0.03, fringe: 0.02, track: 0.10, scalp: true }),
     unlockedBy: () => false,
   },
   {
     id: "shave-2", name: "SCHODY", requirement: "Ogolony dwa razy",
-    style: style({ crown: 0.045, sides: 0.012, track: 0.09, tuft: 0.05, tone: "hair" }),
+    // Two ridges and a clump on a scalp that is now showing.
+    style: style({ crown: 0.05, sides: 0.014, track: 0.16, tuft: 0.05, scalp: true }),
     unlockedBy: () => false,
   },
   {
     id: "shave-3", name: "DOLINA", requirement: "Ogolony trzy razy",
-    style: style({ crown: 0.04, sides: 0.006, track: 0.14, tuft: 0.075, tone: "hair" }),
+    // The crown is gone; a rim around the sides and one clump survive.
+    style: style({ crown: 0, sides: 0.01, tuft: 0.075, scalp: true }),
     unlockedBy: () => false,
   },
   {
     id: "shave-4", name: "RUINA", requirement: "Ogolony cztery razy lub więcej",
-    style: style({ crown: 0.03, sides: 0, track: 0.185, tuft: 0.095, tone: "stubble" }),
+    // Nothing left but scalp and one clump the clippers went round. The head goes pale and narrow,
+    // which is the read that survives at 8 m where a groove on the crown does not.
+    style: style({ crown: 0, sides: 0, tuft: 0.105, scalp: true }),
     unlockedBy: () => false,
   },
 ];
+
+/**
+ * How much hair a style leaves, in metres across the head. Not a stat — a number the tests use to
+ * assert that being shaved repeatedly takes hair away rather than rearranging it.
+ */
+export const hairLeft = (s: HaircutStyle): number =>
+  (s.crown > 0 ? Math.max(0, s.width - s.track) : 0) + s.sides * 2 + s.tuft * 0.5;
 
 /** The count the field will hold. A uint8's worth is far more shaves than a match can contain. */
 export const MAX_SHAVES = 255;

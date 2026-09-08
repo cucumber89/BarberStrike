@@ -457,10 +457,15 @@ export class Character {
     // Drop E: the string, not the style, is the change detector — the same test `weapon` gets above.
     const haircut = inp.haircut ?? "";
     if (haircut !== this.haircutValue) { this.haircutValue = haircut; this.rebuildHair(); }
-    if (this.bareHead.isEnabled() !== shaved) this.bareHead.setEnabled(shaved);
+    // Drop E: the stubbled scalp shows under a shaved head too, not only for Ostrzyżeni's bare one.
+    // It is the whole reason a shave reads at gameplay range — a pale scalp against dark remnants
+    // changes the head's TONE and SILHOUETTE, where a track mown across the crown is a groove nobody
+    // can see from behind or from eight metres (art review of the first cut).
+    const scalp = shaved || this.style.scalp;
+    if (this.bareHead.isEnabled() !== scalp) this.bareHead.setEnabled(scalp);
     // The cap comes off when the style says so, and always when shaved. The bare scalp wins over
     // hair outright: whatever a player equipped, a head that has just been done has nothing on it.
-    const capOn = !shaved && this.style.cap;
+    const capOn = !scalp && this.style.cap;
     if (this.cap.isEnabled() !== capOn) this.cap.setEnabled(capOn);
     if (this.hair && this.hair.isEnabled() === shaved) this.hair.setEnabled(!shaved);
 

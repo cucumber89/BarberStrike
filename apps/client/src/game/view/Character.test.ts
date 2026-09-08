@@ -232,13 +232,33 @@ describe("Character haircuts", () => {
     // is a stronger claim than "thinner", and it holds for every stage rather than only the widest.
     const covered = (r: [number, number][]) => r.reduce((a, [lo, hi]) => a + hi - lo, 0);
     expect(covered(solid) - covered(ridges)).toBeCloseTo(haircutLook(encodeHaircut("bowl", 1)).style.track, 3);
-    // RUINA, the worst shave stage: the widest track of all, two slivers of hair left at the edges
-    // and the stray tuft standing in the middle of the mown strip — three islands, not one crown.
+    // RUINA, the worst stage: ONE clump and nothing else. The first cut of these left two pale
+    // slivers standing at the temples, which an art review read as horns rather than as a ruined
+    // head; taking the hair away instead is both the truer picture and the one that reads at range.
     const worst = new Character(whole, 0, "ruined");
     worst.update(input({ haircut: encodeHaircut("bowl", 4) }), 16);
     const ruin = xIslands(worst, SKULL_TOP + 0.005);
-    expect(ruin.length).toBe(3);
-    expect(covered(ruin)).toBeLessThan(0.1);                         // of the crown's 0.222 m
+    expect(ruin.length).toBe(1);
+    // One clump, well under a third of what a full head of hair covers. (That the stages take hair
+    // away MONOTONICALLY is asserted in `haircuts.test.ts`, where the catalog lives.)
+    expect(covered(ruin)).toBeLessThan(covered(solid) / 3);
+  });
+
+  it("shows the stubbled scalp on a shaved head, and never on one somebody chose", () => {
+    // The read that survives 8 m is TONE, not detail: a pale scalp under dark remnants. This asserts
+    // the mesh Drop D built for Ostrzyżeni is the one carrying it, rather than a second head variant.
+    const s = scene(), c = new Character(s, 0, "scalp");
+    const bare = () => s.meshes.find((m) => m.name === "bare_head")!;
+    c.update(input({ haircut: "bowl" }), 16);
+    expect(bare().isEnabled()).toBe(false);
+    c.update(input({ haircut: encodeHaircut("bowl", 1) }), 16);
+    expect(bare().isEnabled()).toBe(true);
+    c.update(input({ haircut: encodeHaircut("bowl", 4) }), 16);
+    expect(bare().isEnabled()).toBe(true);
+    // Back to a chosen cut and the scalp goes away again.
+    c.update(input({ haircut: "pompadour" }), 16);
+    expect(bare().isEnabled()).toBe(false);
+    c.dispose(); s.dispose();
   });
 
 

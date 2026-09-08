@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_HAIRCUT, FULL_CROWN, HAIRCUTS, MAX_SHAVES, SHAVE_STAGES,
-  encodeHaircut, haircutDef, haircutLook, isHaircutId, isShave, newHaircuts,
+  encodeHaircut, haircutDef, haircutLook, hairLeft, isHaircutId, isShave, newHaircuts,
   ownedHaircuts, parseHaircut, resetShaves, shaveOnce, worstHaircut,
 } from "./haircuts";
 import { emptyLifetime, type LifetimeStats } from "./progression";
@@ -95,15 +95,24 @@ describe("what gets drawn", () => {
 
   it("makes every shave stage read as damage, and none of them as a haircut somebody chose", () => {
     for (const s of SHAVE_STAGES) {
-      // A track mown through the crown is what "bad" is; every stage has one, and it widens.
-      expect(s.style.track).toBeGreaterThan(0);
+      // The scalp showing is what makes a shave read at range — it flips the head's tone and
+      // narrows its silhouette, which is all that survives at 8 m. No equipped haircut may claim it.
+      expect(s.style.scalp).toBe(true);
       expect(s.style.cap).toBe(false);
       expect(s.unlockedBy(life({ matches: 999, kills: 999, shaves: 999 }))).toBe(false);
     }
+    expect(HAIRCUTS.every((h) => !h.style.scalp)).toBe(true);
+    // Being done again TAKES HAIR AWAY. The first cut of these escalated the track's width instead,
+    // which left the worst stage with more hair standing than the one before it and read as horns.
     for (let i = 1; i < SHAVE_STAGES.length; i++) {
-      expect(SHAVE_STAGES[i].style.track).toBeGreaterThan(SHAVE_STAGES[i - 1].style.track);
+      expect(hairLeft(SHAVE_STAGES[i].style)).toBeLessThan(hairLeft(SHAVE_STAGES[i - 1].style));
       expect(SHAVE_STAGES[i].style.sides).toBeLessThanOrEqual(SHAVE_STAGES[i - 1].style.sides);
     }
+    // And the worst of them is bare: nothing but scalp and the one clump the clippers went round.
+    const worst = SHAVE_STAGES[SHAVE_STAGES.length - 1].style;
+    expect(worst.crown).toBe(0);
+    expect(worst.sides).toBe(0);
+    expect(worst.tuft).toBeGreaterThan(0);
     // The default look is the cap, and it is the only one wearing it.
     expect(haircutDef(DEFAULT_HAIRCUT).style.cap).toBe(true);
     expect(HAIRCUTS.filter((h) => h.style.cap)).toHaveLength(1);
@@ -131,7 +140,7 @@ describe("the catalog is cosmetic only (L1)", () => {
     // The style is geometry and a tone. If a stat ever appears here, this test is the alarm.
     const keys = new Set<string>();
     for (const h of [...HAIRCUTS, ...SHAVE_STAGES]) for (const k of Object.keys(h.style)) keys.add(k);
-    expect([...keys].sort()).toEqual(["cap", "crown", "fringe", "sides", "tone", "track", "tuft", "width"]);
+    expect([...keys].sort()).toEqual(["cap", "crown", "fringe", "scalp", "sides", "tone", "track", "tuft", "width"]);
   });
 });
 
