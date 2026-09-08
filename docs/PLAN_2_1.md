@@ -326,10 +326,13 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   here). `TdmRoom.test.ts`'s join test asserts the spawn belongs to the player's team, so it fails
   roughly one run in five. Pre-existing, not this drop's — but it is a real flake in the suite:
   either the pool or the assertion is wrong, and somebody should decide which.
-- **`main` is red in e2e**: `drop 2: buy menu, wallet, frag cook + throw, flashbang` asserts that the
-  DMR card is disabled after switching the shop to the GRENADES tab, and the tabbed shop from PR #14
-  does not render the weapons cards on that tab. MEASURED on unmodified `main` in a clean worktree,
-  not only on this branch. One line of the test (switch back to WEAPONS first) or one of the shop.
+- **`main` is red in e2e, twice over**, both times a test left behind by the shop it tests:
+  `drop 2: buy menu…` asserts the DMR card is disabled after switching to the GRENADES tab (the
+  tabbed shop from PR #14 renders no weapon cards there), and `clean entry, deferred spawn…` clicks
+  a BUTTON named GRENADES that drop I's one-screen shop replaced with an aisle label — a `span`,
+  not a button (`Shop.tsx:216`), so it also never finds CLASSES, now a role strip. MEASURED on
+  unmodified `main` in a clean worktree both times, not only on this branch. Each is a couple of
+  lines in the test; neither is Drop D's to change.
 - PR #14 (The Boys) landed without a ledger row and deleted a large part of the 2.1 UI — Armoury,
   Profile, HowToPlay, Online, the invite module, mastery, challenges, the defuse kit, the bomb
   blast, slide. Some of that is plainly deliberate (the class mode replaces FFA); some looks like
