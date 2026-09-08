@@ -212,6 +212,12 @@ button { font-family: inherit; }
 
 .pause { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(6,6,8,.6); pointer-events: auto; }
 .pause-card { width: min(480px, 90vw); background: var(--bg); border: 1px solid var(--line); padding: 28px; display: flex; flex-direction: column; gap: 10px; max-height: 90vh; overflow: auto; }
+.pause-hint { margin: 0 0 2px; font-size: 12px; color: var(--tx-2); text-align: center; }
+.pause-hint kbd, .pause-warn kbd { font-family: var(--font-mono); font-size: 10px; padding: 1px 5px; border: 1px solid var(--line); color: var(--tx); }
+/* A refused pointer lock has to be SAID. Chrome rejects the request for about a second after the
+   user pressed Escape to leave a previous lock, and a silent refusal reads as a frozen game. */
+.pause-warn { margin: 0 0 4px; font-size: 12px; line-height: 1.45; color: #f0c89a; background: rgba(217,164,65,.09);
+  border-left: 2px solid var(--brass); padding: 8px 10px; }
 .pause-card .version { margin-top: 6px; font-size: 11px; letter-spacing: 0.15em; color: var(--tx-3); text-align: right; }
 .pause-card details summary { list-style: none; cursor: pointer; }
 .pause-card details summary::-webkit-details-marker { display: none; }
@@ -261,35 +267,86 @@ button { font-family: inherit; }
 .smoke-screen { position: absolute; inset: 0; background: radial-gradient(ellipse at 45% 45%, #747a7b, #4e5556); pointer-events: none; }
 .shop-closed-hint { position: absolute; left: 50%; top: 68%; transform: translateX(-50%); font-size: 12px; letter-spacing: 0.25em; color: var(--tx-2); background: rgba(10,10,12,.7); padding: 6px 14px; animation: slide-in 160ms ease-out; }
 
-.shop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(6,6,8,.72); pointer-events: auto; }
-.shop-card { width: min(920px, 94vw); max-height: 92vh; overflow: auto; background: var(--bg); border: 1px solid var(--line); padding: 22px 26px; display: flex; flex-direction: column; gap: 12px; }
-.shop-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
-.shop-title { font-family: var(--font-display); font-size: 34px; letter-spacing: 0.12em; line-height: 1; }
-.shop-sub { font-size: 11px; letter-spacing: 0.25em; color: var(--brass); margin-top: 6px; }
-.shop-wallet { font-family: var(--font-display); font-size: 40px; color: #7dff9a; line-height: 1; }
-.shop-section { font-family: var(--font-display); font-size: 18px; letter-spacing: 0.25em; color: var(--tx); margin-top: 6px; display: flex; align-items: baseline; gap: 12px; }
-.shop-hint { font-family: var(--font-ui); font-size: 11px; letter-spacing: 0.15em; color: var(--tx-3); }
-.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
-.shop-item { background: var(--bg-2); border: 1px solid var(--line); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
-.shop-item.carried { border-color: var(--brass); }
-.shop-item.locked { opacity: 0.55; }
-.shop-item-head { display: flex; justify-content: space-between; align-items: baseline; }
-.shop-item-name { font-family: var(--font-display); font-size: 20px; letter-spacing: 0.08em; }
-.shop-item-price { font-family: var(--font-mono); font-size: 13px; color: #7dff9a; }
-.shop-item-stats { display: flex; gap: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--tx-2); }
-.shop-item-blurb { font-size: 12px; color: var(--tx-2); line-height: 1.35; min-height: 32px; }
-.shop-item-actions { display: flex; gap: 8px; align-items: center; margin-top: auto; }
-.shop-tag { font-size: 10px; letter-spacing: 0.2em; color: var(--brass); }
-.shop-slot { font-family: var(--font-mono); font-size: 11px; margin-left: 8px; padding: 1px 5px; border: 1px solid var(--line); color: var(--tx-2); vertical-align: middle; }
+.shop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(6,6,8,.78); pointer-events: auto; }
+/* THE LAYOUT RULE (see Shop.tsx): the menu fits one screen at 1280x720 with nothing cut off.
+   Three fixed rows — head, body, foot — so the wallet and CLOSE can never leave the screen the way
+   they did when the whole card was one tall scroll. Only the BODY may ever scroll, and at every
+   supported resolution it does not need to: the tallest aisle is 8 rows of 38 px = 328 px against
+   roughly 520 px of body at 720p. */
+.shop-card { width: min(1400px, 96vw); height: min(94vh, 880px); overflow: hidden;
+  background: var(--bg); border: 1px solid var(--line); padding: 16px 22px;
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px; }
+.shop-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.shop-head-right { display: flex; align-items: center; gap: 16px; }
+.shop-title { font-family: var(--font-display); font-size: 28px; letter-spacing: 0.12em; line-height: 1; }
+.shop-sub { font-size: 11px; letter-spacing: 0.2em; color: var(--brass); margin-top: 5px; }
+.shop-wallet { font-family: var(--font-display); font-size: 34px; color: #7dff9a; line-height: 1; }
+
+.shop-body { display: grid; grid-template-columns: 1.08fr 1fr 1fr; gap: 4px 18px; align-content: start; overflow: auto; min-height: 0; }
+.shop-aisle { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.shop-aisle-head { display: flex; align-items: baseline; gap: 8px; padding: 4px 0 3px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+.shop-aisle-head.armed { border-color: var(--brass); }
+.shop-aisle-key { font-family: var(--font-mono); font-size: 10px; line-height: 1; padding: 3px 5px; border: 1px solid var(--line); color: var(--tx-2); }
+.shop-aisle-head.armed .shop-aisle-key { background: var(--brass); border-color: var(--brass); color: #141008; }
+.shop-aisle-label { font-family: var(--font-display); font-size: 17px; letter-spacing: 0.2em; }
+.shop-hint { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.08em; color: var(--tx-3); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* One item = one 38 px row: shortcut, glyph, name over stats, price, state, button. */
+/* Row height follows the viewport so browser zoom (which SHRINKS the CSS viewport rather than
+   scaling the page) cannot push the last aisle past the bottom. 30 px is the floor: below that the
+   38 px shortcut/price/button row stops being comfortably clickable. MEASURED at 1024x576 — what
+   1280x720 reports at 125 % zoom — the tallest aisle is then 291 px against 389 px of body. */
+/* FLEX, not grid: a row has five children or seven depending on whether the item is carried and
+   sellable, and a fixed column template silently wrapped the extra ones onto a second line that
+   the fixed height then clipped over the row below. */
+.shop-row { display: flex; align-items: center; gap: 7px; height: clamp(30px, 5.3vh, 38px);
+  padding: 0 7px; background: var(--bg-2); border: 1px solid var(--line); overflow: hidden; }
+.shop-row.carried { border-color: var(--brass); }
+.shop-row.locked { opacity: .5; }
+.shop-row.aisle-armed { border-color: var(--brass-2); background: #17150f; }
+.shop-key { font-family: var(--font-mono); font-size: 10px; color: var(--tx-3); letter-spacing: .04em; }
+.shop-row.aisle-armed .shop-key { color: var(--brass); }
+.shop-key i { font-style: normal; opacity: .5; margin: 0 1px; }
+.shop-row-art { flex: 0 0 22px; width: 22px; height: 22px; color: var(--brass); display: flex; align-items: center; justify-content: center; }
+.shop-row-art svg { max-width: 100%; max-height: 100%; }
+.shop-row.locked .shop-row-art { color: var(--tx-3); }
+/* The name never collapses to an ellipsis-only stub, however many tags the row carries. */
+.shop-row-main { flex: 1 1 auto; min-width: 74px; display: flex; flex-direction: column; justify-content: center; line-height: 1.15; }
+.shop-row-name { font-family: var(--font-display); font-size: 16px; letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shop-row-stats { font-family: var(--font-mono); font-size: 9.5px; color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shop-why { font-style: normal; color: #d8a49a; }
+.shop-row-price { flex: 0 0 auto; font-family: var(--font-mono); font-size: 12px; color: #7dff9a; text-align: right; }
+.shop-row-price s { color: var(--tx-3); margin-right: 4px; font-size: 10px; }
+.shop-row-price .credit { color: #9fd8ff; }
+.shop-key { flex: 0 0 auto; }
+.shop-row.locked .shop-row-price { color: var(--tx-3); }
+.shop-tag { font-size: 9px; letter-spacing: 0.14em; color: var(--brass); white-space: nowrap; }
+.shop-slot { flex: 0 0 auto; font-family: var(--font-mono); font-size: 9px; margin-left: 6px; padding: 1px 4px; border: 1px solid var(--line); color: var(--tx-2); vertical-align: middle; }
 .shop-slot.lethal { border-color: var(--red); color: #f0a49a; }
-.shop-btn { margin-left: auto; padding: 8px 14px; background: var(--brass); border: 1px solid var(--brass); color: #141008; font-family: var(--font-display); font-size: 16px; letter-spacing: 0.15em; cursor: pointer; }
+.shop-btn { flex: 0 0 auto; padding: 5px 9px; background: var(--brass); border: 1px solid var(--brass); color: #141008; font-family: var(--font-display); font-size: 13px; letter-spacing: 0.1em; cursor: pointer; white-space: nowrap; }
 .shop-btn:hover:not(:disabled) { background: #e6b355; }
 .shop-btn:disabled { background: var(--bg-3); border-color: var(--line); color: var(--tx-3); cursor: default; }
 .shop-btn.ghost { background: transparent; color: var(--tx-2); border-color: var(--line); }
 .shop-btn.ghost:hover { color: var(--tx); border-color: var(--tx-3); background: transparent; }
-.shop-foot { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--line); padding-top: 12px; font-size: 12px; color: var(--tx-3); }
+.shop-foot { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 12px; color: var(--tx-3); }
+.shop-keyhelp { font-size: 11px; color: var(--tx-3); }
+.shop-keyhelp kbd { font-family: var(--font-mono); font-size: 10px; padding: 1px 5px; border: 1px solid var(--line); color: var(--tx-2); }
+.shop-result { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shop-result.ok { color: #7dff9a; }
 .shop-result.err { color: #f0a49a; }
+/* Three aisles are held down to 900 px, well past 125 % zoom on a 1280 screen (1024 px). Folding
+   to two columns is what actually breaks the fit — it makes one column carry two aisles — so it is
+   the LAST resort, not the first. */
+@media (max-width: 900px) { .shop-body { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 640px) { .shop-body { grid-template-columns: 1fr; } .shop-keyhelp { display: none; } }
+/* When the screen is short, the stats line is the first thing to go: a truncated "DMG 33 · RPM…"
+   helps nobody, while the name, the price and the button all still have to be readable. The full
+   text stays on the row's tooltip. */
+@media (max-height: 700px) {
+  .shop-row-stats { display: none; }
+  .shop-title { font-size: 24px; } .shop-wallet { font-size: 28px; }
+  .shop-card { padding: 12px 16px; }
+}
 
 /* ---------- Drop 3: armour, perks, scope ---------- */
 .armor-fill { position: absolute; left: 0; top: -4px; height: 3px; background: #8fd3ff; }
@@ -541,12 +598,6 @@ button { font-family: inherit; }
 .host-option small { font-size: 11px; color: var(--tx-3); line-height: 1.4; }
 
 /* Shop cards (2.1): the drawing of what is being bought. */
-.shop-item-art { height: 56px; color: var(--brass); display: flex; align-items: center; justify-content: center; margin: -2px 0 2px; }
-.shop-item-art.sq { height: 48px; }
-.shop-item.locked .shop-item-art { color: var(--tx-3); }
-.shop-item.carried .shop-item-art { color: var(--tx); }
-.shop-item-art svg { max-height: 100%; }
-.shop-item .mastery { border-top: none; padding-top: 0; margin-top: 0; }
 .pause-card .settings { max-height: 56vh; overflow: auto; padding-right: 6px; }
 .pause-card .tabs { position: sticky; top: 0; background: var(--bg); z-index: 1; }
 .pause-invite { display: flex; flex-direction: column; gap: 4px; }

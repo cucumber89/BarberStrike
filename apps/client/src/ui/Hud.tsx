@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { BOMB, GAME_VERSION, GRENADES, MATCH, MODES, MatchPhase, PERKS, PERK_ORDER, TEAM_NAMES, WEAPONS, BADGES, killerName, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import type { MatchReward } from "../game/progression/profile";
@@ -15,7 +15,12 @@ interface Props {
   settings: Settings;
   onSettings: (s: Settings) => void;
   onLeave: () => void;
-  onResume: () => void;
+  /** Resolves to whether the pointer really ended up locked — a refusal must be visible, not silent. */
+  onResume: () => Promise<boolean>;
+  /** Release the pointer so Escape can open the pause card even when the browser did not do it. */
+  onPause: () => void;
+  /** Toggle fullscreen; resolves to whether the game is fullscreen afterwards. */
+  onFullscreen: () => Promise<boolean>;
   /** Drop 2: shop actions routed to the game (buy/sell go to the server, close re-locks the pointer). */
   shop: ShopApi;
   /** Drop 5: chat send / close, and the minimap's per-frame feed. */
@@ -79,7 +84,7 @@ const money = (n: number) => `$${n.toLocaleString("en-US")}`;
 const carrierName = (h: ReturnType<typeof useHud>): string => h.players.find((p) => p.id === h.bomb?.carrier)?.name ?? "THE CARRIER";
 const REASON_SHORT: Record<string, string> = { kill: "KILL", headshot: "HEAD SHOT", assist: "ASSIST", buy: "", sell: "SOLD", reset: "" };
 
-export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar }: Props) {
+export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, shop, chat, radar }: Props) {
   const h = useHud();
   // The flash overlay and cook ring need a smooth clock; everything else is fine at 4 Hz.
   const fast = h.flashUntil > performance.now() || h.cookingKind !== "";
@@ -88,19 +93,42 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
   const [paused, setPaused] = useState(false);
   const [telemetry, setTelemetry] = useState(false);
   const [pauseSettings, setPauseSettings] = useState(false);
+  /** Set when a resume attempt came back without the pointer, so the card can say so and retry. */
+  const [lockRefused, setLockRefused] = useState(false);
+  const [fullscreen, setFullscreen] = useState(() => typeof document !== "undefined" && document.fullscreenElement != null);
+
+  useEffect(() => {
+    const sync = () => setFullscreen(document.fullscreenElement != null);
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
+
+  const resume = useCallback(async () => {
+    const ok = await onResume();
+    setLockRefused(!ok);
+    if (ok) setPaused(false);
+  }, [onResume]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (h.chatOpen) return; // the chat box owns the keyboard (drop 5)
-      if (e.code === "Tab") { e.preventDefault(); setScoreboard(true); }
-      if (e.code === "Escape" && document.pointerLockElement === null && !h.shopOpen) setPaused((p) => !p);
+      // Tab is the scoreboard in play, but plain focus navigation inside the pause card / shop.
+      if (e.code === "Tab" && !paused && !h.shopOpen) { e.preventDefault(); setScoreboard(true); }
+      if (e.code === "Escape" && !h.shopOpen) {
+        // Two ways in. Normally the browser has already released the pointer by the time this
+        // runs. Under Keyboard Lock (fullscreen, Chromium) Escape reaches the page WITHOUT
+        // releasing it, so the lock has to be dropped here or the pause card would be unclickable.
+        e.preventDefault();
+        if (paused) void resume();
+        else { onPause(); setPaused(true); }
+      }
       if (e.code === "F3" && import.meta.env.DEV) { e.preventDefault(); setTelemetry((t) => !t); }
     };
     const up = (e: KeyboardEvent) => { if (e.code === "Tab") setScoreboard(false); };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
-  }, [h.shopOpen, h.chatOpen]);
+  }, [h.shopOpen, h.chatOpen, paused, resume, onPause]);
 
   // Escape releases pointer lock (browser) → show pause overlay; clicking resume re-locks.
   // The shop and the chat box release / hold the lock on purpose, so they never count as a pause.
@@ -361,7 +389,17 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
         <div className="pause" data-testid="pause">
           <div className="pause-card">
             <div className="wordmark small">BARBERSTRIKE</div>
-            <button className="menu-btn primary" onClick={onResume} data-testid="btn-resume">RESUME</button>
+            <p className="pause-hint">Paused · press <kbd>ESC</kbd> or click Resume to play on</p>
+            {lockRefused && (
+              <p className="pause-warn" data-testid="pause-lock-refused">
+                The browser did not hand over your mouse. Click <strong>RESUME</strong> once more —
+                a refusal right after you pressed Escape is normal and clears in a second.
+              </p>
+            )}
+            <button className="menu-btn primary" onClick={() => void resume()} data-testid="btn-resume">RESUME</button>
+            <button className="menu-btn" onClick={() => void onFullscreen().then(setFullscreen)} data-testid="btn-fullscreen">
+              {fullscreen ? "LEAVE FULLSCREEN" : "GO FULLSCREEN"}
+            </button>
             <button className="menu-btn" onClick={() => setPauseSettings((v) => !v)} data-testid="btn-pause-settings">{pauseSettings ? "HIDE SETTINGS" : "SETTINGS"}</button>
             {pauseSettings && <SettingsPanel settings={settings} onChange={onSettings} />}
             {!pauseSettings && (

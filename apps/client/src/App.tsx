@@ -9,6 +9,7 @@ import type { ShopApi } from "./ui/Shop";
 import type { ChatApi } from "./ui/Chat";
 import { Loading } from "./ui/Loading";
 import { useHudSlice } from "./game/store";
+import { enterFullscreen, exitImmersion, isFullscreen, lockKeyboard } from "./game/input/immersion";
 import { hud } from "./game/store";
 
 type Screen = { kind: "menu"; error?: string } | { kind: "connecting" } | { kind: "game" };
@@ -46,11 +47,19 @@ export function App() {
     const g = gameRef.current;
     gameRef.current = null;
     if (g) await g.dispose();
+    // Leaving the match gives the keyboard and the screen back to the browser. Without this the
+    // player lands in the menu still fullscreen with Escape captured, which reads as a hang.
+    exitImmersion();
     canvasHost.current?.replaceChildren();
     setScreen({ kind: "menu", error: reason && reason !== "left" ? reason : undefined });
   }, []);
 
   const play = useCallback(async (name: string, roomName: string, mode: "auto" | "create" | "join", roomId: string | undefined, gameMode: GameMode, bots: { count: number; level: BotLevel }) => {
+    // Fullscreen is only granted inside the user gesture that started this call, and `connect`
+    // below is an await — by the time it resolves the gesture is spent. So the request is made
+    // FIRST and its promise carried across; `enterFullscreen` never throws, it returns false.
+    const host = canvasHost.current;
+    const goneFullscreen = host ? enterFullscreen(host) : Promise.resolve(false);
     const startWith = async (s: Settings): Promise<void> => {
       setScreen({ kind: "connecting" });
       const connection = await Connection.connect({ url: defaultServerUrl(), name, roomName, mode, roomId, gameMode, bots: bots.count, botLevel: bots.level });
@@ -60,6 +69,12 @@ export function App() {
       gameRef.current = game;
       await game.start();
       (window as unknown as { __fb: unknown }).__fb = { game, hud };
+      // Keyboard Lock needs fullscreen and exists only in Chromium; it is what puts Escape and
+      // Ctrl+W in the game's hands rather than the browser's. Failure is normal and silent.
+      if (await goneFullscreen) void lockKeyboard();
+      // The pointer is asked for last. If the browser refuses (it often does once the gesture has
+      // been spent on a slow connect) the pause card is already the retry surface.
+      await game.requestPointerLockAsync();
     };
     try {
       await startWith(settings);
@@ -106,7 +121,16 @@ export function App() {
       <div ref={canvasHost} className="game-canvas-host" />
       {screen.kind === "game" && (
         <Hud
-          settings={settings} onSettings={updateSettings} onLeave={() => void leave("left")} onResume={() => gameRef.current?.requestPointerLock()}
+          settings={settings} onSettings={updateSettings} onLeave={() => void leave("left")}
+          onResume={async () => (await gameRef.current?.requestPointerLockAsync()) ?? false}
+          onPause={() => gameRef.current?.releasePointerLock()}
+          onFullscreen={async () => {
+            const el = canvasHost.current;
+            if (isFullscreen()) { exitImmersion(); return false; }
+            const ok = el ? await enterFullscreen(el) : false;
+            if (ok) void lockKeyboard();
+            return ok;
+          }}
           shop={shopApi} chat={chatApi} radar={radar}
         />
       )}

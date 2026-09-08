@@ -723,6 +723,9 @@ export class Game {
   private onResize = (): void => { this.engine.resize(); };
 
   requestPointerLock(): void { this.input.requestPointerLock(); }
+  /** Resolves to whether the pointer is actually locked, so the pause card can offer a retry. */
+  requestPointerLockAsync(): Promise<boolean> { return this.input.requestPointerLockAsync(); }
+  releasePointerLock(): void { this.input.exitPointerLock(); }
   get inputState(): InputState { return this.input; }
   get localPlayer(): LocalPlayer { return this.local; }
   get remotePlayers(): ReadonlyMap<string, RemotePlayer> { return this.remotes; }
