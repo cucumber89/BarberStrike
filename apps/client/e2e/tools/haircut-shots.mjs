@@ -169,71 +169,33 @@ async function subject() {
  * remote's own interpolation would otherwise put it back where the server says it is before the
  * shutter. `turn` is added to the subject's yaw: PI faces us, PI/2 gives the profile.
  */
-/**
- * Moves the CAMERA to `dist` metres from the subject and points it at their head, then holds the
- * subject's haircut and facing every frame.
- *
- * The camera moves, not the subject — that is the correction that makes the distances true. Dragging
- * the remote's mesh in front of the camera (Drop A's trick for a frozen weapon pose) does not
- * survive here: the game's own `RemotePlayer.update` writes `root.position` from interpolation on
- * the same frame, so the subject snapped back to wherever the server said it was and a frame
- * labelled "4 m" was shot from whatever range the match happened to put them at. Teleporting the
- * camera uses the server's own position for the subject and cannot be overwritten (`shaved-shots.mjs`
- * does the same, for the same reason).
- */
-const pose = async (haircut, dist, turn, aimHigh) => {
-  const spot = await page.evaluate(([dist, turn]) => {
-    const g = window.__fb.game;
-    // A TEAMMATE: an enemy bot shoots the camera between the pose and the shutter.
-    const mine = window.__fb.hud.get().myTeam;
-    const r = [...g.remotes.values()].find((q) => q.team === mine);
-    if (!r) return null;
-    const p = g.conn?.state?.players?.get(r.id);
-    if (!p) return null;
-    // Stand off along whichever horizontal direction has `dist` metres of clear air to the subject,
-    // so the shot is not taken through a crate. The subject's own facing is set from `turn`.
-    const w = g.world, hit = { hit: false, t: Infinity, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0 };
-    let best = null, bestClear = -1;
-    for (let i = 0; i < 24; i++) {
-      const a = (i * Math.PI) / 12, dx = Math.sin(a), dz = Math.cos(a);
-      // Two rays, eye height and waist height: a line that is clear at 1.6 m can still have a crate.
-      let clear = dist;
-      for (const h of [1.5, 0.6]) {
-        const rr = w.raycast(p.x + dx * 0.4, p.y + h, p.z + dz * 0.4, dx, 0, dz, dist, hit);
-        clear = Math.min(clear, rr.hit ? rr.t : dist);
-      }
-      if (clear > bestClear) { bestClear = clear; best = { a, dx, dz }; }
-    }
-    return { x: p.x + best.dx * dist, y: p.y, z: p.z + best.dz * dist, tx: p.x, ty: p.y, tz: p.z, a: best.a, clear: bestClear, id: r.id };
-  }, [dist, turn]);
-  if (!spot) return null;
-  await page.evaluate(([x, y, z]) => window.__fb.game.conn.send("dev:teleport", { x, y, z }), [spot.x, spot.y, spot.z]);
-  await page.waitForTimeout(500);
-  return page.evaluate(([haircut, turn, aimHigh, spot]) => {
-    const g = window.__fb.game, lp = g.localPlayer, b = lp.body;
-    const s = g.currentScene ?? g.scene;
-    const r = [...g.remotes.values()].find((q) => q.id === spot.id);
-    if (!r) return null;
-    // Look at the head, not the feet: the whole subject of these pictures is 1.6 m off the ground.
-    const head = spot.ty + (aimHigh ? 1.66 : 1.6);
-    lp.yaw = Math.atan2(spot.tx - b.x, spot.tz - b.z);
-    lp.pitch = -Math.atan2(head - (b.y + 1.62), Math.hypot(spot.tx - b.x, spot.tz - b.z));
-    // revive() ONCE: it restarts the spawn fade (visibility 0 → 1 over a third of a second), so
-    // calling it every frame holds the subject at 10 % opacity — measured in Drop A, not guessed.
-    r.character.revive();
-    const hold = () => {
-      // Only the FACING and the haircut are forced; the position is the server's, which is why the
-      // camera had to be the thing that moved.
-      const face = Math.atan2(b.x - r.character.root.position.x, b.z - r.character.root.position.z) + turn;
-      r.yaw = face; r.character.root.rotation.y = face;
-      r.character.update({ speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol", moveDir: 0, haircut }, 16);
-    };
-    if (window.__cutsPose) s.onBeforeRenderObservable.remove(window.__cutsPose);
-    window.__cutsPose = s.onBeforeRenderObservable.add(hold);
-    hold(); s.render();
-    return { clear: Math.round(spot.clear * 10) / 10 };
-  }, [haircut, turn, aimHigh, spot]);
-};
+const pose = (haircut, dist, turn, pitch) => page.evaluate(([haircut, dist, turn, pitch]) => {
+  const g = window.__fb.game;
+  // A TEAMMATE: an enemy bot shoots the camera between the pose and the shutter.
+  const mine = window.__fb.hud.get().myTeam;
+  const r = [...g.remotes.values()].find((q) => q.team === mine);
+  if (!r) return null;
+  const s = g.currentScene ?? g.scene;
+  const lp = g.localPlayer;
+  lp.pitch = pitch;
+  const yaw = lp.yaw, fx = Math.sin(yaw), fz = Math.cos(yaw);
+  const eye = lp.camera.globalPosition ?? lp.camera.position;
+  // revive() ONCE: it restarts the spawn fade (visibility 0 → 1 over a third of a second), so
+  // calling it every frame holds the subject at 10 % opacity — measured in Drop A, not guessed.
+  r.character.revive();
+  const hold = () => {
+    r.character.root.position.set(eye.x + fx * dist, eye.y - 1.62, eye.z + fz * dist);
+    r.yaw = yaw + turn; r.character.root.rotation.y = yaw + turn;
+    r.character.update({ speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol", moveDir: 0, haircut }, 16);
+  };
+  if (window.__cutsPose) s.onBeforeRenderObservable.remove(window.__cutsPose);
+  window.__cutsPose = s.onBeforeRenderObservable.add(hold);
+  // One render, not thirty: the observable re-applies the pose on the game's OWN loop and `frames()`
+  // below is what waits for it, so synchronous renders here buy nothing and cost a SwiftShader frame
+  // each. (Drop A's harness does thirty; it can afford to, it is not holding a haircut still.)
+  hold(); s.render();
+  return r.character.currentHaircut ?? haircut;
+}, [haircut, dist, turn, pitch]);
 
 const file = (id) => id.replace("#", "-x");
 let taken = 0, skipped = 0;
@@ -265,8 +227,8 @@ for (const id of CATALOG) {
     });
     // Third person: close, front and profile. The camera looks slightly UP at 1.1 m so the crown —
     // where a clipper track lives — is in frame rather than foreshortened away.
-    for (const [tag, turn, dist, high] of [["front", 0, 1.6, true], ["side", Math.PI / 2, 1.6, true]]) {
-      if (!(await pose(id, dist, turn, high))) { log(`no bot to pose: ${JSON.stringify(await diagnose())}`); break; }
+    for (const [tag, turn, dist, pitch] of [["front", Math.PI, 1.1, -0.16], ["side", Math.PI / 2, 1.1, -0.16]]) {
+      if (!(await pose(id, dist, turn, pitch))) { log(`no bot to pose: ${JSON.stringify(await diagnose())}`); break; }
       await frames(4);
       if (!(await alive())) { log(`${id}/${tag}: died before the shutter, retrying`); break; }
       await page.screenshot({ path: `${OUT}/tp_${file(id)}_${tag}.png` });
@@ -278,7 +240,7 @@ for (const id of CATALOG) {
     // is shot for every SHAVED head (the claim under test) plus two equipped cuts as the control,
     // rather than for all thirteen, which is minutes of SwiftShader for pictures nobody judges.
     for (const dist of (FP_SET.has(id) ? [4, 8] : [])) {
-      if (!(await pose(id, dist, 0, false))) break;
+      if (!(await pose(id, dist, Math.PI, 0.02))) break;
       await frames(4);
       if (!(await alive())) { log(`${id}/fp${dist}: died before the shutter`); break; }
       await page.screenshot({ path: `${OUT}/fp_${file(id)}_${dist}m.png` });
