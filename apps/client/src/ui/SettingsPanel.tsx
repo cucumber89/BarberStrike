@@ -1,4 +1,9 @@
-import { applyQualityPreset, isCustomGraphics, type QualityPreset, type Settings } from "../settings";
+import { useEffect, useState } from "react";
+import {
+  BINDABLE_ACTIONS, QUALITY_MODES, RESERVED_CODES, applyQualityMode, applyQualityPreset, bindingConflicts,
+  defaultSettings, isCustomGraphics, keyLabel, qualityMode, resolveBindings,
+  type BindableAction, type QualityPreset, type Settings,
+} from "../settings";
 
 interface Props { settings: Settings; onChange: (s: Settings) => void }
 
@@ -33,15 +38,30 @@ export function SettingsPanel({ settings, onChange }: Props) {
       <Toggle label="Invert Y" value={g.invertY} onChange={(v) => set({ gameplay: { ...g, invertY: v } })} />
 
       <h3>GRAPHICS</h3>
+      {/* The four the brief asks for. AUTOMATIC is not a fifth level: it hands `preset` to the
+          auto-quality director, which measures real frames (see perf/autoQuality.ts). */}
       <label className="field">
-        <span>Quality preset</span>
+        <span>Quality</span>
         <div className="segmented">
-          {(["low", "medium", "high", "ultra"] as QualityPreset[]).map((p) => (
-            <button key={p} type="button" className={gr.preset === p ? "active" : ""} onClick={() => set({ graphics: applyQualityPreset(gr, p) })}>{p.toUpperCase()}</button>
+          {QUALITY_MODES.map((q) => (
+            <button key={q.id} type="button" className={qualityMode(gr) === q.id ? "active" : ""} onClick={() => set({ graphics: applyQualityMode(gr, q.id) })}>{q.label}</button>
           ))}
         </div>
       </label>
-      <p className="muted small">{isCustomGraphics(gr) ? "CUSTOM · individual graphics settings" : "Quality preset active"}</p>
+      <p className="muted small">{gr.auto
+        ? `Automatic — measuring your machine and holding ${gr.targetFps} fps. Now running ${gr.preset.toUpperCase()}.`
+        : isCustomGraphics(gr) ? "CUSTOM · individual graphics settings below differ from this level"
+        : QUALITY_MODES.find((q) => q.id === qualityMode(gr))?.blurb ?? "Brightness stays the same across levels."}</p>
+      {!gr.auto && (
+        <label className="field">
+          <span>Fixed level</span>
+          <div className="segmented">
+            {(["low", "medium", "high", "ultra"] as QualityPreset[]).map((p) => (
+              <button key={p} type="button" className={gr.preset === p ? "active" : ""} onClick={() => set({ graphics: applyQualityPreset(gr, p) })}>{p.toUpperCase()}</button>
+            ))}
+          </div>
+        </label>
+      )}
       <Slider label="Brightness" value={gr.brightness} min={.75} max={1.5} step={.05} onChange={v => set({ graphics: { ...gr, brightness: v } })} format={v => `${Math.round(v * 100)}%`} />
       <label className="field"><span>Dynamic resolution target</span><div className="segmented">{([60, 90, 120] as const).map(fps => <button key={fps} type="button" className={gr.targetFps === fps ? "active" : ""} onClick={() => set({ graphics: { ...gr, targetFps: fps } })}>{fps} FPS</button>)}</div></label>
       <Slider label="Render scale" value={gr.renderScale} min={0.5} max={1} step={0.05} onChange={(v) => set({ graphics: { ...gr, renderScale: v } })} format={(v) => `${Math.round(v * 100)}%`} />
@@ -58,7 +78,9 @@ export function SettingsPanel({ settings, onChange }: Props) {
       <Toggle label="Post-processing" value={gr.postProcessing} onChange={(v) => set({ graphics: { ...gr, postProcessing: v } })} />
       <Toggle label="Anti-aliasing" value={gr.antialiasing} onChange={(v) => set({ graphics: { ...gr, antialiasing: v } })} />
       <Toggle label="Extra scenery models (characters and weapons are built in-game)" value={gr.importedModels} onChange={(v) => set({ graphics: { ...gr, importedModels: v } })} />
-      <Toggle label="Force WebGL2 (disable WebGPU)" value={gr.renderer === "webgl2"} onChange={(v) => set({ graphics: { ...gr, renderer: v ? "webgl2" : "auto" } })} />
+      <Toggle label="Try WebGPU (experimental — WebGL2 is the default and always works)" value={gr.renderer === "auto"} onChange={(v) => set({ graphics: { ...gr, renderer: v ? "auto" : "webgl2" } })} />
+
+      <Controls settings={settings} onChange={onChange} />
 
       <h3>AUDIO</h3>
       <Slider label="Master" value={a.master} min={0} max={1} step={0.05} onChange={(v) => set({ audio: { ...a, master: v } })} format={(v) => `${Math.round(v * 100)}%`} />
@@ -96,5 +118,73 @@ export function Credits() {
         Fonts: Bebas Neue, Inter, JetBrains Mono (SIL OFL 1.1). Engine: Babylon.js (Apache-2.0), Colyseus (MIT).
       </p>
     </div>
+  );
+}
+
+/**
+ * Rebinding, conflict detection and restore-to-defaults — the three things the brief asks for.
+ *
+ * Capture runs on the WINDOW in the capture phase so the pressed key reaches this and nothing else
+ * (not the game, not a button's default action). `RESERVED_CODES` refuses keys the input layer
+ * relies on having a fixed job; Escape cancels, Backspace clears back to the default.
+ */
+function Controls({ settings, onChange }: Props) {
+  const [capturing, setCapturing] = useState<BindableAction | null>(null);
+  const bindings = resolveBindings(settings.keys);
+  const conflicts = bindingConflicts(bindings);
+  const [refused, setRefused] = useState("");
+
+  const write = (action: BindableAction, codes: string[] | null) => {
+    const keys = { ...settings.keys };
+    if (codes) keys[action] = codes; else delete keys[action];
+    onChange({ ...settings, keys });
+  };
+
+  // A capture-phase listener, only while capturing, torn down the moment a key lands: one that
+  // outlived the capture would eat the next keystroke the player meant for something else.
+  useEffect(() => {
+    if (capturing === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault(); e.stopPropagation();
+      const action = capturing;
+      setCapturing(null);
+      if (e.code === "Escape") return;
+      if (e.code === "Backspace" || e.code === "Delete") { write(action, null); return; }
+      if (RESERVED_CODES.has(e.code)) { setRefused(`${keyLabel(e.code)} has a fixed job and cannot be rebound.`); return; }
+      setRefused("");
+      write(action, [e.code]);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  });
+
+  return (
+    <>
+      <h3>CONTROLS</h3>
+      <p className="muted small">Click a key to rebind it. ESC cancels, BACKSPACE restores that action's default.</p>
+      {refused && <p className="muted small" data-testid="bind-refused">{refused}</p>}
+      <table className="keys-table">
+        <tbody>
+          {BINDABLE_ACTIONS.map((a) => (
+            <tr key={a.id} className={conflicts.has(a.id) ? "conflict" : ""}>
+              <td>{a.label}</td>
+              <td className="key">
+                <button type="button" className={`keycap ${capturing === a.id ? "capturing" : ""}`} data-testid={`bind-${a.id}`}
+                  onClick={() => { setRefused(""); setCapturing(a.id); }}>
+                  {capturing === a.id ? "PRESS A KEY…" : bindings[a.id].map(keyLabel).join(" / ")}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {conflicts.size > 0 && (
+        <p className="muted small" data-testid="bind-conflicts">
+          Two actions share a key: {[...conflicts].map((id) => BINDABLE_ACTIONS.find((a) => a.id === id)?.label).join(", ")}. Whichever runs first wins.
+        </p>
+      )}
+      <button type="button" className="menu-btn" data-testid="bind-reset"
+        onClick={() => onChange({ ...settings, keys: defaultSettings().keys })}>RESTORE DEFAULT KEYS</button>
+    </>
   );
 }

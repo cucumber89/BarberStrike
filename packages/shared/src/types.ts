@@ -110,10 +110,42 @@ export const C2S = {
   Chat: "chat",
   /** Ping / mark a spot or an enemy for the team: MarkMessage (drop 5). */
   Mark: "mark",
+  /** Ask to change sides: { team } (2.4). The server decides, and may defer it to the next round. */
+  Team: "team",
+  /** Living arena (2.4): vote for one of the plans on offer this round: { plan }. */
+  Vote: "vote",
 } as const;
 
 /** Drop 5: chat limits (the server enforces them, the client mirrors them in the box). */
 export const CHAT = { maxLen: 120, minIntervalMs: 700, history: 8, showMs: 9000 } as const;
+
+/**
+ * Living arena (2.4). Sent twice a plan round: once when the vote opens (`chosen` 0, `votingEndsAt`
+ * set) and once when it closes with the result.
+ */
+export interface PlanEvent {
+  /** Plan ids on offer this round; empty when this round has no vote. */
+  options: number[];
+  /** Votes per option, same order — shown live so a team can coordinate. */
+  tally: number[];
+  /** 0 while voting; the winning plan id once decided (0 = nobody voted, nothing changes). */
+  chosen: number;
+  /** Server time the vote closes and the change takes effect. */
+  appliesAt: number;
+  /** Which team gets to vote this round. */
+  votingTeam: Team;
+  round: number;
+}
+
+/** What the server says about a team change (2.4). `deferred` means it lands next round. */
+export interface TeamResult {
+  ok: boolean;
+  /** Why not, when `ok` is false: "same" | "mode" | "balance" | "cooldown" | "ended". */
+  reason?: string;
+  /** The team the player is on (refusal) or is going to (acceptance). */
+  team: Team;
+  deferred?: boolean;
+}
 /** Drop 5: mark limits. A "go" mark lives ttlMs; a "spot" (enemy) mark spotTtlMs. */
 export const MARK = { minIntervalMs: 1200, ttlMs: 8000, spotTtlMs: 4500, maxRange: 60 } as const;
 
@@ -146,6 +178,10 @@ export const S2C = {
   Money: "money",
   /** Result of a buy/sell request: ShopResult. */
   Shop: "shop",
+  /** Answer to a team-change request: TeamResult (2.4). */
+  TeamResult: "teamres",
+  /** Living arena (2.4): the round's plan vote opened, or its result: PlanEvent. */
+  Plan: "plan",
   /** Domination: a flag changed hands: FlagEvent (drop 4). */
   Flag: "flag",
   /** Text chat line: ChatEvent (drop 5). */

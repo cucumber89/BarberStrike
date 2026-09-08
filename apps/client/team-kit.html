@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="UTF-8"><title>BarberStrike — team kits</title>
+<style>html,body,canvas{width:100%;height:100%;margin:0;overflow:hidden;display:block;background:#14161a}</style></head>
+<body><canvas id="view"></canvas><script type="module">
+import { Engine } from '@babylonjs/core/Engines/engine';
+import { Scene } from '@babylonjs/core/scene';
+import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera';
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Color4 } from '@babylonjs/core/Maths/math.color';
+import { Character } from './src/game/view/Character';
+const canvas=document.querySelector('canvas');
+const engine=new Engine(canvas,true);const scene=new Scene(engine);
+scene.clearColor=new Color4(.08,.09,.10,1);
+new HemisphericLight('h',new Vector3(0,1,.2),scene).intensity=.75;
+const d=new DirectionalLight('d',new Vector3(-.4,-1,.55),scene); d.intensity=2.1;
+const camera=new FreeCamera('c',new Vector3(0,1.55,4.6),scene);camera.minZ=.05;camera.fov=.85;
+camera.setTarget(new Vector3(0,1.0,0));
+// One of each side, standing still, alive, holding a rifle.
+const a=new Character(scene,0,'marcovia'); a.root.position.set(-0.85,0,0);
+const b=new Character(scene,1,'taper');    b.root.position.set(0.85,0,0);
+const input={speed:0,grounded:true,crouch:false,pitch:0,alive:true,reloading:false,weapon:'rifle',moveDir:0,lean:0,tac:false};
+// A few frames so the idle pose settles and the fade-in finishes.
+for(let i=0;i<40;i++){a.update(input,16.7);b.update(input,16.7);}
+window.review={scene,engine,camera,ready:true,view(p,t){camera.position.copyFromFloats(...p);camera.setTarget(new Vector3(...t));}};
+engine.runRenderLoop(()=>scene.render());addEventListener('resize',()=>engine.resize());
+</script></body></html>

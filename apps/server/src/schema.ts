@@ -102,6 +102,12 @@ export class MatchState extends Schema {
    * respawn waves arrived: the HUD's match clock reads this, the wave countdown reads phaseEndsAt.
    */
   @type("float64") matchEndsAt = 0;
+  /**
+   * THE LIVING ARENA: which tactical plan is in force this round (0 = none). One byte, changing at
+   * most once a round, against a 12 kB/s snapshot budget. The plan TABLE lives in shared code on
+   * both ends, so only the index travels — a client can never send geometry.
+   */
+  @type("uint8") planId = 0;
   @type("uint16") scoreA = 0;
   @type("uint16") scoreB = 0;
   @type("int8") winner = -1;

@@ -26,6 +26,8 @@ export interface NetFlag { id: string; owner: number; capTeam: number; cap: numb
 
 export interface NetState {
   phase: MatchPhase; phaseEndsAt: number; matchEndsAt: number; scoreA: number; scoreB: number; winner: number; t: number;
+  /** Living arena (2.4): the tactical plan in force this round, 0 = none. */
+  planId: number;
   mapId: string; roomName: string;
   mode: GameMode; winnerId: string; winnerName: string;
   flags: ArraySchema<NetFlag>;

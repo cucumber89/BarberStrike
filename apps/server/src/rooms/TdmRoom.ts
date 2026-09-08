@@ -19,11 +19,13 @@ import {
   type Projectile, type Wallet, type ThrowMessage, type ThrowEvent, type BoomEvent, type FlashedEvent, type MoneyEvent,
   type ShopResult, type GrenadeId, type Box, type BuyContext, type PerkTimes, type GameMode, type FlagSim, type FlagEvent,
   type MatchEventMessage, type BotLevel, type ChatEvent, type MarkEvent, type MarkKind, type Walk, type NavPoint, type ShopItemId,
+  canSwitchTeam, teamForNewPlayer, teamSizes, type TeamMember,
+  applyPlan, planOffer, tallyVotes, rebuildWorldInto, type PlanEvent,
 } from "@frankibarber/shared";
 import { boysClass, isBoysClass, boysHealRate, boysMedicGoal, BOYS_SUPPORT } from "@frankibarber/shared";
 import { FlagState, MatchState, PlayerState } from "../schema";
-import { nextPhase, teamForNewPlayer } from "../match";
-import { sharedCollisionWorld, sharedWalk } from "./sharedWorld";
+import { nextPhase } from "../match";
+import { roomCollisionWorld, sharedWalk } from "./sharedWorld";
 import { recordTick } from "../stats";
 import { BotBrain, type BotSenses, type BotView } from "../bots/BotBrain";
 
@@ -90,6 +92,13 @@ class Session {
   lastKilledBy = "";
   /** Highest input seq accepted so far; anything <= this is a replay / reorder and is ignored (ack never goes backwards). */
   lastSeq = 0;
+  /**
+   * Team switching (2.4). `pendingTeam` is a switch accepted mid-wave: it lands at the top of the
+   * next prep window rather than teleporting the player out of a live fight. `lastSwitchAt` is the
+   * cooldown anchor, so sides cannot be flipped every few seconds.
+   */
+  pendingTeam: Team | null = null;
+  lastSwitchAt = -Infinity;
   // ---- drop 2: economy + grenades
   spawnedAt = 0;
   lastThrowAt = 0;
@@ -160,7 +169,14 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private map: MapDef = NIGHT_DISTRICT;
   // Shared across rooms (performance pass, task 1): see sharedWorld.ts.
-  private world: CollisionWorld = sharedCollisionWorld();
+  /**
+   * This room's own collision world. It used to be the process-wide shared one, which cannot work
+   * once a tactical plan takes a wall out for a round — every other match would lose it too.
+   * Costs ~376 pointers and 0.03 ms per room. The shared WALK grid is untouched (see sharedWorld).
+   */
+  private world: CollisionWorld = roomCollisionWorld();
+  /** Living arena: one vote per session for the current round, cleared when the round begins. */
+  private planVotes = new Map<string, number>();
   private sessions = new Map<string, Session>();
   /**
    * Players with `connected` set, kept as a count (task 6): `updatePhase` asked for it every tick
@@ -191,6 +207,17 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   /** Team modes (TDM, Domination) keep friendly fire off and score per team; FFA does neither. */
   private get teams(): boolean { return MODES[this.mode].teams; }
+
+  /**
+   * The room's roster in the shape the shared team rules take. A disconnected player still sits in
+   * `state.players` for a few seconds before cleanup; counting those ghosts used to send the next
+   * joiner to the wrong side, so `connected` is derived from whether the session is still live.
+   */
+  private roster(): TeamMember[] {
+    const out: TeamMember[] = [];
+    for (const [id, q] of this.state.players) out.push({ team: q.team as Team, connected: q.bot || this.sessions.has(id), bot: q.bot });
+    return out;
+  }
 
   override onCreate(options: TdmJoinOptions): void {
     this.state.mapId = this.map.id;
@@ -244,6 +271,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.onMessage(C2S.Buy, this.guarded((client, msg) => this.onBuy(client, msg, false)));
     this.onMessage(C2S.Sell, this.guarded((client, msg) => this.onBuy(client, msg, true)));
     this.onMessage(C2S.Throw, this.guarded((client, msg) => this.onThrow(client, msg)));
+    this.onMessage(C2S.Team, this.guarded((client, msg) => this.onTeam(client, msg)));
+    this.onMessage(C2S.Vote, this.guarded((client, msg) => this.onVote(client, msg)));
 
     // Development-only test hooks (never registered unless FB_DEV_TOOLS=1): teleport a player to a free
     // spot; set a wallet balance (screenshot/e2e tooling for the shop).
@@ -339,7 +368,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.name = BOT_NAMES[n % BOT_NAMES.length];
     p.bot = true;
     p.boysClass = p.nextClass = (n % 5) + 1;
-    p.team = this.teams ? teamForNewPlayer(Array.from(this.state.players.values()).map((q) => q.team as Team)) : 0;
+    // `roster()` rather than a bare team list: it excludes players who have disconnected but not
+    // yet been cleaned up, which used to send the next joiner to the side about to be short.
+    p.team = this.teams ? teamForNewPlayer(this.roster()) : 0;
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
     this.state.players.set(id, p); this.connectedCount++;
@@ -447,7 +478,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.id = client.sessionId;
     p.boysClass = p.nextClass = isBoysClass(options?.boysClass) ? options.boysClass : 1;
     p.name = name;
-    p.team = this.teams ? teamForNewPlayer(Array.from(this.state.players.values()).map((q) => q.team as Team)) : 0;
+    p.team = this.teams ? teamForNewPlayer(this.roster()) : 0;
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
     this.state.players.set(client.sessionId, p); this.connectedCount++;
@@ -812,6 +843,120 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   // ---------------------------------------------------------------- spawning
 
+  // ---- THE LIVING ARENA -----------------------------------------------------------------------
+
+  /** The team that gets the choice this round: the attackers, who are the ones making a play. */
+  private get votingTeam(): Team { return this.state.bomb.attackTeam as Team; }
+
+  /** What the vote looks like right now, for a broadcast or a late joiner. */
+  private planEvent(chosen: number): PlanEvent {
+    const options = planOffer(this.state.bomb.round + 1);
+    const tally = options.map((id) => [...this.planVotes.values()].filter((v) => v === id).length);
+    return { options, tally, chosen, appliesAt: this.state.phaseEndsAt, votingTeam: this.votingTeam, round: this.state.bomb.round + 1 };
+  }
+
+  /**
+   * A vote for one of this round's plans.
+   *
+   * The message carries an INDEX into a table both ends already have — never geometry, never a
+   * name — so the worst a hostile client can do is vote for something not on offer, which is
+   * discarded. Only the attacking team votes, only during the buy window, one vote each.
+   */
+  private onVote(client: Client, msg: unknown): void {
+    const s = this.sessions.get(client.sessionId);
+    const p = this.state.players.get(client.sessionId);
+    if (!s || !p || this.mode !== "bomb" || this.rateLimited(s, "other")) return;
+    if (this.state.phase !== MatchPhase.Prep || this.state.bomb.stage !== "buy") return;
+    if (p.team !== this.votingTeam) return;
+    const plan = (msg && typeof msg === "object" ? (msg as { plan?: unknown }).plan : undefined);
+    if (typeof plan !== "number" || !Number.isInteger(plan)) return;
+    if (!planOffer(this.state.bomb.round + 1).includes(plan)) return;
+    this.planVotes.set(client.sessionId, plan);
+    this.broadcast(S2C.Plan, this.planEvent(0));
+  }
+
+  /**
+   * Close the vote and reshape the world for this round.
+   *
+   * Runs at the instant the buy window ends, while everyone is still frozen at spawn — so nobody
+   * is standing in what changes, and nobody is mid-fight when it does. `state.planId` replicates
+   * the outcome, and the client runs the identical filter over the identical shared data at the
+   * same timestamp, so the two ends cannot end up with different worlds.
+   */
+  private resolvePlan(): void {
+    const options = planOffer(this.state.bomb.round + 1);
+    const chosen = tallyVotes([...this.planVotes.values()], options);
+    this.applyPlanId(chosen);
+    if (options.length) this.broadcast(S2C.Plan, { ...this.planEvent(chosen), appliesAt: this.now() });
+  }
+
+  private applyPlanId(id: number): void {
+    if (this.state.planId === id) return;
+    this.state.planId = id;
+    rebuildWorldInto(this.world, applyPlan(this.map.solids, id));
+  }
+
+  /**
+   * A player asks to change sides (2.4).
+   *
+   * Rules are the shared `canSwitchTeam`, so the picker's greyed-out buttons and the server's
+   * answer can never disagree. What this must NOT do is hand out a fresh wallet: money, weapons,
+   * grenades, armour, kit and perks all survive a switch, or changing sides becomes a way to
+   * refill an empty wallet. Kills, deaths and assists stay with the player; the team scores stay
+   * with the team that earned them.
+   */
+  private onTeam(client: Client, msg: unknown): void {
+    const s = this.sessions.get(client.sessionId);
+    const p = this.state.players.get(client.sessionId);
+    if (!s || !p || this.rateLimited(s, "other")) return;
+    const to = (msg && typeof msg === "object" ? (msg as { team?: unknown }).team : undefined);
+    if (to !== 0 && to !== 1) return;
+    const from = p.team as Team;
+    const now = this.now();
+    const verdict = canSwitchTeam(from, to as Team, teamSizes(this.roster()), {
+      teamsMode: this.teams,
+      // Bomb runs in rounds and swaps attack/defend at halftime, so a side change lands between
+      // rounds. Every other team mode is a continuous wave and can move a player at once.
+      roundBased: this.mode === "bomb",
+      frozen: this.state.phase === MatchPhase.Waiting || this.state.phase === MatchPhase.Countdown || this.state.phase === MatchPhase.Prep,
+      matchEnded: this.state.phase === MatchPhase.Ended,
+      now, lastSwitchAt: s.lastSwitchAt,
+    });
+    if (!verdict.ok) {
+      client.send(S2C.TeamResult, { ok: false, reason: verdict.reason, team: from });
+      return;
+    }
+    s.lastSwitchAt = now;
+    if (verdict.deferred) {
+      s.pendingTeam = to as Team;
+      client.send(S2C.TeamResult, { ok: true, deferred: true, team: to });
+      return;
+    }
+    s.pendingTeam = null;
+    this.applyTeam(client.sessionId, to as Team);
+    client.send(S2C.TeamResult, { ok: true, deferred: false, team: to });
+  }
+
+  /** Move a player to a side and put them at one of its spawns. Their kit is untouched. */
+  private applyTeam(id: string, team: Team): void {
+    const p = this.state.players.get(id);
+    if (!p || p.team === team) return;
+    p.team = team;
+    // A live player standing in what is now enemy territory has to be moved; a dead one respawns
+    // on the new side by the normal path.
+    if (p.alive) this.spawn(id);
+  }
+
+  /** Apply switches that were held over, at the moment a new wave / round is about to start. */
+  private flushPendingTeams(): void {
+    for (const [id, s] of this.sessions) {
+      if (s.pendingTeam === null) continue;
+      const team = s.pendingTeam;
+      s.pendingTeam = null;
+      this.applyTeam(id, team);
+    }
+  }
+
   private spawn(id: string): void {
     const p = this.state.players.get(id);
     const s = this.sessions.get(id);
@@ -834,7 +979,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         this.world.raycast(ax, ay, az, dx / l, dy / l, dz / l, l, worldHit);
         return !worldHit.hit;
       },
-    }, this.mode === "ffa" || this.mode === "tdm");
+      // FFA alone ignores sides. TDM used to be in here too, which let a TDM player spawn on the
+      // enemy's points or an arena point — the coin toss that made TdmRoom.test.ts:53 flaky, and
+      // the thing that would make a team switch land the player back where they came from.
+    }, this.mode === "ffa");
     const b = s.body;
     b.x = sp.x; b.y = sp.y; b.z = sp.z; b.vx = b.vy = b.vz = 0; b.grounded = true; b.crouching = false;
     s.inputs.length = 0;
@@ -949,6 +1097,13 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     st.phaseEndsAt = now + BOMB.buyMs;
     st.bomb.stage = "buy";
     st.bomb.attackTeam = bombAttackTeam(st.bomb.round + 1);
+    // Side changes asked for during the last round land here, BEFORE the wave respawns, so the
+    // switcher comes back on their new side rather than being teleported out of a live fight.
+    this.flushPendingTeams();
+    // Last round's plan reverts, and this round's vote opens. A plan lasts ONE round: letting them
+    // accumulate would drift the map away from the one both teams know by the tenth round.
+    this.planVotes.clear();
+    this.applyPlanId(0);
     this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
     if (st.bomb.round === BOMB.halfRounds) {
       this.bombLosses = [0, 0];
@@ -958,9 +1113,16 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     resetBomb(st.bomb, now, this.bombPlayers());
     st.bomb.stage = "buy"; st.bomb.roundEndsAt = st.phaseEndsAt + BOMB.roundMs;
     this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Prep, winner: -1, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
+    // Announced to BOTH teams, not only the one voting: a change the defence cannot see coming is
+    // a random event, which is the thing this mechanic is not allowed to be.
+    const ev = this.planEvent(0);
+    if (ev.options.length) this.broadcast(S2C.Plan, ev);
   }
 
   private releaseBombRound(): void {
+    // The vote closes exactly as the freeze lifts: everyone is still at spawn, so nothing changes
+    // under a player's feet and nobody is mid-fight when the world does.
+    this.resolvePlan();
     this.state.phase = MatchPhase.Playing;
     this.state.bomb.stage = this.state.bomb.carrier ? "carried" : "dropped";
     this.state.bomb.roundEndsAt = this.now() + BOMB.roundMs;

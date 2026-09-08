@@ -16,10 +16,16 @@ export interface CreatedEngine {
 }
 
 /**
- * Creates the rendering engine: WebGPU when available and stable, otherwise WebGL2.
- * `preferWebGPU=false` forces WebGL2 (settings / troubleshooting).
+ * Creates the rendering engine.
+ *
+ * WebGL2 is the DEFAULT and needs no switch flipped: it is what every supported browser has, and
+ * WebGPU can initialise successfully and still fail later inside scene setup on some browser and
+ * driver pairs (App.tsx carries a retry for exactly that). `preferWebGPU` is the opt-in.
+ *
+ * When WebGL2 itself is missing the thrown message is written for a player, not a developer: it
+ * reaches the menu through `humanError`, so it has to say what to do about it.
  */
-export async function createEngine(canvas: HTMLCanvasElement, preferWebGPU = true): Promise<CreatedEngine> {
+export async function createEngine(canvas: HTMLCanvasElement, preferWebGPU = false): Promise<CreatedEngine> {
   let candidate: WebGPUEngine | undefined;
   if (preferWebGPU && typeof navigator !== "undefined" && "gpu" in navigator) {
     try {
@@ -38,7 +44,11 @@ export async function createEngine(canvas: HTMLCanvasElement, preferWebGPU = tru
   const engine = new Engine(canvas, false, { stencil: true, preserveDrawingBuffer: false, powerPreference: "high-performance" }, false);
   if (engine.webGLVersion < 2) {
     engine.dispose();
-    throw new Error("WebGL2 is required but not available in this browser.");
+    throw new Error(
+      "This game needs WebGL2, and this browser did not provide it. " +
+      "A recent Chrome, Edge or Firefox will have it — and if you are already on one, check that " +
+      "hardware acceleration is switched on in the browser's settings.",
+    );
   }
   return { engine, kind: "webgl2" };
 }
