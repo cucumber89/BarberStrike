@@ -55,19 +55,33 @@ await page.goto(`${HOST}/`);
 await page.getByTestId("btn-play").click();
 await page.getByTestId("input-name").fill("CUTS");
 await page.getByTestId("input-room").fill(`cuts-${Date.now()}`);
+// TWO bots, in a TEAM mode, so the balancer gives one to each side: the subject has to be a
+// TEAMMATE. The first version took one bot in whatever mode the lobby offered, and it shot the
+// camera dead before every shutter — three attempts per haircut, all of them a respawn wait, and
+// the run produced nothing. A teammate cannot shoot you (no friendly fire in team modes); a second
+// enemy bot only adds another gun hunting the camera, so two is the whole room.
 await page.getByTestId("bots-range").evaluate((el) => {
   const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-  set.call(el, "1"); el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true }));
+  set.call(el, "2"); el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true }));
 });
 await page.getByTestId("btn-quickplay").click();
-await page.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().myId !== "" && window.__fb.hud.get().loadStage === "ready", null, { timeout: 90000 });
+await page.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().myId !== "" && window.__fb.hud.get().loadStage === "ready", null, { timeout: 120000 });
+// ENTER MATCH. The client joins with `deferSpawn: true` and does not put you in the world until
+// this is clicked (Drop D/I: connect → ready → deploy). Without it the local player is never
+// spawned, `hud.alive` is false forever, and every shutter reports a death that never happened —
+// which is exactly how this tool failed until the button was found.
+await page.getByTestId("enter-game").click({ timeout: 60000 });
+await page.waitForFunction(() => window.__fb.hud.get().alive === true, null, { timeout: 60000 });
 // Without a pointer lock the client paints the pause card over the scene.
 await page.evaluate(() => {
   const c = document.querySelector("canvas");
   Object.defineProperty(document, "pointerLockElement", { get: () => c, configurable: true });
   document.dispatchEvent(new Event("pointerlockchange"));
 });
-await page.waitForFunction(() => window.__fb.game.remotes.size > 0, null, { timeout: 60000 });
+await page.waitForFunction(() => {
+  const g = window.__fb.game, mine = window.__fb.hud.get().myTeam;
+  return [...g.remotes.values()].some((r) => r.team === mine);
+}, null, { timeout: 90000 });
 await page.waitForTimeout(3000);
 
 const frames = async (n) => { const s = await page.evaluate(() => window.__fb.game.frameCount); await page.waitForFunction((t) => window.__fb.game.frameCount >= t, s + n, { timeout: 60000 }); };
@@ -104,12 +118,36 @@ log(`[cuts] ${CATALOG.length} subjects: ${CATALOG.join(", ")}`);
 /** Which subjects get the first-person pair: every shave stage, plus a control at each extreme. */
 const FP_SET = new Set(CATALOG.filter((id) => id.includes("#")).concat(["cap", "mohawk"]));
 
+/**
+ * Moves the camera to the spot the map's spawn pool offers that is FARTHEST from every living
+ * enemy, and holds still there. The subject is posed relative to the camera afterwards, so where
+ * the camera stands does not change the picture — only how long it survives to take it, which was
+ * the whole failure: an enemy bot walked up and shot the photographer between pose and shutter.
+ */
+const retreat = () => page.evaluate(() => {
+  const g = window.__fb.game, h = window.__fb.hud.get();
+  const spawns = [...(g.mapDefinition?.spawns ?? []), ...(g.mapDefinition?.arenaSpawns ?? [])];
+  if (!spawns.length) return null;
+  const foes = [...(g.conn?.state?.players?.values() ?? [])].filter((p) => p.alive && p.team !== h.myTeam && p.id !== h.myId);
+  let best = spawns[0], bestD = -1;
+  for (const s of spawns) {
+    let d = Infinity;
+    for (const f of foes) d = Math.min(d, Math.hypot(s.x - f.x, s.z - f.z));
+    if (d > bestD) { bestD = d; best = s; }
+  }
+  g.conn.send("dev:teleport", { x: best.x, y: best.y, z: best.z });
+  return Number.isFinite(bestD) ? Math.round(bestD) : -1;
+});
+
 const alive = () => page.evaluate(() => window.__fb.hud.get().alive !== false && (window.__fb.hud.get().health ?? 1) > 0);
 
 /** What the client thinks is going on — printed whenever the subject is missing, never guessed at. */
 const diagnose = () => page.evaluate(() => {
   const g = window.__fb.game, h = window.__fb.hud.get();
-  return { remotes: g.remotes.size, players: g.conn?.state?.players?.size ?? -1, phase: h.phase, connected: h.connected, myId: h.myId };
+  return {
+    remotes: g.remotes.size, mates: [...g.remotes.values()].filter((r) => r.team === h.myTeam).length,
+    players: g.conn?.state?.players?.size ?? -1, phase: h.phase, connected: h.connected, alive: h.alive, health: h.health,
+  };
 });
 
 /**
@@ -118,7 +156,10 @@ const diagnose = () => page.evaluate(() => {
  * room, and every pose after that reported "no bot to pose" with nothing to explain it.
  */
 async function subject() {
-  const ok = await page.waitForFunction(() => window.__fb.game.remotes.size > 0, null, { timeout: 45000 }).then(() => true).catch(() => false);
+  const ok = await page.waitForFunction(() => {
+    const g = window.__fb.game, mine = window.__fb.hud.get().myTeam;
+    return [...g.remotes.values()].some((r) => r.team === mine);
+  }, null, { timeout: 45000 }).then(() => true).catch(() => false);
   if (!ok) log(`no subject: ${JSON.stringify(await diagnose())}`);
   return ok;
 }
@@ -130,7 +171,9 @@ async function subject() {
  */
 const pose = (haircut, dist, turn, pitch) => page.evaluate(([haircut, dist, turn, pitch]) => {
   const g = window.__fb.game;
-  const r = [...g.remotes.values()][0];
+  // A TEAMMATE: an enemy bot shoots the camera between the pose and the shutter.
+  const mine = window.__fb.hud.get().myTeam;
+  const r = [...g.remotes.values()].find((q) => q.team === mine);
   if (!r) return null;
   const s = g.currentScene ?? g.scene;
   const lp = g.localPlayer;
@@ -166,12 +209,28 @@ for (const id of CATALOG) {
       await page.waitForTimeout(1000);
     }
     if (!(await subject())) continue;
+    // Stand somewhere the enemy is not, then re-pick the heading from there.
+    const away = await retreat();
+    if (away !== null) await page.waitForTimeout(600);
+    await page.evaluate(() => {
+      const g = window.__fb.game, lp = g.localPlayer, w = g.world;
+      const hit = { hit: false, t: Infinity, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0 };
+      const eye = lp.camera.globalPosition ?? lp.camera.position;
+      let best = lp.yaw, bestD = -1;
+      for (let i = 0; i < 16; i++) {
+        const yaw = (i * Math.PI) / 8;
+        const r = w.raycast(eye.x, eye.y, eye.z, Math.sin(yaw), 0, Math.cos(yaw), 14, hit);
+        const d = r.hit ? r.t : 14;
+        if (d > bestD) { bestD = d; best = yaw; }
+      }
+      lp.yaw = best;
+    });
     // Third person: close, front and profile. The camera looks slightly UP at 1.1 m so the crown —
     // where a clipper track lives — is in frame rather than foreshortened away.
     for (const [tag, turn, dist, pitch] of [["front", Math.PI, 1.1, -0.16], ["side", Math.PI / 2, 1.1, -0.16]]) {
       if (!(await pose(id, dist, turn, pitch))) { log(`no bot to pose: ${JSON.stringify(await diagnose())}`); break; }
       await frames(4);
-      if (!(await alive())) break;
+      if (!(await alive())) { log(`${id}/${tag}: died before the shutter, retrying`); break; }
       await page.screenshot({ path: `${OUT}/tp_${file(id)}_${tag}.png` });
       taken++; done = true;
       log(`tp_${file(id)}_${tag}`);
@@ -183,7 +242,7 @@ for (const id of CATALOG) {
     for (const dist of (FP_SET.has(id) ? [4, 8] : [])) {
       if (!(await pose(id, dist, Math.PI, 0.02))) break;
       await frames(4);
-      if (!(await alive())) break;
+      if (!(await alive())) { log(`${id}/fp${dist}: died before the shutter`); break; }
       await page.screenshot({ path: `${OUT}/fp_${file(id)}_${dist}m.png` });
       taken++;
     }
