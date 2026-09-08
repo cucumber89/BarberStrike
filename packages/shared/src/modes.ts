@@ -114,6 +114,32 @@ export const OSTRZYZENI = {
   /** The shaved side is back on its feet on a short timer; survivors stay down until the round ends. */
   shavedRespawnMs: 3000,
   speedPerk: "energy" as PerkId,
+  /**
+   * What an Ostrzyżony is made of, and half of why the chase lands at all.
+   *
+   * A chaser whose only weapon reaches 2.1 m has to cross a room somebody is shooting across, so
+   * speed alone does not buy the distance. MEASURED as the mode was first written (100 HP, like
+   * everyone else, ordinary spawns): a bot chaser reached its prey again and again and converted
+   * NOBODY across three 90 s rounds against armed bots. Over eight seeded rounds of five players
+   * the same setup managed 9 conversions of 40 with THREE rounds producing none at all.
+   *
+   * With the hunt spawn below and this pool, the same sweep repeated: 14–22 of 40, with zero or
+   * one blank round rather than three. The spread between repeats is wide and the spread between
+   * 220 and 255 sat inside it, so this is "the chase lands now", not a tuned number. The survivors
+   * still usually hold out the clock — the chaser dies three or four times a round — which is the
+   * shape the mode wants. Bots shoot better than people do, so a room of humans is the easier room
+   * to hunt in, and a playtest is what should move this next.
+   *
+   * It stays under 255 because `PlayerState.health` is a uint8 and 300 would silently arrive at a
+   * client as 44. It is also the WHOLE lever: no extra damage, no armour, nothing gated (L1), and
+   * a head shot still takes exactly what it always took.
+   */
+  shavedHealth: 220,
+  /**
+   * How close a returning chaser may be put to the nearest survivor. Below this it starts to read
+   * as a spawn ambush rather than a chase; above it the walk back is the whole round again.
+   */
+  huntSpawnMinM: 14,
   /** Score: surviving a round, converting somebody, and a kill on a shaved chaser. */
   surviveScore: 300,
   convertScore: 100,

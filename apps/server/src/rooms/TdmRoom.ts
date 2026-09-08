@@ -17,7 +17,7 @@ import {
   GUN_GAME, MELEE_WEAPON, ladderAfterKill, ladderDone, ladderWeapon,
   OSTRZYZENI, PERK_ARMED_MS, convertsOnKill, infectionRoundWinner, pickFirstShaved,
   type BodyState, type CollisionWorld, type DamagedEvent, type FireMessage, type HitEvent, type InputTuple, type KillEvent,
-  type MapDef, type PlayerInput, type ShotEvent, type SpawnEvent, type Target, type Team, type WeaponId, type WelcomeMessage,
+  type MapDef, type PlayerInput, type SpawnPoint, type ShotEvent, type SpawnEvent, type Target, type Team, type WeaponId, type WelcomeMessage,
   type Projectile, type Wallet, type ThrowMessage, type ThrowEvent, type BoomEvent, type FlashedEvent, type MoneyEvent,
   type ShopResult, type GrenadeId, type Box, type BuyContext, type PerkTimes, type GameMode, type FlagSim, type FlagEvent,
   type MatchEventMessage, type BotLevel, type ChatEvent, type MarkEvent, type MarkKind, type Walk, type NavPoint, type ShopItemId,
@@ -953,6 +953,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private shave(p: PlayerState, s: Session): void {
     p.shaved = true;
     p.team = OSTRZYZENI.shavedTeam;
+    // The round's first chaser is shaved where they stand, already alive, so the bigger pool has
+    // to be granted here as well as at a respawn — otherwise they hunt on a survivor's health.
+    if (p.alive) p.health = OSTRZYZENI.shavedHealth;
     this.writeWallet(p, { ...freshWallet(), money: 0, owned: [], perks: { ...noPerks(), [OSTRZYZENI.speedPerk]: PERK_ARMED_MS } });
     p.weapon = MELEE_WEAPON;
     p.reloading = false; s.reloadEndsAt = 0; s.spread = 0;
@@ -1096,7 +1099,16 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // FFA (drop 4): every point on the map is a candidate; everyone alive is an enemy.
     const spawnTeam = this.mode === "bomb" && this.state.phase !== MatchPhase.Waiting && this.state.phase !== MatchPhase.Countdown
       ? (p.team === this.state.bomb.attackTeam ? 0 : 1) as Team : p.team as Team;
-    const sp = pickSpawn(this.map, spawnTeam, {
+    // Drop D: a chaser comes back ON THE HUNT, not at the far end of the district. Every other
+    // spawn rule maximises distance from the enemy, which for the one player who has to REACH
+    // somebody is exactly backwards: MEASURED, a chaser spent its round walking, died, and walked
+    // again. It returns at the nearest spawn point that is still `huntSpawnMinM` away — close
+    // enough to keep the pressure on, far enough that nobody is killed as they respawn.
+    const hunting = this.infection && p.shaved && this.state.phase === MatchPhase.Playing;
+    const sp = hunting ? this.huntSpawn() ?? pickSpawn(this.map, spawnTeam, {
+      enemies, allies, rand: this.rand,
+      danger: () => false,
+    }, true) : pickSpawn(this.map, spawnTeam, {
       enemies, allies, rand: this.rand,
       danger: (x, y, z) => this.fires.some(f => f.until > this.now() && Math.abs(f.y - y) < 2 && Math.hypot(x - f.x, z - f.z) < f.radius + 1),
       canSee: (ax, ay, az, bx, by, bz) => {
@@ -1128,7 +1140,12 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       if (!primaryOf(this.walletOf(p))) p.owned.push(boysClass(p.boysClass).starter);
       if (p.boysClass === 2 && p.lethalCount === 0) { p.lethal = "frag"; p.lethalCount = 1; }
     }
-    p.health = this.mode === "boys" ? boysClass(p.boysClass).health : PLAYER.maxHealth; p.alive = true; p.reloading = false;
+    // Drop D: an Ostrzyżony is tougher than the people it chases — the only way a 2.1 m weapon
+    // crosses a room somebody is shooting across. Everything else about them is ordinary.
+    p.health = this.mode === "boys" ? boysClass(p.boysClass).health
+      : this.infection && p.shaved ? OSTRZYZENI.shavedHealth
+      : PLAYER.maxHealth;
+    p.alive = true; p.reloading = false;
     const wallet = this.walletOf(p);
     p.weapon = primaryOf(wallet) ?? secondaryOf(wallet);
     if (this.ladder) this.handLadderWeapon(p, s);
@@ -1307,6 +1324,24 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       if (d < bestD) { bestD = d; best = q; }
     }
     return best ? { x: best.x, y: best.y, z: best.z } : undefined;
+  }
+
+  /**
+   * Where a chaser comes back: the spawn point closest to a living survivor that is not right on
+   * top of one. Undefined when there is nobody to hunt, and then the ordinary rule applies.
+   */
+  private huntSpawn(): SpawnPoint | undefined {
+    const prey: PlayerState[] = [];
+    for (const q of this.state.players.values()) if (!q.shaved && q.alive && q.connected) prey.push(q);
+    if (prey.length === 0) return undefined;
+    let best: SpawnPoint | undefined, bestD = Infinity;
+    for (const sp of [...this.map.spawns, ...(this.map.arenaSpawns ?? [])]) {
+      let near = Infinity;
+      for (const q of prey) near = Math.min(near, Math.hypot(q.x - sp.x, q.z - sp.z));
+      if (near < OSTRZYZENI.huntSpawnMinM) continue;   // never in somebody's face
+      if (near < bestD) { bestD = near; best = sp; }
+    }
+    return best;
   }
 
   private bombGoal(p: PlayerState, s: Session): NavPoint | undefined {

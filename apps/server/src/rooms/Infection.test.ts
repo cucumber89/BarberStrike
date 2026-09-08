@@ -5,7 +5,7 @@
  * ends, the two ways a round can end, and the shop that only the unshaved may open.
  */
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { C2S, MODES, MatchPhase, NIGHT_DISTRICT, OSTRZYZENI, PERK_ARMED_MS, S2C } from "@frankibarber/shared";
+import { C2S, MODES, MatchPhase, NIGHT_DISTRICT, OSTRZYZENI, PERK_ARMED_MS, PLAYER, S2C } from "@frankibarber/shared";
 import type { PlayerState } from "../schema";
 import { RoomHarness, type FakeClient } from "./testHarness";
 
@@ -204,4 +204,45 @@ it("(j) a bot chaser actually converts: it swings the clippers at a survivor wit
   }
   expect(prey.shaved, "a bot chaser should convert a survivor standing within the clippers' reach").toBe(true);
   expect(prey.team).toBe(OSTRZYZENI.shavedTeam);
+});
+
+it("(k) an Ostrzyżony is made of more than the people it chases, from the first shave and on every return", async () => {
+  const cs = await round(3);
+  const chaser = shaved()[0];
+  // Shaved in place at the round's start: the pool arrives immediately, not at some later respawn.
+  expect(chaser.health).toBe(OSTRZYZENI.shavedHealth);
+  expect(chaser.health).toBeGreaterThan(PLAYER.maxHealth);
+  expect(OSTRZYZENI.shavedHealth, "PlayerState.health is a uint8").toBeLessThanOrEqual(255);
+  for (const s of survivors()) expect(s.health).toBe(PLAYER.maxHealth);
+  await live();
+  // And on the way back: a chaser that dies returns with the pool, not with a survivor's.
+  const survivor = h.player(cs.find((c) => c.sessionId !== chaser.id)!.sessionId);
+  killWith(survivor, chaser, "rifle");
+  expect(chaser.alive).toBe(false);
+  await h.advance(OSTRZYZENI.shavedRespawnMs + 200);
+  expect(chaser.alive).toBe(true);
+  expect(chaser.health).toBe(OSTRZYZENI.shavedHealth);
+});
+
+it("(l) a chaser comes back on the hunt: near the nearest survivor, never on top of one", async () => {
+  const cs = await round(4);
+  await live();
+  const chaser = shaved()[0];
+  const prey = survivors();
+  // Park the survivors together at one end so "near them" is a place, not an average.
+  const spot = NIGHT_DISTRICT.spawns[0];
+  for (const q of prey) await h.place(q.id, { ...spot });
+  const nearest = (x: number, z: number) => Math.min(...prey.filter((q) => q.alive).map((q) => Math.hypot(q.x - x, q.z - z)));
+  // The whole pool, for the comparison below.
+  const pool = [...h.map.spawns, ...(h.map.arenaSpawns ?? [])];
+  const worst = Math.max(...pool.map((s) => nearest(s.x, s.z)));
+
+  const survivor = h.player(cs.find((c) => c.sessionId !== chaser.id)!.sessionId);
+  killWith(survivor, chaser, "rifle");
+  await h.advance(OSTRZYZENI.shavedRespawnMs + 200);
+  expect(chaser.alive).toBe(true);
+  const d = nearest(chaser.x, chaser.z);
+  expect(d, "never spawned into somebody's face").toBeGreaterThanOrEqual(OSTRZYZENI.huntSpawnMinM);
+  // The point of the rule: closer than the ordinary spawn rule, which maximises this distance.
+  expect(d, "returned near the prey rather than across the district").toBeLessThan(worst);
 });
