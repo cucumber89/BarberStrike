@@ -10,7 +10,11 @@
  */
 import { chromium } from "@playwright/test";
 import { mkdirSync, readFileSync } from "node:fs";
-const OUT = process.env.OUT ?? "e2e/out/weapons";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+// Relative to THIS tool, not to the shell's cwd: run from the repo root and a bare
+// "e2e/out" lands outside the ignored directory and shows up as untracked files.
+const OUT = process.env.OUT ? resolve(process.env.OUT) : resolve(dirname(fileURLToPath(import.meta.url)), "../out/weapons");
 const WEAPONS = process.env.WEAPONS ? process.env.WEAPONS.split(",") : ["pistol", "revolver", "smg", "smg2", "rifle", "lmg", "shotgun", "dmr", "sniper", "launcher", "clippers"];
 /** TP_ONLY=1 skips the first-person set (the third-person room is the slow, bot-dependent half). */
 const TP_ONLY = !!process.env.TP_ONLY;
