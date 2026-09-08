@@ -17,6 +17,16 @@ import {
 import { BotBrain, type BotSenses } from "./BotBrain";
 
 /**
+ * These are closed-loop simulations: hundreds of ticks through the real mover on the real map,
+ * with real A* searches over the real walk grid. MEASURED on the development box: the longest is
+ * 1.4–2.0 s, comfortably inside vitest's 5 s default — but a shared CI runner is several times
+ * slower, and `keeps its destination…` timed out there at 5 s while passing here in 1.36 s. The
+ * budget is what was wrong, not the test: it is raised rather than the simulation shortened,
+ * because the number of ticks IS the thing under test.
+ */
+vi.setConfig({ testTimeout: 30_000 });
+
+/**
  * Drop 6d: how a bot MOVES, driven through the real mover on the real map.
  *
  * These are closed-loop: the brain's buttons go into `simulateBody` and the resulting position
