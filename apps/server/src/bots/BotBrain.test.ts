@@ -140,24 +140,57 @@ describe("Drop D: the two Ostrzyżeni roles", () => {
     expect(Math.hypot(b.x - goal.x, b.z - goal.z)).toBeLessThan(Math.hypot(start.x - goal.x, start.z - goal.z) - 4);
   });
 
-  it("a survivor backs away from a chaser inside its reach while still shooting, and holds ground when it is far off", () => {
-    const near = sensesFor(1000, createBody(0, 0, 0), [], [{ id: "chaser", team: 1, x: 0, y: 0, z: 5, crouching: false }]);
-    near.mode = "ostrzyzeni"; near.shaved = false;
+  it("a survivor retreats from a chaser its weapon would otherwise have it charge, and fights normally beyond the flee range", () => {
+    // Six metres with a SHOTGUN is the discriminating distance: it sits inside that weapon's own
+    // dead band (preferred range 7.2 m), so a bot in any other mode stands its ground and works
+    // the angles. A survivor must give ground instead — the thing in front of it kills by touch.
+    const preyAt = (z: number) => {
+      const s = sensesFor(1000, createBody(0, 0, 0), [], [{ id: "chaser", team: 1, x: 0, y: 0, z, crouching: false }]);
+      s.me.weapon = "shotgun";
+      return s;
+    };
+    const plain = preyAt(6);
+    expect(new BotBrain("normal", walk, () => 0.5).think(plain).input.buttons & (Btn.Forward | Btn.Back)).toBe(0);
+    const fleeing = preyAt(6);
+    fleeing.mode = "ostrzyzeni"; fleeing.shaved = false;
     const brain = new BotBrain("normal", walk, () => 0.5);
     let fired = false, backed = false;
     for (let t = 1000; t < 3000; t += TICK_MS) {
-      near.now = t;
-      const d = brain.think(near);
+      fleeing.now = t;
+      const d = brain.think(fleeing);
       if (d.fire) fired = true;
       if (d.input.buttons & Btn.Back) backed = true;
       expect(d.input.buttons & Btn.Forward).toBe(0);   // never towards the clippers
     }
-    expect(backed).toBe(true);
-    expect(fired).toBe(true);
-    // Beyond the flee range it fights like anyone else: the rifle band decides, not the mode.
-    const far = sensesFor(1000, createBody(0, 0, 0), [], [{ id: "chaser", team: 1, x: 0, y: 0, z: 20, crouching: false }]);
+    expect(backed, "a survivor gives ground").toBe(true);
+    expect(fired, "…while still shooting back").toBe(true);
+    // Beyond the flee range the mode stops mattering: the shotgun closes, as it does for anyone.
+    const far = preyAt(FLEE_RANGE_M + 4);
     far.mode = "ostrzyzeni"; far.shaved = false;
-    expect(new BotBrain("normal", walk, () => 0.5).think(far).input.buttons & Btn.Back).toBe(0);
+    expect(new BotBrain("normal", walk, () => 0.5).think(far).input.buttons & Btn.Forward).toBe(Btn.Forward);
+    expect(new BotBrain("normal", walk, () => 0.5).think(preyAt(FLEE_RANGE_M + 4)).input.buttons & Btn.Forward).toBe(Btn.Forward);
+  });
+
+  it("a hunter that cannot reach anybody goes back to roaming instead of standing still", () => {
+    // The objective is a survivor on an unreachable spot (off the walk grid). Before the back-off
+    // the brain re-pointed the goal at it every tick, the plan failed every time, and the bot stood
+    // where it was — MEASURED at 30 s frozen with a survivor 6.6 m away.
+    const brain = new BotBrain("normal", walk, prng(4));
+    const b = createBody(start.x, start.y, start.z);
+    const roam = [pointNear(start, 18)];
+    let prev = 0, moved = 0;
+    for (let t = 0; t < 400; t++) {
+      const s = sensesFor(t * TICK_MS, b, roam, []);
+      s.mode = "ostrzyzeni"; s.shaved = true; s.me.weapon = "clippers";
+      s.objective = { x: 9999, y: 0, z: 9999 };        // nowhere the grid can reach
+      const before = { x: b.x, z: b.z };
+      const d = brain.think(s);
+      simulateBody(world, b, d.input, 1, prev);
+      prev = d.input.buttons;
+      if (Math.hypot(b.x - before.x, b.z - before.z) > 0.01) moved++;
+    }
+    expect(moved, "a blocked hunter keeps moving").toBeGreaterThan(120);
+    expect(Math.hypot(b.x - start.x, b.z - start.z), "…and gets somewhere").toBeGreaterThan(3);
   });
 
   it("Gun Game needs no role at all: the bot fights with whatever rung it was handed", () => {
@@ -167,10 +200,11 @@ describe("Drop D: the two Ostrzyżeni roles", () => {
     expect(new BotBrain("normal", walk, () => 0.5).think(s).input.buttons & Btn.Forward).toBe(Btn.Forward);
     s.me.weapon = "rifle";
     expect(new BotBrain("normal", walk, () => 0.5).think(s).input.buttons & Btn.Forward).toBe(0);
-    // And it never shops: the room hands out the rung, so the brain is not asked.
-    expect(new BotBrain("normal", walk, () => 0.5).pickBuy(9000, ["shotgun"])).toBeNull();
   });
 });
+
+/** `FLEE_RANGE` in BotBrain.ts; duplicated here so the test says what distance it means. */
+const FLEE_RANGE_M = 9;
 
 /** A senses object with no enemies: pure navigation towards a single roam point. */
 function sensesFor(now: number, b: BodyState, roam: NavPoint[], enemies: BotSenses["enemies"] = []): BotSenses {

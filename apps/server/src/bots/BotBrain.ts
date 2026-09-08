@@ -119,6 +119,8 @@ const CHASE_MS = 2500;
  * perk can make in a reaction time, so backing off is a real answer rather than a delay.
  */
 const FLEE_RANGE = 9;
+/** How long a hunter roams instead of asking again for a survivor it cannot reach. */
+const CHASE_BLOCKED_MS = 3000;
 /** Standing this close to the last known spot counts as having looked: the chase ends. */
 const CHASE_ARRIVE = 2.5;
 /** sin(22.5°): the half-width of one of the eight movement octants. */
@@ -154,6 +156,8 @@ export class BotBrain {
   private pathGoal: NavPoint | null = null;
   private replanAt = 0;
   private goalAt = 0;
+  /** Drop D: a hunter roams until this time rather than re-asking for a survivor it cannot reach. */
+  private chaseBlockedUntil = 0;
   private sprinting = false;
   private sprintHold = 0;
   private target: string | null = null;
@@ -245,8 +249,19 @@ export class BotBrain {
       this.turnTowards(wantYaw, wantPitch, p.turnRate * TICK_MS / 1000);
       const err = Math.abs(wrapAngle(wantYaw - this.yaw)) + Math.abs(wantPitch - this.pitch);
       const ready = now - this.firstSeenAt >= p.reactionMs;
+      /**
+       * How straight the bot has to be looking before it pulls the trigger. A bullet wants the
+       * 0.06 rad it has always wanted; a SWING does not. The server resolves a melee hit as a ray
+       * against the body box (`traceBullet` with `MELEE.range`), so at two metres a 0.35 m half-width
+       * subtends about 0.17 rad — three times the bullet gate. Holding a swing to the bullet gate is
+       * why a chaser could stand next to somebody and never touch them: MEASURED at zero conversions
+       * in a 60 s round with the chaser reaching 2.3 m again and again.
+       */
+      const swinging = weapon.kind === "melee";
+      const aimGate = swinging ? Math.max(0.12, Math.atan2(PLAYER.halfWidth * 0.8, Math.max(0.5, seenD))) : 0.06;
       if (me.ammo === 0 && me.reserve > 0) reload = true;
-      else if (ready && now >= this.burstRestUntil && err < 0.06 && seenD <= engageRange && me.ammo > 0 && now - this.lastFireAt >= me.fireIntervalMs * p.cadence) {
+      // A swing has no burst to rest between: its own fire interval is the whole cadence.
+      else if (ready && (swinging || now >= this.burstRestUntil) && err < aimGate && seenD <= engageRange && (me.ammo > 0 || swinging) && now - this.lastFireAt >= me.fireIntervalMs * p.cadence) {
         aimDirection(this.yaw, this.pitch, dirTmp);
         spreadDirection(dirTmp[0], dirTmp[1], dirTmp[2], p.aimError, this.rand, outTmp);
         fire = { o: [me.x, eyeY, me.z], d: [outTmp[0], outTmp[1], outTmp[2]] };
@@ -288,12 +303,19 @@ export class BotBrain {
       // finding nobody ENDS the chase; without that the bot arrives, the route completes, the chase
       // hands back the same spot, and it plans a one-waypoint route to its own feet on every tick
       // until the chase timer runs out.
-      if (s.objective && hunting) {
+      if (s.objective && hunting && now >= this.chaseBlockedUntil) {
         // The hunter's objective is a PERSON, not a site: it moves, and arriving at where they were
         // is not the end of anything. So no arrival spin and no waiting for the goal timer — the
         // goal is re-pointed every tick and the route is re-planned when it drifts (`stale` below).
+        //
+        // `chaseBlockedUntil` is what stops that from becoming a stand-still. A survivor a few
+        // metres away with no route to them (a floor above, the far side of a wall) makes the plan
+        // fail — or complete instantly on the bot's own feet — and re-pointing the goal on the next
+        // tick asks the same impossible question for ever. MEASURED before the back-off: a chaser
+        // frozen on one spot for the last 30 s of a round with a survivor 6.6 m away. With it, the
+        // hunter goes back to roaming for a moment, which moves it, which changes the question.
         this.goal = s.objective;
-      } else if (s.objective) {
+      } else if (s.objective && !hunting) {
         if (Math.hypot(me.x - s.objective.x, me.z - s.objective.z) < 1.7) {
           this.goal = null; this.path = null; this.pathGoal = null;
           this.yaw = wrapAngle(this.yaw + TICK_MS / 1000 * 0.5);
@@ -323,6 +345,7 @@ export class BotBrain {
             // chase re-arms the same goal on the very next tick and the back-off never applies —
             // MEASURED at one failed search per tick for the whole 2.5 s chase window.
             this.goal = null; this.goalAt = now + IDLE_MS; this.lastKnown = null; this.target = null;
+            if (hunting) this.chaseBlockedUntil = now + CHASE_BLOCKED_MS;
           }
         }
       }
@@ -350,6 +373,9 @@ export class BotBrain {
           if (w.y > me.y + PLAYER.stepHeight + 0.05 && Math.hypot(w.x - me.x, w.z - me.z) < 1.2) this.jumpUntil = now + 80;
         } else {
           this.goal = null; this.goalAt = now + IDLE_MS; this.path = null; this.pathGoal = null; // arrived
+          // Arriving where a survivor is and not being able to touch them (they are a floor up, or
+          // the route ends against a wall between you) is the same dead end as an unreachable one.
+          if (hunting && !seen) this.chaseBlockedUntil = now + CHASE_BLOCKED_MS;
         }
       }
       if (me.ammo < me.magazine * 0.4 && me.reserve > 0) reload = true;

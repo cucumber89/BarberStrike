@@ -301,12 +301,17 @@ export function Hud({ settings, onSettings, onLeave, onResume, shop, chat, radar
           {activePerks.map((id) => {
             const p = PERKS[id];
             const leftMs = h.perks[id] - h.serverNow;
-            const frac = p.durationMs > 0 ? Math.max(0, Math.min(1, leftMs / p.durationMs)) : 1;
+            // Drop D: a perk can be armed for a whole round rather than for its own duration (the
+            // Ostrzyżony's speed). That is written as `PERK_ARMED_MS`, which as a countdown reads
+            // "999985s" and pins the bar full — so anything longer than the perk's own life shows
+            // as ARMED, the same way a fade does.
+            const timed = p.durationMs > 0 && leftMs <= p.durationMs;
+            const frac = timed ? Math.max(0, Math.min(1, leftMs / p.durationMs)) : 1;
             return (
               <div key={id} className={`perk perk-${id}`} title={p.blurb}>
                 <span className="perk-glyph">{p.glyph}</span>
                 <span className="perk-name">{p.name.toUpperCase()}</span>
-                <span className="perk-time">{p.durationMs > 0 ? `${Math.max(0, Math.ceil(leftMs / 1000))}s` : "ARMED"}</span>
+                <span className="perk-time">{timed ? `${Math.max(0, Math.ceil(leftMs / 1000))}s` : "ARMED"}</span>
                 <span className="perk-bar" style={{ width: `${Math.round(frac * 100)}%` }} />
               </div>
             );

@@ -110,8 +110,13 @@ export class Game {
   private payMatch(e: MatchEventMessage): void {
     const h = hud.get();
     const row = h.players.find((p) => p.id === h.myId);
-    const teams = MODES[h.mode as GameMode]?.teams ?? true;
-    const result = matchResult(teams, h.myTeam, e.winner, e.winnerId ?? "", h.myId);
+    // Drop D: what counts as a win is the mode's `winner`, not whether it has sides. Ostrzyżeni has
+    // both — teams for the round score and a named player on the result screen — and reading
+    // `teams` here wrote the OPPOSITE of what the player was just shown into their profile
+    // whenever they finished the match on the losing side (code review). The HUD and the profile
+    // must agree, so both ask the same question.
+    const byTeam = (MODES[h.mode as GameMode]?.winner ?? "team") === "team";
+    const result = matchResult(byTeam, h.myTeam, e.winner, e.winnerId ?? "", h.myId);
     const stats = this.tracker.finish(row, result, h.mode as GameMode);
     const { profile, reward } = applyMatch(loadProfile(), stats, this.tracker.clipperKills, this.tracker.weaponKills);
     saveProfile(profile);

@@ -5,7 +5,7 @@
  * ends, the two ways a round can end, and the shop that only the unshaved may open.
  */
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { C2S, MODES, MatchPhase, OSTRZYZENI, PERK_ARMED_MS, S2C } from "@frankibarber/shared";
+import { C2S, MODES, MatchPhase, NIGHT_DISTRICT, OSTRZYZENI, PERK_ARMED_MS, S2C } from "@frankibarber/shared";
 import type { PlayerState } from "../schema";
 import { RoomHarness, type FakeClient } from "./testHarness";
 
@@ -180,4 +180,28 @@ it("(i) bots play both sides: one can be the Ostrzyżony with the clippers, the 
   await h.until(MatchPhase.Playing);
   await h.advance(5000);
   for (const p of h.state.players.values()) expect(p.team).toBe(p.shaved ? OSTRZYZENI.shavedTeam : OSTRZYZENI.survivorTeam);
+});
+
+it("(j) a bot chaser actually converts: it swings the clippers at a survivor within reach", async () => {
+  h = await RoomHarness.create({ room: "infection-swing", mode: "ostrzyzeni", bots: 2, seed: 11 });
+  const human = await h.join("Human");
+  await h.until(MatchPhase.Playing, 60000);
+  // Force the roles rather than trusting the random pick: the thing under test is whether a BOT
+  // with the clippers can close a swing on somebody, not which player the RNG shaved this time.
+  const priv = h.room as unknown as { shave(p: PlayerState, s: unknown): void; unshave(p: PlayerState): void };
+  const bot = [...h.state.players.values()].find((p) => p.bot)!;
+  const prey = h.player(human.sessionId);
+  for (const p of h.state.players.values()) if (p.shaved) priv.unshave(p);
+  priv.shave(bot, h.session(bot.id));
+  expect(bot.weapon).toBe("clippers");
+  const sp = NIGHT_DISTRICT.spawns[0];
+  for (let t = 0; t < 60 && !prey.shaved; t++) {
+    // Hold the pair together at a spawn point: navigation has its own tests, this is the swing.
+    await h.place(prey.id, { ...sp });
+    await h.place(bot.id, { ...sp, x: sp.x + 1.4, z: sp.z });
+    prey.protectedUntil = 0;
+    await h.tick(6);
+  }
+  expect(prey.shaved, "a bot chaser should convert a survivor standing within the clippers' reach").toBe(true);
+  expect(prey.team).toBe(OSTRZYZENI.shavedTeam);
 });

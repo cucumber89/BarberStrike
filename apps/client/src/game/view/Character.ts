@@ -155,6 +155,7 @@ export class Character {
   private bombPack: Mesh[] = [];
   /** Drop D: the cap (and its visor) hide when shaved; the bare, stubbled skull shows instead. */
   private capParts: Mesh[] = [];
+  private cap!: Mesh;
   private bareHead: Mesh;
 
   constructor(private scene: Scene, team: Team, name: string) {
@@ -246,7 +247,15 @@ export class Character {
       const meshes = materials.get(mat) ?? []; meshes.push(m);
       materials.set(mat, meshes); groups.set(parent, materials);
     }
-    this.meshes = [this.perkBand, this.bareHead, ...this.bombPack, ...this.capParts];
+    // The cap and its visor are one object as far as the player is concerned — they come off
+    // together — so they are merged into a single toggled mesh rather than kept apart. Excluding
+    // two meshes from the merge instead of one would have cost a draw call per character in EVERY
+    // mode for a flag that is only set in one (code review).
+    const capHead = this.capParts[0].parent as TransformNode;
+    for (const m of this.capParts) { m.parent = null; m.computeWorldMatrix(true); }
+    this.cap = Mesh.MergeMeshes(this.capParts, true, true)!;
+    this.cap.parent = capHead; this.cap.material = M.cloth; this.cap.isPickable = false; this.cap.receiveShadows = true;
+    this.meshes = [this.perkBand, this.bareHead, this.cap, ...this.bombPack];
     for (const [parent, materials] of groups) for (const [mat, meshes] of materials) {
       // Merge in joint-local space; the joint's world transform must not be baked twice.
       for (const m of meshes) { m.parent = null; m.computeWorldMatrix(true); }
@@ -346,7 +355,7 @@ export class Character {
     if (this.bombPack[0] && this.bombPack[0].isEnabled() !== bomb) for (const m of this.bombPack) m.setEnabled(bomb);
     // Shaved (drop D) is not gated on `alive`: the shaved head stays on the body that fell.
     const shaved = !!inp.shaved;
-    if (this.bareHead.isEnabled() !== shaved) { this.bareHead.setEnabled(shaved); for (const m of this.capParts) m.setEnabled(!shaved); }
+    if (this.bareHead.isEnabled() !== shaved) { this.bareHead.setEnabled(shaved); this.cap.setEnabled(!shaved); }
 
     // ---- Death: buckle (0–0.25) → fall away from the killer with a tumble (0.25–0.8) → settle.
     if (this.deathT >= 0) {

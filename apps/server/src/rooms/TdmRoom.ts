@@ -971,6 +971,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     const shieldFrom = this.state.phase === MatchPhase.Prep ? this.state.phaseEndsAt : this.now();
     p.protectedUntil = shieldFrom + (s.fadeShield ? PERK_EFFECT.fadeShieldMs : SPAWN_PROTECTION_MS);
     if (this.mode === "bomb" && this.state.phase !== MatchPhase.Waiting && this.state.phase !== MatchPhase.Countdown) p.protectedUntil = 0;
+    // Drop D: a chaser is back every three seconds inside a live round; a shield on each of those
+    // returns would let them walk through fire to reach somebody (code review). They keep it for
+    // the round's own start, where everyone gets one.
+    if (this.infection && p.shaved && this.state.phase === MatchPhase.Playing) p.protectedUntil = 0;
     s.fadeShield = false;
     s.blindedUntil = 0; s.objectiveUntil = 0; s.respawnAt = 0;
     p.spawnedAt = this.now(); s.spawnedAt = p.spawnedAt;
@@ -1073,7 +1077,12 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private stepInfection(now: number): void {
     if (!this.infection || this.state.phase !== MatchPhase.Playing) return;
     const st = this.state;
-    const winner = infectionRoundWinner(Array.from(st.players.values()), now, st.phaseEndsAt);
+    // The chaser leaving ends the round there and then: with nobody who can convert, the survivors
+    // have already won and the alternative is ninety seconds of walking about (code review).
+    const anyChaser = [...st.players.values()].some((p) => p.shaved && p.connected);
+    const winner = anyChaser
+      ? infectionRoundWinner(Array.from(st.players.values()), now, st.phaseEndsAt)
+      : "survivors";
     if (winner === null) return;
     if (winner === "survivors") {
       st.scoreA++;
@@ -1082,7 +1091,6 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       st.scoreB++;
     }
     st.bomb.round++;
-    st.bomb.result = winner === "survivors" ? "OCALENI" : "OSTRZYŻENI";
     this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
     if (st.bomb.round >= OSTRZYZENI.rounds) { this.endMatch(); return; }
     st.phase = MatchPhase.Prep;
