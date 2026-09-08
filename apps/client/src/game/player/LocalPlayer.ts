@@ -284,8 +284,14 @@ export class LocalPlayer {
     // shot, the lost picture, the hunt back to the target — not a penalty bolted on top of it.
     const boltOut = performance.now() < this.actionUntil;
     const adsTarget = this.alive && this.isAiming() && !boltOut ? 1 : 0;
-    this.adsBlend += (adsTarget - this.adsBlend) * Math.min(1, dtMs / Math.max(16, wdef.adsMs));
-    if (Math.abs(this.adsBlend - adsTarget) < 0.01) this.adsBlend = adsTarget;
+    // LINEAR, not a lerp towards the target. The lerp this replaces moved by a fraction of the
+    // REMAINING distance each frame, so the sights took about 2.3 x `adsMs` to come up and took
+    // LONGER on a slow machine than a fast one: `weapon-signature.mjs` measured 255 ms for the
+    // AR-31's declared 130 and 549 ms for the SR-50's 260. `adsMs` is the time the sights actually
+    // take now, on any framerate — which is what the matrix's axis 3 quotes and what the signature
+    // tool compares against.
+    const adsStep = dtMs / Math.max(16, wdef.adsMs);
+    this.adsBlend = adsTarget > this.adsBlend ? Math.min(adsTarget, this.adsBlend + adsStep) : Math.max(adsTarget, this.adsBlend - adsStep);
     // Tactical sprint (drop 4): a wider FOV sells the extra speed.
     this.tacBlend += ((this.alive && this.wasTac ? 1 : 0) - this.tacBlend) * Math.min(1, dt * 6);
     this.camera.fov = (this.settings.fov * Math.PI / 180) * (1 - this.adsBlend * (1 - wdef.adsZoom)) * (1 + 0.07 * this.tacBlend);

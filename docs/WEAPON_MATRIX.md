@@ -165,6 +165,11 @@ Where the implementation deviates from the rows above, and why:
   covers. `WeaponDef.scoped` still means the SR-50.
 - **The M-1 keeps the minimap; the SR-50 does not.** Hiding it is what a full tube earns, and it is
   now most of what separates the two long rifles in play.
+- **The ADS blend was linearised so axis 3 means what it says.** It moved by a fraction of the
+  REMAINING distance each frame, so the sights took about 2.3 x `adsMs` to come up and took longer
+  on a slow machine than a fast one — `weapon-signature.mjs` measured 255 ms for the AR-31's
+  declared 130 and 549 ms for the SR-50's 260. Every `adsMs` in the rows above is now the time the
+  sights actually take, on any framerate.
 - **Cadence is not measured, it is quoted.** Under SwiftShader the scene runs at 2–4 fps with bots
   in it and the client fires at most once per frame, so every automatic weapon is frame-limited long
   before it is weapon-limited. Those rows carry the renderer's number and a mark saying so. Burst
