@@ -1,6 +1,6 @@
 # MAP_2 — GÓRA, the flat above the shop (Drop G)
 
-**Status: signed off by the owner 2026-09-08 ("już") and BUILT.**
+**Status: signed off by the owner 2026-09-08 (the sign-off sheet at the end, and "już") and BUILT.**
 The draft below is the intent; `packages/shared/src/gora.ts` is the same layout in solids, and the
 generic map suite (`map.test.ts`, `mapFlags.test.ts`, `floorAudit.test.ts`, all of which loop
 `Object.values(MAPS)`) judges it. **See "As built" at the end** for every place the geometry left
@@ -426,11 +426,17 @@ the two that matter (the well and the balcony).
 
 ## Sign-off
 
-Owner: _Aleksander_Ogórek_  Date: 8.09.2026  "signed" / changes requested: _"już"_ — signed, build it.
+Owner: _Aelksander Ogorek  Date: ____8.09.2026________  "signed" / changes requested: ________signed yes______
 
-All six decisions taken as proposed: D-G1 the flat, D-G2 build to the 30 m station spread (the test
-is not changed), D-G3 `huntSpawnMinM` becomes per-map and is 8 m on GÓRA, D-G4 bomb sites on the
-centre line, D-G5 the light well is a real fall, D-G6 no tactical plans in the first cut.
+D-G1 theme _x___  D-G2 width ____  D-G3 hunt spawn ____  D-G4 bomb sites __x__  D-G5 the fall __x__
+D-G6 no plans ____
+
+Read as: signed. The owner ticked D-G1 (the flat), D-G4 (bomb sites on the centre line) and D-G5
+(the light well is a real fall) and wrote "signed yes" across the whole sheet, so the three left
+blank — D-G2 (build to the 30 m buy-station spread rather than change the test that demands it),
+D-G3 (`huntSpawnMinM` becomes a per-map number, 8 m here) and D-G6 (no tactical plans in the first
+cut) — were built as proposed. Each is reversible on a word: D-G2 is the map's width, D-G3 is one
+field, D-G6 is three plans that have not been written.
 
 ---
 
