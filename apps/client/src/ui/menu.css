@@ -104,6 +104,9 @@
   display: inline-flex; align-items: center; gap: 9px; white-space: nowrap;
   padding: 6px 13px; border: 1px solid var(--line); border-radius: 999px; background: rgba(10, 10, 12, .6);
   font-family: var(--font-mono); font-size: 11px; letter-spacing: .16em; color: var(--tx-2);
+  /* The pill reads as one label whatever wrote its text — the unreachable message is a sentence
+     the list body prints in full, and it should not arrive here in a different voice. */
+  text-transform: uppercase;
 }
 .mm-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--tx-3); }
 .mm-status.on { border-color: rgba(125, 255, 154, .28); }
@@ -161,6 +164,7 @@
 .mm-content.lobby-grid {
   display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(330px, .85fr);
   gap: 20px; overflow: hidden; align-items: stretch;
+  width: 100%; max-width: 1560px; margin: 0 auto;
 }
 .lb-setup { min-height: 0; overflow: auto; padding-right: 6px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-content: start; }
 .lb-block { min-width: 0; padding: 12px 14px 14px; background: var(--mm-plate); border: 1px solid var(--line); }
@@ -210,7 +214,9 @@
 .seg-btn:disabled { opacity: .35; cursor: default; }
 
 /* The wardrobe (Drop E). Locked cuts stay visible with what earns them. */
-.cut-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
+/* Three columns, never auto-fill: nine cuts divide into 3 × 3 at every width, and any other count
+   of columns leaves one cut orphaned on a row of its own. */
+.cut-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .cut { display: grid; gap: 1px; padding: 7px 9px; min-width: 0; text-align: left; cursor: pointer; color: #d8d2c8; background: var(--bg-2); border: 1px solid var(--line); }
 .cut b { font-family: var(--font-display); font-size: 13px; letter-spacing: .08em; font-weight: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cut span { font-size: 9px; letter-spacing: .04em; color: var(--tx-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -300,6 +306,8 @@
 /* ------------------------------------------------------------------- settings and controls */
 
 .mm-card { width: min(900px, 100%); margin: 0 auto; padding: 18px 22px 22px; background: rgba(14, 14, 18, .86); border: 1px solid var(--line); border-top: 2px solid rgba(217, 164, 65, .5); }
+/* Sliders and toggles read badly stretched across 900 px; the key grid wants the width. */
+.mm-card.panel { max-width: 720px; }
 /* The shell scrolls now, so the panel does not need its own 60vh window (the pause card still does). */
 .mm-card .settings { max-height: none; overflow: visible; padding-right: 0; }
 .keys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px 26px; align-content: start; }
@@ -307,6 +315,39 @@
 .keys-col .lb-h { font-size: 16px; margin-bottom: 6px; }
 .keys-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, .06); font-size: 12.5px; color: var(--tx-2); }
 .keys-row kbd { flex: 0 0 auto; min-width: 78px; text-align: center; padding: 4px 7px; background: var(--bg-3); border: 1px solid var(--line); border-bottom-width: 2px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .04em; color: var(--brass); }
+
+/* A big screen should show the same things BIGGER, not the same things with 400 px of night under
+   them. Nothing moves, nothing appears: the cards, the rows and the plans take the room. */
+@media (min-width: 1600px) and (min-height: 900px) {
+  .lb-setup { gap: 18px; }
+  .lb-block { padding: 16px 18px 18px; }
+  .lb-h { font-size: 15px; margin-bottom: 11px; }
+  .mode-card { padding: 14px 15px; }
+  .mode-card b { font-size: 17px; }
+  .mode-art { width: 30px; height: 30px; }
+  .mode-tag { font-size: 10px; }
+  .map-card { padding: 12px 14px 13px; }
+  .map-plan { height: 46px; }
+  .map-card b { font-size: 17px; }
+  .cut { padding: 10px 12px; }
+  .cut b { font-size: 14px; }
+  .cut span { font-size: 10px; }
+  .seg-btn { padding: 9px 6px; font-size: 14px; }
+  .bots-num { font-size: 26px; }
+  .srv-row { padding: 12px 14px; gap: 14px; }
+  .srv-name { font-size: 18px; }
+  .srv-meta, .mm-blurb { font-size: 12px; }
+  .srv-private { padding: 14px 16px 15px; }
+}
+
+/* A column that scrolls has to LOOK like one. The default overlay scrollbar is invisible against
+   this palette until the mouse is already inside it, which is how a six-room list reads as a
+   four-room list. */
+.lb-setup::-webkit-scrollbar, .srv-list::-webkit-scrollbar, .mm-content::-webkit-scrollbar { width: 8px; }
+.lb-setup::-webkit-scrollbar-track, .srv-list::-webkit-scrollbar-track, .mm-content::-webkit-scrollbar-track { background: rgba(255, 255, 255, .04); }
+.lb-setup::-webkit-scrollbar-thumb, .srv-list::-webkit-scrollbar-thumb, .mm-content::-webkit-scrollbar-thumb { background: rgba(217, 164, 65, .38); border-radius: 4px; }
+.lb-setup::-webkit-scrollbar-thumb:hover, .srv-list::-webkit-scrollbar-thumb:hover, .mm-content::-webkit-scrollbar-thumb:hover { background: rgba(217, 164, 65, .62); }
+.lb-setup, .srv-list, .mm-content { scrollbar-width: thin; scrollbar-color: rgba(217, 164, 65, .45) rgba(255, 255, 255, .04); }
 
 /* --------------------------------------------------------------------------- fitting rules */
 

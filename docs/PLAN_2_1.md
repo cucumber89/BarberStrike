@@ -243,6 +243,8 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
 | 2026-09-08 | G | drop/g-map-2 | Slice 4, the code review (a separate agent, the diff + the acceptance criteria + "try to break it"). It found five things; three were real and are fixed. **(1) The roof could be climbed off.** The air-conditioner on the deck topped 0.9 m above it — under the real 0.931 m jump apex and OVER the walk grid's 0.88 m `JUMP_UP`, so every reachability check in the drop was blind to it — and from there the ceiling slab was 0.5 m up: a player could walk the roof over every room, where no bot could follow. A second route was the east parapet at 1.2 m, inside the 1.251 m crouch-jump mantle. The slab is now 3.0 m thick (top 5.8), 1.6 m clear of the highest standable thing up there, and `gora.test.ts` re-derives the margin from the geometry using the PLAYER's jump numbers rather than the grid's. **(2) Both home flags sat inside their own team's spawn**: four spawn points a side 2.33 m from a 3.5 m capture zone, so Domination gave each team a free flag and Boys let a player re-class from spawn (NIGHT_DISTRICT's nearest spawn to a flag is 20.35 m; nothing had ever checked). Flags moved to the two outer-ring rooms and the inner crossroads — KUCHNIA / SKŁAD / HOL — which also spreads DOM across the whole map; `map.test.ts` now checks every map, as a cylinder so the roof spawns stay legal. **(3) The minimap still read the module-global `BOMB_SITES`** and drew A and B off the edge of GÓRA with the compass pointing at them — a constant that still exists and still holds valid numbers breaks nothing except the picture, so the guard is a grep test over the client sources. Refuted/absorbed: the hunt-spawn test's docstring claimed more than the test samples (docstring corrected, and an adversarial placement falls back to the ordinary pick rather than crashing); two stale "8 m" references in the docs corrected; one dead floor panel under the well removed. | docs/MAP_2.md ("As built", items 4–5); `packages/shared/src/gora.test.ts`; `apps/client/src/mapAgnostic.test.ts` | typecheck ✓ test ✓ (647: shared 204, client 283, server 160) build ✓ check:weapons ✓ (19/19) e2e — | review |
 
 
+| 2026-09-08 | I | claude/menu-fps-style-ui-uxgo6m | **The menu, rebuilt to the owner's brief** ("zmienić menu … ładnie jak w grach tego typu … proste ale ładne … lepiej widoczne serwery"). The diagnosis, not a taste call: everything lived in ONE 560 px column in DOM order — nickname, room, invite, six three-letter mode chips, maps, nine haircuts, bots, the buttons, and only then the open matches, below the fold on a 1080p screen. A column cannot say what matters, because every row in it is the same width and the same weight. Four rules, written into `menu.css`: **SHAPE** — the lobby is three zones (setup left, the SERVER BROWSER a full-height column of its own on the right, one launch bar pinned at the bottom saying what is about to start), each scrolling inside itself so the page never does; **RANK** — what you choose is a card with a picture, what you tune is a row, what you read is a line; **STATE** — selection is a brass border, brass ink and a corner tab, never "the slightly lighter one"; **ANSWER** — "is anyone playing?" is answered on the title screen by a live-match panel and a status pill, polled there as well as in the lobby. `menuArt.tsx` gives the six modes and the two maps inline-SVG glyphs in `currentColor` (there was no icon system at all, so six modes were six identical boxes of three capital letters): no download, no manifest entry, no licence row. Rooms sort joinable-first then fullest-first, full ones say FULL, the list has explicit empty / unreachable states and a manual refresh, and a click with no nickname typed sends the caret to the field instead of greying out the half of the lobby the player came for. **MEASURED** with a new `menu-fit.mjs` (the ui-fit pattern): 5 viewports including browser zoom, PASS on all — the browser holds 24–29 % of the screen with 4–6 of six matches readable without scrolling, nothing off screen, no page scroll, no text under 9 px. It found the first cut folding to one column at 125 % zoom and putting the rows below the fold — the exact fault the brief is about — so the two columns now hold to 900 px and the server column's width gives first. **Found on the way, not this drop's work but this drop's to fix**: the dormant HUD (mounted behind the loading screen from READY on) armed the pause overlay 300 ms in, and `startup.spec.ts`'s "no pause card on the ready screen" was passing only by beating that timer — proven by probing both trees, pause present in BOTH. Gated on `dormant` like the keyboard effect above it. | `apps/client/e2e/out/menu/{menu-fit.md,title-*.png,lobby-*.png,servers-empty.png,servers-offline.png,mode-boys.png,controls.png,settings.png,link-join.png}` — regenerate with `pnpm --filter @frankibarber/client dev` then `node apps/client/e2e/tools/menu-fit.mjs` | typecheck ✓ test ✓ (686: shared 220, client 298, server 168) build ✓ check:weapons ✓ (19/19) menu-fit ✓ (5/5) **e2e ✓ 15/15** | review |
+
 ## Decisions log (append-only)
 
 - 2026-09-07 — Plan created from the owner's brief: weapons structure + feel, procedural skins with
@@ -469,6 +471,29 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   `weapon-shots.mjs` predates that gate, so copying its recipe is not enough. (2) The photographed
   subject must be a TEAMMATE — an enemy bot shoots the camera between the pose and the shutter, every
   time. (lead)
+
+
+- **Drop I / menu (2026-09-08): the lobby's CSS left `styles.css` for `menu.css`, imported by
+  `Menu.tsx`.** `styles.css` was 770 lines carrying the menu, the HUD, the shop, the scope, the
+  minimap and five drops of overrides, and the menu's own rules were spread over four of those
+  layers (`.menu` was re-declared 400 lines below itself). What stays behind is only what the
+  pause card shares with the menu — `.menu-btn`, `.link`, `.field`, `.switch`, `.segmented`,
+  `.wordmark`, `.muted`, `.settings`, `.panel h2/h3` — and the menu-only rules were deleted rather
+  than left to rot next to their replacements. A component that owns its own stylesheet is the
+  pattern to repeat for the shop and the HUD if either is next. (lead)
+- **Drop I / menu: nothing in the lobby was gated, renamed or removed.** Same six modes, same two
+  maps, same nine haircuts, same bots range, same room code, same invite link, same
+  `onPlay` contract, every `data-testid` the e2e suite names. It is a layout and a skin, so the
+  15/15 e2e run is the claim that the flow is unchanged, not an assertion of taste. (lead)
+- **Drop I / menu: a dormant HUD decides nothing.** The HUD is mounted invisible from READY on so
+  its first commit is not paid at DEPLOY (App.tsx), and while dormant it is connected with no
+  pointer lock — the exact shape of "the player pressed Escape" — so it armed the pause card 300 ms
+  into every ready screen. `startup.spec.ts` asserts there is no pause card there and was passing
+  only because it got to the assertion first; the menu's slightly different first paint lost that
+  race, which is how the bug surfaced. MEASURED on both trees before changing anything: the pause
+  card is present on the ready screen with the old menu too. Fixed at the source (the effect is
+  gated on `dormant`, as the keyboard effect beside it already was), not by moving the assertion.
+  (lead)
 
 ## Deferred (things noticed, deliberately not done)
 
@@ -709,3 +734,20 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   machine with three agents; alone it measures 2.1–2.2× repeatedly. It is a wall-clock benchmark in
   a unit suite, on NIGHT_DISTRICT's boxes, and nothing in Drop G touches it. Same family as the e2e
   note above: check what else is on the CPU before believing a red benchmark.
+
+- Drop I / menu: the room listing carries no ping and no round time, so the browser cannot sort by
+  latency or say how far into a match a room is — both are the two things a player actually picks
+  on after mode and player count. `/rooms` returns `{roomId, clients, maxClients, metadata}`
+  (`hosting`/`index.ts:31`); adding `startedAt` to the metadata is small, a ping needs a probe per
+  room. Worth doing before more than a handful of rooms exist.
+- Drop I / menu: `MODES[m].scoreLimit` is what the mode cards print as "TO 40" / "TO 5", which reads
+  as kills for TDM, points for Domination and ROUNDS for Bomb and Ostrzyżeni. The unit is in the
+  blurb under the picker, not on the card. A `unit` field on `ModeDef` would let the card say
+  "TO 5 ROUNDS"; it is a shared-package change for one line of copy, so it is written here instead.
+- Drop I / menu: there is still no rendered head in the haircut picker (Drop E's open item), and
+  the wardrobe is now a 3 × 3 block of names in the lobby's setup column. The layout has room for
+  thumbnails whenever a head can be rendered off-screen.
+- Drop I / menu: the title screen's live-match panel is READ-ONLY — a click on a row would need a
+  nickname, which is the lobby's job to ask for, so the panel hands the player to the browser
+  instead. If quick-joining from the front page is wanted, the nickname has to move to the title
+  screen with it.

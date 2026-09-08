@@ -64,6 +64,10 @@ Troubleshooting:
   their rifle backwards.
 - Measurement tools (dev servers running): `pnpm profile` (draw calls / meshes / lights per view),
   `pnpm shots` (13 map views), `pnpm anim` (per-weapon idle / shot / reload stills).
+- UI fit (client dev server only — both stub what they need): `node apps/client/e2e/tools/ui-fit.mjs`
+  checks the buy menu fits one screen, `node apps/client/e2e/tools/menu-fit.mjs` checks the menu and
+  the server browser do, at five viewports including browser zoom. Both fail with a non-zero exit
+  and write a table plus screenshots under `apps/client/e2e/out/`.
 - Diagnostic scripts in `apps/client/e2e/tools/` (dev servers running): `reconnect.mjs` (simulated network drop →
   session resume), `audio-selftest.mjs` (renders every sound offline + live voice cap), `shots.mjs` / `faceoff.mjs` /
   `shot1.mjs` (screenshots of the map, characters and HUD in headless Chromium).

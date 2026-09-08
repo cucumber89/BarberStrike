@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BOYS_CLASSES, BOYS, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MODES, MODE_ORDER, isGameMode, type BotLevel, type GameMode } from "@frankibarber/shared";
 import { equipHaircut, equippedHaircut, ownedCuts } from "../game/progression/profile";
 import { copyText, inviteLink, isMapId, mapChoices, parseInvite } from "./invite";
@@ -84,6 +84,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   const [rooms, setRooms] = useState<RoomListing[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const nickRef = useRef<HTMLInputElement>(null);
   const nameOk = name.trim().length >= 2;
 
   /**
@@ -120,7 +121,8 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
       return openA - openB || b.clients - a.clients;
     });
   }, [rooms]);
-  const online = listError === null && rooms !== null;
+  /** Three states, not two: the first request has not come back yet, and that is not "offline". */
+  const netState = listError ? "off" : rooms ? "on" : "";
   const playersOnline = rooms?.reduce((n, r) => n + r.clients, 0) ?? 0;
 
   const commitName = () => {
@@ -129,14 +131,22 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
     return n;
   };
   const play = (mode: "auto" | "create") => onPlay(commitName(), roomName.trim(), mode, undefined, gameMode, bots, mapId);
-  const joinRoom = (r: RoomListing) => onPlay(commitName(), "", "join", r.roomId, r.metadata?.mode ?? "tdm", bots, mapId);
+  /**
+   * A greyed-out match list is the wrong answer to "you have not typed a nickname yet": it makes
+   * the half of the lobby a player came for look broken. The rows stay live and send the click to
+   * the field that is actually missing.
+   */
+  const joinRoom = (r: RoomListing) => {
+    if (!nameOk) { nickRef.current?.focus(); nickRef.current?.select(); return; }
+    onPlay(commitName(), "", "join", r.roomId, r.metadata?.mode ?? "tdm", bots, mapId);
+  };
   /** The address to send a friend: this page, the room in the path, the mode and the map in the query. */
   const link = typeof location !== "undefined" ? inviteLink(location.href, roomName, gameMode, mapId) : "";
 
   const status = (
-    <div className={`mm-status ${online ? "on" : "off"}`} data-testid="server-status">
+    <div className={`mm-status ${netState}`} data-testid="server-status">
       <span className="mm-dot" />
-      {online
+      {rooms && !listError
         ? <span>{rooms.length === 0 ? "NO OPEN MATCHES" : `${rooms.length} ${rooms.length === 1 ? "MATCH" : "MATCHES"}`} · {playersOnline} {playersOnline === 1 ? "PLAYER" : "PLAYERS"}</span>
         : <span>{listError ?? "CONTACTING SERVER…"}</span>}
     </div>
@@ -183,7 +193,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
     <label className="mm-field nick">
       <span>NICKNAME</span>
       <input
-        value={name} maxLength={MAX_NAME_LENGTH} onChange={(e) => setName(e.target.value)}
+        ref={nickRef} value={name} maxLength={MAX_NAME_LENGTH} onChange={(e) => setName(e.target.value)}
         placeholder="2–16 characters" autoFocus={autoFocus} data-testid="input-name"
         onKeyDown={(e) => { if (e.key === "Enter" && nameOk && !connecting) play("auto"); }}
       />
@@ -406,7 +416,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                       return (
                         <button
                           key={r.roomId} className={`srv-row ${full ? "full" : ""}`} data-testid={`room-${r.roomId}`}
-                          disabled={!nameOk || connecting || full} onClick={() => joinRoom(r)}
+                          disabled={connecting || full} onClick={() => joinRoom(r)}
                           title={full ? "This match is full" : !nameOk ? "Enter a nickname first" : `Join ${r.metadata?.name || r.roomId}`}
                         >
                           {roomLine(r)}
