@@ -260,13 +260,13 @@ for (const [name, from, to] of [
   ["T0 spawn → bomb A BALKON", { x: g0.x, y: g0.y, z: g0.z }, gsite("A")],
   ["T1 spawn → bomb A BALKON", { x: g1.x, y: g1.y, z: g1.z }, gsite("A")],
   ["bomb B HOL → bomb A BALKON", gsite("B"), gsite("A")],
-  ["T0 spawn → flag C BALKON", { x: g0.x, y: g0.y, z: g0.z }, gflag("C")],
-  ["T0 spawn → flag B SYPIALNIA (the far flag)", { x: g0.x, y: g0.y, z: g0.z }, gflag("B")],
+  ["T0 spawn → flag C HOL (the contested one)", { x: g0.x, y: g0.y, z: g0.z }, gflag("C")],
+  ["T0 spawn → flag B SKŁAD (the far flag)", { x: g0.x, y: g0.y, z: g0.z }, gflag("B")],
   ["T0 spawn → T1 spawn (first contact)", { x: g0.x, y: g0.y, z: g0.z }, { x: g1.x, y: g1.y, z: g1.z }],
   ["KUCHNIA → SKŁAD (the well is in the way)", { x: -13, y: 0, z: 7 }, { x: 13, y: 0, z: 7 }],
   ["BALKON → DACH (fire escape)", { x: 8, y: 0, z: 10 }, { x: 14, y: 3, z: 5 }],
   ["SKŁAD → DACH (loft stair)", { x: 10, y: 0, z: 6 }, { x: 12, y: 3, z: 1.5 }],
-  ["DACH → flag C on the balcony", { x: 12, y: 3, z: 1.5 }, gflag("C")],
+  ["DACH → the balcony below", { x: 12, y: 3, z: 1.5 }, { x: 0, y: 0, z: 10 }],
 ] as [string, { x: number; y: number; z: number }, { x: number; y: number; z: number }][]) {
   const path = findPath(gwalk, from, to, 60000);
   if (!path) { console.log(`| ${name} | — | NO PATH | — |`); continue; }

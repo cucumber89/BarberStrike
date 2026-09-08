@@ -465,7 +465,8 @@ The numbers below are re-measured on the REAL geometry and the REAL walk grid (�
 - **Rotations came out longer than the drawn polylines**, because a route through rooms is not a
   straight line: spawn → the near site 2.4 s (drafted 1.8), spawn → the far site 3.5 s (2.7),
   site ↔ site **2.2 s** (2.3 — the one the design turns on, unchanged), spawn → spawn 5.0 s (3.6),
-  spawn → the enemy's dom flag 4.2 s. Against NIGHT_DISTRICT, still measured on its own geometry:
+  spawn → the contested dom flag 2.4 s and → the enemy's wing flag 5.0 s (measured after the review
+  moved the flags out of the spawns). Against NIGHT_DISTRICT, still measured on its own geometry:
   10.9 s site ↔ site and 8.0 s spawn → spawn.
 - **The well does what it was drawn to do.** KUCHNIA → SKŁAD is 26 m apart and **46.8 m on foot**:
   the two north chambers do not connect, so crossing the back of the map means the balcony or the
