@@ -135,4 +135,4 @@ from today; plain values are today's numbers kept on purpose.
 
 ## Sign-off
 
-Owner: ____________________  Date: __________  "signed" / changes requested: __________
+Owner: _Aleksander_Ogorek_  Date: 8.09.2026  "signed" / changes requested: ___yes_
