@@ -255,8 +255,16 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
 | 2026-09-09 | C | drop/c-crates | Added the earned cosmetic loop requested after the Armoury deploy: one automatic local-calendar crate per day, three daily match tasks worth one crate each, and an animated opening panel in SZAFA. A crate yields a weapon finish or an unowned equippable haircut; no purchase path. Expanded the procedural catalog from 6 to 19 finishes across five rarity tiers, while the six launch finishes remain the starter set and new recipes are crate drops. Profile migration defaults every new field and preserves existing progress. | `apps/client/e2e/armoury.spec.ts`; profile and catalog tests | typecheck ✓ client test ✓ (330) skins test ✓ build ✓ targeted armoury e2e ✓ (1/1) | review |
 
 | 2026-09-09 | C | drop/c-crates | Polished the complete cosmetic presentation requested by the owner. Crates now have their own Armoury tab, a full-screen rarity reel with real finish palettes, a centre marker that lands on the actual awarded item, reveal effects and reduced-motion handling. The wardrobe has separate readable skin/haircut collections, haircut thumbnails, locked requirements and immediate equip for the next room; the lobby now presents numbered mode/class/map/bot steps and links appearance editing back to the wardrobe. Added four crate-exclusive cuts (Zaczes, Undercut, Kolce, Platynowy Fade). Marcovia's yellow-green street tracksuit now has white piping, zip/waist trim and a geometric chest crest based on the owner-supplied artwork; both teams retain identical geometry and hitboxes. | `apps/client/e2e/armoury.spec.ts`; `apps/client/e2e/startup.spec.ts`; `apps/client/e2e/out/kits/{kits-front,marcovia-close}.png`; Playwright `haircuts.png`, `crate-rolling.png`, `crate-prize.png` artifacts | typecheck ✓ build ✓ shared 238 ✓ skins 2 ✓ server 175 ✓ client 330 ✓ targeted browser 2/2 ✓ team geometry 24/24 ✓ | review |
+| 2026-09-09 | K (new) | claude/serene-cerf-p40i3w (harness-assigned; the drop's own branch) | **Character body builds: six real silhouettes inside one collision box.** The trap the brief names is real and is why the whole drop is shaped around one module: hitscan reads `PLAYER` and nothing else, so a build that changed the drawn body's size would move the target inside a hitbox that stayed put. `packages/shared/src/builds.ts` therefore SOLVES each body onto a frozen envelope instead of letting a catalog entry name dimensions — `BodyBuild` has no height or width field to set, and `buildRig` derives the joint offsets from `legRatio`/`chest`/`belly`/`limb`/`neck`/`head`/`hunch`. MEASURED across the six: crown 1.87 m, sole −0.01 m and widest point 0.367 m identical to twelve decimals; every chin ≥ 13 cm inside the server's head zone; head footprint inside the AABB's. What differs is what you can see — hip 0.845→1.040 m (19 cm), waist 0.343→0.590 m, sleeve 0.084→0.139 m, neck 0.024→0.105 m, skull 0.221→0.264 m, plus a hunch. **`PLAYER` untouched, no schema field added**: the build rides in the existing bounded `skins` join field as `body=<id>` (default writes no entry, so a player who never opens the wardrobe sends the same bytes as before). Two tests hold it — `builds.test.ts` (13) on the rig, `Character.build.test.ts` (10) on every VERTEX the constructor emits, in world space, so the model cannot describe a body nobody draws. Three defects the measurements found and fixed: the shoulder pad floated 7.7 cm clear of a narrow chest (its length is now derived from the chest, not a knob); scaling the crouch by hip height spread the crouched crown over 69 mm (flat offsets: 28 mm); the sleeve piping scaled with limb mass and so let limb thickness decide the silhouette's width. Wardrobe: POSTAĆ tab, `CharacterPreview` with its own engine released on unmount (10 open/close cycles, 0 engines left). Bots get a build each. Draw calls per body unchanged (one mesh count for all six). | `apps/client/e2e/out/builds/` — `builds-cap.png` (six side by side + the numbers), `builds-{mohawk,pompadour,bleach}.png`, per-build crops, `verification.json`; regenerate with `pnpm shots:builds` | typecheck ✓ test ✓ (797: shared 264, skins 2, server 178, client 353) build ✓ check:weapons ✓ 19/19 e2e ✓ 17/18 in one full run, 18/18 after re-running the one failure alone (see below) | done |
 
 ## Decisions log (append-only)
+- 2026-09-09 — Drop K: the full e2e run finished **17/18**, the failure being `ostrzyzeni` timing out
+  in `waitForFrames` after 60 s. It is the LAST test in a 12-minute file, immediately after the
+  2.9-minute Gun Game, and it **passes alone in 51.6 s** — which is how the 2026-09-09 entry above
+  says such a failure is retired, and the same shape as the two already recorded ("a full run is five
+  minutes of bots shooting at the test's own player"). Not called flaky and not left silent: the
+  drop's own two-client test and twelve other two-client tests passed in that same run on the same
+  code, and a fault in character construction would have taken all of them down, not one. (lead)
 
 - 2026-09-07 — Plan created from the owner's brief: weapons structure + feel, procedural skins with
   crates, party modes, shave mechanic, roles as presets, second map, accounts last.
@@ -602,6 +610,56 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   `ps -eo args --no-headers | grep -v grep`. Paired with never piping a long run through `tail` —
   it buffers, so a running suite and a dead one look identical. Both cost a whole run here. (lead)
 
+- 2026-09-09 — Drop K (new): **character body builds**. The owner's brief is cosmetic-only and does
+  not fit A–H, so it is registered as its own drop the way I and J were. Branch is the
+  harness-assigned `claude/serene-cerf-p40i3w`, not `drop/k-…`. (lead)
+- 2026-09-09 — **D-K1. A build varies the DISTRIBUTION of mass, never the size of the target.**
+  `shared/builds.ts` solves each body onto one frozen envelope instead of letting a catalog entry
+  name dimensions: the crown (1.87 m), the sole (−0.01 m) and the widest point (0.367 m) come out
+  bit-identical for all six, the drawn head stays inside the server's head band with ≥ 13 cm of
+  margin and inside the AABB's footprint, and `BodyBuild` has no height or width field to set. The
+  envelope is frozen AT the numbers the existing character already had, so KLASYK reproduces it. Two
+  things are NOT exactly equal and are bounded and stated rather than hidden: the frontal silhouette
+  area (−7.0% TYCZKA to +6.9% BYK, because a short-legged body genuinely carries more torso) and the
+  posed half-width (18 mm, because a thicker sleeve traces a wider arc off the same shoulder). Both
+  are visual acquisition; neither touches registration, which is the AABB for everyone. (lead)
+- 2026-09-09 — **D-K2. The shoulder line is shared and not a per-build choice.** It is the widest
+  point of the silhouette, so pinning it is what makes "the same width" exact rather than a
+  tolerance; the pad's LENGTH is then derived from the chest so a narrow torso still meets its
+  shoulder. It costs one axis of variation (nobody has broader shoulders than anybody else) and buys
+  the claim that peeking a corner exposes the same centimetres whichever body a player chose. (lead)
+- 2026-09-09 — **D-K3. Builds are NOT gated; every one is available from the first launch.** L1
+  permits gating a cosmetic, so this is a choice, not a constraint: the whole value of builds is that
+  a room of twelve reads as twelve people, and that value is largest on the day a player arrives with
+  nothing. Haircuts, finishes and crates already carry the progression. Recorded in
+  `profile.ts` (`equipBuild` has no ownership test, deliberately) and asserted in
+  `profile.test.ts`. (lead)
+- 2026-09-09 — **D-K4. The build rides in the EXISTING `PlayerState.skins` field, as `body=<id>`.**
+  No schema field was added (the plan gates that). The field is already bounded at 400 chars, already
+  sanitised on join, and already written once per player per match; one more entry costs ~11 bytes
+  once, against a 20 Hz patch stream. The default build writes NO entry, so a player who never opens
+  the wardrobe sends exactly the bytes they sent before. `decodeSkins` has always dropped non-weapon
+  keys, so an older client simply does not see it. (lead)
+- 2026-09-09 — **D-K5. Posture is geometry, never a rest rotation of the torso.** A pitched torso
+  drops the head node by (1 − cos θ) × its offset, and the head's height IS the headshot zone; a hump
+  box and a forward shift keep every Y under the solver. For the same reason the pose loop's vertical
+  moves stay in absolute metres: scaling the crouch by the build's own hip height spread the crouched
+  crown over 69 mm (measured), where flat offsets hold it to 28 mm. (lead)
+- 2026-09-09 — Drop K: the character's idle-sway phase is now seeded from the player id instead of
+  `Math.random()`. The offset was always arbitrary; making it a function of the id costs nothing,
+  gives every client the same body, and is what lets the geometry test measure a silhouette to the
+  millimetre instead of to the breath. (lead)
+- 2026-09-09 — **PROPOSAL, owner to decide. The drawn character does not fit the box it is hit in,
+  and never did.** MEASURED on `main` before this drop: the body spans y −0.010…1.905 against
+  `PLAYER.height` 1.8, so the top 10.1 cm of every head (skull to 1.866, cap to 1.901) is drawn
+  where no bullet can land; the arms hang to ±0.367 against `halfWidth` 0.35; and crouched, the drawn
+  crown sits at ~1.46 while the crouch box tops out at 1.25, leaving ~21 cm of un-hittable head on
+  every crouching player. Drop K neither caused this nor made it worse — the envelope is frozen at
+  today's numbers precisely so that every build is equally affected — but it is a real "aim at the
+  head, miss" and it is a change to how players are hit, which the plan gates. Fixing it means
+  shrinking the drawn body onto `PLAYER` (every haircut is positioned off the skull, so they move
+  with it) or raising `PLAYER.height`, which is a balance change. Not decided here. (lead)
+
 ## Deferred (things noticed, deliberately not done)
 
 - **Drop J: prediction runs per rendered frame, so above ~240 fps a client outruns the room.** The
@@ -931,3 +989,19 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   nickname, which is the lobby's job to ask for, so the panel hands the player to the browser
   instead. If quick-joining from the front page is wanted, the nickname has to move to the title
   screen with it.
+- Drop K: **the crouch pose buries the boots ~23 cm below the floor** (measured: sole at −0.234 m for
+  the default build, −0.212 to −0.254 across the six). Pre-existing — the crouch drops the hips by a
+  flat 0.38 m while the legs only fold by fixed angles — and invisible in play because the floor
+  hides it, but it means a crouching body's feet are inside the geometry. The fix is to bend the legs
+  by the amount that actually reaches the floor rather than by a constant; it is animation work, not
+  builds work, and it belongs with whoever reopens the crouch.
+- Drop K: `CHARACTER_EYE` (`Character.ts`, last line) is exported and imported by nothing. It was the
+  seam for a first-person body that never arrived. One line to delete when something else touches the
+  file.
+- Drop K: the imported `CharacterModel` (drop 6b, one rigged glTF) ignores the build id — it has no
+  proportions to solve. Harmless today, because `Game.ts` empties the manifest's characters and the
+  procedural body is the one that runs, but if imported bodies are ever switched back on, half the
+  room would lose its silhouette. `installCharacters` is where the choice is made.
+- Drop K: bots get a build from `BUILDS[(n * 2 + 1) % 6]`, so eight bots cover five of the six and
+  repeat two. Deterministic on purpose (a bot match must look the same twice), but a room of eight
+  never shows the whole set. Worth revisiting only if the catalog grows past the bot count.
