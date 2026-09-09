@@ -1,6 +1,6 @@
 import { Scene } from "@babylonjs/core/scene";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { LEAN, PERK_ORDER, PLAYER, dequantAngle, dequantVel, lerp, lerpAngle, type Team, type WeaponId } from "@frankibarber/shared";
+import { LEAN, PERK_ORDER, PLAYER, dequantAngle, dequantVel, lerp, lerpAngle, slideSeenUntil, type Team, type WeaponId } from "@frankibarber/shared";
 import type { NetPlayer } from "../net/Connection";
 import { Character, type CharacterLike } from "../view/Character";
 
@@ -77,9 +77,16 @@ export class RemotePlayer {
   x = 0; y = 0; z = 0; yaw = 0; pitch = 0; crouch = false; speed = 0; grounded = true;
   vx = 0; vz = 0; reloading = false; weapon: WeaponId = "pistol";
   lean = 0; tac = false;
+  /**
+   * Sliding, reconstructed rather than replicated. `slideSeenUntil` arms on the entry burst and runs
+   * the slide's own duration; nothing about it goes on the wire. See that function for why the
+   * obvious "crouching and fast" test does not work.
+   */
+  sliding = false;
+  private slidingUntil = 0;
   private wasAlive = true;
   private skinsValue = "";
-  private input = { speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol" as WeaponId, moveDir: 0, perked: false, lean: 0, tac: false, shaved: false, haircut: "" };
+  private input = { speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol" as WeaponId, moveDir: 0, perked: false, lean: 0, tac: false, slide: false, shaved: false, haircut: "" };
 
   /**
    * `displayTeam` (drop 4) is the side this player is DRAWN as: in FFA everyone is on team 0 for
@@ -133,6 +140,7 @@ export class RemotePlayer {
     this.character.revive();
     this.character.setEnabled(true);
     this.alive = true; this.wasAlive = true;
+    this.slidingUntil = 0; this.sliding = false;   // a fresh body is not mid-slide
   }
 
   onShot(): void { this.character.onFire(); }
@@ -177,6 +185,8 @@ export class RemotePlayer {
     this.reloading = b.reloading; this.weapon = b.weapon;
     this.speed = Math.hypot(this.vx, this.vz);
     this.alive = b.alive;
+    this.slidingUntil = slideSeenUntil(this.slidingUntil, this.crouch, this.grounded, this.speed, renderT);
+    this.sliding = this.slidingUntil > renderT;
 
     const c = this.character;
     c.root.position.set(this.x, this.y, this.z);
@@ -189,7 +199,7 @@ export class RemotePlayer {
     inp.speed = this.speed; inp.grounded = this.grounded; inp.crouch = this.crouch; inp.pitch = this.pitch;
     inp.alive = this.alive; inp.reloading = this.reloading; inp.weapon = this.weapon;
     inp.perked = b.perkUntil > renderT;
-    inp.lean = this.lean; inp.tac = this.tac;
+    inp.lean = this.lean; inp.tac = this.tac; inp.slide = this.sliding;
     inp.shaved = b.shaved;
     inp.haircut = b.haircut;
     // Direction of travel relative to facing (for the strafe lean).

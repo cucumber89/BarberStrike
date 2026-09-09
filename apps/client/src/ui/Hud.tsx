@@ -365,14 +365,20 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       <ul className="killfeed" data-testid="killfeed">
         {h.killFeed.map((k) => (
           <li key={k.key} className={k.victim === h.myId ? "me-victim" : k.killer === h.myId ? "me-killer" : ""}>
-            <span className={`kf-name ${teams ? `t${k.killerTeam}` : "ffa"}`}>{k.killer === k.victim ? "" : k.killerName}</span>
+            <span className={`kf-name ${teams ? `t${k.killerTeam}` : "ffa"}`}>
+              {k.killer === k.victim ? "" : k.killerName}
+              {/* Assists: "KILLER + HELPER" before the weapon, because a kill somebody set up for you
+                  is not the same event as one you took alone, and the scoreboard's A column says it
+                  far too late to matter. The server names them on the Kill message; see KillEvent. */}
+              {k.assists?.length ? <span className="kf-assist"> + {k.assists.join(" + ")}</span> : null}
+            </span>
             {/* Drop E: a shave gets the razor instead of the weapon's name. Nobody needs telling it
                 was the clippers — the icon IS the clippers, and what matters is that it was from
                 behind. A razor is drawn rather than spelled: it reads at a glance and at 1080p. */}
             <span className="kf-weapon">
               {k.killer === k.victim ? "fell"
                 : k.shave ? <Razor className="kf-razor" title="OGOLENIE" />
-                : <>{killerName(k.weapon).split(" ")[0]}{k.headshot ? " ✦" : ""}</>}
+                : <>{killerName(k.weapon).split(" ")[0]}{k.headshot ? <HeadShot className="kf-head" title="W GŁOWĘ" /> : null}</>}
             </span>
             <span className={`kf-name ${teams ? `t${k.victimTeam}` : "ffa"}`}>{k.victimName}</span>
           </li>
@@ -564,6 +570,30 @@ function Razor({ className, title }: { className?: string; title?: string }): Re
       {/* Pivot and handle, folded open behind the blade. */}
       <circle cx="16.1" cy="5.4" r="1.15" fill="currentColor" />
       <rect x="17" y="4.35" width="6.2" height="2.1" rx="1.05" fill="currentColor" opacity="0.75" />
+    </svg>
+  );
+}
+
+/**
+ * A head in profile with the shot through it — the kill feed's headshot mark.
+ *
+ * It replaces a `\u2726` four-pointed star appended to the weapon's name, which said "headshot" only
+ * to somebody who already knew. Drawn like `Razor`: local inline SVG in `currentColor`, so it takes
+ * the feed row's colour (red on your own death, brass on your own kill) with no extra rule, and no
+ * emoji whose shape is the operating system's opinion.
+ */
+function HeadShot({ className, title }: { className?: string; title?: string }): React.ReactElement {
+  return (
+    <svg className={className} viewBox="0 0 20 16" width="16" height="13" aria-hidden={title ? undefined : true} role={title ? "img" : undefined} focusable="false">
+      {title && <title>{title}</title>}
+      {/* The shot comes in from the left and STOPS at the skull — drawn first and kept clear of it,
+          because an arrow laid over the head reads as a bite out of it rather than a bullet. */}
+      <path d="M0.8 5.6 L4.2 5.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.85" />
+      <path d="M5.0 3.9 L7.4 5.6 L5.0 7.3 Z" fill="currentColor" />
+      {/* Skull and jaw in profile, facing right, clear of the arrow's tip. */}
+      <path d="M11.2 2.1 C14.4 1.2 17.9 3 18.1 6.1 C18.2 7.6 17.4 8.6 17.4 9.6 L17.4 11.2 L14.0 11.2 L14.0 13.4 L11.4 13.4 C10.2 13.4 9.5 12.7 9.5 11.6 L9.5 9.3 C8.7 8.4 8.3 7.3 8.4 6.1 C8.6 4.2 9.6 2.6 11.2 2.1 Z" fill="currentColor" opacity="0.95" />
+      {/* Eye socket, so it reads as a head rather than a blob at 13 px. */}
+      <circle cx="15.3" cy="6.3" r="1.35" fill="#000" opacity="0.55" />
     </svg>
   );
 }

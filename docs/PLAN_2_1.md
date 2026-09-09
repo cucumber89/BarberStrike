@@ -560,6 +560,48 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   The alternative — an interp delay that tracks measured jitter — is better and is L6-locked; it is
   in Deferred. (lead)
 
+- 2026-09-09 — **Drop J, owner's call: crouch goes back on Ctrl.** This REVERSES the 2026-09-08 default
+  (`InputState.DEFAULT_BINDINGS.crouch = ["KeyC"]`), which was chosen because Ctrl+W closes the tab and
+  `preventDefault` cannot stop it. Nothing about that has changed; what changed is the evidence that
+  moving the default did not move the players. Ctrl and C are both bound, Keyboard Lock is asked for
+  every risky chord, and `beforeunload` is armed for the life of a match so the unstoppable case
+  becomes a dialog instead of a lost round. (owner)
+- 2026-09-09 — Drop J: the slide is restored WITHOUT the two replicated fields it originally carried
+  (`PlayerState.slide` / `slideCd`). The plan gates schema fields, and they are not needed: the rule is
+  deterministic on both ends, and an observer reconstructs the pose with `slideSeenUntil` from `crouch`
+  and speed, both already on the wire. MEASURED that the naive version of that reconstruction is
+  wrong — the fastest crouch walk in the game is 3.555 m/s against a slide that ends at 3.2 — so it
+  arms on the entry burst instead of testing the state. If the owner ever wants it exact rather than
+  reconstructed, it is one field and this entry is the place to reopen. (lead)
+- 2026-09-09 — Drop J: `KillEvent.assists` is a MESSAGE field on `S2C.Kill`, not replicated state, so
+  the kill feed naming assisters costs nothing in the snapshot budget and nothing in `PlayerState`.
+  Noted because "adding a field" and "adding a schema field" are the same words for two very different
+  things, and only the second is gated. (lead)
+- 2026-09-09 — Drop J: **"I see no changes" is a question about which commit is deployed before it is a
+  question about the code.** The owner's report came with a guess attached (the skins broke it) and the
+  guess was wrong; the cause was that PR #26 merged at slice 1's head and slice 2 arrived after. Ten
+  minutes of `git log origin/main..HEAD` answered what a bug hunt would not have, so: when a change is
+  reported missing, establish that the build under test CONTAINS it before reading a line of the
+  feature. Corollary, and the reason this drop needed a third slice at all: **pushing a branch is not
+  shipping.** A merged PR is finished and cannot pick up later commits, so work pushed to a branch whose
+  PR has already merged is invisible until a new PR carries it. (lead)
+- 2026-09-09 — Drop J: the branch was rebased onto `origin/main` rather than merged into, because its
+  merged half was already in `main` and a merge would have re-proposed it. This keeps a PR for the
+  branch reviewable as exactly the three unmerged commits. Recorded because it means the branch's
+  history was rewritten once, deliberately, on a branch nobody else had checked out. (lead)
+- 2026-09-09 — Drop J: **one Playwright suite at a time, and read the run time before the failures.**
+  Two suites against one Colyseus server both drive `dev:teleport` and `dev:endmatch` in the same room
+  and produce failures that belong to neither run. A suite that normally takes 8–9 minutes taking 15.5
+  is the tell, and it is visible before any failure is opened. The rule already existed for the
+  collision bench; it applies to e2e for the same reason and is now written down for both. Retire such
+  a failure by re-running ALONE and showing the same test passing — never by calling it flaky. (lead)
+- 2026-09-09 — Drop J: `pgrep` cannot be trusted to tell whether a run is alive in this harness.
+  `pgrep -c playwright` matches process names and answers 0 for a live `npm exec playwright test`;
+  `pgrep -f <pattern>` then matches the harness's own wrapper shell, whose command line contains the
+  pattern, so it never reaches 0 and cleanup looks stuck. Use
+  `ps -eo args --no-headers | grep -v grep`. Paired with never piping a long run through `tail` —
+  it buffers, so a running suite and a dead one look identical. Both cost a whole run here. (lead)
+
 ## Deferred (things noticed, deliberately not done)
 
 - **Drop J: prediction runs per rendered frame, so above ~240 fps a client outruns the room.** The
@@ -617,6 +659,16 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   `characters`, which is the owner's decided option (a). They are not downloaded by a player (the
   loader is lazy and never asked), so this is deploy-image weight, not load time. Removing them is
   Drop A's already-written Deferred item and still waits on the owner's word about the characters.
+- Drop J: two e2e tests were flaky for reasons that were not the thing they tested, and both are
+  fixed as TESTS rather than as game changes, because in both cases the game is behaving correctly.
+  `smoke obscures the view from inside` asserted `smokeOpacity === 1` exactly, but the cloud grows, so
+  teleporting to the burst point lands the player near its edge or well inside it depending on how
+  many frames SwiftShader managed — the honest reading plateaus between 0.96 and 1.0, and it failed
+  about half the full runs while passing alone. `drop 5: … a mark on the map` middle-clicks once, and
+  marking is only allowed while ALIVE (`Game.frame` clears the request either way), so by that point
+  in a full run the room's bots have often killed the marker and the click is dropped in silence. Both
+  now assert what they are named for. If more of these appear, the pattern is the same: a full run is
+  five minutes of bots shooting at the test's own player.
 - Drop C before art acceptance: compare painted metal sight housings/notches against a factory ADS
   reference (the post, steel and brass are preserved, the surrounding metal is painted). The 3 m/12 m
   observer frames are too small/front-facing for pattern review; replace them with valid side views.

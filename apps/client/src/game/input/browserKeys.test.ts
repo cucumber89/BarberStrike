@@ -34,9 +34,11 @@ describe("browser shortcut interception", () => {
     for (const code of ["KeyW", "KeyA", "KeyS", "KeyD", "Space", "Tab", "KeyB", "KeyV", "KeyC"]) {
       expect(shouldPreventDefault(chord(code), bound, true), code).toBe(true);
     }
-    // Ctrl is no longer bound to anything (crouch moved to C), so it goes back to the browser —
-    // which is the point: an unbound key is not the game's to take.
-    expect(shouldPreventDefault(chord("ControlLeft"), bound, true)).toBe(false);
+    // Ctrl is bound (crouch), but the browser sets `ctrlKey` on the Ctrl keydown ITSELF, so that
+    // event is a modifier chord with no base key and there is nothing to refuse: a bare Ctrl press
+    // does nothing in any browser. Cancelling it was the original bug — the shortcut fires on the
+    // D keydown while Ctrl is held, not on the Ctrl press — so leaving it alone is the fix, not a gap.
+    expect(shouldPreventDefault(chord("ControlLeft", { ctrlKey: true }), bound, true)).toBe(false);
   });
 
   it("never touches an Alt chord — Alt+F4 and the window menu belong to the OS", () => {
@@ -78,16 +80,30 @@ describe("text fields keep their keystrokes", () => {
   });
 });
 
-describe("binds that would cost the player their tab", () => {
-  it("does not ship one: crouch is C, not Ctrl", () => {
-    // Crouch-walking forward on a Ctrl bind IS Ctrl+W, and Ctrl+W closes the tab — no page can
-    // refuse it. The default must therefore never put a modifier on a held action.
-    for (const code of DEFAULT_BINDINGS.crouch) expect(modifierBindingWarning(code), code).toBeNull();
+/**
+ * These three used to assert the opposite, and the reversal is the OWNER'S CALL, not a drift.
+ *
+ * The old contract was "no held action's default may be a modifier", because crouch-walking forward
+ * on a Ctrl bind is Ctrl+W and no page can refuse Ctrl+W. That is still true. What changed is the
+ * report from the people playing: a lot of them crouch on Ctrl, and moving the default to C did not
+ * make them stop — it made them rebind, or lose the crouch they are used to. So Ctrl is back in the
+ * default and the danger is MITIGATED instead of avoided: Keyboard Lock captures W/T/N outright in a
+ * fullscreen Chromium, and `unloadGuard.ts` makes every other browser ask before it closes the tab.
+ *
+ * The tests kept their subject and changed their expectation, so that what is asserted is the
+ * mitigation being present — see `crouchOnCtrl.test.ts` — rather than the risk being absent.
+ */
+describe("binds that cost the player a browser chord", () => {
+  it("ships Ctrl for crouch, and C beside it", () => {
     expect(DEFAULT_BINDINGS.crouch).toContain("KeyC");
+    expect(DEFAULT_BINDINGS.crouch).toContain("ControlLeft");
+    expect(DEFAULT_BINDINGS.crouch).toContain("ControlRight");
   });
 
-  it("no held action's default is a modifier at all", () => {
-    const held = ["crouch", "sprint", "forward", "back", "left", "right", "leanLeft", "leanRight"] as const;
+  it("puts a modifier on no held action other than crouch", () => {
+    // Crouch is the one the players asked for. Everything else stays clear of Ctrl and Cmd, because
+    // nothing else has a reason to pay the cost.
+    const held = ["sprint", "forward", "back", "left", "right", "leanLeft", "leanRight"] as const;
     for (const a of held) {
       for (const code of DEFAULT_BINDINGS[a]) {
         expect(modifierBindingWarning(code), `${a} defaults to ${code}, which makes browser chords`).toBeNull();
@@ -95,8 +111,8 @@ describe("binds that would cost the player their tab", () => {
     }
   });
 
-  it("still warns — rather than silently allowing — when a player picks Ctrl themselves", () => {
-    expect(modifierBindingWarning("ControlLeft")).toMatch(/closes the tab/);
+  it("warns about a modifier bind instead of pretending it is free", () => {
+    expect(modifierBindingWarning("ControlLeft")).toMatch(/Ctrl\+W/);
     expect(modifierBindingWarning("MetaLeft")).toMatch(/Cmd\+W/);
     expect(modifierBindingWarning("KeyC")).toBeNull();
     expect(modifierBindingWarning("ShiftLeft"), "Shift makes no browser chord").toBeNull();

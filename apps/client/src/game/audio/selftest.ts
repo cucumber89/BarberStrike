@@ -58,6 +58,7 @@ function catalogue(): [string, sfx.SoundFn][] {
   list.push(["footstep:crouch", sfx.footstep(false, true)]);
   list.push(["footstep:remote", sfx.footstep(true, false, true)]);
   list.push(["jump", sfx.jump]);
+  list.push(["slide", sfx.slide()]);
   list.push(["landing:soft", sfx.landing(2)]);
   list.push(["landing:hard", sfx.landing(12)]);
   list.push(["hit:body", sfx.hitConfirm("body")]);

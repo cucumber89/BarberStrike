@@ -50,10 +50,11 @@ export const RESERVED_BY_BROWSER: readonly string[] = ["KeyW", "KeyT", "KeyN", "
 /**
  * Modifier keys that turn an ordinary movement key into a browser shortcut the page CANNOT refuse.
  *
- * This is the difference between an annoyance and losing the match: bind crouch to Ctrl and
- * crouch-walking forward is Ctrl+W, which closes the tab. Ctrl+T and Ctrl+N open one. None of the
- * three can be stopped by `preventDefault`; only Keyboard Lock reaches them, and only on Chromium
- * while fullscreen. So the UI warns instead of pretending.
+ * Crouch is bound to Ctrl by default because that is how a lot of people play, so this is not a
+ * hypothetical: crouch-walking forward IS Ctrl+W. What stands between that and a lost match is
+ * Keyboard Lock in fullscreen (Chromium, where it never reaches the browser at all) and
+ * `unloadGuard.ts` everywhere else (the browser asks before closing). The warning below is still
+ * shown, because on Firefox or Safari outside fullscreen a confirmation dialog is all there is.
  */
 export const RISKY_MODIFIER_CODES: readonly string[] = ["ControlLeft", "ControlRight", "MetaLeft", "MetaRight"];
 
@@ -66,7 +67,7 @@ export const RISKY_MODIFIER_CODES: readonly string[] = ["ControlLeft", "ControlR
 export function modifierBindingWarning(code: string): string | null {
   if (!RISKY_MODIFIER_CODES.includes(code)) return null;
   const key = code.startsWith("Meta") ? "Cmd" : "Ctrl";
-  return `Holding ${key} while you move makes ${key}+W, ${key}+T and ${key}+N — the browser keeps those, and ${key}+W closes the tab. Fullscreen on Chrome or Edge can capture them; nothing else can.`;
+  return `Holding ${key} while you move makes ${key}+W, ${key}+T and ${key}+N. Fullscreen on Chrome or Edge captures them; anywhere else the browser will ask before it closes the tab, but it can still be closed.`;
 }
 
 /** True when the event came from somewhere a person is typing. */

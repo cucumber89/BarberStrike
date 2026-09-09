@@ -394,6 +394,24 @@ export function footstep(sprint: boolean, crouch: boolean, remote = false): Soun
   };
 }
 
+/** Slide: cloth and grit dragged over concrete — a long falling swish with a low scrape under it. */
+export function slide(): SoundFn {
+  return (g) => {
+    const t = g.t;
+    const out = pan(g, 0); if (out !== g.out) out.connect(g.out);
+    const sG = gain(g, 0);
+    const f = filter(g, "bandpass", vary(g, 1400, 0.15), 0.7);
+    f.frequency.exponentialRampToValueAtTime(420, t + 0.5);
+    noise(g, "pink", 0.6).connect(f); f.connect(sG); sG.connect(out);
+    env(sG.gain, t, 0.5, 0.02, 0.5, 0.06);
+    const lG = gain(g, 0);
+    const lf = filter(g, "lowpass", 220, 0.9);
+    noise(g, "brown", 0.5).connect(lf); lf.connect(lG); lG.connect(out);
+    env(lG.gain, t, 0.45, 0.01, 0.4);
+    return 0.7;
+  };
+}
+
 export const jump: SoundFn = (g) => {
   swish(g, g.t, 350, 1600, 0.14, 0.17);
   return 0.3;
