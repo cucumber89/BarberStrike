@@ -941,19 +941,29 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // string write on a death, which is the whole cost of the mechanic on the wire.
     const shave = isShave(weapon, backstab);
     if (shave) victim.haircut = shaveOnce(victim.haircut);
+    // WHO ASSISTED IS WORKED OUT FIRST, because the kill feed names them and the broadcast is below.
+    // This loop used to run after the broadcast — the server has always known, the feed never did.
+    const now = this.now();
+    const helpers: PlayerState[] = [];
+    for (const [id, e] of vs.damagedBy) {
+      if (id === attacker.id || now - e.at > ECONOMY.assistWindowMs || e.amount < ECONOMY.assistMinDamage) continue;
+      const helper = this.state.players.get(id);
+      if (helper && (!this.teams || helper.team === attacker.team)) helpers.push(helper);
+    }
     const ev: KillEvent = {
       killer: attacker.id, killerName: attacker.name, killerTeam: attacker.team as Team,
       victim: victim.id, victimName: victim.name, victimTeam: victim.team as Team,
       weapon, headshot, shave,
+      // Bounded, and only present when there was one: an absent field keeps the message the size it
+      // was for the overwhelming majority of kills.
+      ...(helpers.length ? { assists: helpers.slice(0, 3).map(h => h.name) } : {}),
     };
     this.broadcast(S2C.Kill, ev);
-    // Economy: the killer is paid; anyone else who did real damage recently gets an assist.
+    // Economy: the killer is paid, and so is everyone who helped.
     this.pay(attacker, killReward(headshot), headshot ? "headshot" : "kill");
-    const now = this.now();
-    for (const [id, e] of vs.damagedBy) {
-      if (id === attacker.id || now - e.at > ECONOMY.assistWindowMs || e.amount < ECONOMY.assistMinDamage) continue;
-      const helper = this.state.players.get(id);
-      if (helper && (!this.teams || helper.team === attacker.team)) { this.pay(helper, ECONOMY.assistReward, "assist"); if (counts) { helper.assists += 1; if (!this.ladder) helper.score += 50; } }
+    for (const helper of helpers) {
+      this.pay(helper, ECONOMY.assistReward, "assist");
+      if (counts) { helper.assists += 1; if (!this.ladder) helper.score += 50; }
     }
     vs.damagedBy.clear();
     if (!counts) return;
@@ -1173,6 +1183,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     }, !this.teams);
     const b = s.body;
     b.x = sp.x; b.y = sp.y; b.z = sp.z; b.vx = b.vy = b.vz = 0; b.grounded = true; b.crouching = false;
+    // A new body is not mid-slide and owes no slide cooldown, and the client's `spawnAt` clears the
+    // same two — they have to agree or the first slide of a life disagrees between the two ends.
+    b.slide = 0; b.slideCd = 0;
     s.inputs.length = 0;
     s.history.length = 0;
     s.lastYaw = sp.yaw; s.lastPitch = 0;

@@ -12,6 +12,7 @@ import { type GameMode, MODES,
 } from "@frankibarber/shared";
 import { createEngine, type RendererKind } from "./engine";
 import { InputState } from "./input/InputState";
+import { guardUnload, releaseUnloadGuard } from "./input/unloadGuard";
 import { Connection, type NetPlayer, type NetState } from "./net/Connection";
 import { buildMap, type MapInstance } from "./world/MapBuilder";
 import { AssetVault, EMPTY_ASSETS, ModelLibrary, buildPropSource, loadAssetManifest, type AssetManifest } from "./world/models";
@@ -132,6 +133,7 @@ export class Game {
   private frameCbs = new Set<(dt: number) => void>();
   private afterCbs = new Set<(dt: number) => void>();
   private wasGrounded = true;
+  private wasSliding = false;
   private stepAcc = 0;
   /** Total rendered frames (debug overlay / tests). */
   frameCount = 0;
@@ -253,6 +255,10 @@ export class Game {
     if (this.disposed) throw new Error("Startup cancelled");
     await this.precompileShaders(scene);
     if (this.disposed) throw new Error("Startup cancelled");
+    // Crouch is on Ctrl again, so a crouch-walk forward is Ctrl+W and Ctrl+W closes the tab in any
+    // browser that is not a fullscreen Chromium. This makes it ASK first. Armed only while a match
+    // exists — in the menu the page behaves like a page. See `unloadGuard.ts`.
+    guardUnload(true);
     hud.set({ loadStage: "ready" });
   }
 
@@ -598,6 +604,9 @@ export class Game {
   private emitMovementFeel(dtMs: number, groundedBefore: boolean, vyBefore: number): void {
     const b = this.local.body;
     if (!this.local.alive) return;
+    const sliding = b.slide > 0;
+    if (sliding && !this.wasSliding) this.events.emit("slide", {});
+    this.wasSliding = sliding;
     if (groundedBefore && !b.grounded && b.vy > 0) this.events.emit("jump", {});
     if (!groundedBefore && b.grounded) this.events.emit("landed", { impactSpeed: Math.abs(vyBefore) });
     this.wasGrounded = b.grounded;
@@ -862,6 +871,7 @@ export class Game {
     if (this.disposed) return;
     this.disposed = true;
     this.cancelStartup?.(); this.cancelStartup = null;
+    releaseUnloadGuard();
     window.removeEventListener("resize", this.onResize);
     this.engine?.stopRenderLoop();
     this.input.exitPointerLock();
