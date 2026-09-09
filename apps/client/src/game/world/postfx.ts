@@ -22,6 +22,7 @@ export const installPostFx: GameModule = (ctx) => {
     const colorChanged = brightness !== s.graphics.brightness;
     if (key === previous && !colorChanged) return;
     const ip = ctx.scene.imageProcessingConfiguration;
+    const hadPipeline = pipeline !== null;
     if (key !== previous) {
       pipeline?.dispose();
       pipeline = null;
@@ -55,7 +56,17 @@ export const installPostFx: GameModule = (ctx) => {
     brightness = s.graphics.brightness;
     // Frozen PBR materials otherwise keep the old shader and output linear colour straight
     // to the display after HIGH -> LOW. Clear readiness without leaving materials unfrozen.
-    for (const material of ctx.scene.materials) material.markDirty(true);
+    //
+    // ONLY when the pipeline itself came or went, which is the transition that changes the colour
+    // convention. It used to run on every `settings` event, and MEASURED on the real map that is a
+    // 273 ms frame the first time and 506 ms the second, against 4-9 ms steady — 121 materials all
+    // re-validating at once. Two things fire that event constantly: the brightness slider (a freeze
+    // per drag step) and the automatic quality director, which changes tier exactly when the machine
+    // is already behind. A system built to protect the framerate was stalling the game a quarter of
+    // a second every time it acted. Exposure and contrast are uniforms; they never needed this.
+    if (hadPipeline !== (pipeline !== null)) {
+      for (const material of ctx.scene.materials) material.markDirty(true);
+    }
   };
   build(ctx.settings);
   const off = ctx.events.on("settings", () => build(ctx.settings));

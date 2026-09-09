@@ -8,9 +8,9 @@
  */
 import { createRoot } from "react-dom/client";
 import { Profiler, useEffect } from "react";
-import { MatchPhase } from "@frankibarber/shared";
+import { MatchPhase, NIGHT_DISTRICT } from "@frankibarber/shared";
 import { Hud } from "./ui/Hud";
-import { hud } from "./game/store";
+import { hud, quantSmoke } from "./game/store";
 import { defaultSettings } from "./settings";
 
 interface Bench { commits: number; totalMs: number; maxMs: number; frames: number; done: boolean; times: number[] }
@@ -37,6 +37,30 @@ hud.set({
   })) as never,
 } as never);
 
+/**
+ * Which parts of a live match to drive, from `?drive=` (default `snapshot`):
+ *
+ *   snapshot  the 20 Hz network patch only — the original bench
+ *   smoke     plus `smokeOpacity`, which the view module writes EVERY frame while a cloud is on
+ *             screen. A whole-HUD reconcile per frame is the worst case the store can produce, and
+ *             a smoke grenade is how a player reaches it.
+ *   radar     plus a live radar snapshot, so `Minimap` actually draws. It runs on its own rAF and
+ *             never re-renders React, so the Profiler cannot see it at all — its cost shows up only
+ *             in Chromium's ScriptDuration, which is why the tool reports that too.
+ *   all       everything at once: the frame a player gets in a firefight inside smoke.
+ */
+const DRIVE = new URLSearchParams(location.search).get("drive") ?? "snapshot";
+const DRIVES_SMOKE = DRIVE === "smoke" || DRIVE === "all";
+const DRIVES_RADAR = DRIVE === "radar" || DRIVE === "all";
+
+/** A radar snapshot shaped like `Game`'s: one mutated object, arrays rebuilt per frame. */
+const radarSnap = {
+  x: 0, z: 0, yaw: 0, alive: true, map: NIGHT_DISTRICT,
+  mates: [] as { id: string; x: number; z: number; yaw: number; alive: boolean }[],
+  spotted: [] as { x: number; z: number }[],
+};
+const radar = DRIVES_RADAR ? () => radarSnap : () => null;
+
 /** Drives the store the way a live match does and stops after `RUN_MS`. */
 function Driver() {
   useEffect(() => {
@@ -50,6 +74,15 @@ function Driver() {
       if (now - start > RUN_MS) { bench.done = true; return; }
       bench.frames++;
       tick++;
+      if (DRIVES_RADAR) {
+        // Walking a circle: every frame changes the position AND the rotation of the map image.
+        const a = tick / 120;
+        radarSnap.x = 12 + Math.cos(a) * 6; radarSnap.z = 10 + Math.sin(a) * 6; radarSnap.yaw = a;
+        radarSnap.mates = players.slice(0, 4).map((p, i) => ({ id: p.id, x: radarSnap.x + i * 2, z: radarSnap.z + i, yaw: a, alive: true }));
+        radarSnap.spotted = [{ x: radarSnap.x + 8, z: radarSnap.z + 3 }, { x: radarSnap.x - 5, z: radarSnap.z + 9 }];
+      }
+      // The per-frame field: a cloud thinning out in front of the player.
+      if (DRIVES_SMOKE) hud.set({ smokeOpacity: quantSmoke(0.35 + Math.sin(tick / 40) * 0.3) } as never);
       // What the game ACTUALLY writes, and how often: `Game.onSnapshot` publishes ~40 fields on
       // every network patch (~20 Hz), and two of them — `perks` and `players` — are rebuilt as new
       // objects each time, so the store's "did anything change" test always says yes.
@@ -77,7 +110,7 @@ createRoot(document.getElementById("root")!).render(
         settings={defaultSettings()} onSettings={noop} onLeave={noop}
         onResume={async () => true} onPause={noop} onFullscreen={async () => true}
         onChooseTeam={noop} onVotePlan={noop}
-        shop={api} chat={{ send: noop, close: noop }} radar={() => null}
+        shop={api} chat={{ send: noop, close: noop }} radar={radar}
       />
   </Profiler>,
 );

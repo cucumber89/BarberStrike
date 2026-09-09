@@ -98,6 +98,8 @@ export class Connection {
   private leaveHandlers: ((code: number) => void)[] = [];
   private errorHandlers: ((code: number, message?: string) => void)[] = [];
   private unbind: (() => void)[] = [];
+  /** The room `bindRoom` last attached to, so a reconnect can detach it (see `bindRoom`). */
+  private bound: Room<NetState> | null = null;
   private offset = 0; // serverTime - performance.now()
   private offsetInitialised = false;
   rtt = 0;
@@ -119,6 +121,14 @@ export class Connection {
   private bindRoom(room: Room<NetState>): void {
     for (const u of this.unbind) u();
     this.unbind = [];
+    // A reconnect makes a NEW room and leaves the old one behind. `onMessage` hands back an
+    // unsubscriber (collected above), but `onStateChange` / `onLeave` / `onError` are signals with no
+    // per-handler unsubscribe returned here — so the old room kept ours. Its `onLeave` firing after
+    // we had already moved on would start a SECOND reconnect chain racing the first, and its
+    // `onStateChange` would keep writing an abandoned room's state into the game.
+    const old = this.bound;
+    if (old && old !== room) { old.onStateChange.clear(); old.onLeave.clear(); old.onError.clear(); }
+    this.bound = room;
     // Events can arrive before the game wires its handlers (e.g. our own spawn); a wildcard
     // handler keeps the SDK from warning about them.
     this.unbind.push(room.onMessage("*", () => {}));
@@ -270,6 +280,14 @@ export class Connection {
     if (this.disposed) return;
     this.disposed = true;
     if (this.pingTimer !== null) window.clearInterval(this.pingTimer);
+    // Every handler list here holds a closure over the Game that registered it, so letting them
+    // stand keeps the whole previous match reachable through this object.
+    for (const u of this.unbind) u();
+    this.unbind = [];
+    this.bound?.onStateChange.clear(); this.bound?.onLeave.clear(); this.bound?.onError.clear();
+    this.bound = null;
+    this.msgHandlers.length = 0; this.stateHandlers.length = 0; this.playerHandlers.length = 0;
+    this.leaveHandlers.length = 0; this.errorHandlers.length = 0; this.reconnectHandlers.length = 0;
     try { await this.room.leave(true); } catch { /* already closed */ }
   }
 }

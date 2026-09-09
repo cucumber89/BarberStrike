@@ -49,10 +49,21 @@ export function compassX(rel: number, half: number = MINIMAP.compassHalf, width:
 
 /** Minimap canvas offset of a world point relative to the viewer, in a facing-up frame (px). */
 export function radarOffset(vx: number, vz: number, yaw: number, x: number, z: number, pxPerM: number): [number, number] {
+  const out: [number, number] = [0, 0];
+  radarOffsetTo(out, vx, vz, Math.cos(yaw), Math.sin(yaw), x, z, pxPerM);
+  return out;
+}
+
+/**
+ * `radarOffset` without the tuple, and with the viewer's rotation passed in already resolved.
+ *
+ * The minimap calls this once per teammate, enemy, flag, site, station and mark, every frame it
+ * draws — thirty-odd times — so the returned array and the two trig calls were thirty allocations
+ * and sixty transcendentals a frame for numbers that do not change within the frame.
+ */
+export function radarOffsetTo(out: [number, number], vx: number, vz: number, cosYaw: number, sinYaw: number, x: number, z: number, pxPerM: number): void {
   const dx = x - vx, dz = z - vz;
   // Rotate the world by −yaw so the facing direction lands on −Y (up on screen).
-  const c = Math.cos(yaw), s = Math.sin(yaw);
-  const rx = dx * c - dz * s;
-  const rz = dx * s + dz * c;
-  return [rx * pxPerM, -rz * pxPerM];
+  out[0] = (dx * cosYaw - dz * sinYaw) * pxPerM;
+  out[1] = -(dx * sinYaw + dz * cosYaw) * pxPerM;
 }

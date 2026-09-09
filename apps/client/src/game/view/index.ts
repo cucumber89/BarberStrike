@@ -11,7 +11,7 @@ import { Grenades } from "./Grenades";
 import { Flags } from "./Flags";
 import { BombSites } from "./BombSites";
 import { Marks } from "./Marks";
-import { hud } from "../store";
+import { hud, quantSmoke } from "../store";
 import { feelOf } from "../combat/weaponFeel";
 import { boysClass, INTERP_DELAY_MS, MatchPhase, WEAPONS, makeRayHit } from "@frankibarber/shared";
 
@@ -225,7 +225,8 @@ export const installView: GameModule = (ctx) => {
       marks.update();
       const b = ctx.local.body;
       eye.set(b.x, b.y + 1.62, b.z);
-      hud.set({ smokeOpacity: grenades.obscurityAt(eye.x, eye.y, eye.z) });
+      // Quantised before it reaches the store — see `quantSmoke` for the measurement.
+      hud.set({ smokeOpacity: quantSmoke(grenades.obscurityAt(eye.x, eye.y, eye.z)) });
       nameplates.update(ctx.remotes, eye);
     }),
   ];
