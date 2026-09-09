@@ -8,9 +8,9 @@
  */
 import { createRoot } from "react-dom/client";
 import { Profiler, useEffect } from "react";
-import { MatchPhase, NIGHT_DISTRICT } from "@frankibarber/shared";
+import { MatchPhase, NIGHT_DISTRICT, quantSmokeOpacity } from "@frankibarber/shared";
 import { Hud } from "./ui/Hud";
-import { hud, quantSmoke } from "./game/store";
+import { hud } from "./game/store";
 import { defaultSettings } from "./settings";
 
 interface Bench { commits: number; totalMs: number; maxMs: number; frames: number; done: boolean; times: number[] }
@@ -82,7 +82,7 @@ function Driver() {
         radarSnap.spotted = [{ x: radarSnap.x + 8, z: radarSnap.z + 3 }, { x: radarSnap.x - 5, z: radarSnap.z + 9 }];
       }
       // The per-frame field: a cloud thinning out in front of the player.
-      if (DRIVES_SMOKE) hud.set({ smokeOpacity: quantSmoke(0.35 + Math.sin(tick / 40) * 0.3) } as never);
+      if (DRIVES_SMOKE) hud.set({ smokeOpacity: quantSmokeOpacity(0.35 + Math.sin(tick / 40) * 0.3) } as never);
       // What the game ACTUALLY writes, and how often: `Game.onSnapshot` publishes ~40 fields on
       // every network patch (~20 Hz), and two of them — `perks` and `players` — are rebuilt as new
       // objects each time, so the store's "did anything change" test always says yes.

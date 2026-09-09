@@ -3,6 +3,24 @@ import { GRENADES } from "./grenades";
 export interface SmokeCloud { x: number; y: number; z: number; born: number; until: number }
 export const MAX_SMOKE_CLOUDS = 4;
 export const SMOKE_CENTER_Y = 1.4;
+
+/**
+ * Steps the view's smoke opacity is rounded to — 2 % each, and staying that way.
+ *
+ * Why it is rounded at all: the client writes this number into the HUD store every frame a cloud is
+ * on screen, and `useHud` subscribes the whole 600-line `Hud` to every field, so each DISTINCT value
+ * costs a full React reconcile. Rounding is what keeps a continuous number from doing that 60 times
+ * a second. Named and moved here so the reason is written down next to the number.
+ *
+ * Why not coarser, which was tried: MEASURED with `hud-bench --drive smoke`, halving it to 25 steps
+ * took 0.49 React commits per frame to 0.42 — about 0.05 ms a frame, and nothing in the "all" case.
+ * It cost more than that. The opacity deep inside a cloud sits around 0.96-1.0 depending on how far
+ * the cloud has grown, and `multiplayer.spec.ts`'s smoke test asserts an exact 1 — so a coarser step
+ * puts the last rung further below 1 and turns an already-marginal test into a failing one. A
+ * fiftieth of the opacity of one full-screen div is not worth that.
+ */
+export const SMOKE_OPACITY_STEPS = 50;
+export const quantSmokeOpacity = (v: number): number => Math.round(v * SMOKE_OPACITY_STEPS) / SMOKE_OPACITY_STEPS;
 /** The dense core grows quickly, then clears over its last second. Used by sight and rendering. */
 export function smokeRadius(cloud: SmokeCloud, now: number): number {
   return GRENADES.smoke.radius * Math.max(0, Math.min(1, (now - cloud.born) / 700, (cloud.until - now) / 1000));

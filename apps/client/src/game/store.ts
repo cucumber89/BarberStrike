@@ -211,16 +211,6 @@ class HudStore {
 
 export const hud = new HudStore();
 
-/**
- * Smoke opacity as the store is allowed to receive it: quantised to 1/32.
- *
- * `useHud` subscribes the whole 600-line `Hud` to every field, and the store's "did anything change"
- * test is a value comparison — so ONE continuous number written every frame reconciles the entire
- * interface every frame. MEASURED (`hud-bench --drive smoke`): 1.00 React commits per frame with a
- * cloud on screen against 0.35 without one. A 1/32 step in the opacity of one full-screen div is
- * not visible; the reconcile it saves is. Exported so the bench drives the same path the game does.
- */
-export const quantSmoke = (v: number): number => Math.round(v * 32) / 32;
 
 export function useHud(): HudState {
   return useSyncExternalStore(hud.subscribe, hud.get, hud.get);

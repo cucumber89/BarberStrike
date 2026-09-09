@@ -9,7 +9,7 @@ import { Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
 import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
 import type { Texture } from "@babylonjs/core/Materials/Textures/texture";
-import { GRENADES, TICK_MS, MAX_SMOKE_CLOUDS, SMOKE_CENTER_Y, smokeRadius, createProjectile, stepProjectile, type SmokeCloud, type BoomEvent, type CollisionWorld, type GrenadeId, type Projectile, type ThrowEvent } from "@frankibarber/shared";
+import { GRENADES, TICK_MS, MAX_SMOKE_CLOUDS, SMOKE_CENTER_Y, quantSmokeOpacity, smokeRadius, createProjectile, stepProjectile, type SmokeCloud, type BoomEvent, type CollisionWorld, type GrenadeId, type Projectile, type ThrowEvent } from "@frankibarber/shared";
 import { softDiscTexture } from "./Effects";
 
 /**
@@ -506,7 +506,7 @@ export class Grenades {
       const inside = smokeRadius(c, this.now()) - Math.hypot(x - c.x, y - c.y - SMOKE_CENTER_Y, z - c.z);
       opacity = Math.max(opacity, Math.min(1, inside / 0.5));
     }
-    return Math.round(opacity * 50) / 50;
+    return quantSmokeOpacity(opacity);
   }
 
   reset(): void {
