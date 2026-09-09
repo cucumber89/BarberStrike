@@ -5,7 +5,7 @@ import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { PLAYER, WEAPONS, haircutLook, type HaircutStyle, type Team, type WeaponId } from "@frankibarber/shared";
+import { DEFAULT_BUILD, PLAYER, WEAPONS, buildRig, hashString, haircutLook, type BuildRig, type HaircutStyle, type Team, type WeaponId } from "@frankibarber/shared";
 import { HOLD } from "./characterHold";
 import { TEAM_KITS } from "./teamKit";
 import { buildWeaponModel, createWeaponMaterials, forEachMesh, type WeaponMaterials, type WeaponModel } from "./weaponMeshes";
@@ -24,6 +24,12 @@ import { beveledBox } from "./geometry";
  * - hit flinch: direction-aware (torso/head snap away from the shot, arms tighten), head shots bigger;
  * - death: knees buckle → fall AWAY from the killer with a tumble → settle; then fade on respawn.
  * Materials are shared per team. Everything is exponential smoothing on a few scalars.
+ *
+ * Body builds: every dimension below comes from a `BuildRig` (`shared/builds.ts`) rather than from a
+ * literal, so the six silhouettes are one table of proportions instead of six constructors. The
+ * animation is untouched by the choice — the joints are in the same places, at different distances
+ * apart — and so is the hitbox, which the rig cannot reach. `Character.build.test.ts` measures the
+ * meshes this file actually creates against the envelope the rig promised.
  */
 
 /**
@@ -140,13 +146,31 @@ const DEATH_MS = 900;
 
 // ------------------------------------------------------------------ Drop E: the hair
 //
-// Head-local landmarks the hair is cut against, all read off the head built in the constructor:
-// the skull box spans y 0…0.24, x ±0.11, z ±0.12, and the goggle frame's top edge sits at 0.1925.
 // Every clump starts SUNK into the skull by `SINK`, so no amount of style data can make hair that
 // hovers — the "nothing floats" rule, applied to a head instead of to a prop.
-const SKULL_TOP = 0.24, SKULL_HX = 0.11, SKULL_HZ = 0.12, BROW_TOP = 0.1925, SINK = 0.01;
-/** The crown slab's depth. Its WIDTH is `style.width` — a full covering, or a mohawk's ridge. */
-const CROWN_D = 0.244;
+const SINK = 0.01;
+/** The skull a `HaircutStyle`'s metres were authored against; a bigger or smaller head scales them. */
+const AUTHORED_SKULL_W = 0.22;
+
+/**
+ * Head-local landmarks the hair is cut against, read off the head this build actually got.
+ *
+ * They used to be five constants, which was right while every head was the same head. A build with
+ * a bigger skull would have worn a fringe cut for a smaller one — hair floating off the brow at one
+ * end of the catalog and buried in the goggles at the other — so they are now derived, and the
+ * style's own metres are scaled by the same ratio so a mohawk stays a ridge on any head.
+ */
+interface HeadCuts { top: number; halfX: number; halfZ: number; browTop: number; bottom: number; crownD: number; scale: number }
+const headCuts = (r: BuildRig): HeadCuts => ({
+  top: r.skullY + r.skullH / 2,
+  halfX: r.skullW / 2,
+  halfZ: r.skullD / 2,
+  // The top edge of the goggle frame, from the same expression the constructor places it with.
+  browTop: r.skullY + r.skullH * (.035 / .24) + .075 / 2,
+  bottom: r.skullY - r.skullH / 2,
+  crownD: r.skullD + .004,
+  scale: r.skullW / AUTHORED_SKULL_W,
+});
 
 /**
  * The boxes one `HaircutStyle` asks for, in head-local space, unparented and ready to be merged.
@@ -155,44 +179,49 @@ const CROWN_D = 0.244;
  * never changes the silhouette a shooter reads — and it could not change how a player is hit in any
  * case, since the hitbox is the shared AABB and nothing here touches it.
  */
-function hairParts(style: HaircutStyle, scene: Scene): Mesh[] {
+function hairParts(style: HaircutStyle, scene: Scene, cuts: HeadCuts): Mesh[] {
   const parts: Mesh[] = [];
   const add = (n: string, w: number, h: number, d: number, x: number, y: number, z: number) => {
     const m = beveledBox(n, w, h, d, scene); m.position.set(x, y, z); parts.push(m);
   };
-  const base = SKULL_TOP - SINK;
+  const k = cuts.scale;
+  const base = cuts.top - SINK;
   if (style.crown > 0) {
-    const h = style.crown + SINK, y = base + h / 2;
-    const w = style.width;
+    const h = style.crown * k + SINK, y = base + h / 2;
+    const w = style.width * k;
     if (style.track > 0) {
       // The clipper track is mown front-to-back THROUGH the crown: one slab becomes two ridges with
       // a bald strip of exactly `track` metres between them. A wide track leaves two thin ridges and
       // scalp down the middle — that is what a ruined head looks like from above and from the side.
-      const ridge = Math.max(0.01, (w - style.track) / 2);
-      for (const s of [-1, 1]) add("hair_ridge", ridge, h, CROWN_D, s * (style.track + ridge) / 2, y, 0);
-    } else add("hair_crown", w, h, CROWN_D, 0, y, 0);
+      const track = style.track * k;
+      const ridge = Math.max(0.01, (w - track) / 2);
+      for (const s of [-1, 1]) add("hair_ridge", ridge, h, cuts.crownD, s * (track + ridge) / 2, y, 0);
+    } else add("hair_crown", w, h, cuts.crownD, 0, y, 0);
   }
   if (style.sides > 0) {
-    // Left, right and back, from ear height to the crown. It stops at y 0.06 rather than at the
-    // skull's bottom so hair can never hang past the neck into the collar.
-    const h = 0.18, y = 0.06 + h / 2, t = style.sides + SINK;
-    for (const s of [-1, 1]) add("hair_side", t, h, 0.24, s * (SKULL_HX + style.sides / 2 - SINK / 2), y, 0);
-    add("hair_back", 0.22, h, t, 0, y, -(SKULL_HZ + style.sides / 2 - SINK / 2));
+    // Left, right and back, from ear height to the crown. It stops a quarter of the way up the skull
+    // rather than at its bottom so hair can never hang past the neck into the collar.
+    const sides = style.sides * k;
+    const bottom = cuts.bottom + (cuts.top - cuts.bottom) * 0.25;
+    const h = cuts.top - bottom, y = bottom + h / 2, t = sides + SINK;
+    for (const s of [-1, 1]) add("hair_side", t, h, cuts.halfZ * 2, s * (cuts.halfX + sides / 2 - SINK / 2), y, 0);
+    add("hair_back", cuts.halfX * 2, h, t, 0, y, -(cuts.halfZ + sides / 2 - SINK / 2));
   }
   if (style.fringe > 0) {
     // Hangs off the front of the crown, forward of the skull's +Z face, and stops just ABOVE the
     // goggle frame: a fringe that reached the brow would bury the goggles, and the goggles are how
     // a head reads at gameplay range.
-    const top = SKULL_TOP + 0.005, bottom = BROW_TOP + 0.004, d = style.fringe + SINK;
-    add("hair_fringe", 0.216, top - bottom, d, 0, (top + bottom) / 2, SKULL_HZ - SINK + d / 2);
+    const top = cuts.top + 0.005, bottom = cuts.browTop + 0.004, d = style.fringe * k + SINK;
+    add("hair_fringe", cuts.halfX * 2 - 0.004, top - bottom, d, 0, (top + bottom) / 2, cuts.halfZ - SINK + d / 2);
   }
   if (style.tuft > 0) {
     // The one clump the clippers missed: off-centre, and taller than the crown, so on a shaved head
     // it is the thing sticking out of the silhouette.
     // A wide clump lies FLAT and lopsided across the scalp (hair the clippers went round); a narrow
     // one stands up (the bun of a topknot). A tall narrow block on a bald head reads as an antenna.
-    const w = style.tuftWide ? 0.115 : 0.05, d = style.tuftWide ? 0.13 : 0.06, x = style.tuftWide ? 0.038 : 0.052;
-    add("hair_tuft", w, style.tuft + SINK, d, x, base + (style.tuft + SINK) / 2, -0.02);
+    const w = (style.tuftWide ? 0.115 : 0.05) * k, d = (style.tuftWide ? 0.13 : 0.06) * k;
+    const x = (style.tuftWide ? 0.038 : 0.052) * k, h = style.tuft * k + SINK;
+    add("hair_tuft", w, h, d, x, base + h / 2, -0.02 * k);
   }
   return parts;
 }
@@ -226,7 +255,14 @@ export class Character {
   private reloadPhase = 0;
   private meshes: Mesh[] = [];
   private fade = 1;
-  private time = Math.random() * 10;
+  /**
+   * Phase of the idle sway and breathing, offset per body so a room of twelve does not breathe in
+   * unison. Seeded from the player's id rather than `Math.random()`: the offset was already
+   * arbitrary, and making it a function of the id costs nothing, gives every client the same body,
+   * and — the reason it changed — makes the rest pose reproducible, which is what lets
+   * `Character.build.test.ts` measure a silhouette to the millimetre instead of to the sway.
+   */
+  private time: number;
   // Feel state (1.0 beta).
   private lastYaw = 0;
   private turnLean = 0;
@@ -246,9 +282,14 @@ export class Character {
   private style: HaircutStyle = haircutLook("").style;
   private hair: Mesh | null = null;
   private mats: SharedMats;
+  /** The proportions this body was built from. Read by the hair builder and by the pose loop. */
+  private rig: BuildRig;
 
-  constructor(private scene: Scene, team: Team, name: string) {
+  constructor(private scene: Scene, team: Team, name: string, build: string = DEFAULT_BUILD) {
     const M = teamMats(scene, team);
+    const R = buildRig(build);
+    this.rig = R;
+    this.time = (hashString(name) % 10000) / 1000;
     this.mats = M;
     this.weaponMaterials = M.weapons;
     this.skinBinding = new SkinBinding(SkinRegistry.forScene(scene), this.weaponMaterials);
@@ -263,80 +304,93 @@ export class Character {
       return m;
     };
 
-    this.hips = node("hips", this.root, 0, 0.95, 0);
-    box("pelvis", this.hips, 0.34, 0.16, 0.2, 0, -0.02, 0, M.cloth);
-    this.torso = node("torso", this.hips, 0, 0.06, 0);
-    box("chest", this.torso, 0.42, 0.5, 0.24, 0, 0.3, 0, M.cloth);
-    box("vest", this.torso, 0.44, 0.34, 0.27, 0, 0.3, 0, M.vest);
-    box("panel", this.torso, 0.18, 0.12, 0.02, 0.09, 0.4, 0.145, M.accent);
-    box("shoulderL", this.torso, 0.12, 0.1, 0.22, -0.26, 0.5, 0, M.vest);
-    box("shoulderR", this.torso, 0.12, 0.1, 0.22, 0.26, 0.5, 0, M.vest);
-    this.head = node("head", this.torso, 0, 0.62, 0);
-    box("skull", this.head, 0.22, 0.24, 0.24, 0, 0.12, 0, M.skin);
-    this.capParts.push(box("cap", this.head, 0.24, 0.07, 0.26, 0, 0.24, 0.01, M.cloth));
-    this.capParts.push(box("visor", this.head, 0.22, 0.02, 0.1, 0, 0.21, 0.17, M.cloth));
+    // Every number below is `R.<field>` or a fraction of one. Kit detail (badge, piping, pouches,
+    // goggles) rides on the box it is pinned to, so a wide chest carries a wide stripe and a small
+    // head carries small goggles: the outfit is worn by the build rather than laid over it.
+    const chestFront = R.chestZ + R.chestD / 2, vestFront = R.vestZ + R.vestD / 2;
+    this.hips = node("hips", this.root, 0, R.hipY, 0);
+    box("pelvis", this.hips, R.pelvisW, R.pelvisH, R.pelvisD, 0, -0.02, 0, M.cloth);
+    this.torso = node("torso", this.hips, 0, R.torsoY, 0);
+    box("chest", this.torso, R.chestW, R.chestH, R.chestD, 0, R.chestY, R.chestZ, M.cloth);
+    box("vest", this.torso, R.vestW, R.vestH, R.vestD, 0, R.chestY, R.vestZ, M.vest);
+    box("panel", this.torso, R.chestW * (.18 / .42), .12, .02, R.chestW * (.09 / .42), R.chestY + R.chestH * .2, chestFront + .025, M.accent);
+    // The hunch is a box on the upper back and a forward roll of the shoulders, never a rest
+    // rotation of the torso: a pitched torso would drop the head, and the head's height is the
+    // headshot zone (`shared/builds.ts`). A build with no hunch builds no hump and pays nothing.
+    if (R.humpH > 0) box("upper_back", this.torso, R.humpW, R.humpH, R.humpD, 0, R.humpY, R.humpZ, M.cloth);
+    box("shoulderL", this.torso, R.shoulderW, R.shoulderH, R.shoulderD, -R.shoulderX, R.shoulderY, R.shoulderZ, M.vest);
+    box("shoulderR", this.torso, R.shoulderW, R.shoulderH, R.shoulderD, R.shoulderX, R.shoulderY, R.shoulderZ, M.vest);
+    this.head = node("head", this.torso, 0, R.headY, R.headZ);
+    box("skull", this.head, R.skullW, R.skullH, R.skullD, 0, R.skullY, 0, M.skin);
+    const capY = R.skullY + R.skullH / 2;
+    this.capParts.push(box("cap", this.head, R.skullW + .02, R.capH, R.skullD + .02, 0, capY, .01, M.cloth));
+    this.capParts.push(box("visor", this.head, R.skullW, .02, .1, 0, capY - .03, R.skullD / 2 + .05, M.cloth));
     // Shaved (drop D): a stubbled skull a hair larger than the skin one so it wins the depth test
     // where they overlap, reaching up to where the cap's crown used to sit. Hidden until `shaved`.
-    this.bareHead = box("bare_head", this.head, 0.226, 0.25, 0.246, 0, 0.13, 0, M.stubble);
+    this.bareHead = box("bare_head", this.head, R.skullW + .006, R.skullH + .01, R.skullD + .006, 0, R.skullY + .01, 0, M.stubble);
     this.bareHead.setEnabled(false);
-    box("neck", this.head, 0.1, 0.08, 0.1, 0, -0.02, 0, M.skin);
-    box("goggle_frame", this.head, 0.238, 0.075, 0.045, 0, 0.155, 0.117, M.boots);
-    box("goggle_lens", this.head, 0.198, 0.039, 0.018, 0, 0.16, 0.145, M.accent);
-    box("face_mask", this.head, 0.19, 0.075, 0.055, 0, 0.068, 0.115, M.cloth);
-    box("headset", this.head, 0.04, 0.085, 0.09, 0.125, 0.15, 0, M.boots);
-    box("apron", this.torso, 0.31, 0.19, 0.025, 0, 0.035, 0.13, M.vest);
-    box("back_team_panel", this.torso, 0.32, 0.17, 0.02, 0, 0.37, -0.145, M.accent);
-    box("chest_team_stripe", this.torso, 0.37, 0.055, 0.02, 0, 0.48, 0.145, M.trim);
+    box("neck", this.head, R.neckW, R.neckH, R.neckW, 0, R.neckY, 0, M.skin);
+    box("goggle_frame", this.head, R.skullW + .018, .075, .045, 0, R.skullY + R.skullH * (.035 / .24), R.skullD / 2 - .003, M.boots);
+    box("goggle_lens", this.head, R.skullW - .022, .039, .018, 0, R.skullY + R.skullH * (.04 / .24), R.skullD / 2 + .025, M.accent);
+    box("face_mask", this.head, R.skullW - .03, .075, .055, 0, R.skullY - R.skullH * (.052 / .24), R.skullD / 2 - .005, M.cloth);
+    box("headset", this.head, .04, .085, .09, R.skullW / 2 + .015, R.skullY + R.skullH * (.03 / .24), 0, M.boots);
+    box("apron", this.torso, R.vestW * (.31 / .44), .19, .025, 0, R.chestY - R.chestH * .53, vestFront - .005, M.vest);
+    box("back_team_panel", this.torso, R.chestW * (.32 / .42), .17, .02, 0, R.chestY + R.chestH * .14, R.chestZ - R.chestD / 2 - .025, M.accent);
+    box("chest_team_stripe", this.torso, R.chestW * (.37 / .42), .055, .02, 0, R.chestY + R.chestH * .36, chestFront + .025, M.trim);
     {
       // Street tracksuit piping and a compact club badge. Marcovia's materials reproduce the
       // supplied green-yellow crest; the other side gets the same geometry to preserve fairness.
-      box("marcovia_badge", this.torso, .115, .13, .018, -.12, .37, .151, M.accent);
-      box("marcovia_badge_inset", this.torso, .08, .095, .019, -.12, .37, .162, M.vest);
-      box("marcovia_m_l", this.torso, .014, .05, .02, -.145, .37, .174, M.accent);
-      box("marcovia_m_r", this.torso, .014, .05, .02, -.095, .37, .174, M.accent);
-      box("marcovia_m_diag_l", this.torso, .012, .043, .02, -.13, .378, .174, M.accent).rotation.z = .58;
-      box("marcovia_m_diag_r", this.torso, .012, .043, .02, -.11, .378, .174, M.accent).rotation.z = -.58;
-      box("track_zip", this.torso, .018, .43, .018, 0, .3, .151, M.trim);
-      box("track_waist", this.torso, .4, .025, .018, 0, .065, .151, M.trim);
+      const bx = -R.chestW * (.12 / .42), by = R.chestY + R.chestH * .14, bz = chestFront + .031;
+      box("marcovia_badge", this.torso, .115, .13, .018, bx, by, bz, M.accent);
+      box("marcovia_badge_inset", this.torso, .08, .095, .019, bx, by, bz + .011, M.vest);
+      box("marcovia_m_l", this.torso, .014, .05, .02, bx - .025, by, bz + .023, M.accent);
+      box("marcovia_m_r", this.torso, .014, .05, .02, bx + .025, by, bz + .023, M.accent);
+      box("marcovia_m_diag_l", this.torso, .012, .043, .02, bx - .01, by + .008, bz + .023, M.accent).rotation.z = .58;
+      box("marcovia_m_diag_r", this.torso, .012, .043, .02, bx + .01, by + .008, bz + .023, M.accent).rotation.z = -.58;
+      box("track_zip", this.torso, .018, R.chestH * (.43 / .5), .018, 0, R.chestY, chestFront + .031, M.trim);
+      box("track_waist", this.torso, R.vestW * (.4 / .44), .025, .018, 0, R.chestY - R.chestH * .47, vestFront + .016, M.trim);
     }
-    for (const x of [-0.13, 0, 0.13]) {
-      box("ammo_pouch", this.torso, 0.1, 0.13, 0.065, x, 0.24, 0.155, M.boots);
-      box("pouch_buckle", this.torso, 0.028, 0.02, 0.014, x, 0.28, 0.193, M.trim);
+    for (const x of [-R.chestW * (.13 / .42), 0, R.chestW * (.13 / .42)]) {
+      box("ammo_pouch", this.torso, .1, .13, .065, x, R.chestY - R.chestH * .12, vestFront + .02, M.boots);
+      box("pouch_buckle", this.torso, .028, .02, .014, x, R.chestY - R.chestH * .04, vestFront + .058, M.trim);
     }
-    this.perkBand = box("perkBand", this.head, 0.25, 0.03, 0.27, 0, 0.215, 0.01, M.accent);
+    this.perkBand = box("perkBand", this.head, R.skullW + .03, .03, R.skullD + .03, 0, capY - .025, .01, M.accent);
     this.perkBand.setEnabled(false);
 
-    this.armR = node("armR", this.torso, 0.3, 0.48, 0);
-    box("upperR", this.armR, 0.11, 0.3, 0.11, 0, -0.15, 0, M.cloth);
-    box("track_arm_r", this.armR, .018, .27, .116, .058, -.15, 0, M.trim);
-    box("bandR", this.armR, 0.125, 0.06, 0.125, 0, -0.1, 0, M.trim);
-    this.forearmR = node("forearmR", this.armR, 0, -0.3, 0);
-    box("lowerR", this.forearmR, 0.09, 0.28, 0.09, 0, -0.14, 0, M.skin);
-    box("handR", this.forearmR, 0.08, 0.08, 0.1, 0, -0.3, 0.02, M.boots);
+    this.armR = node("armR", this.torso, R.armX, R.armY, R.shoulderZ);
+    box("upperR", this.armR, R.upperW, R.upperH, R.upperW, 0, -R.upperH / 2, 0, M.cloth);
+    box("track_arm_r", this.armR, R.stripeW, R.upperH * (.27 / .3), R.upperW + .006, R.armStripeX, -R.upperH / 2, 0, M.trim);
+    box("bandR", this.armR, R.upperW * (.125 / .11), .06, R.upperW * (.125 / .11), 0, -R.upperH / 3, 0, M.trim);
+    this.forearmR = node("forearmR", this.armR, 0, R.foreY, 0);
+    box("lowerR", this.forearmR, R.foreW, R.foreH, R.foreW, 0, -R.foreH / 2, 0, M.skin);
+    box("handR", this.forearmR, R.handW, R.handH, R.handD, 0, R.handY, .02, M.boots);
     // The weapon hangs off the torso (not the hand chain) so it always points where the player aims;
     // the arms are posed to reach it approximately — at gameplay distances that reads correctly.
-    this.gunHand = node("gunHand", this.torso, 0.16, 0.36, 0.16);
+    // Its offsets are the SAME for every build: the gun is a gameplay object and must read from the
+    // same place on every body, and the bore direction is a rotation the rig never touches.
+    this.gunHand = node("gunHand", this.torso, R.gunX, 0.36, 0.16);
 
-    this.armL = node("armL", this.torso, -0.3, 0.48, 0);
-    box("upperL", this.armL, 0.11, 0.3, 0.11, 0, -0.15, 0, M.cloth);
-    box("track_arm_l", this.armL, .018, .27, .116, -.058, -.15, 0, M.trim);
-    this.forearmL = node("forearmL", this.armL, 0, -0.3, 0);
-    box("lowerL", this.forearmL, 0.09, 0.28, 0.09, 0, -0.14, 0, M.skin);
-    box("handL", this.forearmL, 0.08, 0.08, 0.1, 0, -0.3, 0.02, M.boots);
+    this.armL = node("armL", this.torso, -R.armX, R.armY, R.shoulderZ);
+    box("upperL", this.armL, R.upperW, R.upperH, R.upperW, 0, -R.upperH / 2, 0, M.cloth);
+    box("track_arm_l", this.armL, R.stripeW, R.upperH * (.27 / .3), R.upperW + .006, -R.armStripeX, -R.upperH / 2, 0, M.trim);
+    this.forearmL = node("forearmL", this.armL, 0, R.foreY, 0);
+    box("lowerL", this.forearmL, R.foreW, R.foreH, R.foreW, 0, -R.foreH / 2, 0, M.skin);
+    box("handL", this.forearmL, R.handW, R.handH, R.handD, 0, R.handY, .02, M.boots);
 
-    this.legR = node("legR", this.hips, 0.1, -0.05, 0);
-    box("thighR", this.legR, 0.15, 0.42, 0.16, 0, -0.21, 0, M.cloth);
-    box("track_leg_r", this.legR, .018, .39, .166, .078, -.21, 0, M.trim);
-    this.shinR = node("shinR", this.legR, 0, -0.44, 0);
-    box("calfR", this.shinR, 0.13, 0.4, 0.14, 0, -0.2, 0, M.cloth);
-    box("bootR", this.shinR, 0.14, 0.1, 0.26, 0, -0.42, 0.04, M.boots);
-    this.legL = node("legL", this.hips, -0.1, -0.05, 0);
-    box("thighL", this.legL, 0.15, 0.42, 0.16, 0, -0.21, 0, M.cloth);
-    box("track_leg_l", this.legL, .018, .39, .166, -.078, -.21, 0, M.trim);
-    this.shinL = node("shinL", this.legL, 0, -0.44, 0);
-    box("calfL", this.shinL, 0.13, 0.4, 0.14, 0, -0.2, 0, M.cloth);
-    box("bootL", this.shinL, 0.14, 0.1, 0.26, 0, -0.42, 0.04, M.boots);
-    for (const shin of [this.shinL, this.shinR]) box("knee_pad", shin, 0.145, 0.14, 0.065, 0, -0.045, 0.08, M.vest);
+    /** One leg. Both sides are the same chain mirrored, so the rig is read once per dimension. */
+    const buildLeg = (side: 1 | -1, hip: string, knee: string): [TransformNode, TransformNode] => {
+      const s = side > 0 ? "R" : "L";
+      const leg = node(hip, this.hips, side * R.legX, R.legY, 0);
+      box(`thigh${s}`, leg, R.thighW, R.thighH, R.thighD, 0, -R.thighH / 2, 0, M.cloth);
+      box(`track_leg_${s.toLowerCase()}`, leg, R.stripeW, R.thighH * (.39 / .42), R.thighD + .006, side * R.legStripeX, -R.thighH / 2, 0, M.trim);
+      const shin = node(knee, leg, 0, R.shinY, 0);
+      box(`calf${s}`, shin, R.calfW, R.calfH, R.calfD, 0, -R.calfH / 2, 0, M.cloth);
+      box(`boot${s}`, shin, R.bootW, R.bootH, R.bootD, 0, R.bootY, .04, M.boots);
+      box("knee_pad", shin, R.kneeW, R.kneeH, R.kneeD, 0, -R.calfH * (.045 / .4), R.calfD * (.08 / .14), M.vest);
+      return [leg, shin];
+    };
+    [this.legR, this.shinR] = buildLeg(1, "legR", "shinR");
+    [this.legL, this.shinL] = buildLeg(-1, "legL", "shinL");
 
     // Merge only within a joint and material, retaining articulation and the toggled perk band,
     // bomb pack, cap and bare head. Added clothing detail therefore does not add a draw call for
@@ -386,7 +440,7 @@ export class Character {
       this.hair = null;
     }
     this.style = haircutLook(this.haircutValue).style;
-    const parts = hairParts(this.style, this.scene);
+    const parts = hairParts(this.style, this.scene, headCuts(this.rig));
     if (parts.length === 0) return;
     // Merge in head-local space: the parts are unparented, so their world matrix is their local
     // position and the head's transform is not baked into the vertices.
@@ -456,7 +510,7 @@ export class Character {
   revive(): void {
     this.deathT = -1; this.fade = 0;
     this.root.rotation.x = 0; this.root.rotation.z = 0;
-    this.hips.position.y = 0.95; this.hips.rotation.set(0, 0, 0);
+    this.hips.position.y = this.rig.hipY; this.hips.rotation.set(0, 0, 0);
     this.flinchT = 0; this.landSquash = 0; this.airTime = 0;
   }
 
@@ -473,6 +527,7 @@ export class Character {
   get dying(): boolean { return this.deathT >= 0; }
 
   update(inp: CharacterInput, dtMs: number): void {
+    const R = this.rig;
     const dt = Math.min(0.1, dtMs / 1000);
     this.time += dt;
     if (inp.weapon !== this.currentWeapon) {
@@ -519,7 +574,7 @@ export class Character {
       const rel = this.deathDir - this.root.rotation.y;             // fall direction in local yaw
       this.root.rotation.x = Math.cos(rel) * (1.5 * ef - settle);   // forward (+Z) fall tips over +X axis
       this.root.rotation.z = -Math.sin(rel) * (1.5 * ef - settle);
-      this.hips.position.y = 0.95 - 0.45 * buckle - 0.35 * ef;
+      this.hips.position.y = R.hipY - 0.45 * buckle - 0.35 * ef;
       this.hips.rotation.y = this.deathSpin * 0.6 * ef;
       this.torso.rotation.x = 0.35 * buckle + 0.25 * ef;
       this.torso.rotation.y = this.deathSpin * 0.25 * ef;
@@ -574,8 +629,13 @@ export class Character {
     const breathe = Math.sin(this.time * 1.6) * idle;
 
     // Hips: crouch lowers, running bounces, landing squashes; lean into strafes and turns.
+    // The build moves the hip's RESTING height and nothing else: every offset below stays in absolute
+    // metres, identical for all six. MEASURED, and the reason it is not scaled by hip height: scaling
+    // the crouch by the build's own hips spread the crouched crown over 69 mm (BARYŁKA 1.505 m,
+    // TYCZKA 1.436 m), because a short build then dipped less. Flat offsets hold it to 11 mm. Equal
+    // displacement is equal exposure, which is the thing a crouch must not sell.
     const bounce = Math.abs(c) * 0.03 * run;
-    this.hips.position.y = 0.95 - 0.38 * cr + bounce - 0.05 * this.blendAir - 0.16 * this.landSquash + 0.006 * shift;
+    this.hips.position.y = R.hipY - 0.38 * cr + bounce - 0.05 * this.blendAir - 0.16 * this.landSquash + 0.006 * shift;
     const strafe = Math.sin(inp.moveDir);
     this.root.rotation.z = -strafe * 0.08 * run + this.turnLean * (0.4 + 0.6 * run) + 0.02 * shift * (1 - run);
     this.root.rotation.x = 0;

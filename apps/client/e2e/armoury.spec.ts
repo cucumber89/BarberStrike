@@ -23,6 +23,30 @@ test("the main menu exposes the six launch skins and remembers an equipped finis
   await expect(page.getByTestId("armoury-haircut-cap")).toHaveClass(/\bon\b/);
   await expect(page.getByTestId("armoury-haircut-slickback")).toBeDisabled();
   await page.screenshot({ path: info.outputPath("haircuts.png"), fullPage: true });
+
+  // POSTAĆ: the body picker. Unlike the haircuts nothing here is locked — builds are not earned
+  // (Decisions, 2026-09-09) — so every card is clickable from an untouched profile.
+  await page.getByTestId("armoury-body").click();
+  await expect(page.getByTestId("armoury-build-klasyk")).toHaveClass(/\bon\b/);
+  await expect(page.getByTestId("character-preview")).toHaveAttribute("data-ready", "true", { timeout: 30_000 });
+  for (const id of ["klasyk", "byk", "tyczka", "barylka", "zylasty", "przygarbiony"]) {
+    await expect(page.getByTestId(`armoury-build-${id}`)).toBeEnabled();
+  }
+  await page.getByTestId("armoury-build-byk").click();
+  await expect(page.getByTestId("armoury-build-byk")).toHaveClass(/\bon\b/);
+  // The renderer rebuilt the body for the new pick, not just the card's border.
+  await expect(page.getByTestId("character-preview")).toHaveAttribute("data-build", "byk");
+  await expect(page.getByTestId("character-preview")).toHaveAttribute("data-ready", "true", { timeout: 30_000 });
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("bs_profile_v1") ?? "{}").build)).toBe("byk");
+  await page.screenshot({ path: info.outputPath("body.png"), fullPage: true });
+
+  // ...and it is still BYK after a reload, which is the whole point of writing it down.
+  await page.reload();
+  await page.getByTestId("btn-armoury").click();
+  await page.getByTestId("armoury-body").click();
+  await expect(page.getByTestId("armoury-build-byk")).toHaveClass(/\bon\b/);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("bs_profile_v1") ?? "{}").build)).toBe("byk");
+
   await page.getByTestId("armoury-skins").click();
 
   await page.screenshot({ path: info.outputPath("armoury.png"), fullPage: true });

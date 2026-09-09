@@ -3,7 +3,8 @@ import {
   newBadges, newHaircuts, ownedHaircuts, titleFor, xpForMatch,
   type HaircutDef, type LevelState, type LifetimeStats, type MatchStats, type XpLine,
 } from "@frankibarber/shared";
-import { WEAPON_ORDER, encodeSkins, type WeaponId } from "@frankibarber/shared";
+import { DEFAULT_BUILD, isBuildId } from "@frankibarber/shared";
+import { WEAPON_ORDER, encodeCosmetics, type WeaponId } from "@frankibarber/shared";
 import { catalog, fitsWeapon, skinById, type SkinInstance } from "@frankibarber/skins";
 
 /**
@@ -28,6 +29,13 @@ export interface Profile {
    * and a catalog that grows later hands out what a player already qualifies for.
    */
   haircut: string;
+  /**
+   * The body build (`shared/builds.ts`). Unlike a haircut there is nothing to own — every build is
+   * available from the first launch (Decisions, 2026-09-09) — so the only migration it needs is the
+   * one every field here gets: an id this build does not know falls back to the default rather than
+   * being trusted. A profile edited by hand cannot conjure a seventh body.
+   */
+  build: string;
   skins: SkinInstance[];
   equip: Partial<Record<WeaponId, string>>;
   crates: number;
@@ -37,7 +45,7 @@ export interface Profile {
   challengeBase: { matches: number; kills: number; headshots: number };
 }
 
-export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT, skins: [], equip: {}, crates: 0, crateDay: "", crateCuts: [], challengeClaims: [], challengeBase: { matches: 0, kills: 0, headshots: 0 } });
+export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT, build: DEFAULT_BUILD, skins: [], equip: {}, crates: 0, crateDay: "", crateCuts: [], challengeClaims: [], challengeBase: { matches: 0, kills: 0, headshots: 0 } });
 
 /**
  * Reads the profile, repairing anything the shape has outgrown.
@@ -79,6 +87,7 @@ export function loadProfile(): Profile {
       // An id from a build that had a haircut this one does not, or one the player has not earned
       // (a cleared profile, an edited blob), falls back to the cap rather than to nothing.
       haircut: isHaircutId(p.haircut) && (ownedHaircuts(life).some((h) => h.id === p.haircut) || (p.crateCuts ?? []).includes(p.haircut as string)) ? (p.haircut as string) : DEFAULT_HAIRCUT,
+      build: isBuildId(p.build) ? p.build : DEFAULT_BUILD,
     };
   } catch {
     // A corrupt or unreadable profile is not worth a crash on the way into a match.
@@ -123,6 +132,7 @@ export function applyMatch(profile: Profile, stats: MatchStats, clipperKills: nu
       xp, life,
       badges: [...profile.badges, ...earned.filter((b) => !profile.badges.includes(b))],
       haircut: profile.haircut,
+      build: profile.build,
   });
   return {
     profile: next,
@@ -153,7 +163,34 @@ export function equipHaircut(id: string): string {
   return haircutDef(id).id;
 }
 
-export const equippedSkins = (): string => encodeSkins(loadProfile().equip);
+/**
+ * The one cosmetic field for the join options: finishes and body together.
+ *
+ * Storage-first and defensive for the same reason `equippedHaircut` is — this runs on the way INTO
+ * a match, where a throw would cost the player the match rather than the look.
+ */
+export const equippedSkins = (): string => {
+  try { const p = loadProfile(); return encodeCosmetics(p.equip, p.build); } catch { return ""; }
+};
+
+/** The equipped build id, for the wardrobe and the preview. */
+export function equippedBuild(): string {
+  try { return loadProfile().build; } catch { return DEFAULT_BUILD; }
+}
+
+/**
+ * Picks a body. Returns what is equipped afterwards, like `equipHaircut`.
+ *
+ * There is no ownership test, and that is the decision rather than an oversight: builds are not
+ * earned (see `Profile.build`). An unknown id still cannot be stored — `isBuildId` is the same gate
+ * `loadProfile` applies, so the write and the read agree.
+ */
+export function equipBuild(id: string): string {
+  const p = loadProfile();
+  if (!isBuildId(id)) return p.build;
+  saveProfile({ ...p, build: id });
+  return id;
+}
 
 export const CRATE_CHALLENGES = [
   { id: "mecz", label: "Rozegraj 1 mecz", stat: "matches" as const, target: 1 },

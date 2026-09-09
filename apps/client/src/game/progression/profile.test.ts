@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { BADGES, DEFAULT_HAIRCUT, HAIRCUTS, XP, levelFor, xpToNext, type MatchStats } from "@frankibarber/shared";
-import { applyMatch, emptyProfile, loadProfile, ownedCuts, saveProfile, equipHaircut, equippedHaircut, ensureStarterSkins, equipSkin, equippedSkins, refreshDailyCrates, openCrate } from "./profile";
+import { BADGES, BUILDS, DEFAULT_BUILD, DEFAULT_HAIRCUT, HAIRCUTS, XP, decodeBuild, decodeSkins, levelFor, xpToNext, type MatchStats } from "@frankibarber/shared";
+import { applyMatch, emptyProfile, loadProfile, ownedCuts, saveProfile, equipBuild, equipHaircut, equippedBuild, equippedHaircut, ensureStarterSkins, equipSkin, equippedSkins, refreshDailyCrates, openCrate } from "./profile";
 
 const match = (over: Partial<MatchStats> = {}): MatchStats => ({
   kills: 0, headshots: 0, assists: 0, deaths: 0, captures: 0, wavesSurvived: 0, result: -1, mode: "tdm", ...over,
@@ -55,11 +55,12 @@ describe("applying a match to a profile", () => {
   });
 });
 
-/** Drop E: the wardrobe. Owned is derived, equipped is stored, and neither buys anything. */
-describe("haircuts in the profile", () => {
-  // This suite runs in node, where there is no storage. `loadProfile` swallows that by design (a
-  // browser in private mode is the normal case), which would make every assertion below pass
-  // vacuously — so give it a real one to write to.
+/**
+ * These suites run in node, where there is no storage. `loadProfile` swallows that by design (a
+ * browser in private mode is the normal case), which would make every assertion below pass
+ * vacuously — so give it a real one to write to.
+ */
+function memoryStorage(): Map<string, string> {
   const mem = new Map<string, string>();
   beforeAll(() => {
     (globalThis as { localStorage?: unknown }).localStorage = {
@@ -71,6 +72,12 @@ describe("haircuts in the profile", () => {
   });
   afterAll(() => { delete (globalThis as { localStorage?: unknown }).localStorage; });
   beforeEach(() => mem.clear());
+  return mem;
+}
+
+/** Drop E: the wardrobe. Owned is derived, equipped is stored, and neither buys anything. */
+describe("haircuts in the profile", () => {
+  const mem = memoryStorage();
 
   it("migrates an old profile and repairs skin fields without losing progression", () => {
     mem.set("bs_profile_v1", JSON.stringify({ xp: 123, life: { kills: 7 } }));
@@ -146,5 +153,65 @@ describe("haircuts in the profile", () => {
     expect(loadProfile().haircut).toBe(DEFAULT_HAIRCUT);
     // Nothing in the catalog is reachable without a counter to justify it (L1).
     expect(HAIRCUTS.every((h) => h.id === DEFAULT_HAIRCUT || !h.unlockedBy(emptyProfile().life))).toBe(true);
+  });
+});
+
+describe("the body build", () => {
+  memoryStorage();
+
+  it("starts on the default and survives a reload", () => {
+    expect(equippedBuild()).toBe(DEFAULT_BUILD);
+    expect(equipBuild("byk")).toBe("byk");
+    expect(equippedBuild()).toBe("byk");
+    // The reload: nothing is cached, the value comes back out of storage.
+    expect(loadProfile().build).toBe("byk");
+    expect(JSON.parse(localStorage.getItem("bs_profile_v1")!).build).toBe("byk");
+  });
+
+  it("refuses a build that does not exist, on the way in and on the way out", () => {
+    // The way in: a caller with a junk id.
+    saveProfile({ ...emptyProfile(), build: "byk" });
+    expect(equipBuild("a-build-that-does-not-exist")).toBe("byk");
+    expect(loadProfile().build, "a refused equip must not overwrite what was there").toBe("byk");
+    // The way out: a blob from a build that had a body this one does not, or a hand-edited profile.
+    for (const junk of ["not-a-build", "", null, 42, { id: "byk" }, "<script>"]) {
+      saveProfile({ ...emptyProfile(), build: junk as string });
+      expect(loadProfile().build, String(junk)).toBe(DEFAULT_BUILD);
+    }
+  });
+
+  it("is not gated: every build is equippable from an empty profile", () => {
+    // The decision (Decisions log, 2026-09-09) in a test, so a later change to gate them has to
+    // change this line and say why. Contrast `equipHaircut`, which refuses what is not earned.
+    for (const item of BUILDS) {
+      saveProfile(emptyProfile());
+      expect(equipBuild(item.id), item.id).toBe(item.id);
+    }
+  });
+
+  it("rides to the room in the cosmetic field, next to the finishes", () => {
+    saveProfile(emptyProfile());
+    ensureStarterSkins();
+    equipSkin("rifle", "osy");
+    expect(equippedSkins()).toBe("rifle=osy");        // default build: no entry, unchanged on the wire
+    equipBuild("tyczka");
+    expect(equippedSkins()).toBe("body=tyczka,rifle=osy");
+    expect(decodeBuild(equippedSkins())).toBe("tyczka");
+    expect(decodeSkins(equippedSkins())).toEqual({ rifle: "osy" });
+  });
+
+  it("survives a profile written before builds existed", () => {
+    // The real migration case: last week's blob, with no `build` key at all.
+    const old = { ...emptyProfile(), xp: 900, haircut: DEFAULT_HAIRCUT } as Record<string, unknown>;
+    delete old.build;
+    localStorage.setItem("bs_profile_v1", JSON.stringify(old));
+    const p = loadProfile();
+    expect(p.build).toBe(DEFAULT_BUILD);
+    expect(p.xp, "migrating one field must not cost the player the rest").toBe(900);
+  });
+
+  it("is carried through a match, like the haircut", () => {
+    const p = { ...emptyProfile(), build: "barylka" };
+    expect(applyMatch(p, match({ kills: 3 }), 0).profile.build).toBe("barylka");
   });
 });

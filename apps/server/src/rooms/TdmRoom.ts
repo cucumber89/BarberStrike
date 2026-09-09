@@ -414,6 +414,11 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // Drop E: bots wear the catalog too, spread across it deterministically. A room of identical
     // caps makes the shave invisible in exactly the place it is easiest to look at — a bot match.
     p.haircut = encodeHaircut(HAIRCUTS[n % HAIRCUTS.length].id, 0);
+    // ...and a body each, by the same rule and for the same reason: eight identical silhouettes is
+    // what a bot match looked like before, and the builds cost a bot nothing — the hitbox is
+    // `PLAYER` for every one of them (`shared/builds.ts`). Offset so bot 0 is not always KLASYK
+    // wearing the default cap; the two catalogs then walk out of step with each other.
+    p.skins = encodeCosmetics({}, BUILDS[(n * 2 + 1) % BUILDS.length].id);
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
     this.state.players.set(id, p); this.connectedCount++;
@@ -2039,4 +2044,4 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     } satisfies KillEvent);
   }
 }
-import { sanitizeSkins } from "@frankibarber/shared";
+import { BUILDS, encodeCosmetics, sanitizeSkins } from "@frankibarber/shared";

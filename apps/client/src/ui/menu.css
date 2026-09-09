@@ -505,3 +505,24 @@
 .crate-reveal.epicki > b { color: #bd75ff; }
 .crate-reveal.legendarny > b { color: #ff65aa; }
 .crate-reveal.zloty > b { color: #ffd04b; }
+
+/* ------------------------------------------------------------- the body (POSTAĆ) */
+/* Four tabs where there were three; the grid was hard-wired to repeat(3). */
+.armoury-tabs { grid-template-columns: repeat(4, 1fr); }
+.armoury-tabs button { padding: 9px 2px; font-size: 11px; }
+/* The weapon column has nothing to say about a body, and the silhouette is what the player is
+   judging here — so the stage takes its width for as long as the POSTAĆ tab is open. */
+.armoury.on-body { grid-template-columns: minmax(320px, 1fr) 300px; }
+.armoury.on-body .armoury-weapons { display: none; }
+.armoury-build-list { min-height: 0; overflow: auto; display: grid; align-content: start; gap: 8px; padding: 10px; scrollbar-width: thin; scrollbar-color: rgba(217, 164, 65, .45) transparent; }
+.armoury-build-list button { display: grid; gap: 3px; padding: 10px 11px; text-align: left; background: #171a20; border: 1px solid var(--line); color: #ddd; cursor: pointer; }
+.armoury-build-list button:hover { background: rgba(255, 255, 255, .05); }
+.armoury-build-list button.on { border-color: var(--brass); background: #211a0e; }
+.armoury-build-list b { font: 17px var(--font-display); letter-spacing: .08em; font-weight: normal; }
+.armoury-build-list small { font-size: 10px; line-height: 1.4; color: var(--tx-3); }
+.armoury-build-list span { justify-self: start; margin-top: 3px; padding: 3px 6px; border: 1px solid rgba(217, 164, 65, .35); color: var(--tx-3); font: 8px var(--font-mono); letter-spacing: .12em; }
+.armoury-build-list button.on span { border-color: var(--brass); color: var(--brass); }
+@media (max-width: 1100px) {
+  .armoury.on-body { grid-template-columns: minmax(300px, 1fr); }
+  .armoury.on-body .armoury-skins { grid-column: 1 / -1; min-height: 310px; }
+}
