@@ -605,13 +605,21 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private rateLimited(s: Session, kind: "input" | "other" | "fire"): boolean {
     const t = this.now();
     if (t - s.msgWindowStart >= 1000) { s.msgWindowStart = t; s.inputCount = 0; s.otherCount = 0; s.fireCount = 0; }
-    if (kind === "input") return ++s.inputCount > MAX_INPUT_RATE * 1.5;
+    // No slack factor on inputs: the constant is a display refresh rate and means what it says. The
+    // 1.5x that used to be here read as generosity but was the opposite — it put the real ceiling
+    // at 135/s, under a 144 Hz client's one-input-per-frame stream.
+    if (kind === "input") return ++s.inputCount > MAX_INPUT_RATE;
     if (kind === "fire") return ++s.fireCount > MAX_FIRE_MSG_RATE;
     return ++s.otherCount > MAX_OTHER_MSG_RATE;
   }
 
   /** Fire messages dropped by the per-second cap (diagnostics only). */
   fireDropped = 0;
+  /**
+   * Inputs refused by the per-second cap. A real client cannot reach it, so anything but zero here
+   * is either a flood or a framerate nobody anticipated — which is worth seeing rather than feeling.
+   */
+  inputDropped = 0;
 
   private onInput(client: Client, msg: unknown): void {
     const s = this.sessions.get(client.sessionId);
@@ -620,7 +628,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // Oversized batches are dropped whole: a real client sends 1–3 inputs per message.
     if (list.length > MAX_INPUT_BATCH) return;
     for (const t of list) {
-      if (this.rateLimited(s, "input")) return;
+      if (this.rateLimited(s, "input")) { this.inputDropped++; return; }
       if (!isInputTuple(t)) return;
       const input = unpackInput(t);
       // Replays / reordered packets: seq must strictly increase so `ack` can never move backwards.
@@ -1698,8 +1706,20 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         s.ack = inp.seq;
         processed++;
       }
-      // Idle body still needs gravity (e.g. floor removed / spawn on ledge).
-      if (processed === 0 && !s.body.grounded) {
+      // An idle body still needs gravity: the floor was removed under it, it spawned on a ledge, or
+      // its client has gone quiet. But this step is TIME, so it is bought from the same bank as an
+      // input, under the same two conditions — nothing is queued (the client is not merely behind),
+      // and the bank can actually pay for it.
+      //
+      // MEASURED, and the reason both conditions are here: the room takes 60 steps a second whatever
+      // framerate the client runs at, so a 30 fps player leaves HALF of them with an empty queue. As
+      // an unconditional step that was 30 x 33.3 ms of input plus 30 x 16.7 ms of free gravity per
+      // second — 1500 ms of simulation per 1000 ms of real time. A 30 fps player's jumps were pulled
+      // out of the air at one and a half g, none of it predicted by their client, so every one of
+      // those steps also bought a correction. Charging the bank makes the invariant structural:
+      // simulated time can never exceed the real time the bank was refilled with.
+      if (processed === 0 && s.inputs.length === 0 && !s.body.grounded && s.bank >= TICK_MS) {
+        s.bank -= TICK_MS;
         simulateBody(this.world, s.body, { seq: s.ack, dt: TICK_MS, buttons: s.prevButtons & ~Btn.Jump, yaw: s.lastYaw, pitch: s.lastPitch }, mobility, s.prevButtons);
       }
 

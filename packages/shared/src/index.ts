@@ -1,5 +1,6 @@
 export * from "./constants";
 export * from "./types";
+export * from "./inputDt";
 export * from "./weapons";
 export * from "./collision";
 export * from "./movement";
