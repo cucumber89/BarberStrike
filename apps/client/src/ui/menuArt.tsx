@@ -139,4 +139,10 @@ export const NAV_ART = {
       <path d="M6 10h1.5M9.5 10H11M13 10h1.5M17 10h1.5M8 13.5h8" />
     </svg>
   ),
+  armoury: (): ReactElement => (
+    <svg {...stroke}>
+      <path d="M4 17.5 16.5 5l2.5 2.5L6.5 20H4zM14.5 7l2.5 2.5M7 15l2 2" />
+      <path d="M15 16h5v4h-8z" />
+    </svg>
+  ),
 } as const;

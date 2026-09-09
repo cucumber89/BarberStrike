@@ -6,6 +6,7 @@ import { Connection, defaultServerUrl, type RoomListing } from "../game/net/Conn
 import type { Settings } from "../settings";
 import { SettingsPanel } from "./SettingsPanel";
 import { MODE_ART, NAV_ART, mapArt } from "./menuArt";
+import { Armoury } from "./Armoury";
 import "./menu.css";
 
 interface Props {
@@ -29,7 +30,7 @@ const CONTROLS: [string, string, string][] = [
 ];
 const CONTROL_GROUPS: [string, string][] = [["move", "MOVEMENT"], ["fight", "COMBAT"], ["team", "TEAM & MATCH"]];
 
-type Panel = "main" | "lobby" | "settings" | "controls";
+type Panel = "main" | "lobby" | "settings" | "controls" | "armoury";
 
 /** Touch-only devices (phones/tablets) cannot play: no pointer lock, no keyboard. */
 const touchOnly = (): boolean =>
@@ -238,6 +239,10 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                     <i className="mm-nav-no">03</i><span className="mm-nav-art"><NAV_ART.controls /></span>
                     <b>CONTROLS</b><em>Every key on one card</em><span className="mm-nav-go">▸</span>
                   </button>
+                  <button className="mm-nav-btn" onClick={() => setPanel("armoury")} data-testid="btn-armoury">
+                    <i className="mm-nav-no">04</i><span className="mm-nav-art"><NAV_ART.armoury /></span>
+                    <b>SZAFA</b><em>Skiny broni i kolekcja</em><span className="mm-nav-go">▸</span>
+                  </button>
                 </nav>
               )}
             </div>
@@ -275,7 +280,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
         <div className="mm-shell">
           <header className="mm-bar">
             <button className="mm-back" onClick={() => setPanel("main")} data-testid="btn-back">◂ BACK</button>
-            <div className="mm-bar-brand"><b>BARBERSTRIKE</b><span>{panel === "lobby" ? "LOBBY" : panel === "settings" ? "SETTINGS" : "CONTROLS"}</span></div>
+            <div className="mm-bar-brand"><b>BARBERSTRIKE</b><span>{panel === "lobby" ? "LOBBY" : panel === "settings" ? "SETTINGS" : panel === "armoury" ? "SZAFA" : "CONTROLS"}</span></div>
             {panel === "lobby" ? status : <span className="mm-version">v{GAME_VERSION}</span>}
           </header>
 
@@ -490,6 +495,10 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                 ))}
               </div>
             </section>
+          )}
+
+          {panel === "armoury" && (
+            <div className="mm-content armoury-content"><Armoury /></div>
           )}
         </div>
       )}
