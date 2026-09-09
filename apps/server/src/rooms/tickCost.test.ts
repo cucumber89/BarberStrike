@@ -48,4 +48,30 @@ describe("server tick cost", () => {
     // The peak is the one that matters. One 11.5 ms search used to fit here on its own.
     expect(peak).toBeLessThan(1000);
   }, 180000);
+
+  /**
+   * The same budget for a FULL room. `MAX_PLAYERS` is 12 and `MAX_BOTS` is 8, so four humans plus
+   * eight bots is the busiest room the matchmaker will build with bots in it — and the case above
+   * (nine bodies) was only three quarters of it. Every per-tick cost that is quadratic in the player
+   * count shows up here and nowhere else.
+   */
+  it("holds the budget with a full house", async () => {
+    h = await RoomHarness.create({ room: "cost12", mode: "tdm", bots: 8, botLevel: "normal", seed: 11 });
+    for (let i = 0; i < 4; i++) await h.join(`HUMAN${i}`);
+    await h.tick(60);
+    const N = 600;
+    let total = 0, peak = 0;
+    for (let i = 0; i < N; i++) {
+      const c0 = process.cpuUsage();
+      await h.tick(1);
+      const c = process.cpuUsage(c0);
+      const ms = (c.user + c.system) / 1000;
+      total += ms;
+      if (ms > peak) peak = ms;
+    }
+    console.log(`8 bots + 4 humans (full house): mean ${(total / N).toFixed(3)} ms/tick, peak ${peak.toFixed(2)} ms (budget 16.7)`);
+    expect(h.state.players.size).toBe(12);
+    expect(total / N).toBeLessThan(4);
+    expect(peak).toBeLessThan(1000);
+  }, 180000);
 });

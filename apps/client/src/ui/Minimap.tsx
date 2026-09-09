@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { sitesOf, TEAM_COLORS, type MapDef } from "@frankibarber/shared";
 import type { RadarSnapshot } from "../game/Game";
 import { hud } from "../game/store";
-import { MINIMAP, bearingTo, compassX, radarOffset, relativeAngle, toMap } from "./minimapGeometry";
+import { MINIMAP, bearingTo, compassX, radarOffsetTo, relativeAngle, toMap } from "./minimapGeometry";
 
 /**
  * Minimap + compass (drop 5). The map is a pre-rendered top-down image of the collision boxes
@@ -15,6 +15,15 @@ import { MINIMAP, bearingTo, compassX, radarOffset, relativeAngle, toMap } from 
 interface Props { radar: () => RadarSnapshot | null }
 
 const NEUTRAL = "#9a9a9a";
+/**
+ * Shortest gap between two radar redraws.
+ *
+ * ~60 Hz. The minimap runs on its own `requestAnimationFrame`, so before this it redrew as fast as
+ * the display refreshed — on a 144 Hz monitor that is 144 rotated blits of the whole map plus 144
+ * rounds of thirty-odd pieces of canvas text a second, for a picture nobody can read that fast.
+ * MEASURED (`hud-bench --drive radar`): the minimap cost 0.13 ms of main-thread script per frame.
+ */
+const MIN_REDRAW_MS = 15;
 const cache = new WeakMap<MapDef, HTMLCanvasElement>();
 
 function baseImage(map: MapDef): HTMLCanvasElement {
@@ -61,14 +70,54 @@ export function Minimap({ radar }: Props) {
     const cc = strip.getContext("2d")!;
     let raf = 0;
     const size = MINIMAP.size, half = size / 2, pxPerM = half / MINIMAP.range;
+    // Per-frame state the helpers below read. Hoisted out of `draw` so the three closures are made
+    // once for the life of the component instead of thirty-odd times a second.
+    const view = { x: 0, z: 0, cos: 1, sin: 0 };
+    const off: [number, number] = [0, 0];
+    let font = "";
+    /** `ctx.font =` reparses the shorthand every time, so only pay for it when the font changes. */
+    const setFont = (f: string) => { if (font !== f) { font = f; ctx.font = f; } };
+    const dot = (x: number, z: number, color: string, rad: number, ring = false) => {
+      radarOffsetTo(off, view.x, view.z, view.cos, view.sin, x, z, pxPerM);
+      const ox = off[0], oy = off[1];
+      if (ox * ox + oy * oy > (half - 4) * (half - 4)) return;
+      ctx.beginPath(); ctx.arc(half + ox, half + oy, rad, 0, Math.PI * 2);
+      if (ring) { ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke(); } else { ctx.fillStyle = color; ctx.fill(); }
+    };
+    const glyph = (x: number, z: number, text: string, color: string, f = "bold 11px system-ui") => {
+      radarOffsetTo(off, view.x, view.z, view.cos, view.sin, x, z, pxPerM);
+      const ox = off[0], oy = off[1];
+      if (ox * ox + oy * oy > (half - 6) * (half - 6)) return;
+      setFont(f);
+      ctx.fillStyle = "rgba(0,0,0,.8)"; ctx.fillText(text, half + ox + 1, half + oy + 1);
+      ctx.fillStyle = color; ctx.fillText(text, half + ox, half + oy);
+    };
+    let compassYaw = 0, compassW = MINIMAP.compassWidth, compassH = strip.height;
+    const mark = (bearing: number, text: string, color: string, y = compassH / 2) => {
+      const cx = compassX(relativeAngle(bearing, compassYaw));
+      if (cx === null) return;
+      cc.fillStyle = color; cc.fillText(text, compassW / 2 + cx, y);
+    };
+    // Font and alignment are context state, not per-call arguments, and the compass only ever uses
+    // one font — so it is set here, once, rather than reparsed on every frame.
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    cc.textAlign = "center"; cc.textBaseline = "middle"; cc.font = "bold 11px system-ui";
+    let lastDraw = 0;
     const draw = () => {
       raf = requestAnimationFrame(draw);
       const r = radar();
       if (!r || !r.map) return;
+      // A radar does not need to be redrawn faster than the eye can use it. At 60 Hz this changes
+      // nothing; on a 144 or 240 Hz display it drops two frames of canvas work in three, and the
+      // work is not small — a rotated blit of the whole map plus about thirty pieces of text.
+      const now = performance.now();
+      if (now - lastDraw < MIN_REDRAW_MS) return;
+      lastDraw = now;
       const st = hud.get();
       const map = r.map;
       const img = baseImage(map);
       const [px, py] = toMap(r.x, r.z, map.bounds);
+      view.x = r.x; view.z = r.z; view.cos = Math.cos(r.yaw); view.sin = Math.sin(r.yaw);
       ctx.clearRect(0, 0, size, size);
       ctx.save();
       ctx.beginPath(); ctx.arc(half, half, half - 1, 0, Math.PI * 2); ctx.clip();
@@ -79,19 +128,6 @@ export function Minimap({ radar }: Props) {
       ctx.scale(k, k);
       ctx.drawImage(img, -px, -py);
       ctx.restore();
-      const dot = (x: number, z: number, color: string, rad: number, ring = false) => {
-        const [ox, oy] = radarOffset(r.x, r.z, r.yaw, x, z, pxPerM);
-        if (Math.hypot(ox, oy) > half - 4) return;
-        ctx.beginPath(); ctx.arc(half + ox, half + oy, rad, 0, Math.PI * 2);
-        if (ring) { ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke(); } else { ctx.fillStyle = color; ctx.fill(); }
-      };
-      const glyph = (x: number, z: number, text: string, color: string, font = "bold 11px system-ui") => {
-        const [ox, oy] = radarOffset(r.x, r.z, r.yaw, x, z, pxPerM);
-        if (Math.hypot(ox, oy) > half - 6) return;
-        ctx.font = font; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillStyle = "rgba(0,0,0,.8)"; ctx.fillText(text, half + ox + 1, half + oy + 1);
-        ctx.fillStyle = color; ctx.fillText(text, half + ox, half + oy);
-      };
       for (const s of map.stations) glyph(s.x, s.z, "$", "#7dd68a", "bold 10px system-ui");
       if (st.mode === "bomb") {
         for (const s of sitesOf(map)) { dot(s.x, s.z, "#e5ae52", 7, true); glyph(s.x, s.z, s.id, "#e5ae52"); }
@@ -118,12 +154,7 @@ export function Minimap({ radar }: Props) {
       const W = MINIMAP.compassWidth, H = strip.height;
       cc.clearRect(0, 0, W, H);
       cc.fillStyle = "rgba(10,10,12,.7)"; cc.fillRect(0, 0, W, H);
-      cc.font = "bold 11px system-ui"; cc.textAlign = "center"; cc.textBaseline = "middle";
-      const mark = (bearing: number, text: string, color: string, y = H / 2) => {
-        const cx = compassX(relativeAngle(bearing, r.yaw));
-        if (cx === null) return;
-        cc.fillStyle = color; cc.fillText(text, W / 2 + cx, y);
-      };
+      compassYaw = r.yaw; compassH = H; compassW = W;
       mark(0, "N", "#fff"); mark(Math.PI / 2, "E", "#bbb"); mark(Math.PI, "S", "#bbb"); mark(-Math.PI / 2, "W", "#bbb");
       if (st.mode === "bomb") for (const s of sitesOf(r.map)) mark(bearingTo(r.x, r.z, s.x, s.z), s.id, "#e5ae52");
       if ((st.mode === "dom" || st.mode === "boys")) st.flags.forEach((f, i) => { const def = map.flags[i]; if (def) mark(bearingTo(r.x, r.z, def.x, def.z), f.id, f.owner === -1 ? NEUTRAL : TEAM_COLORS[f.owner as 0 | 1]); });

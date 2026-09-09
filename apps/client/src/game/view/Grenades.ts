@@ -9,7 +9,7 @@ import { Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
 import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
 import type { Texture } from "@babylonjs/core/Materials/Textures/texture";
-import { GRENADES, TICK_MS, MAX_SMOKE_CLOUDS, SMOKE_CENTER_Y, smokeRadius, createProjectile, stepProjectile, type SmokeCloud, type BoomEvent, type CollisionWorld, type GrenadeId, type Projectile, type ThrowEvent } from "@frankibarber/shared";
+import { GRENADES, TICK_MS, MAX_SMOKE_CLOUDS, SMOKE_CENTER_Y, quantSmokeOpacity, smokeRadius, createProjectile, stepProjectile, type SmokeCloud, type BoomEvent, type CollisionWorld, type GrenadeId, type Projectile, type ThrowEvent } from "@frankibarber/shared";
 import { softDiscTexture } from "./Effects";
 
 /**
@@ -365,7 +365,7 @@ export class Grenades {
       const s = this.smokes[i];
       s.core.scaling.setAll(Math.max(0.001, smokeRadius(s.cloud, now)));
       if (now >= s.stopAt && s.ps.emitRate > 0) s.ps.emitRate = 0;
-      if (now >= s.until) { s.ps.dispose(); s.core.dispose(false, true); this.smokes.splice(i, 1); }
+      if (now >= s.until) { s.ps.dispose(false); s.core.dispose(false, true); this.smokes.splice(i, 1); }
     }
     for (let i = this.stuck.length - 1; i >= 0; i--) {
       if (now >= this.stuck[i].until) { this.stuck[i].node.dispose(false, false); this.stuck.splice(i, 1); }
@@ -453,11 +453,15 @@ export class Grenades {
   }
 
   private endFire(f: Fire): void {
-    f.ps.dispose(); f.light.dispose(); f.node.dispose();
+    // `dispose(false)`: the texture is SHARED. Babylon's ParticleSystem.dispose() defaults to
+    // disposing its texture, so the first molotov to burn out took `fireTex` with it — and
+    // `fireballMat` uses the same texture, so every explosion after the first in a match had no
+    // fireball. The same trap took `smokeTex` (shared with `dust`) on the first smoke to clear.
+    f.ps.dispose(false); f.light.dispose(); f.node.dispose();
   }
 
   private startSmoke(x: number, y: number, z: number, effectMs: number): void {
-    if (this.smokes.length >= MAX_SMOKES) { const old = this.smokes.shift()!; old.ps.dispose(); old.core.dispose(false, true); }
+    if (this.smokes.length >= MAX_SMOKES) { const old = this.smokes.shift()!; old.ps.dispose(false); old.core.dispose(false, true); }
     const ps = new ParticleSystem("gr_smoke_ps", 260, this.scene);
     ps.particleTexture = this.smokeTex;
     ps.emitter = new Vector3(x, y + 0.2, z);
@@ -502,7 +506,7 @@ export class Grenades {
       const inside = smokeRadius(c, this.now()) - Math.hypot(x - c.x, y - c.y - SMOKE_CENTER_Y, z - c.z);
       opacity = Math.max(opacity, Math.min(1, inside / 0.5));
     }
-    return Math.round(opacity * 50) / 50;
+    return quantSmokeOpacity(opacity);
   }
 
   reset(): void {
@@ -510,7 +514,7 @@ export class Grenades {
     this.flights.clear();
     for (const f of this.fires) this.endFire(f);
     this.fires.length = 0;
-    for (const s of this.smokes) { s.ps.dispose(); s.core.dispose(false, true); }
+    for (const s of this.smokes) { s.ps.dispose(false); s.core.dispose(false, true); }
     this.smokes.length = 0;
     for (const s of this.stuck) s.node.dispose(false, false);
     this.stuck.length = 0;
@@ -520,12 +524,15 @@ export class Grenades {
     for (const f of this.flights.values()) f.node.dispose(false, false);
     this.flights.clear();
     for (const f of this.fires) this.endFire(f);
-    for (const s of this.smokes) { s.ps.dispose(); s.core.dispose(false, true); }
+    for (const s of this.smokes) { s.ps.dispose(false); s.core.dispose(false, true); }
     for (const s of this.stuck) s.node.dispose(false, false);
     for (const b of this.fireballs) b.mesh.dispose();
     for (const d of this.scorches) d.dispose();
     for (const t of this.templates.values()) t.dispose(false, true);
-    this.sparks.dispose(); this.dust.dispose();
+    // `sparks` owns its texture; `dust` shares `smokeTex`, so the two shared ones go by hand, here,
+    // once, at the end of the module's life rather than at the end of one grenade's.
+    this.sparks.dispose(); this.dust.dispose(false);
+    this.fireTex.dispose(); this.smokeTex.dispose();
     this.boomLight.dispose();
     this.fireballMat.dispose(true, true); this.flashMat.dispose(true, true); this.scorchMat.dispose(true, true);
     this.matBody.dispose(); this.matMetal.dispose(); this.matGlass.dispose(); this.matBlade.dispose(); this.matRag.dispose();

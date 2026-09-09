@@ -19,10 +19,25 @@ export const MAX_PLAYERS = 12;
 export const MAX_NAME_LENGTH = 16;
 export const MIN_NAME_LENGTH = 2;
 
-/** Max input packets a client may send per second before we start dropping them. */
-export const MAX_INPUT_RATE = 90;
+/**
+ * Max inputs a client may send per second before the surplus is dropped.
+ *
+ * A client emits ONE input per rendered frame, so this ceiling is a display refresh rate, not a
+ * guess: at 90 it refused a 144 Hz player nine inputs a second and the room rubber-banded them
+ * once per second, every second. 250 clears every display anyone plays on. Nothing about speed
+ * hacking rides on this number — the per-player time bank prices each input by its `dt`, so extra
+ * inputs buy no extra movement; this cap is only here so a flood cannot cost the tick CPU.
+ */
+export const MAX_INPUT_RATE = 250;
 /** Max dt (ms) accepted per input; longer frames are clamped so a stalled tab cannot "teleport". */
 export const MAX_INPUT_DT_MS = 50;
+/**
+ * Resolution of the `dt` field on the wire: tenths of a millisecond.
+ *
+ * The client must quantise to this with `InputDt` rather than rounding each frame on its own — see
+ * that class for why rounding per frame makes a 60 Hz player's movement decay over a match.
+ */
+export const INPUT_DT_STEP_MS = 0.1;
 /** Max inputs per C2S.Input message; larger batches are dropped whole (a real client sends 1–3). */
 export const MAX_INPUT_BATCH = 12;
 /** Max queued (not yet simulated) inputs per player on the server; the oldest are discarded beyond this. */

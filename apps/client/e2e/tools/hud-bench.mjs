@@ -15,13 +15,15 @@ const OUT = resolve(HERE, "../out/hud");
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i >= 0 ? process.argv[i + 1] : d; };
 const BASE = arg("--url", "http://localhost:5199");
 const LABEL = arg("--label", "run");
+// Which parts of a live match to drive: snapshot | smoke | radar | all. See src/hudBench.tsx.
+const DRIVE = arg("--drive", "snapshot");
 const EXE = process.env.PW_CHROMIUM ?? "/opt/pw-browsers/chromium";
 
 mkdirSync(OUT, { recursive: true });
 const browser = await chromium.launch(existsSync(EXE) ? { executablePath: EXE } : {});
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 page.on("pageerror", (e) => console.error("[page]", e.message));
-await page.goto(`${BASE}/hud-bench.html`, { waitUntil: "networkidle" });
+await page.goto(`${BASE}/hud-bench.html?drive=${DRIVE}`, { waitUntil: "networkidle" });
 // Chromium's own counters. The React numbers above say how much JS the HUD runs; these say how
 // much LAYOUT and STYLE work it forces the browser into, which is the half a transition on `width`
 // or `left` pays for and a transform does not.
@@ -38,7 +40,7 @@ const times = (b.times ?? []).slice().sort((x, y) => x - y);
 const pct = (q) => (times.length ? +times[Math.min(times.length - 1, Math.floor(times.length * q))].toFixed(2) : 0);
 const perFrame = b.totalMs / b.frames;
 const row = {
-  label: LABEL, frames: b.frames, commits: b.commits,
+  label: LABEL, drive: DRIVE, frames: b.frames, commits: b.commits,
   commitsPerFrame: +(b.commits / b.frames).toFixed(2),
   totalMs: +b.totalMs.toFixed(1),
   msPerFrame: +perFrame.toFixed(3),
@@ -55,6 +57,10 @@ const row = {
   styleRecalcs: delta("RecalcStyleCount"),
   layoutMs: +((after.LayoutDuration ?? 0) - (before.LayoutDuration ?? 0)).toFixed(3),
   styleMs: +((after.RecalcStyleDuration ?? 0) - (before.RecalcStyleDuration ?? 0)).toFixed(3),
+  // ALL the main-thread JS for the run, React and everything else. The minimap draws on its own rAF
+  // and never re-renders React, so this is the only number that can see it.
+  scriptMs: +(((after.ScriptDuration ?? 0) - (before.ScriptDuration ?? 0)) * 1000).toFixed(1),
+  scriptMsPerFrame: +((((after.ScriptDuration ?? 0) - (before.ScriptDuration ?? 0)) * 1000) / b.frames).toFixed(3),
 };
-writeFileSync(`${OUT}/hud-${LABEL}.json`, JSON.stringify(row, null, 2) + "\n");
+writeFileSync(`${OUT}/hud-${DRIVE}-${LABEL}.json`, JSON.stringify(row, null, 2) + "\n");
 console.log(JSON.stringify(row, null, 2));

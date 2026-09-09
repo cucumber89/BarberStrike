@@ -250,6 +250,7 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
 | 2026-09-08 | C | drop/c-skins | Deployment follow-up for PR #24. The VPS Docker build could not resolve `@frankibarber/skins`: `deploy/Dockerfile` copied only the shared workspace manifest/source, so pnpm never linked the new skins workspace and Rollup could not see it. Added `packages/skins/package.json` to the dependency layer and the package source to the build layer. This changes only the image build context; runtime image contents still receive the already bundled client/server output. | deploy/Dockerfile; VPS error supplied by owner | typecheck — (no TS change) test — (no logic change) build ✓ (client + server locally) Docker build — (Docker daemon unavailable on this machine) | fixed; pushed to PR #24 |
 
 | 2026-09-09 | C | drop/c-skins-armoury | Production visibility follow-up after the owner reported that the deployed game showed no skins. Added **SZAFA** to the ordinary main menu: all 11 weapons, an interactive 3D preview, factory finish and the six accepted launch recipes. The launch collection is granted once into old or new local profiles until crates provide acquisition; existing instances and wear remain untouched. Clicking a finish equips and saves it immediately, so the existing join-field/runtime renders it in the next match. A focused browser test opens the real menu, finds all six cards, waits for the renderer, equips Osy on the pistol and verifies `bs_profile_v1.equip.pistol`. | `apps/client/e2e/armoury.spec.ts`; Playwright `armoury.png` artifact | typecheck ✓ test ✓ (client 308) build ✓ targeted armoury e2e ✓ (1/1) | review |
+| 2026-09-09 | J (new) | claude/eager-volta-0wc4f5 | **Owner's brief: analyse the game and fix everything, smoothness first.** Four recon passes (client frame path, server tick, netcode, leaks) then two bug hunts (shared rules, audio + combat). **Netcode, five faults, all framerate-shaped and none visible at 60 fps on a fast machine.** The room simulated MORE time than had passed for anyone under 60 fps: it takes 60 steps a second whatever the client runs at, and every step with an empty queue stepped a whole tick of gravity for free — MEASURED 383 ms of simulation per 267 ms of input, i.e. 1.5 g, jumps pulled out of the air, and a correction bought on every one of those steps. The step is now paid for out of the same time bank, which makes the invariant structural; 267 for 267. The CLIENT overdrew that bank: `Math.round(dtMs*10)/10` turns a 60 Hz frame's 16.6667 into 16.7, so a 60 Hz player asked for 2 ms a second more than existed and spent the bank's entire 120 ms of slack in a minute, after which the room stalled a tick at a time and dropped queued inputs for the rest of the match — `InputDt` carries the remainder instead (swept 1–240 Hz). The room REFUSED a 144 Hz player: one input per rendered frame against a cap of `MAX_INPUT_RATE * 1.5` = 135/s, so nine a second were dropped and the rest of the batch abandoned with them — a rubber-band on every window boundary; the constant is now a display refresh rate (250) that means what it says, and refusals are counted. Prediction replay RE-JUMPED (`prevButtonsBefore(0)` hard-coded to 0, so a held jump looked like a fresh press and launched a body the server had left falling — a correction loop); each pending input now carries the prev buttons it was first simulated against. Corrections were CAMERA JUMP CUTS; the body still takes the truth at once and the eye walks the error off over 80 ms, capped at 0.75 m so a spawn still cuts, with `eyePosition` deliberately ignoring the offset so hit registration is bit-identical. Remote players FROZE AND JUMPED on any lost packet (interpolation factor clamped at 1); now carried at their last horizontal velocity, fading to a stop, capped at 120 ms / 0.75 m / 250 ms of gap, never for a corpse and never vertically, with the snapshot buffer trimmed by age as well as count. **Client.** `postfx` marked every one of the map's 121 materials dirty on EVERY `settings` event — every brightness-slider step, and every automatic-quality tier change, which by design happens when the machine is already behind: a system built to protect the framerate stalled the game each time it acted. Confined to the pipeline-presence flip its own comment describes. **Leaks and lifetimes.** `ParticleSystem.dispose()` defaults to disposing its texture and two are SHARED, so the first molotov to burn out took the fireball's texture and the first smoke the dust's — every explosion after the first in a match was wrong. First-run hints rebuilt a `setInterval` ~60×/s for a whole match and never once fired (the effect depended on the whole `HudState`). `window.__fb` kept the previous Game, Scene, disposed engine and WebGL context alive. A reconnect left the old room's `onLeave` attached, able to start a second reconnect chain. **Audio.** `send()` tapped each sound's internal node UPSTREAM of the voice gain and panner and wired it straight to the shared reverb, so a shot 40 m away was ~0.08 dry and ~0.17 WET — distant gunfire came back as a directionless wash and there was no judging range by ear; each voice now owns a send pre-scaled by its gain, faded and disconnected with it. The clippers THROBBED at half a hertz (no hold, so `env`'s tau decayed the voice to 0.4 % of peak before its 1.88 s re-trigger); the self-test now measures SUSTAIN as well as peak, which is the gap that let it through — old -16.7 peak / -38.4 sustain, new -16.3 / -16.3. **Combat.** Dying mid-reload cost the start of the next life (MG-4's 5 200 ms against a 3 200 ms respawn: no firing, no reload, `busy()` blocking grenades, no sound, until a dead man's timer expired) and completed on the corpse; breath now resets on spawn, not on weapon switch, so the winded penalty cannot be erased by switching. A cooked frag auto-threw INTO the freeze and decremented the HUD for a throw the server discards. **Bomb mode.** A mutual wipe with no bomb down went to the ATTACKERS (defenders-eliminated was tested first), and `resetBomb` could put the bomb at the WORLD ORIGIN, out of reach, making the round unwinnable. **Two things deliberately NOT done, and one withdrawn.** The server is measured healthy at a FULL house (8 bots + 4 humans: mean 0.318 ms/tick, peak 10.27, budget 16.7), so the per-tick allocation churn a recon pass found is in Deferred with its numbers instead of being refactored on spec — only the ray broadphase was fixed, where the docblock's "allocates nothing" was false (a closure and a `subarray` per ray). A flagged grenade hazard did not reproduce when probed (30 ticks into a corner: `travel` never zero, never more than one bounce per step) so the physics was left alone and the tests say they are characterisation. And I coarsened the smoke opacity on a bench measurement that drove a raw sine rather than the game's already-1/50-quantised value — the real gain was 0.49→0.42 commits/frame (~0.05 ms), it turned a marginal e2e red at `received 0.96`, and it is withdrawn; the rounding is now named in `shared/smoke.ts` with both reasons beside it. | `apps/client/e2e/out/hud/frame-cost.md` (with its own correction section), `apps/client/e2e/out/weapons/parts.md`; regenerate with `node apps/client/e2e/tools/hud-bench.mjs --url <dev> --drive snapshot\|smoke\|radar\|all --label <l>`, `node apps/client/e2e/tools/audio-selftest.mjs`, `node apps/client/e2e/tools/profile.mjs`, `pnpm check:weapons` | typecheck ✓ test ✓ (743: shared 238, skins 2, server 175, client 328) build ✓ check:weapons ✓ (19/19) audio-selftest ✓ (now with a sustain check that FAILS the old hum) **e2e ✓ 15/15** (8.2 min, freshly started servers, nothing else on the machine) | review |
 
 ## Decisions log (append-only)
 
@@ -516,8 +517,102 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   Fifth rarity, daily seeds/grants and crude-art defaults remain later-slice decisions; no crate or
   purchase code exists in this tranche. The weapon preview does not close the Deferred head preview.
 
+- 2026-09-09 — **New drop J, "smoothness and correctness"**, opened for the owner's brief
+  (*"przeanalizował grę i poprawił wszystkie błędy … najważniejsza jest płynność rozgrywki
+  optymalizacja"*). It is not drops A–H, and not drop I either: I is the player-facing feedback list
+  (controls, shop, teams, renderer, the living arena), while this is the frame loop, the tick and the
+  wire. The plan already anticipated it as `OPTIMIZATION_PROMPT.md` on its own branch; recorded as a
+  drop so it gets a ledger row like everything else. (lead)
+- 2026-09-09 — Drop J: the server's idle-gravity step is now **bought from the same time bank as an
+  input**. This is not a change to the tick rate, the snapshot rate, the prediction model or server
+  authority, so L6 is untouched: it makes the room OBEY the rule `ARCHITECTURE.md` already states
+  ("inputs cost their `dt` → clients cannot run faster than real time") in the other direction as
+  well. Before it, the room simulated 1.5x real time for anyone under 60 fps — measured, see the
+  ledger row. (lead)
+- 2026-09-09 — Drop J: `MAX_INPUT_RATE` raised 90 → 250 and the `* 1.5` slack in `rateLimited`
+  removed, so the constant means what its name says. It is a FLOOD guard, not an anti-cheat: the time
+  bank prices every input by its `dt`, so extra inputs buy no extra movement. At the old effective
+  ceiling of 135/s a 144 Hz client had nine inputs a second refused, and the refusal also abandoned
+  the rest of the batch — a rubber-band on every one-second window boundary. (lead)
+- 2026-09-09 — **PROPOSAL, owner to decide. Fixed-timestep client prediction.** Prediction currently
+  runs once per rendered frame (`ARCHITECTURE.md`, "`LocalPlayer` runs `simulateBody` per frame"), so
+  the input rate IS the framerate. Everything up to 240 fps now works, but above that a client queues
+  faster than the room can drain (4 inputs/tick) and loses inputs, and at any framerate the client's
+  frame slices never line up exactly with the server's ticks, which is where the residual mispredicts
+  come from. The standard fix — accumulate real time and simulate in FIXED slices, one input per
+  slice — would make both ends simulate identical steps and drop corrections towards zero. It is
+  squarely inside what **L6** locks, so it was not done. Cost is one focused slice on `LocalPlayer`
+  plus its tests; the risk is that every feel number tuned against per-frame stepping wants
+  re-checking. (lead)
+- 2026-09-09 — Drop J: correction smoothing is a **render offset on the camera only**. The body still
+  takes the server's position in one step, and `eyePosition` — what every shot is built from — ignores
+  the offset, so hit registration is bit-for-bit unchanged and there is no question of L6 or of
+  server authority. Capped at 0.75 m so a spawn or a teleport still cuts rather than sliding the view
+  through the map. `prediction.test.ts` pins both halves. (lead)
+- 2026-09-09 — Drop J: remote players are now **extrapolated** for up to 120 ms and 0.75 m past their
+  newest snapshot instead of freezing. This is presentation only (`RemotePlayer`'s own docblock:
+  "never used for hit tests"), the velocity fades to a stop so it reads as slowing rather than
+  sliding, and it is refused outright for a corpse and for the vertical axis (no `vy` on the wire).
+  The alternative — an interp delay that tracks measured jitter — is better and is L6-locked; it is
+  in Deferred. (lead)
+
 ## Deferred (things noticed, deliberately not done)
 
+- **Drop J: prediction runs per rendered frame, so above ~240 fps a client outruns the room.** The
+  server consumes at most 4 inputs per tick (240/s) and a client emits one per frame, so a 300 Hz
+  display queues faster than the room drains and the queue's oldest entries are discarded — a lost
+  input is a permanent disagreement until the next correction. The real fix is a FIXED-TIMESTEP
+  prediction loop (accumulate real time, simulate in fixed slices, one input per slice), which makes
+  client and server simulate byte-identical steps at any framerate and pins the input rate. It is
+  also a change to the prediction model, which **L6 locks** ("prediction and interpolation stay
+  exactly as `ARCHITECTURE.md` says", and the doc says `LocalPlayer` runs `simulateBody` per frame).
+  Not done here for that reason. Owner's call — see the Decisions entry of 2026-09-09.
+- **Drop J: below 20 fps a player loses movement authority in proportion, by design.** `dt` is clamped
+  to `MAX_INPUT_DT_MS` (50 ms) per input, so a 10 fps client can only ever buy 500 ms of simulation
+  per real second; the rest of the second is spent by the room's own gravity-only step, which now
+  charges the same time bank. The totals are right — simulated time still equals real time, which is
+  the invariant this drop fixed — but half of it is a body falling with no input on it. The clamp is
+  what stops a tab that was asleep for two seconds from teleporting, so it should stay; if 10 fps is
+  ever a framerate worth supporting, the answer is for the client to emit TWO inputs on a long frame
+  rather than one clamped one. Nobody has been asked to play at 10 fps, so nothing was changed.
+- **Drop J: `INTERP_DELAY_MS` is a fixed 110 ms** (`constants.ts:14`), about two snapshots plus
+  60 ms of jitter budget. Anyone whose jitter exceeds that gets extrapolation (added here) instead of
+  interpolation, which is a guess. An interp delay that tracks measured jitter is the standard answer
+  and is worth more than any further micro-optimisation on this list — but the constant is named in
+  `ARCHITECTURE.md`, so it is L6 as well.
+- Drop J: `useHud()` subscribes the whole 600-line `Hud` to every field, so ANY changed field
+  reconciles all of it — including `serverNow` and `ping`, which change on every 10 Hz sync. The
+  smoke case was the acute one and is fixed by quantising; the general fix is to split `Hud.tsx` into
+  components that take `useHudSlice`. MEASURED baseline for whoever does it:
+  `apps/client/e2e/out/hud/frame-cost.md`, 0.29 ms/frame of React at rest.
+- Drop J: the per-tick allocation churn a recon pass found in the room and left alone **because the
+  measurement says it does not matter**: `stepBot` builds a fresh view object per enemy per bot per
+  tick (~80/tick) and re-walks the whole `MapSchema` per bot; the `senses` literal and its `los`
+  closure are per bot per tick; lag-comp history is `push`/`shift` on an array rather than a ring;
+  `perksOf` allocates per living player per tick. MEASURED with a FULL house (8 bots + 4 humans,
+  `tickCost.test.ts`): mean **0.318 ms/tick**, peak **10.27 ms**, budget 16.7. Nothing here is worth
+  churning a 2 000-line hot file for; revisit only if a real server shows tick overruns.
+- Drop J: `maxLightsPerMesh` measured **45** on the district's worst mesh (`profile.mjs`), against
+  materials capped at `maxSimultaneousLights` 4–5. That is not a per-frame cost — the shadow map is
+  `refreshRate` 0, rendered once — but it means only 4 or 5 of the 45 lights in range actually light
+  that mesh, chosen by list order, so lighting can pop as a player crosses the map. A LOOK problem,
+  not a speed one; the fix is per-light `includedOnlyMeshes` in the map data.
+- Drop J: no render timing measured in this container means anything. Turning effect density from 0
+  to 1 moves the median `scene.render()` from **3 ms to 255 ms** on SwiftShader, so alpha-blended
+  particles dominate every frame a grenade is on screen and swamp any other attribution. 31 of 60
+  consecutive renders exceeded 50 ms during a bot fight. On a real GPU those quads are nearly free —
+  but nobody has confirmed that, and until somebody does, no client render claim in this drop rests
+  on a clock.
+- Drop J: `skinCache.evict()` is a SOFT cap by design (evicting a live texture would corrupt another
+  gun's material, and the docblock says so), so with 12 players wearing 12 distinct finishes the
+  cache sits at its limit with nothing evictable. Self-limiting in practice — a weapon switch drops
+  the lease — but it also rebuilds a pair array and sorts it on every acquire and release. Left as
+  is; if the Armoury ever holds many previews open at once, that is where to look.
+- Drop J: the client bundle ships **8 firearm and 2 character `.glb` files** (13 MB of `dist/models`
+  out of 23 MB) that the running game never loads — `Game.ts` empties the manifest's `weapons` and
+  `characters`, which is the owner's decided option (a). They are not downloaded by a player (the
+  loader is lazy and never asked), so this is deploy-image weight, not load time. Removing them is
+  Drop A's already-written Deferred item and still waits on the owner's word about the characters.
 - Drop C before art acceptance: compare painted metal sight housings/notches against a factory ADS
   reference (the post, steel and brass are preserved, the surrounding metal is painted). The 3 m/12 m
   observer frames are too small/front-facing for pattern review; replace them with valid side views.

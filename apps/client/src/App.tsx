@@ -65,6 +65,12 @@ export function App() {
     // player lands in the menu still fullscreen with Escape captured, which reads as a hang.
     exitImmersion();
     canvasHost.current?.replaceChildren();
+    // The e2e harness hook holds the WHOLE previous generation: the Game, its Scene, its disposed
+    // engine with the WebGL context behind it, the Connection with the full room state, every
+    // RemotePlayer and the local player's 240-entry input history. Leaving it set meant a stale
+    // generation stayed reachable for as long as the tab lived — the view and audio modules already
+    // delete their own globals on teardown, and this one was simply missed.
+    delete (window as unknown as { __fb?: unknown }).__fb;
     hud.reset();
     setScreen({ kind: "menu", error: reason && reason !== "left" ? reason : undefined });
     try { if (g) await g.dispose(); else await c?.leave(); } catch (error) { console.warn("[app] cleanup", error); }

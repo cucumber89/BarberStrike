@@ -264,6 +264,8 @@ function swish(g: Graph, at: number, from: number, to: number, len: number, leve
  * loops. A saw and a triangle an octave apart through a band-pass is a small brushed motor under
  * load; it is deliberately quiet, because unlike every other voice in the game it never stops.
  */
+export const HUM_FADE_S = 0.2;
+
 export function clippersHum(seconds: number): SoundFn {
   return (g) => {
     const t = g.t;
@@ -274,7 +276,14 @@ export function clippersHum(seconds: number): SoundFn {
     a.connect(f); b.connect(f);
     f.connect(out);
     out.connect(g.out);
-    env(out.gain, t, 0.16, 0.08, seconds);
+    // The motor RUNS, so the envelope HOLDS. It used to pass no hold, and `env`'s decay is
+    // exponential with tau = decay / 4 — so with decay = `seconds` the voice was at 0.4 % of peak by
+    // the time the caller re-triggered it 1.88 s in. The clippers pulsed at half a hertz instead of
+    // humming, and the self-test could not see it because it measures peak level only, which was
+    // correct. Now: 60 ms in, full for the body of the voice, and a fade over the last
+    // `HUM_FADE_S` that the next voice's attack rises into — which is what makes the seam inaudible.
+    const fade = Math.min(HUM_FADE_S, seconds * 0.25);
+    env(out.gain, t, 0.16, 0.06, fade, Math.max(0, seconds - 0.06 - fade));
     return seconds;
   };
 }

@@ -22,6 +22,36 @@ interface Snapshot {
 }
 
 const SNAP_BUFFER = 16;
+/**
+ * How long a remote may be carried past its newest snapshot, and how far.
+ *
+ * At 20 Hz with a 110 ms interpolation delay the buffer normally holds two snapshots ahead of render
+ * time. Lose one packet and render time walks off the end of the buffer: the old code clamped the
+ * interpolation factor at 1, so the remote FROZE where it stood and then jumped when the next
+ * snapshot landed — a hitch on every dropped packet, on the thing players are aiming at.
+ *
+ * Carrying them on at their last known velocity is a guess, so it is made a cheap one: the velocity
+ * fades to nothing across the window, which reads as a player slowing to a stop rather than sliding,
+ * and the whole excursion is capped in metres so a guess can never put a body somewhere absurd. Only
+ * the horizontal velocity is replicated, so height is held — a falling remote pauses mid-air for a
+ * frame rather than being launched through a floor.
+ *
+ * Presentation only. Nothing here is used for a hit test; the server decides those.
+ */
+const EXTRAPOLATE_MS = 120;
+const EXTRAPOLATE_MAX_M = 0.75;
+/**
+ * Past this, the gap is not a lost packet and a guess is not information: hold position instead.
+ *
+ * Two cases need this. A server hiccup or a lost connection should freeze a body where it was, not
+ * slide it — the old behaviour, and the right one. And a remote's FIRST snapshot is stamped `t = 0`
+ * by the constructor, so on the frame it is created render time is a server clock ahead of it by
+ * years; without this test a player who joins while someone is running would see them appear three
+ * quarters of a metre from where they are.
+ */
+const EXTRAPOLATE_MAX_GAP_MS = 250;
+/** Snapshots older than this behind render time cannot be the right answer for anything. */
+const MAX_SNAP_AGE_MS = 400;
 
 /**
  * How a remote player's body gets built (drop 6b). The default is the procedural `Character`;
@@ -109,11 +139,16 @@ export class RemotePlayer {
 
   /** Interpolates presentation to `renderT` (server-clock ms) and animates the character. */
   update(renderT: number, dtMs: number): void {
+    // Drop snapshots that cannot be the answer to any render time from here on. Without this the
+    // buffer holds 800 ms of history, and a backwards step in the clock offset would render a body
+    // where it stood most of a second ago.
+    while (this.snaps.length > 2 && renderT - this.snaps[0].t > MAX_SNAP_AGE_MS) this.pool.push(this.snaps.shift()!);
     const n = this.snaps.length;
     if (n === 0) return;
     let a = this.snaps[0], b = this.snaps[n - 1];
+    let ahead = 0;
     if (renderT <= a.t) b = a;
-    else if (renderT >= b.t) a = b;
+    else if (renderT >= b.t) { a = b; ahead = renderT - b.t; }
     else {
       for (let i = n - 1; i > 0; i--) {
         if (this.snaps[i - 1].t <= renderT) { a = this.snaps[i - 1]; b = this.snaps[i]; break; }
@@ -124,8 +159,22 @@ export class RemotePlayer {
     this.x = lerp(a.x, b.x, f); this.y = lerp(a.y, b.y, f); this.z = lerp(a.z, b.z, f);
     this.yaw = lerpAngle(a.yaw, b.yaw, f); this.pitch = lerp(a.pitch, b.pitch, f);
     this.vx = lerp(a.vx, b.vx, f); this.vz = lerp(a.vz, b.vz, f);
-    this.crouch = b.crouch; this.grounded = b.grounded; this.reloading = b.reloading; this.weapon = b.weapon;
-    this.lean = b.lean; this.tac = b.tac;
+    // Past the newest snapshot: carry on at the last velocity, fading it out (see EXTRAPOLATE_MS).
+    if (ahead > 0 && ahead <= EXTRAPOLATE_MAX_GAP_MS && b.alive && (b.vx !== 0 || b.vz !== 0)) {
+      const w = Math.min(ahead, EXTRAPOLATE_MS) / 1000;
+      const fade = 1 - Math.min(1, ahead / EXTRAPOLATE_MS) / 2; // mean speed over the fade
+      let dx = b.vx * w * fade, dz = b.vz * w * fade;
+      const d = Math.hypot(dx, dz);
+      if (d > EXTRAPOLATE_MAX_M) { const k = EXTRAPOLATE_MAX_M / d; dx *= k; dz *= k; }
+      this.x += dx; this.z += dz;
+    }
+    // Pose flags are discrete, so they belong to the snapshot we are NEAREST to. Taking them from
+    // the newer one started the crouch up to a snapshot before the body began to move with it.
+    const pose = f < 0.5 ? a : b;
+    this.crouch = pose.crouch; this.grounded = pose.grounded; this.lean = pose.lean; this.tac = pose.tac;
+    // These three are events in disguise (a reload started, a weapon came up, a player died); being
+    // early with them costs nothing and being late shows a gun firing that is no longer held.
+    this.reloading = b.reloading; this.weapon = b.weapon;
     this.speed = Math.hypot(this.vx, this.vz);
     this.alive = b.alive;
 
