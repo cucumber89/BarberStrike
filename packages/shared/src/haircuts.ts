@@ -135,6 +135,10 @@ export const HAIRCUTS: readonly HaircutDef[] = [
     id: "bleach", name: "BLOND", requirement: "20 ogoleń",
     style: style({ crown: 0.045, sides: 0.02, fringe: 0.03, tone: "bleach" }), unlockedBy: (s) => s.shaves >= 20,
   },
+  { id: "slickback", name: "ZACZES", requirement: "Ze skrzynki", style: style({ crown: .032, sides: .012, fringe: .012 }), unlockedBy: () => false },
+  { id: "undercut", name: "UNDERCUT", requirement: "Ze skrzynki", style: style({ crown: .06, sides: .003, fringe: .025 }), unlockedBy: () => false },
+  { id: "liberty", name: "KOLCE", requirement: "Ze skrzynki", style: style({ crown: .09, width: .13, sides: .006, tuft: .045 }), unlockedBy: () => false },
+  { id: "platinum", name: "PLATYNOWY FADE", requirement: "Ze skrzynki", style: style({ crown: .052, sides: .008, fringe: .035, tone: "bleach" }), unlockedBy: () => false },
 ];
 
 const BY_ID = new Map(HAIRCUTS.map((h) => [h.id, h]));

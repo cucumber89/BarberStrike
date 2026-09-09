@@ -287,6 +287,18 @@ export class Character {
     box("apron", this.torso, 0.31, 0.19, 0.025, 0, 0.035, 0.13, M.vest);
     box("back_team_panel", this.torso, 0.32, 0.17, 0.02, 0, 0.37, -0.145, M.accent);
     box("chest_team_stripe", this.torso, 0.37, 0.055, 0.02, 0, 0.48, 0.145, M.trim);
+    {
+      // Street tracksuit piping and a compact club badge. Marcovia's materials reproduce the
+      // supplied green-yellow crest; the other side gets the same geometry to preserve fairness.
+      box("marcovia_badge", this.torso, .115, .13, .018, -.12, .37, .151, M.accent);
+      box("marcovia_badge_inset", this.torso, .08, .095, .019, -.12, .37, .162, M.vest);
+      box("marcovia_m_l", this.torso, .014, .05, .02, -.145, .37, .174, M.accent);
+      box("marcovia_m_r", this.torso, .014, .05, .02, -.095, .37, .174, M.accent);
+      box("marcovia_m_diag_l", this.torso, .012, .043, .02, -.13, .378, .174, M.accent).rotation.z = .58;
+      box("marcovia_m_diag_r", this.torso, .012, .043, .02, -.11, .378, .174, M.accent).rotation.z = -.58;
+      box("track_zip", this.torso, .018, .43, .018, 0, .3, .151, M.trim);
+      box("track_waist", this.torso, .4, .025, .018, 0, .065, .151, M.trim);
+    }
     for (const x of [-0.13, 0, 0.13]) {
       box("ammo_pouch", this.torso, 0.1, 0.13, 0.065, x, 0.24, 0.155, M.boots);
       box("pouch_buckle", this.torso, 0.028, 0.02, 0.014, x, 0.28, 0.193, M.trim);
@@ -296,6 +308,7 @@ export class Character {
 
     this.armR = node("armR", this.torso, 0.3, 0.48, 0);
     box("upperR", this.armR, 0.11, 0.3, 0.11, 0, -0.15, 0, M.cloth);
+    box("track_arm_r", this.armR, .018, .27, .116, .058, -.15, 0, M.trim);
     box("bandR", this.armR, 0.125, 0.06, 0.125, 0, -0.1, 0, M.trim);
     this.forearmR = node("forearmR", this.armR, 0, -0.3, 0);
     box("lowerR", this.forearmR, 0.09, 0.28, 0.09, 0, -0.14, 0, M.skin);
@@ -306,17 +319,20 @@ export class Character {
 
     this.armL = node("armL", this.torso, -0.3, 0.48, 0);
     box("upperL", this.armL, 0.11, 0.3, 0.11, 0, -0.15, 0, M.cloth);
+    box("track_arm_l", this.armL, .018, .27, .116, -.058, -.15, 0, M.trim);
     this.forearmL = node("forearmL", this.armL, 0, -0.3, 0);
     box("lowerL", this.forearmL, 0.09, 0.28, 0.09, 0, -0.14, 0, M.skin);
     box("handL", this.forearmL, 0.08, 0.08, 0.1, 0, -0.3, 0.02, M.boots);
 
     this.legR = node("legR", this.hips, 0.1, -0.05, 0);
     box("thighR", this.legR, 0.15, 0.42, 0.16, 0, -0.21, 0, M.cloth);
+    box("track_leg_r", this.legR, .018, .39, .166, .078, -.21, 0, M.trim);
     this.shinR = node("shinR", this.legR, 0, -0.44, 0);
     box("calfR", this.shinR, 0.13, 0.4, 0.14, 0, -0.2, 0, M.cloth);
     box("bootR", this.shinR, 0.14, 0.1, 0.26, 0, -0.42, 0.04, M.boots);
     this.legL = node("legL", this.hips, -0.1, -0.05, 0);
     box("thighL", this.legL, 0.15, 0.42, 0.16, 0, -0.21, 0, M.cloth);
+    box("track_leg_l", this.legL, .018, .39, .166, -.078, -.21, 0, M.trim);
     this.shinL = node("shinL", this.legL, 0, -0.44, 0);
     box("calfL", this.shinL, 0.13, 0.4, 0.14, 0, -0.2, 0, M.cloth);
     box("bootL", this.shinL, 0.14, 0.1, 0.26, 0, -0.42, 0.04, M.boots);

@@ -13,19 +13,14 @@ import type { Team } from "@frankibarber/shared";
  *     club's history from 1923.  http://www.marki.net.pl/historia-klubow-sportowych-na-terenie-marek-159
  *   - Akademia Piłkarska Marcovia Marki (the club).  https://marcovia-marki.pl/klub/
  *
- * HONEST LIMIT: those pages could not be opened from this environment (the network proxy refuses
- * every one of those hosts), so the colours come from three independent search results that agree,
- * and the crest itself was never seen. What follows is therefore a kit INSPIRED BY the club's
- * colours — the green-yellow shirt with white trim the sources describe — and deliberately not a
- * reproduction of the badge. If the owner wants the real crest, it needs the actual artwork and a
- * licence decision, which is a question for them, not a guess for here.
+ * The owner supplied the crest artwork. Character.ts translates its green-yellow rings and central
+ * M into a tiny geometric chest badge that remains readable on the low-poly player model.
  *
  * TWO CONSTRAINTS THIS FILE EXISTS TO KEEP, both from the brief:
  *
- *  1. COLOURS ONLY. Not one box moves, resizes or is added. A skin that changes the silhouette
- *     changes how easy a player is to see and hit, and this is a competitive shooter — so the kit
- *     is a palette swap over the existing named parts and nothing else. Hitboxes come from
- *     `PLAYER` and never touched geometry in the first place; `teamKit.test.ts` holds the line.
+ *  1. IDENTICAL SILHOUETTES. Tracksuit piping and the badge use the same tiny geometry on both
+ *     teams, with different materials. Hitboxes come from `PLAYER` and never from these meshes;
+ *     `teamKit.test.ts` checks both sides still have exactly the same shapes.
  *  2. THE TWO SIDES MUST NOT BE CONFUSABLE. Yellow-and-green against brown-and-violet is a
  *     separation of both hue and value, so it survives a dark corner, a smoke and colour-blindness
  *     — the test checks the numbers rather than trusting the eye.
@@ -51,10 +46,10 @@ export const TEAM_KITS: Record<Team, TeamKit> = {
   // MARCOVIA — white, yellow and green, as the sources above describe the club.
   0: {
     name: "MARCOVIA",
-    cloth: "#e3c02c",  // shirt and trousers: the club yellow
-    vest: "#12703a",   // vest, shoulders, apron: the club green
-    accent: "#d9a441", // TEAM_COLORS[0]: the panels match the minimap dot
-    trim: "#f2f2ee",   // armbands and chest stripe: the club white
+    cloth: "#e3c02c",  // yellow tracksuit body
+    vest: "#12703a",   // green zip jacket panels
+    accent: "#d9a441", // crest and team-readable panels
+    trim: "#f2f2ee",   // white tracksuit piping
     boots: "#23272d",
     skin: "#c39270",
   },

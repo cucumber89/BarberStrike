@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { BADGES, DEFAULT_HAIRCUT, HAIRCUTS, XP, levelFor, xpToNext, type MatchStats } from "@frankibarber/shared";
-import { applyMatch, emptyProfile, loadProfile, ownedCuts, saveProfile, equipHaircut, equippedHaircut, ensureStarterSkins, equipSkin, equippedSkins } from "./profile";
+import { applyMatch, emptyProfile, loadProfile, ownedCuts, saveProfile, equipHaircut, equippedHaircut, ensureStarterSkins, equipSkin, equippedSkins, refreshDailyCrates, openCrate } from "./profile";
 
 const match = (over: Partial<MatchStats> = {}): MatchStats => ({
   kills: 0, headshots: 0, assists: 0, deaths: 0, captures: 0, wavesSurvived: 0, result: -1, mode: "tdm", ...over,
@@ -93,6 +93,21 @@ describe("haircuts in the profile", () => {
     expect(first.skins.map((skin) => skin.skin)).toEqual(["warsztat", "stalowka", "talk", "slupek-frankiego", "szlaczek-babci", "osy"]);
     expect(ensureStarterSkins(200)).toEqual(first);
     expect(loadProfile().skins).toHaveLength(6);
+  });
+
+  it("grants one daily crate, rewards completed daily tasks once, and opens a cosmetic", () => {
+    const morning = new Date(2026, 8, 9, 8);
+    expect(refreshDailyCrates(morning).crates).toBe(1);
+    expect(refreshDailyCrates(new Date(2026, 8, 9, 22)).crates).toBe(1);
+    let p = applyMatch(loadProfile(), match({ kills: 10, headshots: 3 }), 0).profile;
+    saveProfile(p);
+    expect(p.crates).toBe(4);
+    p = applyMatch(p, match({ kills: 10, headshots: 3 }), 0).profile;
+    expect(p.crates).toBe(4);
+    saveProfile(p);
+    const opened = openCrate(new Date(2026, 8, 9, 23).getTime());
+    expect(opened?.profile.crates).toBe(3);
+    expect(opened?.prize.kind === "skin" || opened?.prize.kind === "haircut").toBe(true);
   });
 
   it("starts with the cap alone and hands out the first haircut for turning up once", () => {

@@ -136,7 +136,8 @@ describe("the catalog is cosmetic only (L1)", () => {
   it("unlocks on lifetime counters alone — no level, no money, no ownership", () => {
     // Every requirement is reachable, and nothing unlocks that the counters do not justify.
     const everything = life({ matches: 999, kills: 999, headshots: 999, assists: 999, wins: 999, shaves: 999 });
-    expect(ownedHaircuts(everything)).toHaveLength(HAIRCUTS.length);
+    expect(ownedHaircuts(everything)).toHaveLength(HAIRCUTS.filter(h => h.requirement !== "Ze skrzynki").length);
+    expect(HAIRCUTS.filter(h => h.requirement === "Ze skrzynki").every(h => !h.unlockedBy(everything))).toBe(true);
     const after = life({ matches: 1 });
     expect(newHaircuts(emptyLifetime(), after)).toEqual(["buzz"]);
     expect(newHaircuts(after, after)).toEqual([]);
