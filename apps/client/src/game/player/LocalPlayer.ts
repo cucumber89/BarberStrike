@@ -2,7 +2,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { TargetCamera } from "@babylonjs/core/Cameras/targetCamera";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import {
-  Btn, LEAN, MatchPhase, PLAYER, TAC, WEAPONS, aimDirection, copyBody, createBody, dequantVel, eyeHeight, frozenAt, leanClearance, leanOf, maskInput, simulateBody, sprintActive, tacActive, wrapAngle,
+  Btn, InputDt, LEAN, MatchPhase, PLAYER, TAC, WEAPONS, aimDirection, copyBody, createBody, dequantVel, eyeHeight, frozenAt, leanClearance, leanOf, maskInput, simulateBody, sprintActive, tacActive, wrapAngle,
   type BodyState, type CollisionWorld, type PlayerInput, type WeaponId,
 } from "@frankibarber/shared";
 import { BIPOD, bipodDeployed, feelOf, lookScale, type ScopeStyle } from "../combat/weaponFeel";
@@ -13,6 +13,16 @@ interface PendingInput {
   input: PlayerInput;
   /** Predicted body state after applying this input. */
   after: BodyState;
+  /**
+   * Buttons of the input BEFORE this one, as they were when this input was first simulated.
+   *
+   * A replay has to feed `simulateBody` the same `prevButtons` the original pass did, because the
+   * edges are what the movement reads: `movement.ts` jumps on a Jump bit that was not set last
+   * frame. Replaying the head of the queue against a zero told it every held jump was a fresh
+   * press, so a player holding space rose again inside the replay while the server had not — a
+   * disagreement that produced the next correction, which produced the next replay.
+   */
+  prev: number;
 }
 
 export interface LookSettings {
@@ -24,6 +34,24 @@ export interface LookSettings {
 }
 
 const MAX_PITCH = 1.5;
+/**
+ * How a mispredict reaches the eye.
+ *
+ * `reconcile` moves the body to the server's truth in one step — it has to, everything that shoots
+ * or collides reads the body. The CAMERA does not have to arrive with it. Before this, a 4 cm
+ * correction was a 4 cm jump cut, and corrections come in runs (a wall, a slope, a crowded
+ * doorway), so what the player saw was the view ticking sideways several times a second.
+ *
+ * `CORRECTION_MS` is the time constant of the catch-up: long enough to read as motion rather than a
+ * cut, short enough that the eye is never meaningfully behind the hitbox it is aiming with. The
+ * offset is a render offset only — `eyePosition` (what shots are built from) ignores it, so nothing
+ * about hit registration moves.
+ *
+ * `CORRECTION_MAX_M` is where hiding it stops being honest: a spawn, a teleport or a lag spike moves
+ * the player metres, and sliding the camera through walls to get there looks far worse than a cut.
+ */
+const CORRECTION_MS = 80;
+const CORRECTION_MAX_M = 0.75;
 const tmpDir: [number, number, number] = [0, 0, 0];
 /** Scope sway (drop 3): amplitude in radians, breath hold length and the winded penalty after it. */
 const SCOPE = { sway: 0.0045, holdMs: 4000, refillPerMs: 0.5, windedMs: 2200, heldScale: 0.12, windedScale: 2.2 } as const;
@@ -46,6 +74,12 @@ export class LocalPlayer {
   private pool: PendingInput[] = [];
   private outbox: PlayerInput[] = [];
   private serverBody: BodyState = createBody();
+  /** Quantiser for the `dt` on the wire; one per player, because the carry is per stream. */
+  private readonly dtq = new InputDt();
+  /** Metres of correction the camera has yet to walk off; decays in `updateCamera`. */
+  private errX = 0;
+  private errY = 0;
+  private errZ = 0;
   private bobPhase = 0;
   private eyeBlend = PLAYER.eyeHeight;
   /** Recoil offsets applied to the view (pitch up is negative). */
@@ -95,6 +129,14 @@ export class LocalPlayer {
     this.yaw = yaw; this.pitch = 0;
     this.pending.length = 0;
     this.recoilPitch = this.recoilYaw = 0;
+    // A new body starts square with the server: no correction to walk off, no dt owed either way.
+    this.errX = this.errY = this.errZ = 0;
+    this.dtq.reset();
+    // Breath belongs to the shooter, not to the gun, so `clearWeaponState` (which also runs on a
+    // weapon switch) must not refill it — switching to a pistol and back would erase the winded
+    // penalty. A new body, on the other hand, breathes.
+    this.breathLeft = 1;
+    this.windedUntil = 0;
     this.clearWeaponState(); // a bolt owed by the body that just died is not owed by this one
     this.alive = true;
   }
@@ -160,14 +202,18 @@ export class LocalPlayer {
     // The input carries the EFFECTIVE view (recoil and scope sway included): that is what the shot
     // direction is built from, and the server checks each shot against the angles of its input seq
     // (handoff P1). The recoil yaw is a fraction of a degree, so movement is unaffected.
+    // `dt` is quantised with a carry, not rounded per frame: see `InputDt` for why a 60 Hz display
+    // rounding 16.6667 up to 16.7 every frame drains the server's time bank over a match.
     const input: PlayerInput = {
-      seq: ++this.seq, dt: Math.min(50, Math.max(1, Math.round(dtMs * 10) / 10)), buttons,
+      seq: ++this.seq, dt: this.dtq.step(dtMs), buttons,
       yaw: wrapAngle(this.yaw + this.recoilYaw + this.swayYaw), pitch: Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch + this.recoilPitch + this.swayPitch)),
     };
-    simulateBody(this.world, this.body, input, WEAPONS[this.weapon].mobility * this.speedScale(sprintActive(buttons, this.body.crouching)), this.prevButtons);
+    const prev = this.prevButtons;
+    simulateBody(this.world, this.body, input, WEAPONS[this.weapon].mobility * this.speedScale(sprintActive(buttons, this.body.crouching)), prev);
     this.prevButtons = buttons;
-    const entry = this.pool.pop() ?? { input, after: createBody() };
+    const entry = this.pool.pop() ?? { input, after: createBody(), prev };
     entry.input = input;
+    entry.prev = prev;
     copyBody(this.body, entry.after);
     this.pending.push(entry);
     if (this.pending.length > 240) this.pool.push(this.pending.shift()!);
@@ -208,18 +254,30 @@ export class LocalPlayer {
       return;
     }
     this.correctionCount++;
+    // Where the eye was standing a moment ago. The body is about to be moved to the truth; the
+    // CAMERA walks there over `CORRECTION_MS` instead of arriving instantly (see `viewError`).
+    const wasX = b.x, wasY = b.y, wasZ = b.z;
     b.x = p.x; b.y = p.y; b.z = p.z; b.vx = dequantVel(p.vx); b.vy = dequantVel(p.vy); b.vz = dequantVel(p.vz); b.grounded = p.grounded; b.crouching = p.crouch;
-    let prev = this.prevButtonsBefore(0);
     for (const e of this.pending) {
-      simulateBody(this.world, b, e.input, WEAPONS[this.weapon].mobility * this.speedScale(sprintActive(e.input.buttons, b.crouching)), prev);
-      prev = e.input.buttons;
+      simulateBody(this.world, b, e.input, WEAPONS[this.weapon].mobility * this.speedScale(sprintActive(e.input.buttons, b.crouching)), e.prev);
       copyBody(b, e.after);
     }
+    // Only the part of the error the replay did not already absorb is worth hiding, and only if it
+    // is small: a big jump is a teleport, a spawn or a lag spike, where sliding the camera through
+    // the world would be a worse lie than the snap.
+    const ex = wasX - b.x, ey = wasY - b.y, ez = wasZ - b.z;
+    if (ex * ex + ey * ey + ez * ez <= CORRECTION_MAX_M * CORRECTION_MAX_M) {
+      this.errX += ex; this.errY += ey; this.errZ += ez;
+      const held = this.errX * this.errX + this.errY * this.errY + this.errZ * this.errZ;
+      if (held > CORRECTION_MAX_M * CORRECTION_MAX_M) {
+        const k = CORRECTION_MAX_M / Math.sqrt(held);
+        this.errX *= k; this.errY *= k; this.errZ *= k;
+      }
+    } else { this.errX = this.errY = this.errZ = 0; }
   }
 
-  private prevButtonsBefore(index: number): number {
-    return index > 0 ? this.pending[index - 1].input.buttons : 0;
-  }
+  /** Metres the camera is still lagging behind the corrected body, for telemetry and tests. */
+  get viewError(): number { return Math.hypot(this.errX, this.errY, this.errZ); }
 
   /**
    * Kicks the view. Recovery is exponential at `recoverPerSec` and starts only after `delayMs`,
@@ -338,9 +396,16 @@ export class LocalPlayer {
       shakeRoll = Math.sin(t * 2.3 + 1.1) * this.shake * 0.8;
       this.shake *= Math.max(0, 1 - dt * 12);
     } else this.shake = 0;
+    // Walk off whatever a correction owed the eye. Exponential in real time, so the catch-up takes
+    // the same 80 ms at 30 fps as at 144, and it is dropped once it is under a millimetre.
+    if (this.errX !== 0 || this.errY !== 0 || this.errZ !== 0) {
+      const k = Math.exp(-dtMs / CORRECTION_MS);
+      this.errX *= k; this.errY *= k; this.errZ *= k;
+      if (this.errX * this.errX + this.errY * this.errY + this.errZ * this.errZ < 1e-6) this.errX = this.errY = this.errZ = 0;
+    }
     const cam = this.camera;
     const side = bobX + LEAN.offset * this.leanBlend;
-    cam.position.set(b.x + Math.cos(this.yaw) * side, b.y + this.eyeBlend + bobY - this.landDip - LEAN.drop * Math.abs(this.leanBlend), b.z - Math.sin(this.yaw) * side);
+    cam.position.set(b.x + this.errX + Math.cos(this.yaw) * side, b.y + this.errY + this.eyeBlend + bobY - this.landDip - LEAN.drop * Math.abs(this.leanBlend), b.z + this.errZ - Math.sin(this.yaw) * side);
     cam.rotation.set(this.pitch + this.recoilPitch + this.swayPitch + shakePitch, this.yaw + this.recoilYaw + this.swayYaw, Math.sin(this.bobPhase) * 0.004 * bobAmt + shakeRoll + LEAN.roll * this.leanBlend);
   }
 

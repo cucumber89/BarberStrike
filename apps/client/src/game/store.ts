@@ -211,6 +211,7 @@ class HudStore {
 
 export const hud = new HudStore();
 
+
 export function useHud(): HudState {
   return useSyncExternalStore(hud.subscribe, hud.get, hud.get);
 }

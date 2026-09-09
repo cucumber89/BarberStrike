@@ -32,7 +32,7 @@ await a.mouse.click(300, 200); // user gesture → resume()
 await a.keyboard.press("Shift");
 const report = await a.evaluate(() => window.__fbAudio.selfTest());
 console.log("contextState:", report.contextState, "| voices after:", report.voicesAfter);
-for (const o of report.offline) console.log(`${o.ok ? "ok  " : "FAIL"} ${o.name.padEnd(24)} peak ${String(o.peakDb).padStart(6)} dBFS  (${o.seconds.toFixed(2)} s)`);
+for (const o of report.offline) console.log(`${o.ok ? "ok  " : "FAIL"} ${o.name.padEnd(24)} peak ${String(o.peakDb).padStart(6)} dBFS  sustain ${String(o.sustainDb).padStart(6)} dBFS  (${o.seconds.toFixed(2)} s)`);
 for (const l of report.live) if (!l.ok) console.log("FAIL live", l.name, l.error);
 console.log(`live steps: ${report.live.filter((l) => l.ok).length}/${report.live.length} ok`);
 // Let the remote footstep/reload paths run for a moment with BRAVO moving.

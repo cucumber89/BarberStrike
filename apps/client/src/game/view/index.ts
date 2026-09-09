@@ -225,6 +225,8 @@ export const installView: GameModule = (ctx) => {
       marks.update();
       const b = ctx.local.body;
       eye.set(b.x, b.y + 1.62, b.z);
+      // Already quantised by `obscurityAt` to `SMOKE_OPACITY_STEPS`, which is where the reason lives:
+      // one changed field reconciles the whole Hud, and this one is written every frame.
       hud.set({ smokeOpacity: grenades.obscurityAt(eye.x, eye.y, eye.z) });
       nameplates.update(ctx.remotes, eye);
     }),

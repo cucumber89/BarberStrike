@@ -99,3 +99,66 @@ describe("explosion and flash", () => {
     expect(flashMs(1)).toBeGreaterThan(flashMs(0.3));
   });
 });
+
+/**
+ * What a grenade does once it has stopped flying and is just leaning on something.
+ *
+ * CHARACTERISATION, not a bug demonstration — said plainly because it would be easy to read these as
+ * regression tests for something that was broken. A review flagged two hazards in `contact` and the
+ * sub-step loop: a swept ray that hits at zero distance consumes no time, so the loop could in
+ * principle run the same contact three times in one step; and `p.bounces++` sits above the
+ * "already separating" return, so a contact the grenade is moving away from would still count as a
+ * bounce (and `bounces` is read for exactly one thing — whether to play a bounce sound).
+ *
+ * MEASURED against a grenade driven into a corner over 30 ticks: `travel` was never zero (the
+ * sphere push-out keeps the body clear of the surface, so the ray almost never starts inside the
+ * radius — the one non-negative reading was 0.0083 m) and no step ever produced more than one
+ * bounce. Neither hazard reproduces, so neither was "fixed": changing a deterministic physics path
+ * on a hazard nobody can trigger is how feel gets broken. These tests pin the behaviour as it is, so
+ * that if either ever does start happening, something says so.
+ */
+describe("a grenade resting against something", () => {
+  /** A corner: the room's floor and its wall at x 5 meet, and a second wall closes the z side. */
+  const corner = () => {
+    const w = room();
+    w.add(boxFrom(-100, 0, 5, 200, 6, 1));
+    return w;
+  };
+
+  it("does not spend its whole step bouncing off the same surface", () => {
+    const world = corner();
+    const p = createProjectile(1, "frag", "a", [4.6, 0.3, 4.6], [0, 0, 0]);
+    p.vx = 3; p.vz = 3; p.vy = 0;
+    const before = p.bounces;
+    stepProjectile(world, p, TICK_MS);
+    expect(p.bounces - before, "one step, more than one bounce").toBeLessThanOrEqual(1);
+  });
+
+  it("does not count a contact it is moving away from as a bounce", () => {
+    const world = room();
+    const p = createProjectile(2, "frag", "a", [4.7, 0.3, 0], [0, 0, 0]);
+    p.vx = -2; p.vy = 0; p.vz = 0; // already travelling AWAY from the wall at x 5
+    const before = p.bounces;
+    for (let i = 0; i < 4; i++) stepProjectile(world, p, TICK_MS);
+    expect(p.bounces).toBe(before);
+  });
+
+  it("still bounces off a wall it is travelling into", () => {
+    const world = room();
+    const p = createProjectile(3, "frag", "a", [3, 1, 0], [0, 0, 0]);
+    p.vx = 9; p.vy = 0; p.vz = 0;
+    for (let i = 0; i < 30; i++) stepProjectile(world, p, TICK_MS);
+    expect(p.bounces).toBeGreaterThan(0);
+    expect(p.vx).toBeLessThan(0); // it came back off the wall
+  });
+
+  it("settles in a corner rather than jittering forever", () => {
+    const world = corner();
+    const p = createProjectile(4, "frag", "a", [4.5, 1.2, 4.5], [0, 0, 0]);
+    p.fuseMs = 60_000; // outlive the test: we are measuring rest, not the fuse
+    p.vx = 5; p.vz = 5; p.vy = -1;
+    let rested = false;
+    for (let t = 0; t < 6000 && !rested; t += TICK_MS) rested = stepProjectile(world, p, TICK_MS) === "resting";
+    expect(rested, "never came to rest in a corner").toBe(true);
+  });
+});

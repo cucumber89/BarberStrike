@@ -132,6 +132,24 @@ export class WeaponController {
     this.onReload?.(this.weapon);
   }
 
+  /**
+   * Death ends whatever the gun was in the middle of.
+   *
+   * Nothing used to clear this, and `syncFrom` only cancels a reload the server has also finished —
+   * within 150 ms of when we expected it. So dying mid-reload with a weapon whose reload outlasts the
+   * respawn timer (the MG-4's 5 200 ms against RESPAWN_DELAY_MS 3 200) meant coming back still
+   * "reloading": firing refused, a new reload refused, `busy()` blocking grenades and inspect, and no
+   * sound to explain any of it, for the two seconds until the old timer ran out. The reload also
+   * completed while the corpse was on the floor, because that branch sits above the alive check.
+   */
+  cancel(): void {
+    this.reloading = false;
+    this.reloadEndsAt = 0;
+    this.spread = 0;
+    this.triggerHeld = false;
+    this.player.clearWeaponState();
+  }
+
   /** Current effective cone half-angle for the crosshair. */
   effectiveSpread(): number {
     const w = WEAPONS[this.weapon];

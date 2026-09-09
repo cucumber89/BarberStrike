@@ -40,3 +40,61 @@ describe("bomb objective", () => {
     b.round = BOMB.halfRounds; resetBomb(b, 200000, players); expect(b.attackTeam).toBe(1); expect(b.carrier).toBe("b");
   });
 });
+
+/**
+ * Two rules that only fire in the awkward cases, and were both wrong there.
+ *
+ * A round is decided by asking two questions in an order, and the order was the wrong way round when
+ * the answer to both was "nobody". The bomb's resting place had a `?? 0` in it, and `0` on a map is
+ * a real coordinate.
+ */
+describe("bomb objective, the awkward cases", () => {
+  const wipe = (players: BombPlayer[]) => { for (const p of players) p.alive = false; };
+
+  it("gives a mutual wipe with no bomb down to the DEFENDERS", () => {
+    // One frag kills the last attacker and the last defender on the same tick. Nobody planted
+    // anything, so the attack failed — it used to be scored as "DEFENDERS ELIMINATED" and won by a
+    // team that had just been wiped itself.
+    const { b, players } = setup();
+    expect(b.stage).toBe("carried");
+    wipe(players);
+    const winner = stepBomb(b, players, 2000, 16);
+    expect(winner).toBe(1 - b.attackTeam);
+    expect(b.result).toBe("ATTACKERS ELIMINATED");
+  });
+
+  it("still gives the round to the attackers when only the defenders die", () => {
+    const { b, players } = setup();
+    players[1].alive = false; // the only defender
+    expect(stepBomb(b, players, 2000, 16)).toBe(b.attackTeam);
+    expect(b.result).toBe("DEFENDERS ELIMINATED");
+  });
+
+  it("detonates a planted bomb when the last defender dies, whatever the timer says", () => {
+    const { b, players } = setup();
+    players[0].using = true;
+    stepBomb(b, players, 4000, BOMB.plantMs);
+    stepBomb(b, players, 5000, BOMB.plantMs);
+    expect(b.stage).toBe("planted");
+    players[1].alive = false;
+    expect(stepBomb(b, players, 6000, 16)).toBe(b.attackTeam);
+  });
+
+  it("never leaves the bomb at the world origin when nobody can carry it", () => {
+    const players = [player("a", 0), player("b", 1)];
+    players[0].x = 40; players[0].y = 2; players[0].z = -12;
+    const b: BombData = { round: 0, attackTeam: 0, stage: "idle", carrier: "", site: "", x: 0, y: 0, z: 0, endsAt: 0, roundEndsAt: 0, actor: "", progress: 0, result: "" };
+    // The attacker is connected but has not respawned yet — a real state on the reset paths that do
+    // not respawn first. The bomb belongs where they are, not at (0, 0, 0).
+    players[0].alive = false;
+    resetBomb(b, 1000, players);
+    expect(b.stage).toBe("dropped");
+    expect(b.carrier).toBe("");
+    expect([b.x, b.y, b.z]).toEqual([40, 2, -12]);
+
+    // And with no attacker at all it stays where it was rather than teleporting to the origin.
+    b.x = 7; b.y = 1; b.z = 3;
+    resetBomb(b, 2000, [player("b", 1)]);
+    expect([b.x, b.y, b.z]).toEqual([7, 1, 3]);
+  });
+});

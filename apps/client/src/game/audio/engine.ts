@@ -33,6 +33,18 @@ export interface PlayOptions {
 interface Voice {
   gain: GainNode;
   tail: AudioNode; // last node before the bus (gain or panner)
+  /**
+   * This voice's own send into the shared reverb, pre-scaled by the voice's gain.
+   *
+   * It has to be per voice, not the shared bus, for two reasons. Level: a sound's `send()` taps its
+   * own internal node, which sits UPSTREAM of the voice gain and the panner, so a send straight to
+   * the shared bus arrived at full scale however far away the sound was — a rifle shot across 40 m
+   * of map was ~0.08 dry and ~0.17 WET, so distant gunfire came back as a loud, directionless wash
+   * and there was no judging range or bearing by ear. Lifetime: `disconnect` only ever dropped
+   * `tail` and `gain`, so a stolen or finished voice's reverb tail kept feeding the bus — the voice
+   * cap limited voices, not what you could hear.
+   */
+  verb: GainNode | null;
   priority: number;
   startedAt: number;
   endsAt: number;
@@ -211,10 +223,18 @@ export class AudioEngine {
       vg.connect(p);
       tail = p;
     }
-    const voice: Voice = { gain: vg, tail, priority, startedAt: t, endsAt: t, timer: 0 };
-    if (!this.admit(voice)) { vg.disconnect(); return null; }
+    // The wet path is attenuated like the dry one and dies with the voice (see `Voice.verb`). It is
+    // deliberately NOT panned: a reverb return is the room answering, which has no bearing.
+    let verb: GainNode | null = null;
+    if (opts.bus !== "ui") {
+      verb = ctx.createGain();
+      verb.gain.value = opts.gain ?? 1;
+      verb.connect(this.reverbIn);
+    }
+    const voice: Voice = { gain: vg, tail, verb, priority, startedAt: t, endsAt: t, timer: 0 };
+    if (!this.admit(voice)) { vg.disconnect(); verb?.disconnect(); return null; }
     tail.connect(bus);
-    const g: Graph = { ctx, out: vg, verb: opts.bus === "ui" ? null : this.reverbIn, t, buf: sharedBuffers(ctx), rnd: Math.random };
+    const g: Graph = { ctx, out: vg, verb, t, buf: sharedBuffers(ctx), rnd: Math.random };
     let dur = 0.5;
     try { dur = fn(g); } catch (err) { console.warn("[audio] sound failed", err); }
     voice.endsAt = t + dur + 0.6; // reverb send / setTargetAtTime tails
@@ -252,6 +272,8 @@ export class AudioEngine {
     const t = this.ctx.currentTime;
     v.gain.gain.cancelScheduledValues(t);
     v.gain.gain.setTargetAtTime(0, t, 0.004);
+    // The send has to be faded too, or a stolen voice goes on ringing through the reverb.
+    if (v.verb) { v.verb.gain.cancelScheduledValues(t); v.verb.gain.setTargetAtTime(0, t, 0.004); }
     v.timer = window.setTimeout(() => this.disconnect(v), 40);
   }
 
@@ -263,7 +285,7 @@ export class AudioEngine {
   }
 
   private disconnect(v: Voice): void {
-    try { v.tail.disconnect(); if (v.tail !== v.gain) v.gain.disconnect(); } catch { /* already gone */ }
+    try { v.tail.disconnect(); if (v.tail !== v.gain) v.gain.disconnect(); v.verb?.disconnect(); } catch { /* already gone */ }
   }
 
   /** Brief low-pass + dip on the effects bus (taking damage). */
