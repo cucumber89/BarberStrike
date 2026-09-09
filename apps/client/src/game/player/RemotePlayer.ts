@@ -40,6 +40,16 @@ const SNAP_BUFFER = 16;
  */
 const EXTRAPOLATE_MS = 120;
 const EXTRAPOLATE_MAX_M = 0.75;
+/**
+ * Past this, the gap is not a lost packet and a guess is not information: hold position instead.
+ *
+ * Two cases need this. A server hiccup or a lost connection should freeze a body where it was, not
+ * slide it — the old behaviour, and the right one. And a remote's FIRST snapshot is stamped `t = 0`
+ * by the constructor, so on the frame it is created render time is a server clock ahead of it by
+ * years; without this test a player who joins while someone is running would see them appear three
+ * quarters of a metre from where they are.
+ */
+const EXTRAPOLATE_MAX_GAP_MS = 250;
 /** Snapshots older than this behind render time cannot be the right answer for anything. */
 const MAX_SNAP_AGE_MS = 400;
 
@@ -150,7 +160,7 @@ export class RemotePlayer {
     this.yaw = lerpAngle(a.yaw, b.yaw, f); this.pitch = lerp(a.pitch, b.pitch, f);
     this.vx = lerp(a.vx, b.vx, f); this.vz = lerp(a.vz, b.vz, f);
     // Past the newest snapshot: carry on at the last velocity, fading it out (see EXTRAPOLATE_MS).
-    if (ahead > 0 && b.alive && (b.vx !== 0 || b.vz !== 0)) {
+    if (ahead > 0 && ahead <= EXTRAPOLATE_MAX_GAP_MS && b.alive && (b.vx !== 0 || b.vz !== 0)) {
       const w = Math.min(ahead, EXTRAPOLATE_MS) / 1000;
       const fade = 1 - Math.min(1, ahead / EXTRAPOLATE_MS) / 2; // mean speed over the fade
       let dx = b.vx * w * fade, dz = b.vz * w * fade;

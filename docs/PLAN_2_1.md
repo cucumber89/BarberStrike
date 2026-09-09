@@ -514,8 +514,94 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   Fifth rarity, daily seeds/grants and crude-art defaults remain later-slice decisions; no crate or
   purchase code exists in this tranche. The weapon preview does not close the Deferred head preview.
 
+- 2026-09-09 — **New drop J, "smoothness and correctness"**, opened for the owner's brief
+  (*"przeanalizował grę i poprawił wszystkie błędy … najważniejsza jest płynność rozgrywki
+  optymalizacja"*). It is not drops A–H, and not drop I either: I is the player-facing feedback list
+  (controls, shop, teams, renderer, the living arena), while this is the frame loop, the tick and the
+  wire. The plan already anticipated it as `OPTIMIZATION_PROMPT.md` on its own branch; recorded as a
+  drop so it gets a ledger row like everything else. (lead)
+- 2026-09-09 — Drop J: the server's idle-gravity step is now **bought from the same time bank as an
+  input**. This is not a change to the tick rate, the snapshot rate, the prediction model or server
+  authority, so L6 is untouched: it makes the room OBEY the rule `ARCHITECTURE.md` already states
+  ("inputs cost their `dt` → clients cannot run faster than real time") in the other direction as
+  well. Before it, the room simulated 1.5x real time for anyone under 60 fps — measured, see the
+  ledger row. (lead)
+- 2026-09-09 — Drop J: `MAX_INPUT_RATE` raised 90 → 250 and the `* 1.5` slack in `rateLimited`
+  removed, so the constant means what its name says. It is a FLOOD guard, not an anti-cheat: the time
+  bank prices every input by its `dt`, so extra inputs buy no extra movement. At the old effective
+  ceiling of 135/s a 144 Hz client had nine inputs a second refused, and the refusal also abandoned
+  the rest of the batch — a rubber-band on every one-second window boundary. (lead)
+- 2026-09-09 — **PROPOSAL, owner to decide. Fixed-timestep client prediction.** Prediction currently
+  runs once per rendered frame (`ARCHITECTURE.md`, "`LocalPlayer` runs `simulateBody` per frame"), so
+  the input rate IS the framerate. Everything up to 240 fps now works, but above that a client queues
+  faster than the room can drain (4 inputs/tick) and loses inputs, and at any framerate the client's
+  frame slices never line up exactly with the server's ticks, which is where the residual mispredicts
+  come from. The standard fix — accumulate real time and simulate in FIXED slices, one input per
+  slice — would make both ends simulate identical steps and drop corrections towards zero. It is
+  squarely inside what **L6** locks, so it was not done. Cost is one focused slice on `LocalPlayer`
+  plus its tests; the risk is that every feel number tuned against per-frame stepping wants
+  re-checking. (lead)
+- 2026-09-09 — Drop J: correction smoothing is a **render offset on the camera only**. The body still
+  takes the server's position in one step, and `eyePosition` — what every shot is built from — ignores
+  the offset, so hit registration is bit-for-bit unchanged and there is no question of L6 or of
+  server authority. Capped at 0.75 m so a spawn or a teleport still cuts rather than sliding the view
+  through the map. `prediction.test.ts` pins both halves. (lead)
+- 2026-09-09 — Drop J: remote players are now **extrapolated** for up to 120 ms and 0.75 m past their
+  newest snapshot instead of freezing. This is presentation only (`RemotePlayer`'s own docblock:
+  "never used for hit tests"), the velocity fades to a stop so it reads as slowing rather than
+  sliding, and it is refused outright for a corpse and for the vertical axis (no `vy` on the wire).
+  The alternative — an interp delay that tracks measured jitter — is better and is L6-locked; it is
+  in Deferred. (lead)
+
 ## Deferred (things noticed, deliberately not done)
 
+- **Drop J: prediction runs per rendered frame, so above ~240 fps a client outruns the room.** The
+  server consumes at most 4 inputs per tick (240/s) and a client emits one per frame, so a 300 Hz
+  display queues faster than the room drains and the queue's oldest entries are discarded — a lost
+  input is a permanent disagreement until the next correction. The real fix is a FIXED-TIMESTEP
+  prediction loop (accumulate real time, simulate in fixed slices, one input per slice), which makes
+  client and server simulate byte-identical steps at any framerate and pins the input rate. It is
+  also a change to the prediction model, which **L6 locks** ("prediction and interpolation stay
+  exactly as `ARCHITECTURE.md` says", and the doc says `LocalPlayer` runs `simulateBody` per frame).
+  Not done here for that reason. Owner's call — see the Decisions entry of 2026-09-09.
+- **Drop J: `INTERP_DELAY_MS` is a fixed 110 ms** (`constants.ts:14`), about two snapshots plus
+  60 ms of jitter budget. Anyone whose jitter exceeds that gets extrapolation (added here) instead of
+  interpolation, which is a guess. An interp delay that tracks measured jitter is the standard answer
+  and is worth more than any further micro-optimisation on this list — but the constant is named in
+  `ARCHITECTURE.md`, so it is L6 as well.
+- Drop J: `useHud()` subscribes the whole 600-line `Hud` to every field, so ANY changed field
+  reconciles all of it — including `serverNow` and `ping`, which change on every 10 Hz sync. The
+  smoke case was the acute one and is fixed by quantising; the general fix is to split `Hud.tsx` into
+  components that take `useHudSlice`. MEASURED baseline for whoever does it:
+  `apps/client/e2e/out/hud/frame-cost.md`, 0.29 ms/frame of React at rest.
+- Drop J: the per-tick allocation churn a recon pass found in the room and left alone **because the
+  measurement says it does not matter**: `stepBot` builds a fresh view object per enemy per bot per
+  tick (~80/tick) and re-walks the whole `MapSchema` per bot; the `senses` literal and its `los`
+  closure are per bot per tick; lag-comp history is `push`/`shift` on an array rather than a ring;
+  `perksOf` allocates per living player per tick. MEASURED with a FULL house (8 bots + 4 humans,
+  `tickCost.test.ts`): mean **0.318 ms/tick**, peak **10.27 ms**, budget 16.7. Nothing here is worth
+  churning a 2 000-line hot file for; revisit only if a real server shows tick overruns.
+- Drop J: `maxLightsPerMesh` measured **45** on the district's worst mesh (`profile.mjs`), against
+  materials capped at `maxSimultaneousLights` 4–5. That is not a per-frame cost — the shadow map is
+  `refreshRate` 0, rendered once — but it means only 4 or 5 of the 45 lights in range actually light
+  that mesh, chosen by list order, so lighting can pop as a player crosses the map. A LOOK problem,
+  not a speed one; the fix is per-light `includedOnlyMeshes` in the map data.
+- Drop J: no render timing measured in this container means anything. Turning effect density from 0
+  to 1 moves the median `scene.render()` from **3 ms to 255 ms** on SwiftShader, so alpha-blended
+  particles dominate every frame a grenade is on screen and swamp any other attribution. 31 of 60
+  consecutive renders exceeded 50 ms during a bot fight. On a real GPU those quads are nearly free —
+  but nobody has confirmed that, and until somebody does, no client render claim in this drop rests
+  on a clock.
+- Drop J: `skinCache.evict()` is a SOFT cap by design (evicting a live texture would corrupt another
+  gun's material, and the docblock says so), so with 12 players wearing 12 distinct finishes the
+  cache sits at its limit with nothing evictable. Self-limiting in practice — a weapon switch drops
+  the lease — but it also rebuilds a pair array and sorts it on every acquire and release. Left as
+  is; if the Armoury ever holds many previews open at once, that is where to look.
+- Drop J: the client bundle ships **8 firearm and 2 character `.glb` files** (13 MB of `dist/models`
+  out of 23 MB) that the running game never loads — `Game.ts` empties the manifest's `weapons` and
+  `characters`, which is the owner's decided option (a). They are not downloaded by a player (the
+  loader is lazy and never asked), so this is deploy-image weight, not load time. Removing them is
+  Drop A's already-written Deferred item and still waits on the owner's word about the characters.
 - Drop C before art acceptance: compare painted metal sight housings/notches against a factory ADS
   reference (the post, steel and brass are preserved, the surrounding metal is painted). The 3 m/12 m
   observer frames are too small/front-facing for pattern review; replace them with valid side views.

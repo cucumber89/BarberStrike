@@ -62,7 +62,7 @@ describe("remote interpolation", () => {
     r.dispose();
   });
 
-  it("never guesses further than three quarters of a metre, however long the gap", () => {
+  it("never guesses further than three quarters of a metre, and stops guessing on a long gap", () => {
     const r = new RemotePlayer(scene, net(), 0);
     push(r, 1000, 0, 0, 9, 0); // faster than any body in the game
     push(r, 1000 + SNAPSHOT_MS, 0.45, 0, 9, 0);
@@ -71,6 +71,20 @@ describe("remote interpolation", () => {
       r.update(edge + gap, 16.7);
       expect(r.x - 0.45, `gap ${gap} ms`).toBeLessThanOrEqual(0.75 + 1e-6);
     }
+    // Beyond a quarter of a second it is not a lost packet, it is no information: hold, do not slide.
+    r.update(edge + 5000, 16.7);
+    expect(r.x).toBeCloseTo(0.45, 6);
+    r.dispose();
+  });
+
+  it("does not fling a remote across the floor on the frame it joins", () => {
+    // The constructor stamps its first snapshot `t = 0`, so on the joining frame render time is a
+    // server clock ahead of it by years. A remote who happens to be sprinting must still appear where
+    // the snapshot says they are.
+    const r = new RemotePlayer(scene, net({ x: 4, z: 7, vx: quantVel(9), vz: quantVel(0) }), 0);
+    r.update(Date.now(), 16.7);
+    expect(r.x).toBeCloseTo(4, 6);
+    expect(r.z).toBeCloseTo(7, 6);
     r.dispose();
   });
 
