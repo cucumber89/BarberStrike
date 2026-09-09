@@ -4,7 +4,7 @@ import {
   type HaircutDef, type LevelState, type LifetimeStats, type MatchStats, type XpLine,
 } from "@frankibarber/shared";
 import { WEAPON_ORDER, encodeSkins, type WeaponId } from "@frankibarber/shared";
-import { fitsWeapon, skinById, type SkinInstance } from "@frankibarber/skins";
+import { catalog, fitsWeapon, skinById, type SkinInstance } from "@frankibarber/skins";
 
 /**
  * The local player profile: lifetime XP, badges and stats, in localStorage.
@@ -143,6 +143,25 @@ export function equipHaircut(id: string): string {
 }
 
 export const equippedSkins = (): string => encodeSkins(loadProfile().equip);
+
+/**
+ * The six slice-4 finishes are the launch collection: until crates ship, hiding every recipe behind
+ * an acquisition system that does not exist would leave a working renderer with no player path.
+ * Existing instances are retained verbatim; only missing recipe ids are appended once.
+ */
+export function ensureStarterSkins(now = Date.now()): Profile {
+  const profile = loadProfile();
+  const owned = new Set(profile.skins.map((instance) => instance.skin));
+  const missing = catalog.filter((skin) => !owned.has(skin.id));
+  if (!missing.length) return profile;
+  const next = {
+    ...profile,
+    skins: [...profile.skins, ...missing.map((skin, index) => ({ skin: skin.id, wear: 0, rolledAt: now + index }))],
+  };
+  saveProfile(next);
+  return next;
+}
+
 /** Factory finish is always available; ownership gates cosmetics only, never the weapon itself. */
 export function equipSkin(weapon: WeaponId, id: string): string {
   const profile = loadProfile(); const skin = skinById(id);

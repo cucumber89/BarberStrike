@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { BADGES, DEFAULT_HAIRCUT, HAIRCUTS, XP, levelFor, xpToNext, type MatchStats } from "@frankibarber/shared";
-import { applyMatch, emptyProfile, loadProfile, ownedCuts, saveProfile, equipHaircut, equippedHaircut, equipSkin, equippedSkins } from "./profile";
+import { applyMatch, emptyProfile, loadProfile, ownedCuts, saveProfile, equipHaircut, equippedHaircut, ensureStarterSkins, equipSkin, equippedSkins } from "./profile";
 
 const match = (over: Partial<MatchStats> = {}): MatchStats => ({
   kills: 0, headshots: 0, assists: 0, deaths: 0, captures: 0, wavesSurvived: 0, result: -1, mode: "tdm", ...over,
@@ -86,6 +86,13 @@ describe("haircuts in the profile", () => {
     expect(equippedSkins()).toBe("rifle=osy");
     expect(applyMatch(loadProfile(), match(), 0).profile).toMatchObject({ skins, equip: { rifle: "osy" } });
     expect(equipSkin("rifle", "")).toBe(""); expect(equippedSkins()).toBe("");
+  });
+
+  it("grants the launch collection once to old and new profiles", () => {
+    const first = ensureStarterSkins(100);
+    expect(first.skins.map((skin) => skin.skin)).toEqual(["warsztat", "stalowka", "talk", "slupek-frankiego", "szlaczek-babci", "osy"]);
+    expect(ensureStarterSkins(200)).toEqual(first);
+    expect(loadProfile().skins).toHaveLength(6);
   });
 
   it("starts with the cap alone and hands out the first haircut for turning up once", () => {

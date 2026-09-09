@@ -316,6 +316,48 @@
 .keys-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, .06); font-size: 12.5px; color: var(--tx-2); }
 .keys-row kbd { flex: 0 0 auto; min-width: 78px; text-align: center; padding: 4px 7px; background: var(--bg-3); border: 1px solid var(--line); border-bottom-width: 2px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .04em; color: var(--brass); }
 
+/* ------------------------------------------------------------------------------- armoury */
+
+.armoury-content { overflow: hidden; }
+.armoury {
+  height: 100%; min-height: 500px; display: grid;
+  grid-template-columns: minmax(180px, 230px) minmax(360px, 1fr) minmax(280px, 380px);
+  gap: 14px;
+}
+.armoury > aside, .armoury-stage { min-width: 0; background: rgba(14, 14, 18, .88); border: 1px solid var(--line); }
+.armoury-heading { min-height: 58px; display: flex; gap: 12px; align-items: center; padding: 11px 13px; border-bottom: 1px solid var(--line); }
+.armoury-heading > span { font-family: var(--font-mono); color: var(--brass); font-size: 10px; }
+.armoury-heading b, .armoury-heading small { display: block; }
+.armoury-heading b { font-family: var(--font-display); font-size: 18px; letter-spacing: .14em; font-weight: normal; }
+.armoury-heading small { margin-top: 2px; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--tx-3); }
+.armoury-weapons, .armoury-skins { display: flex; flex-direction: column; min-height: 0; }
+.armoury-weapon-list, .armoury-skin-grid { min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(217, 164, 65, .45) transparent; }
+.armoury-weapon-list { display: grid; align-content: start; padding: 7px; }
+.armoury-weapon-list button { padding: 9px 10px; text-align: left; color: var(--tx-2); background: transparent; border: 0; border-left: 2px solid transparent; cursor: pointer; }
+.armoury-weapon-list button:hover { background: rgba(255, 255, 255, .05); }
+.armoury-weapon-list button.on { color: var(--tx); border-left-color: var(--brass); background: rgba(217, 164, 65, .1); }
+.armoury-weapon-list span, .armoury-weapon-list small { display: block; }
+.armoury-weapon-list span { font: 16px var(--font-display); letter-spacing: .07em; }
+.armoury-weapon-list small { margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; color: var(--tx-3); }
+.armoury-stage { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.armoury-canvas { min-height: 320px; overflow: hidden; background: radial-gradient(circle at 50% 45%, rgba(217, 164, 65, .08), transparent 52%), #0b1014; }
+.armoury-current { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 15px; border-top: 1px solid var(--line); }
+.armoury-current small, .armoury-current b { display: block; }
+.armoury-current small { font: 9px var(--font-mono); letter-spacing: .12em; color: var(--tx-3); text-transform: uppercase; }
+.armoury-current b { margin-top: 2px; font: 22px var(--font-display); letter-spacing: .08em; font-weight: normal; }
+.armoury-current > span { padding: 5px 8px; border: 1px solid rgba(217, 164, 65, .5); color: var(--brass); font: 9px var(--font-mono); letter-spacing: .12em; }
+.armoury-skin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-content: start; padding: 10px; }
+.skin-card { position: relative; display: grid; grid-template-rows: 64px auto auto; padding: 0 0 8px; overflow: hidden; text-align: left; color: var(--tx-2); background: var(--bg-3); border: 1px solid var(--line); cursor: pointer; }
+.skin-card:hover, .skin-card.on { color: var(--tx); border-color: var(--brass); transform: translateY(-1px); }
+.skin-card.on::after { content: "✓"; position: absolute; top: 5px; right: 6px; width: 20px; height: 20px; display: grid; place-items: center; background: var(--brass); color: #111; font-weight: bold; }
+.skin-swatch { display: block; width: 100%; height: 64px; margin-bottom: 8px; background-size: 90px 90px !important; }
+.skin-swatch.factory { background: linear-gradient(135deg, #637783, #24272c 52%, #a6acb5); }
+.skin-card b, .skin-card small { padding: 0 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skin-card b { font: 14px var(--font-display); letter-spacing: .06em; }
+.skin-card small { margin-top: 3px; font: 8px var(--font-mono); letter-spacing: .11em; color: #8b96a4; }
+.skin-card.rzadki small { color: #6f87ff; }
+.armoury-note { margin: auto 11px 11px; padding: 9px 10px; border-left: 2px solid var(--brass); background: rgba(217, 164, 65, .07); color: var(--tx-3); font-size: 10px; line-height: 1.45; }
+
 /* A big screen should show the same things BIGGER, not the same things with 400 px of night under
    them. Nothing moves, nothing appears: the cards, the rows and the plans take the room. */
 @media (min-width: 1600px) and (min-height: 900px) {
@@ -360,6 +402,7 @@
   .mode-card b { font-size: 14px; }
   .srv-row { gap: 9px; padding: 8px 10px; }
   .srv-name { font-size: 16px; }
+  .armoury { grid-template-columns: 180px minmax(320px, 1fr) 280px; }
 }
 /* One column below this: the browser can no longer hold two comfortable ones, and a squeezed
    server list is worse than one under the setup. The whole content area scrolls instead. */
@@ -367,6 +410,10 @@
   .mm-content.lobby-grid { grid-template-columns: minmax(0, 1fr); overflow: auto; }
   .lb-setup, .srv-list { overflow: visible; min-height: 0; }
   .lb-servers { grid-template-rows: auto auto auto; }
+  .armoury-content { overflow: auto; }
+  .armoury { height: auto; grid-template-columns: 150px minmax(300px, 1fr); }
+  .armoury-skins { grid-column: 1 / -1; min-height: 310px; }
+  .armoury-skin-grid { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 860px) {
   .mm-title-grid { grid-template-columns: minmax(0, 1fr); }
