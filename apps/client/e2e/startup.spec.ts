@@ -110,8 +110,15 @@ test("a /r/<room> link asks for a nickname only, and CHANGE opens the full lobby
 test("the lobby offers six modes", async ({ page }) => {
   await page.goto("/");
   await page.getByTestId("btn-play").click();
+  await expect(page.getByRole("heading", { name: "01 TRYB GRY" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /02 MAPA/ })).toBeVisible();
   for (const m of ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni"]) {
     await expect(page.getByTestId(`mode-${m}`)).toBeVisible();
   }
   await expect(page.getByTestId("mode-ffa")).toHaveCount(0);
+  await expect(page.getByTestId("haircut-picker")).toContainText("WYGLĄD POSTACI");
+  await page.getByRole("button", { name: /OTWÓRZ SZAFĘ/ }).click();
+  await expect(page.getByTestId("armoury")).toBeVisible();
+  await page.getByTestId("armoury-haircuts").click();
+  await expect(page.getByTestId("armoury-haircut-cap")).toBeVisible();
 });

@@ -28,7 +28,6 @@
   --mm-plate: linear-gradient(180deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, .014));
 }
 
-.crate-panel{margin-top:10px;padding:12px;background:#0d1014;border:1px solid #31343a}.crate-top{display:flex;justify-content:space-between}.crate-top div{display:grid}.crate-top small{color:#777;font-size:9px}.crate-top strong{font:28px var(--display);color:#e3ad39}.crate-box{height:62px;margin:10px 0;background:linear-gradient(135deg,#3a2a14,#c58b2b);display:grid;place-items:center;position:relative;overflow:hidden}.crate-box span{font:30px var(--display);color:#17110a}.crate-box.opening i{position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 35px,#fff4 36px 38px);animation:crate-roll .25s linear infinite}.crate-panel>button{width:100%;padding:9px;background:#c99228;border:0;font-weight:800}.crate-panel>button:disabled{opacity:.35}.crate-prize{text-align:center;padding:8px;color:#f4c861;font-weight:800}.crate-tasks{display:grid;gap:4px;margin-top:8px}.crate-tasks div{display:flex;justify-content:space-between;font-size:10px;color:#aaa}.crate-tasks .done{color:#6ea77a}@keyframes crate-roll{to{transform:translateX(38px)}}
 
 /* The room the menu sits in: barber stripes drifting across two practical lights, under a
    vignette. Purely decorative and never clickable; the drift stops for reduced motion. */
@@ -173,6 +172,7 @@
 .lb-block.wide { grid-column: 1 / -1; }
 .lb-h { display: flex; align-items: center; gap: 10px; margin: 0 0 9px; font-family: var(--font-display); font-size: 14px; font-weight: normal; letter-spacing: .26em; color: var(--tx-2); }
 .lb-h em { font-style: normal; font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: var(--brass); }
+.lb-h>span{font:9px var(--font-mono);letter-spacing:.08em;color:var(--brass)}
 .lb-h::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--line); }
 
 /* Mode: six cards with a picture, not six three-letter boxes. */
@@ -225,6 +225,7 @@
 .cut:hover:not(:disabled) { border-color: rgba(230, 185, 128, .5); }
 .cut.on { border-color: #e6b980; background: rgba(230, 185, 128, .13); color: #e6b980; }
 .cut.locked { opacity: .42; cursor: default; }
+.lobby-look{display:flex;align-items:center;justify-content:space-between;gap:16px;border-left:3px solid var(--brass)}.lobby-look>div{display:grid;gap:3px}.lobby-look .lb-h{margin:0}.lobby-look>div>b{font:19px var(--font-display);color:#edc266}.lobby-look>div>small{font-size:10px;color:#888}.lobby-look>button{padding:11px 16px;background:#211a0e;border:1px solid var(--brass);color:#edc266;font:12px var(--font-display);letter-spacing:.1em}
 
 /* The Boys: five roles, each with what it hands you for free. */
 .boys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(172px, 1fr)); gap: 8px; }
@@ -359,6 +360,8 @@
 .skin-card small { margin-top: 3px; font: 8px var(--font-mono); letter-spacing: .11em; color: #8b96a4; }
 .skin-card.rzadki small { color: #6f87ff; }
 .armoury-note { margin: auto 11px 11px; padding: 9px 10px; border-left: 2px solid var(--brass); background: rgba(217, 164, 65, .07); color: var(--tx-3); font-size: 10px; line-height: 1.45; }
+.armoury-tabs{display:grid;grid-template-columns:repeat(3,1fr);padding:8px;gap:6px;border-bottom:1px solid var(--line)}.armoury-tabs button{padding:9px 4px;background:#11141a;border:1px solid var(--line);color:#777;font:12px var(--font-display);letter-spacing:.08em}.armoury-tabs button.on{border-color:var(--brass);color:#efbc50;background:#211a0e}.armoury-cut-grid{min-height:0;overflow:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}.armoury-cut-grid button{min-height:96px;display:grid;place-items:center;padding:8px;background:#171a20;border:1px solid var(--line);color:#ddd}.armoury-cut-grid button.on{border-color:var(--brass);background:#211a0e}.armoury-cut-grid button.locked{opacity:.35}.armoury-cut-grid i{display:block;width:42px;height:42px;border-radius:50%;background:#b58462;position:relative}.armoury-cut-grid i:after{content:"";position:absolute;left:5px;right:5px;top:1px;height:var(--height);max-height:25px;border-radius:50% 50% 20% 20%;background:var(--hair)}.armoury-cut-grid b{font:13px var(--font-display)}.armoury-cut-grid small{font-size:8px;color:#888}
+.crate-panel{margin:10px;padding:12px;background:linear-gradient(145deg,#17130d,#0b0d10);border:1px solid #4b3b21}.crate-top{display:flex;justify-content:space-between}.crate-top div{display:grid}.crate-top small{color:#8d8b87;font-size:9px}.crate-top strong{font:28px var(--font-display);color:#efb934}.crate-case{width:100%;height:92px!important;margin:10px 0;padding:0!important;position:relative;background:linear-gradient(150deg,#73501c,#d09a32 55%,#6e4818)!important;border:1px solid #f0bf55!important;box-shadow:inset 0 0 0 4px #2d2010,0 8px 20px #0008;color:#171008!important;cursor:pointer}.crate-case>i{position:absolute;left:8%;right:8%;top:10px;height:12px;background:#2c2112;border:2px solid #c18a2c}.crate-case>span{display:grid;place-items:center;width:38px;height:38px;margin:auto;border:5px solid #0d713d;border-radius:50%;font:bold 20px var(--font-display);color:#0d713d;background:#e5c42e}.crate-case>b{position:absolute;right:12px;bottom:8px;font:12px var(--font-display);letter-spacing:.12em}.crate-tasks{display:grid;gap:5px}.crate-tasks>div{position:relative;display:grid;grid-template-columns:1fr auto;overflow:hidden;padding:7px 8px;background:#15171b;color:#bbb;font-size:9px}.crate-tasks>div>i{position:absolute;inset:auto auto 0 0;width:var(--p);height:2px;background:#d9a441}.crate-tasks>div b{color:#d9a441}.crate-opening{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:radial-gradient(circle,#26200fdd,#050609f5 65%);backdrop-filter:blur(8px)}.crate-dialog{position:relative;width:min(1050px,92vw);padding:34px;background:#0d1015;border:1px solid #76602f;box-shadow:0 30px 100px #000}.crate-dialog header{text-align:center;display:grid;gap:5px}.crate-dialog header small{color:#d8a83d;letter-spacing:.3em}.crate-dialog header b{font:36px var(--font-display);letter-spacing:.12em}.crate-close{position:absolute;right:15px;top:12px;background:none;border:0;color:#aaa;font-size:28px}.reel-window{height:180px;margin:28px 0;position:relative;overflow:hidden;border-block:2px solid #c39332;background:#07090c}.reel-window>i{position:absolute;z-index:2;left:50%;top:0;bottom:0;width:3px;background:#ffd36a;box-shadow:0 0 20px #ffb000}.reel-track{height:100%;display:flex;gap:8px;align-items:center;width:max-content;animation:crate-reel 4.2s cubic-bezier(.08,.72,.08,1) forwards}.reel-track>div{width:145px;height:135px;display:grid;grid-template-rows:76px auto auto;padding:8px;background:#171a20;border-bottom:4px solid #789}.reel-track span{background:linear-gradient(135deg,currentColor,#111)!important}.reel-track b{font:13px var(--font-display)}.reel-track small{font-size:8px;text-transform:uppercase}.reel-track .rzadki{border-color:#5979ff}.reel-track .epicki{border-color:#a34fff}.reel-track .legendarny{border-color:#ef4d93}.reel-track .zloty{border-color:#ffc52f}.crate-reveal{text-align:center;display:grid;gap:8px;animation:prize-in .45s ease-out}.crate-reveal>span{font-size:10px;letter-spacing:.25em;color:#999}.crate-reveal>b{font:44px var(--font-display);color:#efbd4e;text-shadow:0 0 28px currentColor}.crate-reveal>button{justify-self:center;padding:11px 28px;background:#d59d31;border:0;font-weight:bold}.crate-dialog>p{text-align:center;color:#777;font-size:10px}@keyframes crate-reel{from{transform:translateX(0)}to{transform:translateX(calc(-100% + 56vw))}}@keyframes prize-in{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
 
 /* A big screen should show the same things BIGGER, not the same things with 400 px of night under
    them. Nothing moves, nothing appears: the cards, the rows and the plans take the room. */
@@ -438,3 +441,67 @@
   .mm-bg, .mm-pole, .mm-status.on .mm-dot { animation: none; }
   .mm-nav-btn:hover { transform: none; }
 }
+
+/* The reel uses the real skin palette and always lands prize card 27 under the centre marker. */
+.reel-track > div {
+  border: 1px solid #2b3039;
+  border-bottom: 4px solid #789;
+  box-shadow: 0 7px 20px #0008;
+}
+.reel-track > div[data-winning="true"] { filter: brightness(1.15); }
+.reel-track span {
+  display: block;
+  border: 1px solid #ffffff18;
+  box-shadow: inset 0 0 20px #0008;
+  background: var(--swatch) !important;
+}
+.reel-track span.haircut-drop {
+  position: relative;
+  border-radius: 50% 50% 35% 35%;
+  transform: scale(.58);
+  box-shadow: 0 0 0 17px #ad7656, 0 0 28px #000;
+}
+.reel-track span.haircut-drop::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: -12%;
+  height: 44%;
+  border-radius: 60% 60% 25% 25%;
+  background: inherit;
+}
+.reel-track .rzadki { border-bottom-color: #5979ff; }
+.reel-track .epicki { border-bottom-color: #a34fff; }
+.reel-track .legendarny { border-bottom-color: #ef4d93; }
+.reel-track .zloty { border-bottom-color: #ffc52f; }
+@keyframes crate-reel {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(min(46vw, 525px) - 4237.5px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reel-track { animation-duration: .01ms; }
+}
+
+.armoury-cut-grid i.cut-head::after {
+  left: 50%;
+  right: auto;
+  width: var(--width);
+  height: var(--height);
+  transform: translateX(-50%);
+  border-radius: 55% 55% 22% 22%;
+  box-shadow: 16px 10px 0 -7px var(--hair), -16px 10px 0 -7px var(--hair);
+}
+.armoury-cut-grid i.cut-head.cap::after {
+  top: -2px;
+  width: 43px;
+  height: 18px;
+  border-radius: 50% 50% 15% 15%;
+  background: #d3b52c;
+  border-bottom: 4px solid #0d713d;
+  box-shadow: 11px 14px 0 -8px #d3b52c;
+}
+.crate-reveal.rzadki > b { color: #7891ff; }
+.crate-reveal.epicki > b { color: #bd75ff; }
+.crate-reveal.legendarny > b { color: #ff65aa; }
+.crate-reveal.zloty > b { color: #ffd04b; }
