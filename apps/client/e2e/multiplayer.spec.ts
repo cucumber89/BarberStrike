@@ -589,9 +589,19 @@ test.describe("two clients", () => {
     await expect(b.getByTestId("chat-line").filter({ hasText: "INDIA" })).toBeVisible();
     // Keys go back to the game once the box closes.
     await expect.poll(() => a.evaluate(() => window.__fb.game.inputState.typing), { timeout: 3000 }).toBe(false);
-    // A mark: middle mouse drops a "go" marker that A's own HUD and B's (same team? teams vary) at least A records.
-    await a.mouse.click(320, 180, { button: "middle" });
-    await expect.poll(async () => (await hud(a)).marks.length, { timeout: 8000 }).toBeGreaterThanOrEqual(1);
+    // A mark: middle mouse drops a "go" marker that A's own HUD and B's (same team? teams vary) at
+    // least A records.
+    //
+    // Marking is only allowed while ALIVE, and `Game.frame` clears the request either way — so a
+    // click that lands on a corpse is dropped in silence and never retried. By this point in a FULL
+    // run the room's bots have had five minutes to kill A, which is why this passed alone and failed
+    // about half the time in the suite. Wait to be alive, and let the poll re-click: the test then
+    // measures marking rather than luck with a respawn timer.
+    await expect.poll(async () => (await hud(a)).alive, { timeout: 20_000 }).toBe(true);
+    await expect.poll(async () => {
+      await a.mouse.click(320, 180, { button: "middle" });
+      return (await hud(a)).marks.length;
+    }, { timeout: 10_000 }).toBeGreaterThanOrEqual(1);
     expect(errors, errors.join("\n")).toEqual([]);
     await ctxA.close();
     await ctxB.close();
@@ -646,24 +656,35 @@ test.describe("two clients", () => {
       await joinRoom(a, "SLIDER", room); await joinRoom(b, "WATCHER", room);
       await fakeLock(a);
       await expect.poll(async () => (await hud(a)).alive, { timeout: 30_000 }).toBe(true);
-      // A free spot with a long straight run: try a few lanes, then face the direction with the most
-      // clear floor (the local collision world knows), so the test survives map dressing.
-      let placed = false;
-      for (const [x, z] of [[-31, -18], [41, -18], [-14, -14], [0, 30]]) {
-        await a.evaluate(([x, z]) => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x, y: 0, z }), [x, z]);
-        try { await expect.poll(async () => Math.hypot((await pos(a)).x - x, (await pos(a)).z - z), { timeout: 2_000 }).toBeLessThan(0.3); placed = true; break; } catch { /* next lane */ }
-      }
-      expect(placed, "a dev teleport landed").toBe(true);
-      const run = await a.evaluate(() => {
+      // A free spot with a long straight run. Every candidate lane is MEASURED and the longest wins,
+      // rather than taking the first that a teleport lands on — SwiftShader runs this client at 13-24
+      // fps, so a keypress can take three frames (measured: 720 ms) to reach the simulation, and on a
+      // fourteen-metre lane the player is into the wall before the crouch arrives. That is a property
+      // of the test environment, not of the move: at a real framerate the press lands the same frame.
+      const lanes: [number, number][] = [[-31, -18], [41, -18], [-14, -14], [0, 30]];
+      const measure = () => a.evaluate(() => {
         const lp = window.__fb.game.localPlayer as unknown as { body: { x: number; y: number; z: number }; world: { overlaps(a: number, b: number, c: number, d: number, e: number, f: number): boolean }; yaw: number; pitch: number };
         const b = lp.body; let best = 0, bestYaw = 0;
         for (let i = 0; i < 16; i++) {
           const yaw = i * Math.PI / 8; let d = 0;
-          for (; d < 30; d += 0.5) { const x = b.x + Math.sin(yaw) * d, z = b.z + Math.cos(yaw) * d; if (lp.world.overlaps(x - 0.35, b.y + 0.45, z - 0.35, x + 0.35, b.y + 1.7, z + 0.35)) break; }
+          for (; d < 40; d += 0.5) { const x = b.x + Math.sin(yaw) * d, z = b.z + Math.cos(yaw) * d; if (lp.world.overlaps(x - 0.35, b.y + 0.45, z - 0.35, x + 0.35, b.y + 1.7, z + 0.35)) break; }
           if (d > best) { best = d; bestYaw = yaw; }
         }
-        lp.yaw = bestYaw; lp.pitch = 0; return best;
+        return { run: best, yaw: bestYaw };
       });
+      const teleport = (x: number, z: number) => a.evaluate(([x, z]) => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x, y: 0, z }), [x, z]);
+      let bestLane: { x: number; z: number; run: number; yaw: number } | null = null;
+      for (const [x, z] of lanes) {
+        await teleport(x, z);
+        try { await expect.poll(async () => Math.hypot((await pos(a)).x - x, (await pos(a)).z - z), { timeout: 2_000 }).toBeLessThan(0.3); } catch { continue; }
+        const m = await measure();
+        if (!bestLane || m.run > bestLane.run) bestLane = { x, z, run: m.run, yaw: m.yaw };
+      }
+      expect(bestLane, "no dev teleport landed").not.toBeNull();
+      await teleport(bestLane!.x, bestLane!.z);
+      await expect.poll(async () => Math.hypot((await pos(a)).x - bestLane!.x, (await pos(a)).z - bestLane!.z), { timeout: 5_000 }).toBeLessThan(0.3);
+      await a.evaluate((yaw) => { const lp = window.__fb.game.localPlayer; lp.yaw = yaw; lp.pitch = 0; }, bestLane!.yaw);
+      const run = bestLane!.run;
       expect(run, "metres of clear floor ahead").toBeGreaterThan(14);
       const body = () => a.evaluate(() => { const l = window.__fb.game.localPlayer as unknown as { body: { slide: number; slideCd: number; vx: number; vz: number; crouching: boolean }; correctionCount: number }; return { slide: l.body.slide, cd: l.body.slideCd, speed: Math.hypot(l.body.vx, l.body.vz), crouch: l.body.crouching, corrections: l.correctionCount }; });
       await a.keyboard.down("KeyW"); await a.keyboard.down("ShiftLeft");
@@ -671,7 +692,8 @@ test.describe("two clients", () => {
       const before = (await body()).corrections;
       // Ctrl, which is a crouch key again — so this also covers the bind the players asked for.
       await a.keyboard.down("ControlLeft");
-      await expect.poll(async () => (await body()).slide, { timeout: 5_000 }).toBeGreaterThan(0);
+      // 15 s, not 5: three frames at 13 fps is most of a second, and the poll has to outlast a stall.
+      await expect.poll(async () => (await body()).slide, { timeout: 15_000 }).toBeGreaterThan(0);
       const mid = await body();
       expect(mid.crouch).toBe(true);
       expect(mid.speed, "faster than a crouch walk while sliding").toBeGreaterThan(4);
@@ -682,10 +704,18 @@ test.describe("two clients", () => {
         const g = window.__fb.game as unknown as { remotes: Map<string, { sliding: boolean }> };
         return g.remotes.get(id)?.sliding ?? false;
       }, aId), { timeout: 5_000 }).toBe(true);
-      await expect.poll(async () => (await body()).slide, { timeout: 10_000 }).toBe(0);
-      const after = await body();
-      expect(after.cd, "cooldown after the slide").toBeGreaterThan(0);
-      expect(after.corrections - before, "prediction and server agree on the slide").toBeLessThanOrEqual(2);
+      // Sample the moment the slide ENDS, not whenever the next round-trip happens to land: on a
+      // starved SwiftShader client a poll interval can be several hundred ms, and the 700 ms cooldown
+      // can be over before the next read. (The cooldown itself is asserted deterministically in
+      // `slide.movement.test.ts`, where a fake clock can see it; what only an e2e can prove is the
+      // line below — that a real server, running the same rule, agreed with the prediction.)
+      let ended: Awaited<ReturnType<typeof body>> | null = null;
+      await expect.poll(async () => {
+        const now = await body();
+        if (now.slide === 0 && !ended) ended = now;
+        return now.slide;
+      }, { timeout: 10_000 }).toBe(0);
+      expect(ended!.corrections - before, "prediction and server agree on the slide").toBeLessThanOrEqual(2);
       await a.keyboard.up("ControlLeft"); await a.keyboard.up("ShiftLeft"); await a.keyboard.up("KeyW");
     } finally { await ca.close(); await cb.close(); }
   });

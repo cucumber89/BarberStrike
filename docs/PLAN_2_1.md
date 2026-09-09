@@ -633,6 +633,16 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   `characters`, which is the owner's decided option (a). They are not downloaded by a player (the
   loader is lazy and never asked), so this is deploy-image weight, not load time. Removing them is
   Drop A's already-written Deferred item and still waits on the owner's word about the characters.
+- Drop J: two e2e tests were flaky for reasons that were not the thing they tested, and both are
+  fixed as TESTS rather than as game changes, because in both cases the game is behaving correctly.
+  `smoke obscures the view from inside` asserted `smokeOpacity === 1` exactly, but the cloud grows, so
+  teleporting to the burst point lands the player near its edge or well inside it depending on how
+  many frames SwiftShader managed — the honest reading plateaus between 0.96 and 1.0, and it failed
+  about half the full runs while passing alone. `drop 5: … a mark on the map` middle-clicks once, and
+  marking is only allowed while ALIVE (`Game.frame` clears the request either way), so by that point
+  in a full run the room's bots have often killed the marker and the click is dropped in silence. Both
+  now assert what they are named for. If more of these appear, the pattern is the same: a full run is
+  five minutes of bots shooting at the test's own player.
 - Drop C before art acceptance: compare painted metal sight housings/notches against a factory ADS
   reference (the post, steel and brass are preserved, the surrounding metal is painted). The 3 m/12 m
   observer frames are too small/front-facing for pattern review; replace them with valid side views.
