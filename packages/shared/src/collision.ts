@@ -160,8 +160,13 @@ export class CollisionWorld {
     let best = Infinity;
     const useGrid = this.boxes.length >= GRID_MIN_BOXES;
     if (useGrid && !this.gStart) this.buildGrid();
-    const order = useGrid ? this.rayCells(ox, oz, dx, dz, maxT) : null;
-    const n = order ? order.length : this.boxes.length;
+    // `rayCells` fills `rayBuf` and returns how much of it it filled; the buffer is reused, so a
+    // broadphase query allocates nothing at all. It used to hand back `out.subarray(0, m)`, which is
+    // a fresh typed-array view on every ray — and rays are the hottest thing in here: one per
+    // line-of-sight check per bot per tick, nine per shotgun trigger pull, one per grenade bounce.
+    const count = useGrid ? this.rayCells(ox, oz, dx, dz, maxT) : -1;
+    const order = count >= 0 ? this.rayBuf : null;
+    const n = order ? count : this.boxes.length;
     for (let q = 0; q < n; q++) {
       const i = order ? order[q] : q;
       const b = this.boxes[i];
@@ -216,23 +221,17 @@ export class CollisionWorld {
 
   /**
    * Box indices in the XZ cells the ray segment crosses, each index once, walked with a 2-D DDA.
-   * Returned in traversal order; `raycast` does not depend on that order for correctness.
+   *
+   * Writes them into `rayBuf` and returns HOW MANY — not a slice of it. In traversal order;
+   * `raycast` does not depend on that order for correctness.
    */
-  private rayCells(ox: number, oz: number, dx: number, dz: number, maxT: number): Int32Array {
+  private rayCells(ox: number, oz: number, dx: number, dz: number, maxT: number): number {
     const start = this.gStart!, items = this.gItems, stamp = this.gStamp;
     const nx = this.gnx, nz = this.gnz;
     if (this.rayBuf.length < this.boxes.length) this.rayBuf = new Int32Array(this.boxes.length);
     const out = this.rayBuf;
     let m = 0;
     const visit = ++this.gVisit;
-    const push = (c: number) => {
-      for (let k = start[c], end = start[c + 1]; k < end; k++) {
-        const i = items[k];
-        if (stamp[i] === visit) continue;
-        stamp[i] = visit;
-        out[m++] = i;
-      }
-    };
     let cx = Math.floor((ox - this.gx0) / CELL);
     let cz = Math.floor((oz - this.gz0) / CELL);
     const stepX = dx > 0 ? 1 : dx < 0 ? -1 : 0;
@@ -245,17 +244,25 @@ export class CollisionWorld {
     // A ray starting outside the grid: skip forward to where it enters, or give up if it never does.
     let guard = nx + nz + 2;
     while ((cx < 0 || cx >= nx || cz < 0 || cz >= nz) && guard-- > 0) {
-      if (tMaxX < tMaxZ) { if (tMaxX > maxT) return out.subarray(0, m); cx += stepX; tMaxX += tDeltaX; }
-      else { if (tMaxZ > maxT) return out.subarray(0, m); cz += stepZ; tMaxZ += tDeltaZ; }
-      if (!Number.isFinite(tMaxX) && !Number.isFinite(tMaxZ)) return out.subarray(0, m);
+      if (tMaxX < tMaxZ) { if (tMaxX > maxT) return m; cx += stepX; tMaxX += tDeltaX; }
+      else { if (tMaxZ > maxT) return m; cz += stepZ; tMaxZ += tDeltaZ; }
+      if (!Number.isFinite(tMaxX) && !Number.isFinite(tMaxZ)) return m;
     }
     while (cx >= 0 && cx < nx && cz >= 0 && cz < nz) {
-      push(cz * nx + cx);
+      // Inlined rather than kept as a `push(cell)` helper: it had exactly one call site, and the
+      // closure it needed over `m` was an allocation on every single ray.
+      const c = cz * nx + cx;
+      for (let k = start[c], end = start[c + 1]; k < end; k++) {
+        const i = items[k];
+        if (stamp[i] === visit) continue;
+        stamp[i] = visit;
+        out[m++] = i;
+      }
       if (tMaxX < tMaxZ) { if (tMaxX > maxT) break; cx += stepX; tMaxX += tDeltaX; }
       else { if (tMaxZ > maxT) break; cz += stepZ; tMaxZ += tDeltaZ; }
       if (stepX === 0 && stepZ === 0) break; // a purely vertical ray stays in one cell
     }
-    return out.subarray(0, m);
+    return m;
   }
 }
 
