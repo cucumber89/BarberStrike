@@ -31,10 +31,16 @@ hud.set({
   connected: true, myId: "p0", myTeam: 0, health: 87, alive: true, weapon: "rifle", pointerLocked: true, armor: 50, tac: 0.7,
   ammo: 24, reserve: 90, phase: MatchPhase.Playing, players,
   money: 4300, scoreA: 7, scoreB: 5, mode: "bomb",
-  killFeed: Array.from({ length: 5 }, (_, i) => ({
-    key: i, at: performance.now(), killer: `p${i}`, killerName: `Player ${i}`, victim: `p${i + 1}`,
-    victimName: `Player ${i + 1}`, weapon: "rifle", headshot: i % 2 === 0, killerTeam: 0, victimTeam: 1,
-  })) as never,
+  // A feed with one of each row the component can draw, so `hud-shot.mjs` is a picture of all of
+  // them: a plain kill, a headshot (head icon), an assisted kill ("A + B"), an assisted headshot, and
+  // a shave (razor). Row 0 is the local player's own kill so the "me-killer" border shows too.
+  killFeed: [
+    { key: 0, at: performance.now(), killer: "p0", killerName: "Player 0", victim: "p3", victimName: "Player 3", weapon: "rifle", headshot: false, killerTeam: 0, victimTeam: 1 },
+    { key: 1, at: performance.now(), killer: "p2", killerName: "Player 2", victim: "p5", victimName: "Player 5", weapon: "dmr", headshot: true, killerTeam: 0, victimTeam: 1 },
+    { key: 2, at: performance.now(), killer: "p4", killerName: "Player 4", victim: "p1", victimName: "Player 1", weapon: "smg", headshot: false, killerTeam: 0, victimTeam: 1, assists: ["Player 6"] },
+    { key: 3, at: performance.now(), killer: "p0", killerName: "Player 0", victim: "p7", victimName: "Player 7", weapon: "sniper", headshot: true, killerTeam: 0, victimTeam: 1, assists: ["Player 2", "Player 4"] },
+    { key: 4, at: performance.now(), killer: "p6", killerName: "Player 6", victim: "p0", victimName: "Player 0", weapon: "clippers", headshot: false, killerTeam: 1, victimTeam: 0, shave: true },
+  ] as never,
 } as never);
 
 /**

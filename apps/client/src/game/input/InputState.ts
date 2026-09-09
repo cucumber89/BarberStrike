@@ -34,12 +34,24 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   right: ["KeyD", "ArrowRight"],
   jump: ["Space"],
   sprint: ["ShiftLeft", "ShiftRight"],
-  // C, NOT Ctrl. Crouch-walking forward on a Ctrl bind is literally Ctrl+W, and Ctrl+W closes the
-  // tab — `preventDefault()` cannot stop it (see RESERVED_BY_BROWSER in browserKeys.ts), so no
-  // amount of interception saves a player who crouches while moving. Keyboard Lock does capture it,
-  // but only on Chromium and only while fullscreen, which is not a promise a default can rest on.
-  // Ctrl stays BINDABLE for anyone who wants it; the controls screen warns what it costs.
-  crouch: ["KeyC"],
+  /**
+   * C AND Ctrl, because that is how people actually play, and the reason Ctrl was taken out is now
+   * handled rather than avoided.
+   *
+   * The danger was never Ctrl+D (bookmark) — `browserKeys.ts` intercepts that and everything like it.
+   * It was Ctrl+W: crouch-walking forward on a Ctrl bind IS Ctrl+W, and `preventDefault()` cannot
+   * stop the browser closing the tab. Two things now stand between a player and that:
+   *
+   *  - Keyboard Lock (`immersion.ts`) captures W, T and N outright — Chromium, fullscreen, which is
+   *    where most people play. Nothing reaches the browser at all.
+   *  - `unloadGuard.ts` everywhere else: a slipped Ctrl+W asks "leave site?" instead of ending the
+   *    match. That is the difference between an annoyance and losing a round, and it works in every
+   *    browser.
+   *
+   * Both keys are listed so neither camp has to rebind anything, and the controls screen still says
+   * plainly what Ctrl costs outside fullscreen.
+   */
+  crouch: ["KeyC", "ControlLeft", "ControlRight"],
   reload: ["KeyR"],
   scoreboard: ["Tab"],
   // Drop 4: Q/E lean (owner decision), so "last weapon" moves to X.
