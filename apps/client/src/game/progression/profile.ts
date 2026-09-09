@@ -1,5 +1,5 @@
 import {
-  BADGES, DEFAULT_HAIRCUT, addMatch, emptyLifetime, haircutDef, isHaircutId, levelFor,
+  BADGES, DEFAULT_HAIRCUT, HAIRCUTS, addMatch, emptyLifetime, haircutDef, hashString, isHaircutId, levelFor, mulberry32,
   newBadges, newHaircuts, ownedHaircuts, titleFor, xpForMatch,
   type HaircutDef, type LevelState, type LifetimeStats, type MatchStats, type XpLine,
 } from "@frankibarber/shared";
@@ -30,9 +30,14 @@ export interface Profile {
   haircut: string;
   skins: SkinInstance[];
   equip: Partial<Record<WeaponId, string>>;
+  crates: number;
+  crateDay: string;
+  crateCuts: string[];
+  challengeClaims: string[];
+  challengeBase: { matches: number; kills: number; headshots: number };
 }
 
-export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT, skins: [], equip: {} });
+export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT, skins: [], equip: {}, crates: 0, crateDay: "", crateCuts: [], challengeClaims: [], challengeBase: { matches: 0, kills: 0, headshots: 0 } });
 
 /**
  * Reads the profile, repairing anything the shape has outgrown.
@@ -63,12 +68,17 @@ export function loadProfile(): Profile {
     }
     return {
       skins, equip,
+      crates: Number.isFinite(p.crates) ? Math.max(0, Math.floor(p.crates as number)) : 0,
+      crateDay: typeof p.crateDay === "string" ? p.crateDay : "",
+      crateCuts: Array.isArray(p.crateCuts) ? p.crateCuts.filter(id => typeof id === "string" && isHaircutId(id)) : [],
+      challengeClaims: Array.isArray(p.challengeClaims) ? p.challengeClaims.filter(id => typeof id === "string") : [],
+      challengeBase: { matches: Number(p.challengeBase?.matches) || 0, kills: Number(p.challengeBase?.kills) || 0, headshots: Number(p.challengeBase?.headshots) || 0 },
       xp: Number.isFinite(p.xp) ? Math.max(0, Math.floor(p.xp as number)) : 0,
       life,
       badges: Array.isArray(p.badges) ? p.badges.filter((b) => known.has(b)) : [],
       // An id from a build that had a haircut this one does not, or one the player has not earned
       // (a cleared profile, an edited blob), falls back to the cap rather than to nothing.
-      haircut: isHaircutId(p.haircut) && ownedHaircuts(life).some((h) => h.id === p.haircut) ? (p.haircut as string) : DEFAULT_HAIRCUT,
+      haircut: isHaircutId(p.haircut) && (ownedHaircuts(life).some((h) => h.id === p.haircut) || (p.crateCuts ?? []).includes(p.haircut as string)) ? (p.haircut as string) : DEFAULT_HAIRCUT,
     };
   } catch {
     // A corrupt or unreadable profile is not worth a crash on the way into a match.
@@ -108,13 +118,14 @@ export function applyMatch(profile: Profile, stats: MatchStats, clipperKills: nu
   const haircuts = newHaircuts(profile.life, life);
   const xp = profile.xp + total;
   const after = levelFor(xp);
-  return {
-    profile: {
+  const next = claimChallengeCrates({
       ...profile,
       xp, life,
       badges: [...profile.badges, ...earned.filter((b) => !profile.badges.includes(b))],
       haircut: profile.haircut,
-    },
+  });
+  return {
+    profile: next,
     reward: { lines, total, before, after, levelsGained: after.level - before.level, earned, haircuts, title: titleFor(after.level) },
   };
 }
@@ -122,7 +133,7 @@ export function applyMatch(profile: Profile, stats: MatchStats, clipperKills: nu
 // ------------------------------------------------------------------ Drop E: the wardrobe
 
 /** The haircuts this profile has earned, catalog order. Always at least the cap. */
-export const ownedCuts = (p: Profile = loadProfile()): HaircutDef[] => ownedHaircuts(p.life);
+export const ownedCuts = (p: Profile = loadProfile()): HaircutDef[] => HAIRCUTS.filter(h => h.unlockedBy(p.life) || p.crateCuts.includes(h.id));
 
 /**
  * The equipped haircut id, for the join options.
@@ -144,6 +155,50 @@ export function equipHaircut(id: string): string {
 
 export const equippedSkins = (): string => encodeSkins(loadProfile().equip);
 
+export const CRATE_CHALLENGES = [
+  { id: "mecz", label: "Rozegraj 1 mecz", stat: "matches" as const, target: 1 },
+  { id: "zabojstwa", label: "Zdobądź 10 zabójstw", stat: "kills" as const, target: 10 },
+  { id: "glowy", label: "Traf 3 razy w głowę", stat: "headshots" as const, target: 3 },
+];
+
+const dayKey = (now = new Date()): string => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+export function refreshDailyCrates(now = new Date()): Profile {
+  const p = loadProfile(); const day = dayKey(now);
+  if (p.crateDay === day) return p;
+  const next = { ...p, crates: p.crates + 1, crateDay: day, challengeClaims: [],
+    challengeBase: { matches: p.life.matches, kills: p.life.kills, headshots: p.life.headshots } };
+  saveProfile(next); return next;
+}
+
+export function claimChallengeCrates(profile: Profile): Profile {
+  const claims = [...profile.challengeClaims]; let crates = profile.crates;
+  for (const task of CRATE_CHALLENGES) {
+    if (!claims.includes(task.id) && profile.life[task.stat] - profile.challengeBase[task.stat] >= task.target) {
+      claims.push(task.id); crates++;
+    }
+  }
+  return { ...profile, crates, challengeClaims: claims };
+}
+
+export type CratePrize = { kind: "skin"; id: string } | { kind: "haircut"; id: string };
+export function openCrate(now = Date.now()): { profile: Profile; prize: CratePrize } | null {
+  const p = refreshDailyCrates(new Date(now)); if (p.crates < 1) return null;
+  const rng = mulberry32(hashString(`${p.crateDay}:${now}:${p.skins.length}:${p.crateCuts.length}`));
+  const lockedCuts = HAIRCUTS.filter(h => !h.id.startsWith("shave-") && h.id !== DEFAULT_HAIRCUT && !ownedCuts(p).some(o => o.id === h.id));
+  if (lockedCuts.length && rng() < .18) {
+    const cut = lockedCuts[Math.floor(rng() * lockedCuts.length)];
+    const profile = { ...p, crates: p.crates - 1, crateCuts: [...p.crateCuts, cut.id] }; saveProfile(profile);
+    return { profile, prize: { kind: "haircut", id: cut.id } };
+  }
+  const weights = { pospolity: 70, rzadki: 22, epicki: 6, legendarny: 1.7, zloty: .3 };
+  const roll = rng() * 100; let cursor = 0; const rarity = (Object.keys(weights) as (keyof typeof weights)[]).find(r => (cursor += weights[r]) >= roll) ?? "pospolity";
+  const pool = catalog.filter(s => s.rarity === rarity && !p.skins.some(i => i.skin === s.id));
+  const fallback = catalog.filter(s => !p.skins.some(i => i.skin === s.id));
+  const skin = (pool.length ? pool : fallback.length ? fallback : catalog)[Math.floor(rng() * (pool.length || fallback.length || catalog.length))];
+  const profile = { ...p, crates: p.crates - 1, skins: [...p.skins, { skin: skin.id, wear: rng() * .5, rolledAt: now }] }; saveProfile(profile);
+  return { profile, prize: { kind: "skin", id: skin.id } };
+}
+
 /**
  * The six slice-4 finishes are the launch collection: until crates ship, hiding every recipe behind
  * an acquisition system that does not exist would leave a working renderer with no player path.
@@ -152,7 +207,8 @@ export const equippedSkins = (): string => encodeSkins(loadProfile().equip);
 export function ensureStarterSkins(now = Date.now()): Profile {
   const profile = loadProfile();
   const owned = new Set(profile.skins.map((instance) => instance.skin));
-  const missing = catalog.filter((skin) => !owned.has(skin.id));
+  const starter = new Set(["warsztat", "stalowka", "talk", "slupek-frankiego", "szlaczek-babci", "osy"]);
+  const missing = catalog.filter((skin) => starter.has(skin.id) && !owned.has(skin.id));
   if (!missing.length) return profile;
   const next = {
     ...profile,

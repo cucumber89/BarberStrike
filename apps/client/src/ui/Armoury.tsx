@@ -4,6 +4,7 @@ import { catalog, fitsWeapon, type SkinDef } from "@frankibarber/skins";
 import { ensureStarterSkins, equipSkin } from "../game/progression/profile";
 import { uiSound } from "../game/audio";
 import { SkinPreview } from "./SkinPreview";
+import { Crates } from "./Crates";
 
 const rarityLabel: Record<SkinDef["rarity"], string> = {
   pospolity: "POSPOLITY", rzadki: "RZADKI", epicki: "EPICKI", legendarny: "LEGENDARNY", zloty: "ZŁOTY",
@@ -19,8 +20,9 @@ export function Armoury() {
   const initial = useMemo(() => ensureStarterSkins(), []);
   const [weapon, setWeapon] = useState<WeaponId>("rifle");
   const [equip, setEquip] = useState(initial.equip);
+  const [owned, setOwned] = useState(() => new Set(initial.skins.map(instance => instance.skin)));
   const [preview, setPreview] = useState(initial.equip.rifle ?? catalog.find((skin) => fitsWeapon(skin, "rifle"))?.id ?? "");
-  const skins = catalog.filter((skin) => fitsWeapon(skin, weapon));
+  const skins = catalog.filter((skin) => fitsWeapon(skin, weapon) && owned.has(skin.id));
 
   const chooseWeapon = (id: WeaponId) => {
     setWeapon(id); setPreview(equip[id] ?? catalog.find((skin) => fitsWeapon(skin, id))?.id ?? "");
@@ -69,6 +71,7 @@ export function Armoury() {
           ))}
         </div>
         <p className="armoury-note">Wybór zapisuje się od razu. Skin zobaczysz po wejściu do następnego meczu.</p>
+        <Crates onProfile={(profile) => { setEquip(profile.equip); setOwned(new Set(profile.skins.map(instance => instance.skin))); }} />
       </aside>
     </section>
   );

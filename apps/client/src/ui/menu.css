@@ -28,6 +28,8 @@
   --mm-plate: linear-gradient(180deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, .014));
 }
 
+.crate-panel{margin-top:10px;padding:12px;background:#0d1014;border:1px solid #31343a}.crate-top{display:flex;justify-content:space-between}.crate-top div{display:grid}.crate-top small{color:#777;font-size:9px}.crate-top strong{font:28px var(--display);color:#e3ad39}.crate-box{height:62px;margin:10px 0;background:linear-gradient(135deg,#3a2a14,#c58b2b);display:grid;place-items:center;position:relative;overflow:hidden}.crate-box span{font:30px var(--display);color:#17110a}.crate-box.opening i{position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 35px,#fff4 36px 38px);animation:crate-roll .25s linear infinite}.crate-panel>button{width:100%;padding:9px;background:#c99228;border:0;font-weight:800}.crate-panel>button:disabled{opacity:.35}.crate-prize{text-align:center;padding:8px;color:#f4c861;font-weight:800}.crate-tasks{display:grid;gap:4px;margin-top:8px}.crate-tasks div{display:flex;justify-content:space-between;font-size:10px;color:#aaa}.crate-tasks .done{color:#6ea77a}@keyframes crate-roll{to{transform:translateX(38px)}}
+
 /* The room the menu sits in: barber stripes drifting across two practical lights, under a
    vignette. Purely decorative and never clickable; the drift stops for reduced motion. */
 .mm-bg {
@@ -347,7 +349,7 @@
 .armoury-current b { margin-top: 2px; font: 22px var(--font-display); letter-spacing: .08em; font-weight: normal; }
 .armoury-current > span { padding: 5px 8px; border: 1px solid rgba(217, 164, 65, .5); color: var(--brass); font: 9px var(--font-mono); letter-spacing: .12em; }
 .armoury-skin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-content: start; padding: 10px; }
-.skin-card { position: relative; display: grid; grid-template-rows: 64px auto auto; padding: 0 0 8px; overflow: hidden; text-align: left; color: var(--tx-2); background: var(--bg-3); border: 1px solid var(--line); cursor: pointer; }
+.skin-card { position: relative; display: grid; grid-template-rows: 64px auto auto; min-height: 105px; padding: 0 0 8px; overflow: hidden; text-align: left; color: var(--tx-2); background: var(--bg-3); border: 1px solid var(--line); cursor: pointer; }
 .skin-card:hover, .skin-card.on { color: var(--tx); border-color: var(--brass); transform: translateY(-1px); }
 .skin-card.on::after { content: "✓"; position: absolute; top: 5px; right: 6px; width: 20px; height: 20px; display: grid; place-items: center; background: var(--brass); color: #111; font-weight: bold; }
 .skin-swatch { display: block; width: 100%; height: 64px; margin-bottom: 8px; background-size: 90px 90px !important; }

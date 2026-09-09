@@ -7,6 +7,7 @@ test("the main menu exposes the six launch skins and remembers an equipped finis
   await page.getByTestId("btn-armoury").click();
 
   await expect(page.getByTestId("armoury")).toBeVisible();
+  await expect(page.getByTestId("crate-count")).toHaveText("1");
   for (const id of ["warsztat", "stalowka", "talk", "slupek-frankiego", "szlaczek-babci", "osy"]) {
     await expect(page.getByTestId(`skin-${id}`)).toBeVisible();
   }
@@ -21,5 +22,8 @@ test("the main menu exposes the six launch skins and remembers an equipped finis
   await expect(page.getByTestId("skin-osy")).toHaveClass(/\bon\b/);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("bs_profile_v1") ?? "{}").equip?.pistol)).toBe("osy");
   await page.screenshot({ path: info.outputPath("armoury.png"), fullPage: true });
+  await page.getByTestId("crate-open").click();
+  await expect(page.getByTestId("crate-prize")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByTestId("crate-count")).toHaveText("0");
   expect(errors).toEqual([]);
 });
