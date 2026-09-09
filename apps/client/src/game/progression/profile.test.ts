@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { BADGES, BUILDS, DEFAULT_BUILD, DEFAULT_HAIRCUT, HAIRCUTS, XP, decodeBuild, decodeSkins, levelFor, xpToNext, type MatchStats } from "@frankibarber/shared";
-import { applyMatch, emptyProfile, loadProfile, ownedCuts, saveProfile, equipBuild, equipHaircut, equippedBuild, equippedHaircut, ensureStarterSkins, equipSkin, equippedSkins, refreshDailyCrates, openCrate } from "./profile";
+import { BADGES, BUILDS, DEFAULT_BUILD, DEFAULT_HAIRCUT, DEFAULT_OUTFIT, DROPPABLE_OUTFITS, HAIRCUTS, XP, decodeBuild, decodeOutfit, decodeSkins, levelFor, xpToNext, type MatchStats } from "@frankibarber/shared";
+import { skinById } from "@frankibarber/skins";
+import { applyMatch, emptyProfile, loadProfile, ownedCuts, ownedFits, saveProfile, equipBuild, equipHaircut, equipOutfit, equippedBuild, equippedHaircut, equippedOutfit, ensureStarterSkins, equipSkin, equippedSkins, refreshDailyCrates, openCrate } from "./profile";
 
 const match = (over: Partial<MatchStats> = {}): MatchStats => ({
   kills: 0, headshots: 0, assists: 0, deaths: 0, captures: 0, wavesSurvived: 0, result: -1, mode: "tdm", ...over,
@@ -213,5 +214,100 @@ describe("the body build", () => {
   it("is carried through a match, like the haircut", () => {
     const p = { ...emptyProfile(), build: "barylka" };
     expect(applyMatch(p, match({ kills: 3 }), 0).profile.build).toBe("barylka");
+  });
+});
+
+describe("outfits in the profile", () => {
+  memoryStorage();
+
+  it("starts with the kit and nothing else, and the kit is always wearable", () => {
+    expect(equippedOutfit()).toBe(DEFAULT_OUTFIT);
+    expect(ownedFits().map((o) => o.id)).toEqual([DEFAULT_OUTFIT]);
+    expect(equipOutfit(DEFAULT_OUTFIT)).toBe(DEFAULT_OUTFIT);
+  });
+
+  it("refuses an outfit the player has not rolled", () => {
+    // Unlike a build, an outfit IS earned, so this is the haircut rule and not the build rule.
+    expect(equipOutfit("kibol")).toBe(DEFAULT_OUTFIT);
+    saveProfile({ ...emptyProfile(), fits: ["kibol"] });
+    expect(equipOutfit("kibol")).toBe("kibol");
+    expect(loadProfile().outfit).toBe("kibol");
+    expect(equipOutfit("nietoperz"), "still not owned").toBe("kibol");
+  });
+
+  it("repairs an equipped outfit the player cannot justify", () => {
+    saveProfile({ ...emptyProfile(), outfit: "nietoperz", fits: [] });
+    expect(loadProfile().outfit, "equipped but not owned").toBe(DEFAULT_OUTFIT);
+    for (const junk of ["not-an-outfit", "", null, 42, "<script>"]) {
+      saveProfile({ ...emptyProfile(), outfit: junk as string, fits: ["kibol"] });
+      expect(loadProfile().outfit, String(junk)).toBe(DEFAULT_OUTFIT);
+    }
+    // ...and a junk ownership list is filtered rather than trusted.
+    saveProfile({ ...emptyProfile(), fits: ["kibol", "kibol", "nope", 7, DEFAULT_OUTFIT] as string[] });
+    expect(loadProfile().fits).toEqual(["kibol"]);
+  });
+
+  it("survives a profile written before outfits existed", () => {
+    const old = { ...emptyProfile(), xp: 1200, build: "byk" } as Record<string, unknown>;
+    delete old.outfit; delete old.fits;
+    localStorage.setItem("bs_profile_v1", JSON.stringify(old));
+    const p = loadProfile();
+    expect(p.outfit).toBe(DEFAULT_OUTFIT);
+    expect(p.fits).toEqual([]);
+    expect(p.xp, "migrating two fields must not cost the rest").toBe(1200);
+    expect(p.build).toBe("byk");
+  });
+
+  it("rides to the room in the same field as the build and the finishes", () => {
+    saveProfile({ ...emptyProfile(), fits: ["menel"] });
+    ensureStarterSkins();
+    equipSkin("rifle", "osy");
+    equipBuild("tyczka");
+    equipOutfit("menel");
+    expect(equippedSkins()).toBe("body=tyczka,fit=menel,rifle=osy");
+    expect(decodeOutfit(equippedSkins())).toBe("menel");
+  });
+});
+
+describe("what a crate rolls", () => {
+  memoryStorage();
+
+  it("hands out outfits, haircuts and finishes, and never the same outfit twice", () => {
+    saveProfile({ ...emptyProfile(), crates: 400, crateDay: "2026-01-01", life: { ...emptyProfile().life, matches: 50, kills: 200, headshots: 60, assists: 40, wins: 20, shaves: 30 } });
+    const kinds = new Set<string>(); const outfits: string[] = [];
+    for (let i = 0; i < 400; i++) {
+      const rolled = openCrate(1_700_000_000_000 + i * 137);
+      if (!rolled) break;
+      kinds.add(rolled.prize.kind);
+      if (rolled.prize.kind === "outfit") outfits.push(rolled.prize.id);
+    }
+    expect([...kinds].sort()).toEqual(["haircut", "outfit", "skin"]);
+    expect(new Set(outfits).size, "a rolled outfit is never rolled again").toBe(outfits.length);
+    expect(outfits.length, "every droppable outfit is reachable").toBe(DROPPABLE_OUTFITS.length);
+    // Everything it gave out is owned afterwards, and the kit was never handed out as a prize.
+    const p = loadProfile();
+    expect(p.fits.sort()).toEqual(DROPPABLE_OUTFITS.map((o) => o.id).sort());
+    expect(p.fits).not.toContain(DEFAULT_OUTFIT);
+  });
+
+  it("stops rolling outfits once they are all owned, instead of giving duds", () => {
+    saveProfile({ ...emptyProfile(), crates: 30, crateDay: "2026-01-01", fits: DROPPABLE_OUTFITS.map((o) => o.id) });
+    for (let i = 0; i < 30; i++) {
+      const rolled = openCrate(1_700_000_100_000 + i * 91);
+      expect(rolled?.prize.kind, "an exhausted pool hands its share to the others").not.toBe("outfit");
+    }
+  });
+
+  it("gives the common tiers out more often than the golden one", () => {
+    // The weights as behaviour rather than as a table read back to itself.
+    saveProfile({ ...emptyProfile(), crates: 600, crateDay: "2026-01-01" });
+    const tiers: Record<string, number> = {};
+    for (let i = 0; i < 600; i++) {
+      const rolled = openCrate(1_700_000_200_000 + i * 53);
+      if (rolled?.prize.kind !== "skin") continue;
+      const rarity = skinById(rolled.prize.id)?.rarity ?? "?";
+      tiers[rarity] = (tiers[rarity] ?? 0) + 1;
+    }
+    expect(tiers.pospolity ?? 0).toBeGreaterThan(tiers.zloty ?? 0);
   });
 });

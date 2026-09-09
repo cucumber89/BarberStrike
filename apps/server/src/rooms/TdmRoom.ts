@@ -418,7 +418,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // what a bot match looked like before, and the builds cost a bot nothing — the hitbox is
     // `PLAYER` for every one of them (`shared/builds.ts`). Offset so bot 0 is not always KLASYK
     // wearing the default cap; the two catalogs then walk out of step with each other.
-    p.skins = encodeCosmetics({}, BUILDS[(n * 2 + 1) % BUILDS.length].id);
+    // ...and a look each, from the two catalogs walked at different strides so the pairings do not
+    // repeat inside a full house. Bots pay nothing for an outfit either: it is paint and trimmings
+    // merged into meshes the body already had (`shared/outfits.ts`).
+    p.skins = encodeCosmetics({}, BUILDS[(n * 2 + 1) % BUILDS.length].id, OUTFITS[(n * 3 + 2) % OUTFITS.length].id);
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
     this.state.players.set(id, p); this.connectedCount++;
@@ -2044,4 +2047,4 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     } satisfies KillEvent);
   }
 }
-import { BUILDS, encodeCosmetics, sanitizeSkins } from "@frankibarber/shared";
+import { BUILDS, OUTFITS, encodeCosmetics, sanitizeSkins } from "@frankibarber/shared";

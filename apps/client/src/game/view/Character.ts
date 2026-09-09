@@ -5,7 +5,10 @@ import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { DEFAULT_BUILD, PLAYER, WEAPONS, buildRig, hashString, haircutLook, type BuildRig, type HaircutStyle, type Team, type WeaponId } from "@frankibarber/shared";
+import {
+  DEFAULT_BUILD, DEFAULT_OUTFIT, PLAYER, WEAPONS, buildRig, hashString, haircutLook, hidesHair, outfitDef, outfitParts,
+  type BuildRig, type HaircutStyle, type OutfitDef, type OutfitRole, type Team, type WeaponId,
+} from "@frankibarber/shared";
 import { HOLD } from "./characterHold";
 import { TEAM_KITS } from "./teamKit";
 import { buildWeaponModel, createWeaponMaterials, forEachMesh, type WeaponMaterials, type WeaponModel } from "./weaponMeshes";
@@ -92,15 +95,24 @@ export interface Pose {
 
 interface SharedMats { skin: PBRMaterial; cloth: PBRMaterial; vest: PBRMaterial; accent: PBRMaterial; trim: PBRMaterial; boots: PBRMaterial; stubble: PBRMaterial; razorburn: PBRMaterial; hair: PBRMaterial; bleach: PBRMaterial; weapons: WeaponMaterials }
 
-const SHARED = new Map<Scene, Map<Team, SharedMats>>();
+/**
+ * Materials, shared by every body in a scene wearing the same team AND the same outfit.
+ *
+ * It used to be keyed by team alone. Outfits repaint five of the roles, so the key is now the pair:
+ * twelve players in four outfits build four sets rather than twelve, and two players in the same
+ * outfit still share one. Freed with the scene, like before.
+ */
+const SHARED = new Map<Scene, Map<string, SharedMats>>();
 
-function teamMats(scene: Scene, team: Team): SharedMats {
-  let byTeam = SHARED.get(scene);
-  if (!byTeam) { byTeam = new Map(); SHARED.set(scene, byTeam); scene.onDisposeObservable.addOnce(() => SHARED.delete(scene)); }
-  let m = byTeam.get(team);
+function teamMats(scene: Scene, team: Team, outfit: string = DEFAULT_OUTFIT): SharedMats {
+  let byKey = SHARED.get(scene);
+  if (!byKey) { byKey = new Map(); SHARED.set(scene, byKey); scene.onDisposeObservable.addOnce(() => SHARED.delete(scene)); }
+  const def = outfitDef(outfit);
+  const key = `${team}|${def.id}`;
+  let m = byKey.get(key);
   if (m) return m;
   const mk = (name: string, hex: string, rough: number, metal = 0, emissive?: string) => {
-    const mat = new PBRMaterial(`${name}_t${team}`, scene);
+    const mat = new PBRMaterial(`${name}_t${team}_${def.id}`, scene);
     mat.albedoColor = Color3.FromHexString(hex).toLinearSpace();
     mat.roughness = rough; mat.metallic = metal;
     if (emissive) mat.emissiveColor = Color3.FromHexString(emissive).scale(0.6);
@@ -113,13 +125,18 @@ function teamMats(scene: Scene, team: Team): SharedMats {
   // geometry change by accident. Roughness/metalness stay per ROLE — a shirt is a shirt whatever
   // colour it is — which is what keeps the two sides reading as the same game.
   const kit = TEAM_KITS[team];
+  // An outfit owns five of the six roles and CANNOT own `accent` — `OutfitPalette` has no field for
+  // it (`shared/outfits.ts`). That is what keeps two NIETOPERZs on opposite sides of a doorway
+  // tellable apart: whatever a player is wearing, the chest panel, the back panel, the badge, the
+  // armband and the chest band are their side's colour and nobody else's.
+  const p = def.palette;
   m = {
-    skin: mk("ch_skin", kit.skin, 0.7, 0, "#1b100b"),
-    cloth: mk("ch_cloth", kit.cloth, 0.85, 0, "#10151c"),
-    vest: mk("ch_vest", kit.vest, 0.7, 0.05, "#181b19"),
+    skin: mk("ch_skin", p?.skin ?? kit.skin, 0.7, 0, "#1b100b"),
+    cloth: mk("ch_cloth", p?.cloth ?? kit.cloth, 0.85, 0, "#10151c"),
+    vest: mk("ch_vest", p?.vest ?? kit.vest, 0.7, 0.05, "#181b19"),
     accent: mk("ch_accent", kit.accent, 0.45, 0.1, kit.accent),
-    trim: mk("ch_trim", kit.trim, 0.55, 0, "#141414"),
-    boots: mk("ch_boots", kit.boots, 0.6, 0, "#090c10"),
+    trim: mk("ch_trim", p?.trim ?? kit.trim, 0.55, 0, "#141414"),
+    boots: mk("ch_boots", p?.boots ?? kit.boots, 0.6, 0, "#090c10"),
     // Drop D: a freshly clipped scalp — matte, with a grey cast over the kit's skin tone, so a
     // shaved head reads as "no hair" at gameplay distance rather than as a bald skin tone. Not a
     // kit colour: a shaved scalp is a scalp whichever side shaved you.
@@ -134,12 +151,26 @@ function teamMats(scene: Scene, team: Team): SharedMats {
     // haircut whichever side you are on, and reading it off a head is how a player knows who has
     // been done. Dark enough to separate from every kit skin tone, matte so it is not mistaken for
     // a helmet; the bleach is the one look that is meant to be spotted across the map.
-    hair: mk("ch_hair", "#241c16", 0.92, 0, "#0d0906"),
+    hair: mk("ch_hair", p?.hair ?? "#241c16", 0.92, 0, "#0d0906"),
     bleach: mk("ch_bleach", "#e0cf95", 0.8, 0, "#241f12"),
     weapons: createWeaponMaterials(scene),
   };
-  byTeam.set(team, m);
+  byKey.set(key, m);
   return m;
+}
+
+/**
+ * Where the stripes down a sleeve or a trouser sit, outermost first.
+ *
+ * The first one is the body's own piping and never moves — it is the widest geometry on the whole
+ * character, so shifting it would change the silhouette an outfit presents. Extra stripes are laid
+ * INBOARD at a fixed pitch, which is what makes "two paski" and "three paski" a look rather than a
+ * measurement.
+ */
+const STRIPE_PITCH = 0.026;
+function stripeOffsets(outer: number, width: number, count: number): number[] {
+  const n = Math.max(1, Math.min(3, Math.floor(count) || 1));
+  return Array.from({ length: n }, (_, i) => outer - i * (width + STRIPE_PITCH));
 }
 
 const DEATH_MS = 900;
@@ -284,11 +315,15 @@ export class Character {
   private mats: SharedMats;
   /** The proportions this body was built from. Read by the hair builder and by the pose loop. */
   private rig: BuildRig;
+  /** What it is wearing. Fixed at construction, like the build: an outfit is geometry, not a flag. */
+  private outfit: OutfitDef;
 
-  constructor(private scene: Scene, team: Team, name: string, build: string = DEFAULT_BUILD) {
-    const M = teamMats(scene, team);
+  constructor(private scene: Scene, team: Team, name: string, build: string = DEFAULT_BUILD, outfit: string = DEFAULT_OUTFIT) {
+    const F = outfitDef(outfit);
+    const M = teamMats(scene, team, F.id);
     const R = buildRig(build);
     this.rig = R;
+    this.outfit = F;
     this.time = (hashString(name) % 10000) / 1000;
     this.mats = M;
     this.weaponMaterials = M.weapons;
@@ -334,9 +369,11 @@ export class Character {
     box("goggle_lens", this.head, R.skullW - .022, .039, .018, 0, R.skullY + R.skullH * (.04 / .24), R.skullD / 2 + .025, M.accent);
     box("face_mask", this.head, R.skullW - .03, .075, .055, 0, R.skullY - R.skullH * (.052 / .24), R.skullD / 2 - .005, M.cloth);
     box("headset", this.head, .04, .085, .09, R.skullW / 2 + .015, R.skullY + R.skullH * (.03 / .24), 0, M.boots);
-    box("apron", this.torso, R.vestW * (.31 / .44), .19, .025, 0, R.chestY - R.chestH * .53, vestFront - .005, M.vest);
+    if (F.apron) box("apron", this.torso, R.vestW * (.31 / .44), .19, .025, 0, R.chestY - R.chestH * .53, vestFront - .005, M.vest);
     box("back_team_panel", this.torso, R.chestW * (.32 / .42), .17, .02, 0, R.chestY + R.chestH * .14, R.chestZ - R.chestD / 2 - .025, M.accent);
-    box("chest_team_stripe", this.torso, R.chestW * (.37 / .42), .055, .02, 0, R.chestY + R.chestH * .36, chestFront + .025, M.trim);
+    // Team-coloured, not trim: an outfit owns `trim`, so a band named "team stripe" painted with it
+    // would have gone black on NIETOPERZ and taken the side's colour off the chest with it.
+    box("chest_team_stripe", this.torso, R.chestW * (.37 / .42), .055, .02, 0, R.chestY + R.chestH * .36, chestFront + .025, M.accent);
     {
       // Street tracksuit piping and a compact club badge. Marcovia's materials reproduce the
       // supplied green-yellow crest; the other side gets the same geometry to preserve fairness.
@@ -359,8 +396,12 @@ export class Character {
 
     this.armR = node("armR", this.torso, R.armX, R.armY, R.shoulderZ);
     box("upperR", this.armR, R.upperW, R.upperH, R.upperW, 0, -R.upperH / 2, 0, M.cloth);
-    box("track_arm_r", this.armR, R.stripeW, R.upperH * (.27 / .3), R.upperW + .006, R.armStripeX, -R.upperH / 2, 0, M.trim);
-    box("bandR", this.armR, R.upperW * (.125 / .11), .06, R.upperW * (.125 / .11), 0, -R.upperH / 3, 0, M.trim);
+    for (const sx of stripeOffsets(R.armStripeX, R.stripeW, F.stripes)) {
+      box("track_arm_r", this.armR, R.stripeW, R.upperH * (.27 / .3), R.upperW + .006, sx, -R.upperH / 2, 0, M.trim);
+    }
+    // Likewise the armband: it is an armband, so it wears the side's colour. Both were the club's
+    // trim before outfits existed, when trim WAS the team's; now it is the outfit's.
+    box("bandR", this.armR, R.upperW * (.125 / .11), .06, R.upperW * (.125 / .11), 0, -R.upperH / 3, 0, M.accent);
     this.forearmR = node("forearmR", this.armR, 0, R.foreY, 0);
     box("lowerR", this.forearmR, R.foreW, R.foreH, R.foreW, 0, -R.foreH / 2, 0, M.skin);
     box("handR", this.forearmR, R.handW, R.handH, R.handD, 0, R.handY, .02, M.boots);
@@ -372,7 +413,9 @@ export class Character {
 
     this.armL = node("armL", this.torso, -R.armX, R.armY, R.shoulderZ);
     box("upperL", this.armL, R.upperW, R.upperH, R.upperW, 0, -R.upperH / 2, 0, M.cloth);
-    box("track_arm_l", this.armL, R.stripeW, R.upperH * (.27 / .3), R.upperW + .006, -R.armStripeX, -R.upperH / 2, 0, M.trim);
+    for (const sx of stripeOffsets(R.armStripeX, R.stripeW, F.stripes)) {
+      box("track_arm_l", this.armL, R.stripeW, R.upperH * (.27 / .3), R.upperW + .006, -sx, -R.upperH / 2, 0, M.trim);
+    }
     this.forearmL = node("forearmL", this.armL, 0, R.foreY, 0);
     box("lowerL", this.forearmL, R.foreW, R.foreH, R.foreW, 0, -R.foreH / 2, 0, M.skin);
     box("handL", this.forearmL, R.handW, R.handH, R.handD, 0, R.handY, .02, M.boots);
@@ -382,7 +425,9 @@ export class Character {
       const s = side > 0 ? "R" : "L";
       const leg = node(hip, this.hips, side * R.legX, R.legY, 0);
       box(`thigh${s}`, leg, R.thighW, R.thighH, R.thighD, 0, -R.thighH / 2, 0, M.cloth);
-      box(`track_leg_${s.toLowerCase()}`, leg, R.stripeW, R.thighH * (.39 / .42), R.thighD + .006, side * R.legStripeX, -R.thighH / 2, 0, M.trim);
+      for (const sx of stripeOffsets(R.legStripeX, R.stripeW, F.stripes)) {
+        box(`track_leg_${s.toLowerCase()}`, leg, R.stripeW, R.thighH * (.39 / .42), R.thighD + .006, side * sx, -R.thighH / 2, 0, M.trim);
+      }
       const shin = node(knee, leg, 0, R.shinY, 0);
       box(`calf${s}`, shin, R.calfW, R.calfH, R.calfD, 0, -R.calfH / 2, 0, M.cloth);
       box(`boot${s}`, shin, R.bootW, R.bootH, R.bootD, 0, R.bootY, .04, M.boots);
@@ -391,6 +436,16 @@ export class Character {
     };
     [this.legR, this.shinR] = buildLeg(1, "legR", "shinR");
     [this.legL, this.shinL] = buildLeg(-1, "legL", "shinL");
+
+    // The outfit's own pieces — a hood, a cape, a moustache. They go in BEFORE the merge, with the
+    // same six materials the body uses, so a hood joins the head's cloth mesh and a cape joins the
+    // torso's: an outfit adds boxes and not one draw call. Their sizes come from the rig, so a piece
+    // fits whichever build is wearing it, and `outfitViolations` (shared) is what keeps them inside
+    // the body a bullet can reach.
+    const roles: Record<OutfitRole, PBRMaterial> = { cloth: M.cloth, vest: M.vest, trim: M.trim, boots: M.boots, skin: M.skin, hair: M.hair, accent: M.accent };
+    for (const part of outfitParts(F, R)) {
+      box(part.name, part.joint === "head" ? this.head : this.torso, part.w, part.h, part.d, part.x, part.y, part.z, roles[part.role]);
+    }
 
     // Merge only within a joint and material, retaining articulation and the toggled perk band,
     // bomb pack, cap and bare head. Added clothing detail therefore does not add a draw call for
@@ -558,9 +613,15 @@ export class Character {
     if (this.bareHead.material !== scalpMat) this.bareHead.material = scalpMat;
     // The cap comes off when the style says so, and always when shaved. The bare scalp wins over
     // hair outright: whatever a player equipped, a head that has just been done has nothing on it.
-    const capOn = !scalp && this.style.cap;
+    // ...and an outfit's own headgear replaces it outright: a KIBOL wears the hood, not the hood
+    // over the shop cap. The kit outfit has none, so nothing changes for a player who has not
+    // rolled one.
+    const capOn = !scalp && this.style.cap && this.outfit.headgear === "none";
     if (this.cap.isEnabled() !== capOn) this.cap.setEnabled(capOn);
-    if (this.hair && this.hair.isEnabled() === shaved) this.hair.setEnabled(!shaved);
+    // A cowl is the only piece that closes over the whole skull, so it is the only one that hides
+    // hair; a hood and a beanie let it out at the sides, which is what they look like in life.
+    const hairOn = !shaved && !hidesHair(this.outfit);
+    if (this.hair && this.hair.isEnabled() !== hairOn) this.hair.setEnabled(hairOn);
 
     // ---- Death: buckle (0–0.25) → fall away from the killer with a tumble (0.25–0.8) → settle.
     if (this.deathT >= 0) {

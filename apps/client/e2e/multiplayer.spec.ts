@@ -853,7 +853,7 @@ test.describe("two clients", () => {
    * changes sides, is holding the clippers, has no money, and the HUD's round line counts one
    * fewer unshaved head.
    */
-  test("body builds: each client picks a silhouette, and the other one draws it", async ({ browser }) => {
+  test("body builds and outfits: each client picks a look, and the other one draws it", async ({ browser }) => {
     test.setTimeout(180_000);
     const room = `${ROOM}-body`;
     const ca = await browser.newContext(ctxOpts);
@@ -861,14 +861,15 @@ test.describe("two clients", () => {
     try {
       // Written straight into the profile, which is where the wardrobe writes it: this test is about
       // what crosses the wire and what gets drawn, not about the menu (armoury.spec.ts covers that).
-      for (const [c, build] of [[ca, "barylka"], [cb, "tyczka"]] as const) {
+      for (const [c, build, outfit] of [[ca, "barylka", "nietoperz"], [cb, "tyczka", "kibol"]] as const) {
         await c.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), LOW_SETTINGS);
-        await c.addInitScript((b) => {
+        await c.addInitScript(([b, f]) => {
           const raw = localStorage.getItem("bs_profile_v1");
           const profile = raw ? JSON.parse(raw) : {};
-          localStorage.setItem("bs_profile_v1", JSON.stringify({ ...profile, build: b }));
+          // `fits` is the ownership list the wardrobe writes; the equip is refused without it.
+          localStorage.setItem("bs_profile_v1", JSON.stringify({ ...profile, build: b, outfit: f, fits: [f] }));
           localStorage.setItem("fb_bots", "0");
-        }, build);
+        }, [build, outfit] as const);
       }
       const a = await ca.newPage(), b = await cb.newPage();
       await joinRoom(a, "BARYLKA", room);
@@ -882,6 +883,8 @@ test.describe("two clients", () => {
       }, id);
       await expect.poll(() => fieldOf(b, idA), { timeout: 30_000 }).toContain("body=barylka");
       await expect.poll(() => fieldOf(a, idB), { timeout: 30_000 }).toContain("body=tyczka");
+      expect(await fieldOf(b, idA), "the outfit rides in the same field").toContain("fit=nietoperz");
+      expect(await fieldOf(a, idB)).toContain("fit=kibol");
 
       // 2. …and the remote body was actually BUILT from it. The hip joint is the loudest difference
       // between the six (0.845 m for BARYŁKA against 1.040 m for TYCZKA), so it is the one number
@@ -921,6 +924,26 @@ test.describe("two clients", () => {
       // crown is what an opponent aims at.
       const crownBarylka = seenByB.crownY, crownTyczka = seenByA.crownY;
       expect(Math.abs(crownBarylka - crownTyczka), `crowns: ${crownBarylka} vs ${crownTyczka}`).toBeLessThan(0.02);
+
+      // 4. The outfit was built too, not merely received: material names carry the outfit id, and
+      // the team's accent is on the body whatever that outfit is — the thing that stops two
+      // repainted bodies from being indistinguishable in a doorway.
+      const dressOf = (p: Page, id: string) => p.evaluate((pid) => {
+        interface M { name: string; material?: { name: string } | null }
+        const game = window.__fb.game as unknown as { remotes: Map<string, { character: { root: { getChildMeshes(d?: boolean): M[] } } }> };
+        const meshes = game.remotes.get(pid)?.character.root.getChildMeshes(false) ?? [];
+        // By MATERIAL, not by mesh name: an outfit's pieces merge into the body's meshes, so a
+        // cape renames `chest` to `chest_merged`. The material name carries team and outfit ids.
+        return {
+          shirt: meshes.map((m) => m.material?.name ?? "").find((n) => n.startsWith("ch_cloth")) ?? "",
+          accents: meshes.filter((m) => (m.material?.name ?? "").startsWith("ch_accent")).length,
+        };
+      }, id);
+      const bat = await dressOf(b, idA), hooligan = await dressOf(a, idB);
+      expect(bat.shirt, "B sees A wearing NIETOPERZ").toContain("nietoperz");
+      expect(hooligan.shirt, "A sees B wearing KIBOL").toContain("kibol");
+      expect(bat.accents, "…and both still carry their side's colour").toBeGreaterThan(0);
+      expect(hooligan.accents).toBeGreaterThan(0);
     } finally { await ca.close(); await cb.close(); }
   });
 

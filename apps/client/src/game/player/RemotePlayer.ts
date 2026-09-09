@@ -59,7 +59,7 @@ const MAX_SNAP_AGE_MS = 400;
  * loaded. Injected rather than looked up so the choice is made ONCE, at start-up, and a player who
  * joins mid-match cannot end up with a different body from everyone else.
  */
-export type CharacterFactory = (scene: Scene, team: Team, id: string, build: string) => CharacterLike;
+export type CharacterFactory = (scene: Scene, team: Team, id: string, build: string, outfit: string) => CharacterLike;
 
 /**
  * Another player: snapshot interpolation (INTERP_DELAY_MS behind the newest server time) driving
@@ -96,7 +96,7 @@ export class RemotePlayer {
     this.id = p.id;
     this.name = p.name;
     this.team = displayTeam;
-    this.character = (make ?? ((s, t, i, build) => new Character(s, t, i, build)))(scene, this.team, p.id, decodeBuild(p.skins));
+    this.character = (make ?? ((s, t, i, build, outfit) => new Character(s, t, i, build, outfit)))(scene, this.team, p.id, decodeBuild(p.skins), decodeOutfit(p.skins));
     this.pushFrom(p, 0);
     this.x = p.x; this.y = p.y; this.z = p.z; this.yaw = dequantAngle(p.yaw);
     this.character.root.position.set(p.x, p.y, p.z);
@@ -111,9 +111,9 @@ export class RemotePlayer {
       this.skinsValue = skins;
       void this.character.applySkins?.(decodeSkins(skins));
     }
-    // The build is read ONCE, by the constructor, from the first snapshot: a body is geometry, and
-    // rebuilding one mid-match to follow a field would drop a player's meshes on the frame somebody
-    // is shooting at them. The field only changes on join, so there is nothing to follow.
+    // The build and the outfit are read ONCE, by the constructor, from the first snapshot: both are
+    // geometry, and rebuilding a body mid-match to follow a field would drop a player's meshes on
+    // the frame somebody is shooting at them. The field only changes on join, so nothing to follow.
 
     const last = this.snaps[this.snaps.length - 1];
     if (last && last.t === t) { this.fill(last, p, t); return; }
@@ -228,4 +228,4 @@ export class RemotePlayer {
     this.character.dispose();
   }
 }
-import { decodeBuild, decodeSkins } from "@frankibarber/shared";
+import { decodeBuild, decodeOutfit, decodeSkins } from "@frankibarber/shared";

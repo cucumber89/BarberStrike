@@ -474,12 +474,12 @@ export class Game {
     const containers = await this.charactersReady;
     if (!containers.some(Boolean)) return;
     const lib = this.weaponModels;
-    this.makeCharacter = (s, team, id, build) => {
+    this.makeCharacter = (s, team, id, build, outfit) => {
       const entry = assets.characters[team];
       const container = containers[team];
       // The imported body is one rigged mesh and has no builds; only the procedural one takes a
       // build id. `Game.ts` empties the manifest's characters today, so this is the path that runs.
-      if (!entry || !container) return new Character(s, team, id, build);
+      if (!entry || !container) return new Character(s, team, id, build, outfit);
       const body = new CharacterModel(s, container, team, id, { tintMaterial: entry.tint, modelHeight: entry.height });
       if (lib) {
         body.setWeaponProvider(async (wid) => {

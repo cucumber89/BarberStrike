@@ -21,6 +21,7 @@ export * from "./rounds";
 export * from "./progression";
 export * from "./haircuts";
 export * from "./builds";
+export * from "./outfits";
 export * from "./bots";
 export * from "./smoke";
 export * from "./bomb";

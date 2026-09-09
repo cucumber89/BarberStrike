@@ -47,6 +47,13 @@ test("the main menu exposes the six launch skins and remembers an equipped finis
   await expect(page.getByTestId("armoury-build-byk")).toHaveClass(/\bon\b/);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("bs_profile_v1") ?? "{}").build)).toBe("byk");
 
+  // STRÓJ: outfits are crate drops, so on an untouched profile exactly one is wearable — the kit.
+  await page.getByTestId("armoury-outfits").click();
+  await expect(page.getByTestId("armoury-outfit-klubowy")).toHaveClass(/\bon\b/);
+  await expect(page.getByTestId("armoury-outfit-nietoperz")).toBeDisabled();
+  await expect(page.getByTestId("character-preview")).toHaveAttribute("data-outfit", "klubowy");
+  await page.screenshot({ path: info.outputPath("outfits.png"), fullPage: true });
+
   await page.getByTestId("armoury-skins").click();
 
   await page.screenshot({ path: info.outputPath("armoury.png"), fullPage: true });
@@ -65,5 +72,36 @@ test("the main menu exposes the six launch skins and remembers an equipped finis
   await expect(page.getByTestId("crate-count")).toHaveText("0");
   await page.waitForTimeout(500);
   await page.screenshot({ path: info.outputPath("crate-prize.png"), fullPage: true });
+
+  // The crate now says what is in it before it is opened, and how much of it the player has.
+  await expect(page.getByTestId("crate-odds")).toContainText("STRÓJ");
+  await expect(page.getByTestId("crate-collection")).toContainText("STROJE");
+
+  // An outfit rolled out of a crate becomes wearable, without a reload: the panel hands the new
+  // profile back and STRÓJ reads it. Crates are granted daily, so the profile is topped up here
+  // rather than waiting a day for the second one.
+  await page.evaluate(() => {
+    const profile = JSON.parse(localStorage.getItem("bs_profile_v1") ?? "{}");
+    localStorage.setItem("bs_profile_v1", JSON.stringify({ ...profile, crates: 40, fits: [] }));
+  });
+  await page.reload();
+  await page.getByTestId("btn-armoury").click();
+  await page.getByTestId("armoury-crates").click();
+  for (let i = 0; i < 12; i++) {
+    await page.getByTestId("crate-open").click();
+    await expect(page.getByTestId("crate-prize")).toBeVisible({ timeout: 10_000 });
+    await page.getByTestId("crate-prize").getByRole("button").click();
+    const owned = await page.evaluate(() => JSON.parse(localStorage.getItem("bs_profile_v1") ?? "{}").fits ?? []);
+    if (owned.length) break;
+  }
+  const fits = await page.evaluate(() => JSON.parse(localStorage.getItem("bs_profile_v1") ?? "{}").fits ?? []);
+  expect(fits.length, "twelve crates should have produced at least one outfit").toBeGreaterThan(0);
+  await page.getByTestId("armoury-outfits").click();
+  await expect(page.getByTestId(`armoury-outfit-${fits[0]}`)).toBeEnabled();
+  await page.getByTestId(`armoury-outfit-${fits[0]}`).click();
+  await expect(page.getByTestId("character-preview")).toHaveAttribute("data-outfit", fits[0]);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("bs_profile_v1") ?? "{}").outfit)).toBe(fits[0]);
+  await page.screenshot({ path: info.outputPath("outfit-equipped.png"), fullPage: true });
+
   expect(errors).toEqual([]);
 });

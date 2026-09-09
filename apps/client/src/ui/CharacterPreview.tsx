@@ -6,7 +6,7 @@ import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
-import { BODY_ENVELOPE, type Team } from "@frankibarber/shared";
+import { BODY_ENVELOPE, DEFAULT_OUTFIT, type Team } from "@frankibarber/shared";
 import { Character } from "../game/view/Character";
 
 /**
@@ -20,15 +20,33 @@ import { Character } from "../game/view/Character";
  *
  * It runs the real animation loop rather than a still pose: the thing a player is choosing between
  * is a silhouette in motion, and a static T-pose is the one view that hides how a build reads.
+ *
+ * Build, outfit and haircut are all shown together, because that is what the player will be: three
+ * separate previews would let somebody pick a hood and a mohawk without ever seeing that the hood
+ * covers it.
  */
-export function CharacterPreview({ build, haircut, team = 0, rotate = true }: {
-  build: string; haircut: string; team?: Team; rotate?: boolean;
+export function CharacterPreview({ build, haircut, outfit = DEFAULT_OUTFIT, team = 0, rotate = true, turn = 0 }: {
+  build: string; haircut: string; outfit?: string; team?: Team; rotate?: boolean;
+  /**
+   * Yaw applied to the BODY (rad), not to the camera — the evidence tool turns it round to show a
+   * cape. Turning the body is unambiguous; an orbit angle depends on which direction the camera
+   * measures from, which is one guess too many for something a test asserts against.
+   */
+  turn?: number;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const state = useRef<{ scene: Scene; body: Character | null } | null>(null);
-  // Kept in a ref and read by the render loop, so a prop change never restarts the engine.
-  const look = useRef({ build, haircut });
-  look.current = { build, haircut };
+  const state = useRef<{ scene: Scene; camera: ArcRotateCamera; body: Character | null } | null>(null);
+  /**
+   * Everything the render loop reads, in a ref rather than in the effect's dependencies.
+   *
+   * The engine effect must run EXACTLY once per mount. It used to list `rotate` and the camera angle,
+   * and that was a real bug rather than a style point: changing either tore the scene down and built
+   * a new one, while the effect that builds the BODY did not re-run — its own dependencies had not
+   * changed — so the preview came back as an empty box. It showed up as thirteen blank tiles the
+   * first time the evidence tool asked for a view from behind.
+   */
+  const look = useRef({ build, haircut, outfit, rotate });
+  look.current = { build, haircut, outfit, rotate };
 
   useEffect(() => {
     const element = canvas.current!;
@@ -46,7 +64,7 @@ export function CharacterPreview({ build, haircut, team = 0, rotate = true }: {
     // A rim from behind separates the body from the panel it stands on — without it a dark build on
     // a dark background is an outline nobody can judge.
     const rim = new DirectionalLight("body_rim", new Vector3(.7, -.4, -1), scene); rim.intensity = 1.1;
-    state.current = { scene, body: null };
+    state.current = { scene, camera, body: null };
 
     const observer = new ResizeObserver(() => engine.resize()); observer.observe(element);
     let last = performance.now();
@@ -59,7 +77,7 @@ export function CharacterPreview({ build, haircut, team = 0, rotate = true }: {
           weapon: "rifle", moveDir: 0, haircut: look.current.haircut,
         }, dt);
       }
-      if (rotate && !element.matches(":active")) camera.alpha += dt * .00022;
+      if (look.current.rotate && !element.matches(":active")) camera.alpha += dt * .00022;
       scene.render();
     });
     return () => {
@@ -67,13 +85,18 @@ export function CharacterPreview({ build, haircut, team = 0, rotate = true }: {
       state.current = null;
       scene.dispose(); engine.dispose();  // Every mount owns a WebGL context: always release it.
     };
-  }, [rotate]);
+  }, []);
+
+  // Turning the body is a property of the body, so it is set on the body — never by rebuilding
+  // the scene, which is what the first cut did and why it came back as an empty box.
+  useEffect(() => { if (state.current?.body) state.current.body.root.rotation.y = turn; }, [turn]);
 
   useEffect(() => {
     const s = state.current; if (!s) return;
     s.body?.dispose(); s.body = null;
     if (canvas.current) canvas.current.dataset.ready = "false";
-    const body = new Character(s.scene, team, `preview_${build}`, build);
+    const body = new Character(s.scene, team, `preview_${build}`, build, outfit);
+    body.root.rotation.y = turn;
     // One frame so the pose smoothers are off their zero state before the first render.
     body.update({
       speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false,
@@ -82,13 +105,14 @@ export function CharacterPreview({ build, haircut, team = 0, rotate = true }: {
     s.body = body;
     if (canvas.current) canvas.current.dataset.ready = "true";
     return () => { if (state.current === s && s.body === body) { body.dispose(); s.body = null; } };
-  }, [build, haircut, team]);
+  }, [build, haircut, outfit, team, turn]);
 
   return (
     <canvas
       ref={canvas}
       data-testid="character-preview"
       data-build={build}
+      data-outfit={outfit}
       aria-label="Podgląd postaci — przeciągnij, aby obrócić"
       style={{ width: "100%", height: "100%", display: "block", touchAction: "none" }}
     />
