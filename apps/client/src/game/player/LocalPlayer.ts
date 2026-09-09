@@ -132,6 +132,11 @@ export class LocalPlayer {
     // A new body starts square with the server: no correction to walk off, no dt owed either way.
     this.errX = this.errY = this.errZ = 0;
     this.dtq.reset();
+    // Breath belongs to the shooter, not to the gun, so `clearWeaponState` (which also runs on a
+    // weapon switch) must not refill it — switching to a pistol and back would erase the winded
+    // penalty. A new body, on the other hand, breathes.
+    this.breathLeft = 1;
+    this.windedUntil = 0;
     this.clearWeaponState(); // a bolt owed by the body that just died is not owed by this one
     this.alive = true;
   }

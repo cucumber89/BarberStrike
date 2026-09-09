@@ -20,9 +20,15 @@ export interface BombPlayer {
 }
 export function resetBomb(b: BombData, now: number, players: readonly BombPlayer[]): void {
   b.round++; b.attackTeam = bombAttackTeam(b.round);
-  const carrier = players.find(p => p.alive && p.connected && p.team === b.attackTeam);
-  b.carrier = carrier?.id ?? ""; b.stage = carrier ? "carried" : "dropped";
-  b.x = carrier?.x ?? 0; b.y = carrier?.y ?? 0; b.z = carrier?.z ?? 0;
+  // Whoever is about to hold it. A connected attacker who is not alive yet still counts as a PLACE
+  // to put the bomb, because `?? 0` put it at the WORLD ORIGIN — a bomb marker in the middle of the
+  // street, metres from any site, with no attacker near enough to pick it up, so the round could not
+  // be won. The caller usually respawns everyone first, but not on every path, and a team can be
+  // entirely disconnected. With no attacker at all the bomb simply stays where it was.
+  const alive = players.find(p => p.alive && p.connected && p.team === b.attackTeam);
+  const anyone = alive ?? players.find(p => p.connected && p.team === b.attackTeam);
+  b.carrier = alive?.id ?? ""; b.stage = alive ? "carried" : "dropped";
+  if (anyone) { b.x = anyone.x; b.y = anyone.y; b.z = anyone.z; }
   b.site = ""; b.endsAt = 0; b.roundEndsAt = now + BOMB.roundMs;
   b.actor = ""; b.progress = 0; b.result = "";
 }
@@ -38,9 +44,17 @@ export function stepBomb(b: BombData, players: readonly BombPlayer[], now: numbe
   const alive = players.filter(p => p.alive && p.connected);
   const finish = (team: Team, reason: string): Team => { b.stage = "resolved"; b.result = reason; b.actor = ""; b.progress = 0; return team; };
   if (b.stage === "planted" && now >= b.endsAt) return finish(atk, "BOMB DETONATED");
-  if (!alive.some(p => p.team === def)) return finish(atk, "DEFENDERS ELIMINATED");
-  if (b.stage !== "planted") {
-    if (!alive.some(p => p.team === atk)) return finish(def, "ATTACKERS ELIMINATED");
+  const atkAlive = alive.some(p => p.team === atk), defAlive = alive.some(p => p.team === def);
+  if (b.stage === "planted") {
+    // Bomb down and nobody left to defuse it: it goes off, whatever the timer says.
+    if (!defAlive) return finish(atk, "DEFENDERS ELIMINATED");
+  } else {
+    // ORDER MATTERS, and it used to be the other way round. One frag that kills the last player on
+    // each side in the same tick left both `some` tests false — and the defenders' test came first,
+    // so the round went to attackers who had also been wiped and had never planted anything. A
+    // mutual wipe with no bomb down is a FAILED attack: nobody is left to plant, so the site holds.
+    if (!atkAlive) return finish(def, "ATTACKERS ELIMINATED");
+    if (!defAlive) return finish(atk, "DEFENDERS ELIMINATED");
     if (now >= b.roundEndsAt) return finish(def, "SITE SECURED");
   }
   if (b.stage === "carried") {

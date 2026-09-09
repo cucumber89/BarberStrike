@@ -324,6 +324,7 @@ export class Game {
         this.local.alive = false;
         this.input.clearAll();
         this.throwing.cancel();
+        this.weapons.cancel(); // a reload the corpse was halfway through is not the next life's problem
         if (this.shopOpen) this.setShopOpen(false, false);
         Object.assign(patch, {
           // Individual respawn countdown in both warm-up and the live match.

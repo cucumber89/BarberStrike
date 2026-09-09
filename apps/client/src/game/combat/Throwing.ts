@@ -100,6 +100,11 @@ export class Throwing {
     const kind = this.state.kind;
     if (!kind) return;
     if (!this.player.alive) { this.cancel(); return; }
+    // `canStart` refuses to PRIME during a freeze, but nothing refused to RELEASE into one: a frag
+    // cooked before the countdown auto-released at its fuse, sent a Throw the server discards, and
+    // optimistically decremented the HUD count — so the player watched a grenade they still had
+    // disappear from the corner of the screen. It stays in the hand until the freeze lifts.
+    if (this.player.frozen) return;
     const def = GRENADES[kind];
     if (this.windupEndsAt === -Infinity) {
       // Cooking: progress towards the fuse; auto-release just before it.

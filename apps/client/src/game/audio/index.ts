@@ -84,14 +84,29 @@ export const installAudio: GameModule = (ctx) => {
   let humVoice: { stop(): void } | null = null;
   let humTimer = 0;
   const HUM_S = 2;
-  const stopHum = (): void => { window.clearInterval(humTimer); humTimer = 0; humVoice?.stop(); humVoice = null; };
+  /**
+   * The voice being crossfaded OUT. Two references, because the hum is one-shots overlapped: the new
+   * voice starts while the old one is still fading (`HUM_FADE_S`), and `stopHum` used to stop only
+   * the newest — leaving the previous one to finish its fade out loud after the clippers were gone.
+   */
+  let humPrev: { stop(): void } | null = null;
+  const stopHum = (): void => {
+    window.clearInterval(humTimer); humTimer = 0;
+    humVoice?.stop(); humVoice = null;
+    humPrev?.stop(); humPrev = null;
+  };
   const setHum = (weapon: WeaponId): void => {
     const level = feelOf(weapon).hum;
     stopHum();
     if (level <= 0) return;
-    const tick = (): void => { humVoice = play(sfx.clippersHum(HUM_S), Priority.movement, level); };
+    const tick = (): void => {
+      humPrev = humVoice;
+      humVoice = play(sfx.clippersHum(HUM_S), Priority.movement, level);
+    };
     tick();
-    humTimer = window.setInterval(tick, (HUM_S - 0.12) * 1000);
+    // Re-triggered exactly one fade before the end, so the new voice's attack rises into the old
+    // one's decay. The two numbers are one decision: `sfx.HUM_FADE_S` is where it is written down.
+    humTimer = window.setInterval(tick, (HUM_S - sfx.HUM_FADE_S) * 1000);
   };
   let countdownTimers: number[] = [];
   const clearCountdown = () => { for (const t of countdownTimers) window.clearTimeout(t); countdownTimers = []; };

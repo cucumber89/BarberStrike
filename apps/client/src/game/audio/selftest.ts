@@ -2,6 +2,10 @@
  * In-page audio harness (exposed as `window.__fbAudio.selfTest()`).
  *  1. Renders every one-shot through an OfflineAudioContext and asserts its peak is neither
  *     silent (< -40 dBFS) nor clipping (> -1 dBFS) — catches broken envelopes.
+ *     It also measures the SUSTAIN — the level late in the voice, not just its loudest instant —
+ *     because a peak on its own cannot tell a sound that holds from one that dies. The clippers'
+ *     hum passed the peak check at -16 dBFS while decaying to 0.4 % of it before the caller
+ *     re-triggered, so the motor pulsed at half a hertz for a whole match and this tool said "ok".
  *  2. Fires every game event the module listens to and every exported UI/music entry point on
  *     the live engine, asserting nothing throws and the context is "running".
  */
@@ -12,7 +16,11 @@ import * as sfx from "./sfx";
 import { sharedBuffers, type Graph } from "./synth";
 import { WEAPON_FEEL } from "../combat/weaponFeel";
 
-export interface OfflineResult { name: string; peakDb: number; ok: boolean; seconds: number; }
+export interface OfflineResult {
+  name: string; peakDb: number; ok: boolean; seconds: number;
+  /** Peak over the window 60-80 % through the voice, in dBFS: what is still there late on. */
+  sustainDb: number;
+}
 export interface SelfTestReport {
   contextState: string;
   offline: OfflineResult[];
@@ -23,6 +31,14 @@ export interface SelfTestReport {
 
 const PEAK_MAX_DB = -1;
 const PEAK_MIN_DB = -40;
+/**
+ * How far a HELD sound may have fallen by four fifths of the way through.
+ *
+ * Only sounds that are meant to run continuously are judged on this — a gunshot is supposed to decay.
+ * 6 dB is half the amplitude: audible as a shape, nowhere near the 48 dB the broken hum was losing.
+ */
+const SUSTAIN_MAX_DROP_DB = 6;
+const HELD = (name: string): boolean => name.startsWith("hum:");
 
 function catalogue(): [string, sfx.SoundFn][] {
   const list: [string, sfx.SoundFn][] = [];
@@ -70,20 +86,25 @@ export async function renderOffline(name: string, fn: sfx.SoundFn, seconds = 3.5
   const g: Graph = { ctx, out, verb: null, t: 0.05, buf: sharedBuffers(ctx), rnd };
   const dur = fn(g);
   const buf = await ctx.startRendering();
-  let peak = 0;
+  let peak = 0, late = 0;
+  // The late window: 60-80 % of the way through the voice, past any attack and before any tail.
+  const from = Math.floor((0.05 + dur * 0.6) * sr), to = Math.min(buf.length, Math.floor((0.05 + dur * 0.8) * sr));
   for (let c = 0; c < buf.numberOfChannels; c++) {
     const d = buf.getChannelData(c);
     for (let i = 0; i < d.length; i++) { const a = Math.abs(d[i]); if (a > peak) peak = a; }
+    for (let i = from; i < to; i++) { const a = Math.abs(d[i]); if (a > late) late = a; }
   }
-  const peakDb = peak > 0 ? 20 * Math.log10(peak) : -Infinity;
-  return { name, peakDb: Math.round(peakDb * 10) / 10, ok: peakDb <= PEAK_MAX_DB && peakDb >= PEAK_MIN_DB, seconds: dur };
+  const db = (v: number) => (v > 0 ? Math.round(20 * Math.log10(v) * 10) / 10 : -Infinity);
+  const peakDb = db(peak), sustainDb = db(late);
+  const held = !HELD(name) || peakDb - sustainDb <= SUSTAIN_MAX_DROP_DB;
+  return { name, peakDb, sustainDb, ok: peakDb <= PEAK_MAX_DB && peakDb >= PEAK_MIN_DB && held, seconds: dur };
 }
 
 export async function runSelfTest(engine: AudioEngine, ctx: GameContext | null, exports: { uiSound: (k: sfx.UiSoundKind) => void; setMusic: (on: boolean) => void }): Promise<SelfTestReport> {
   const offline: OfflineResult[] = [];
   for (const [name, fn] of catalogue()) {
     try { offline.push(await renderOffline(name, fn)); }
-    catch (err) { offline.push({ name, peakDb: NaN, ok: false, seconds: 0 }); console.error("[audio selftest]", name, err); }
+    catch (err) { offline.push({ name, peakDb: NaN, sustainDb: NaN, ok: false, seconds: 0 }); console.error("[audio selftest]", name, err); }
   }
   const live: SelfTestReport["live"] = [];
   const step = (name: string, f: () => void) => {
