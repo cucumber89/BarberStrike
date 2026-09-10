@@ -14,6 +14,22 @@ export function buildArchitecture(scene: Scene, map: MapDef, add: AddPiece): voi
   };
   buildStreetscape(scene, map, add);
   buildDistrictLandmarks(scene, map, add);
+  // Site A is a loading shelter, B the cafe's open court. Surface graphics keep both retake
+  // lanes clear; no paving slab is laid over the existing floor (the old z-fighting defect).
+  for (const [x,z,tag] of [[-35,24,"paint_yellow"],[43,24,"paint_green"]] as const) {
+    for (const side of [-1,1]) {
+      box(tag,x+side*3,.05,z,.1,.05,5);
+      box(tag,x,.05,z+side*2.5,6,.05,.1);
+    }
+  }
+  const depot = map.solids.find(s=>s.name === "depot_site_roof")!.box;
+  for (const z of [depot.minZ,depot.maxZ]) {
+    box("paint_red",(depot.minX+depot.maxX)/2,depot.maxY+.1,z,10,.2,.1);
+    for (const x of [-38,-36,-34,-32]) box("paint_yellow",x,4.2,z,.5,.2,.1);
+  }
+  // The court's existing low planter becomes a seating landmark, with a contrasting rim.
+  const court = map.solids.find(s=>s.name === "district_cover_43_32")!.box;
+  box("paint_white",(court.minX+court.maxX)/2,court.maxY-.05,court.minZ-.05,3.5,.1,.1);
   // Finish the central shop as a small commercial building, with a capped parapet and
   // masonry piers. These follow solid facade sections, clear of its doors and display glass.
   box("wall_concrete", 1.85, 4.83, -.15, 12.7, .13, .5);

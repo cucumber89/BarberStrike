@@ -295,7 +295,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(-21.7, 0, 6, 0.65, 1, 2, "metal", "garage_toolbench"));
   solids.push(S(X0, 3.5, 3.6, 13, 0.3, 6.8, "corrugated_green", "garage_roof"));
   for (const i of [0, 2]) solids.push(S(X0 + 1 + i * 4.2, 0, 3.7, 3.2, 2.6, 0.3, "corrugated_blue", `garage_door_${i}`));
-  props.push({ kind: "sign", x: -20, y: 3.1, z: 3.98, yaw: Math.PI, text: "REPAIR / BACKLOT", w: 3.5, h: 0.36 });
+  props.push({ kind: "sign", x: -20, y: 3.1, z: 3.98, yaw: Math.PI, text: "SERWIS / GARAŻE", w: 3.5, h: 0.36 });
   props.push({ kind: "tube_light", x: -20, y: 3.42, z: 7, w: 1.8 });
   props.push({ kind: "crate", x: -21.38, y: 1, z: 6.5, variant: "small" });
   lights.push({ kind: "point", x: -20, y: 2.9, z: 7, color: DISTRICT_LIGHTS.mercury, intensity: 1.1, range: 7 });
@@ -367,7 +367,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
 
   // Night market: two recognisable islands of cover with open sides for flanking.
   // Counters stop bullets; the canopy is high enough to run beneath it.
-  for (const [x, color, title] of [[-19, "paint_red", "NIGHT BITES"], [23, "paint_blue", "MIDNIGHT RECORDS"]] as const) {
+  for (const [x, color, title] of [[-19, "paint_red", "NOCNY BAR"], [23, "paint_blue", "PŁYTY / NOCĄ"]] as const) {
     solids.push(O(x, 0, -5.8, 3.6, 1.05, 0.8, color, "kiosk_counter", `market_counter_${x}`));
     solids.push(S(x - 0.15, 2.85, -7.2, 3.9, 0.16, 2.8, color, `market_canopy_${x}`));
     for (const px of [x, x + 3.4]) solids.push(S(px, 0, -7, 0.12, 2.85, 0.12, "metal", `market_post_${px}`));
@@ -403,7 +403,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   for (const px of [-4.8, -0.25]) for (const pz of [28.15, 30.7]) solids.push(S(px, 0, pz, 0.15, 2.3, 0.15, "metal", `lookout_support_${px}_${pz}`));
   solids.push(S(-5, 2.5, 30.9, 5, 0.85, 0.1, "paint_yellow", "lookout_rail_n"));
   solids.push(S(-5, 2.5, 28, 4, 0.85, 0.1, "paint_yellow", "lookout_rail_s"));
-  props.push({ kind: "sign", x: -2.5, y: 2.06, z: 31.03, text: "ROOFTOP / 02", w: 3.2, h: 0.35 });
+  props.push({ kind: "sign", x: -2.5, y: 2.06, z: 31.03, text: "TARAS / 02", w: 3.2, h: 0.35 });
   solids.push(O(-9, 0, 20, 1.6, 1.3, 1.2, "paint_blue", "dumpster", "dumpster_yard", Math.PI));
   solids.push(O(-11, 0, 25, 1.2, 1.2, 1.2, "wood", "crate", "crate_yard_a"));
   solids.push(O(-9.8, 0, 25, 1.2, 0.6, 1.2, "wood", "crate", "crate_yard_b"));
@@ -449,8 +449,8 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   props.push({ kind: "counter_top", x: 5.75, y: 1.05, z: 1.75, w: 2.7, h: 0.9 });
   props.push({ kind: "sign", x: 2, y: 4.25, z: -0.32, yaw: Math.PI, text: "FRANKIBARBER", w: 5.0, h: 0.8 });
   props.push({ kind: "barber_pole", x: -0.7, y: 2.2, z: -0.42, yaw: 0, h: 0.7 }); // drop 6: by the door, on the street side
-  props.push({ kind: "neon", x: 5.0, y: 2.35, z: 0.28, yaw: Math.PI, text: "AFTER HOURS", w: 2.6 });
-  props.push({ kind: "board", x: 2.5, y: 1.9, z: 9.83, yaw: 0, text: "STAFF" });
+  props.push({ kind: "neon", x: 5.0, y: 2.35, z: 0.28, yaw: Math.PI, text: "PO GODZINACH", w: 2.6 });
+  props.push({ kind: "board", x: 2.5, y: 1.9, z: 9.83, yaw: 0, text: "ZAPLECZE" });
   props.push({ kind: "poster", x: 7.83, y: 1.9, z: 4.0, yaw: -Math.PI / 2, variant: "cuts" });
   props.push({ kind: "sticker", x: 4.2, y: 1.5, z: 0.16, yaw: Math.PI, variant: "open" });
   props.push({ kind: "pendant", x: 1.0, y: 3.55, z: 4.5 });
@@ -463,7 +463,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   props.push({ kind: "poster", x: -3.99, y: 1.9, z: 12.5, yaw: Math.PI / 2, variant: "hours" });
   props.push({ kind: "tube_light", x: 2, y: 3.5, z: 14, yaw: 0, w: 1.4 });
   props.push({ kind: "tube_light", x: -2, y: 3.5, z: 16, yaw: Math.PI / 2, w: 1.2 });
-  props.push({ kind: "board", x: -1.0, y: 1.9, z: 17.83, yaw: 0, text: "SHIFTS", variant: "shifts" });
+  props.push({ kind: "board", x: -1.0, y: 1.9, z: 17.83, yaw: 0, text: "DYŻURY", variant: "shifts" });
   props.push({ kind: "vent", x: 19.96, y: 3.2, z: 6, yaw: -Math.PI / 2 });
   props.push({ kind: "pipe", x: 19.7, y: 4.8, z: 5, yaw: 0, w: 9.0 });
   props.push({ kind: "tube_light", x: 14, y: 5.7, z: 5, yaw: Math.PI / 2, w: 1.5 });
@@ -483,8 +483,8 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   props.push({ kind: "poster", x: -7.5, y: 2.0, z: 8.01, yaw: 0, variant: "gig" });
   // Backlot / kiosk.
   props.push({ kind: "sign", x: -23, y: 2.65, z: 13.97, yaw: Math.PI, text: "KIOSK 24H", w: 3.0, h: 0.5 });
-  props.push({ kind: "neon", x: -19.88, y: 1.9, z: 16, yaw: -Math.PI / 2, text: "OPEN", w: 1.2, h: 0.4 });
-  props.push({ kind: "graffiti", x: -16, y: 2.0, z: 10.01, yaw: 0, variant: "big", text: "NO FADE NO GAIN" });
+  props.push({ kind: "neon", x: -19.88, y: 1.9, z: 16, yaw: -Math.PI / 2, text: "OTWARTE", w: 1.2, h: 0.4 });
+  props.push({ kind: "graffiti", x: -16, y: 2.0, z: 10.01, yaw: 0, variant: "big", text: "OSTRE CIĘCIE" });
   props.push({ kind: "lamp", x: -22, y: 0, z: 24, variant: "post" });
   props.push({ kind: "tube_light", x: -23, y: 2.9, z: 16, yaw: Math.PI / 2, w: 1.2, variant: "cool" });
   props.push({ kind: "trash", x: -25.5, y: 0, z: 26, variant: "bags" });
@@ -494,17 +494,17 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   props.push({ kind: "pole", x: 17.8, y: 0, z: -2.5, variant: "sign" });
   props.push({ kind: "sticker", x: -3.7, y: 1.2, z: -4.9, yaw: 0, variant: "fb" });
   props.push({ kind: "vent", x: 12, y: 4.2, z: -0.04, yaw: Math.PI, variant: "big" });
-  props.push({ kind: "sign", x: -4.25, y: 2.0, z: -20.5, yaw: 0, text: "NIGHT BUS", w: 1.6, h: 0.4 });
+  props.push({ kind: "sign", x: -4.25, y: 2.0, z: -20.5, yaw: 0, text: "NOCNY / N01", w: 1.6, h: 0.4 });
   props.push({ kind: "poster", x: -8, y: 2.5, z: -21.99, yaw: 0, variant: "gig" });
   props.push({ kind: "poster", x: 24, y: 2.5, z: -21.99, yaw: 0, variant: "cuts" });
   props.push({ kind: "graffiti", x: -22, y: 2.2, z: -21.99, yaw: 0, variant: "big" });
-  props.push({ kind: "neon", x: 8, y: 4.5, z: -21.99, yaw: 0, text: "LATE LATE", w: 3.2, h: 0.6 });
+  props.push({ kind: "neon", x: 8, y: 4.5, z: -21.99, yaw: 0, text: "DO PÓŹNA", w: 3.2, h: 0.6 });
   props.push({ kind: "trash", x: 22, y: 0.15, z: -20.5, variant: "bags" });
   // East block.
   props.push({ kind: "sign", x: 27, y: 2.93, z: 8.03, yaw: 0, text: "PARKING", w: 3.0, h: 0.5 });
   props.push({ kind: "tube_light", x: 25, y: 3.1, z: 4, yaw: Math.PI / 2, w: 1.5, variant: "cool" });
   props.push({ kind: "tube_light", x: 31, y: 3.1, z: 4, yaw: Math.PI / 2, w: 1.5, variant: "cool" });
-  props.push({ kind: "sign", x: 27, y: 3.9, z: 13.97, yaw: Math.PI, text: "CAR WASH", w: 4.0, h: 0.7 });
+  props.push({ kind: "sign", x: 27, y: 3.9, z: 13.97, yaw: Math.PI, text: "MYJNIA", w: 4.0, h: 0.7 });
   props.push({ kind: "tube_light", x: 27, y: 4.4, z: 19, yaw: Math.PI / 2, w: 1.5, variant: "cool" });
   props.push({ kind: "graffiti", x: 34.98, y: 1.8, z: 4, yaw: -Math.PI / 2, variant: "tag" });
   props.push({ kind: "lamp", x: 33.5, y: 0, z: 18, variant: "post" });
@@ -521,13 +521,13 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   props.push({ kind: "graffiti", x: -0.05, y: 1.4, z: 25, yaw: -Math.PI / 2, variant: "fb" });
   props.push({ kind: "vent", x: 16, y: 4.5, z: 18.18, yaw: 0, variant: "big" });
   props.push({ kind: "pipe", x: 8.5, y: 0.3, z: 22, yaw: Math.PI / 2, w: 5.5, variant: "vertical" });
-  props.push({ kind: "sign", x: 17, y: 4.2, z: 18.18, yaw: 0, text: "LOADING", w: 2.4, h: 0.5 });
+  props.push({ kind: "sign", x: 17, y: 4.2, z: 18.18, yaw: 0, text: "ROZŁADUNEK", w: 2.4, h: 0.5 });
   // North compound.
   props.push({ kind: "lamp", x: -8, y: 0, z: 42, variant: "post" });
   props.push({ kind: "lamp", x: 18, y: 0, z: 42, variant: "post" });
-  props.push({ kind: "board", x: -13, y: 1.6, z: 37.98, yaw: Math.PI, text: "SITE OFFICE", w: 1.2, h: 0.4 });
+  props.push({ kind: "board", x: -13, y: 1.6, z: 37.98, yaw: Math.PI, text: "DYŻURKA", w: 1.2, h: 0.4 });
   props.push({ kind: "poster", x: 23.98, y: 1.7, z: 39.5, yaw: -Math.PI / 2, variant: "hours" });
-  props.push({ kind: "graffiti", x: 10, y: 2.4, z: 44.98, yaw: Math.PI, variant: "big", text: "AFTER HOURS" });
+  props.push({ kind: "graffiti", x: 10, y: 2.4, z: 44.98, yaw: Math.PI, variant: "big", text: "PO GODZINACH" });
   props.push({ kind: "trash", x: 29, y: 0, z: 43, variant: "bags" });
 
   // ---------- Lights ----------
@@ -549,7 +549,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   }
   lights.push({ kind: "point", x: 2.0, y: 4.0, z: -1.2, color: DISTRICT_LIGHTS.amber, intensity: 9, range: 6, priority: 4 });
   lights.push({ kind: "point", x: -4.2, y: 2.2, z: -19.8, color: DISTRICT_LIGHTS.mercury, intensity: 10, range: 7, priority: 5 }); // bus shelter
-  lights.push({ kind: "point", x: 8, y: 4.4, z: -21.5, color: DISTRICT_LIGHTS.accent, intensity: 8, range: 7, priority: 4 });     // "LATE LATE" neon
+  lights.push({ kind: "point", x: 8, y: 4.4, z: -21.5, color: DISTRICT_LIGHTS.accent, intensity: 8, range: 7, priority: 4 });     // "DO PÓŹNA" neon
   // Alley: cool blue-grey security light + warm bulb over the shop's side door.
   lights.push({ kind: "point", x: -8, y: 3.9, z: 15.5, color: DISTRICT_LIGHTS.mercury, intensity: 14, range: 9, priority: 5 });
   lights.push({ kind: "point", x: -4.7, y: 2.9, z: 7, color: DISTRICT_LIGHTS.amber, intensity: 8, range: 6, priority: 4 });
