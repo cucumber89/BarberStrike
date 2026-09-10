@@ -3,6 +3,21 @@ import type { Team } from "./types";
 export const BOMB = { roundMs: 115000, fuseMs: 40000, plantMs: 3200, defuseMs: 10000, breakMs: 5000, buyMs: 30000,
   halfRounds: 6, maxRounds: 12, wins: 7, startMoney: 800, winMoney: 3250, useRadius: 2.5 } as const;
 export const bombAttackTeam = (round: number): Team => round <= BOMB.halfRounds ? 0 : 1;
+/**
+ * Which spawn SET a player uses in Bomb — attackers take the south (team-0) points, defenders the
+ * north (team-1) ones, every round.
+ *
+ * This is the whole reason an asymmetric map is fair here, and it is easy to mistake for a bug.
+ * NIGHT_DISTRICT is not symmetric: the north set is 10.7 m closer to site A and 22.3 m closer to
+ * site B, while the south set is 17.6 m closer to the RECEPTION shop and 11.6 m to the BOOTH
+ * (measured on the walk grid by `map-audit.ts`). If a team spawned on its OWN set, one of them
+ * would keep that for the whole match. Because the set follows the ROLE and `bombAttackTeam` gives
+ * each team six rounds of each, both teams play both sides of the map and the asymmetry cancels —
+ * the owner's decision of 2026-09-10: keep the map asymmetric, force the sides to change.
+ *
+ * Every other team mode spawns on `p.team` and never swaps, so there the asymmetry does stick.
+ */
+export const bombSpawnSide = (team: Team, attackTeam: Team): Team => (team === attackTeam ? 0 : 1);
 /** A plantable site. Lives on `MapDef.sites`; `BOMB_SITES` is NIGHT_DISTRICT's pair and the default. */
 export interface BombSite { id: string; name: string; x: number; y: number; z: number }
 export const BOMB_SITES = [

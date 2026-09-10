@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOMB, BOMB_SITES, resetBomb, stepBomb, type BombData, type BombPlayer } from "./bomb";
+import { BOMB, BOMB_SITES, bombAttackTeam, bombSpawnSide, resetBomb, stepBomb, type BombData, type BombPlayer } from "./bomb";
 const player = (id: string, team: number): BombPlayer => ({ ...BOMB_SITES[0], id, team, alive: true, connected: true, using: false });
 function setup() {
   const players = [player("a", 0), player("b", 1), player("c", 0)];
@@ -96,5 +96,37 @@ describe("bomb objective, the awkward cases", () => {
     b.x = 7; b.y = 1; b.z = 3;
     resetBomb(b, 2000, [player("b", 1)]);
     expect([b.x, b.y, b.z]).toEqual([7, 1, 3]);
+  });
+});
+
+/**
+ * The asymmetric map is fair because the SIDE follows the ROLE, not the team. This pins it: over a
+ * full twelve rounds each team spends six on the south set and six on the north, so neither keeps
+ * the north set's 22 m head start to site B or the south set's two buy stations. The owner chose
+ * this over moving the sites (2026-09-10), and it is one expression in TdmRoom that could be
+ * "simplified" back to `p.team` without anything else noticing.
+ */
+describe("which side of the map a team spawns on", () => {
+  it("gives each team half the rounds on each set across a full match", () => {
+    const rounds = Array.from({ length: BOMB.maxRounds }, (_, i) => i + 1);
+    for (const team of [0, 1] as const) {
+      const south = rounds.filter((r) => bombSpawnSide(team, bombAttackTeam(r)) === 0).length;
+      expect(south, `team ${team} plays ${south} of ${BOMB.maxRounds} rounds on the south set`).toBe(BOMB.maxRounds / 2);
+    }
+  });
+
+  it("always puts the attacker on the south set and the defender on the north", () => {
+    for (const round of [1, 6, 7, 12]) {
+      const atk = bombAttackTeam(round);
+      expect(bombSpawnSide(atk, atk)).toBe(0);
+      expect(bombSpawnSide((1 - atk) as 0 | 1, atk)).toBe(1);
+    }
+  });
+
+  it("never leaves both teams on the same set", () => {
+    for (const round of [1, 6, 7, 12]) {
+      const atk = bombAttackTeam(round);
+      expect(bombSpawnSide(0, atk)).not.toBe(bombSpawnSide(1, atk));
+    }
   });
 });

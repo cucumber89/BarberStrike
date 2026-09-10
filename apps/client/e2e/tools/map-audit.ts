@@ -171,7 +171,9 @@ console.log(off.length ? "\n" + off.join("\n") : "\nnone — every floor-standin
 console.log(`\n## 5. Props that read as cover — which ones actually stop a bullet`);
 const COVER = /^(lamp|pole|barber_pole|crate|dumpster|trash)$/;
 const withSolid: string[] = [], without: string[] = [];
-for (const p of map.props.filter((v) => COVER.test(v.kind) && v.variant !== "wall" && v.variant !== "head")) {
+// A lamp HEAD is the top of a post solid, so it belongs in this count; only wall fixtures, which
+// are mounted on a wall that is already cover, are excluded.
+for (const p of map.props.filter((v) => COVER.test(v.kind) && v.variant !== "wall")) {
   const solid = map.solids.find((s) => Math.abs((s.box.minX + s.box.maxX) / 2 - p.x) < .5 &&
     Math.abs((s.box.minZ + s.box.maxZ) / 2 - p.z) < .5 && s.box.maxY > 1);
   (solid ? withSolid : without).push(`${p.kind}(${p.variant ?? "-"}) @ (${p.x}, ${p.z})`);
@@ -199,36 +201,59 @@ console.log(`- lights flagged \`shadows\`: ${map.lights.filter((l) => l.shadows)
 console.log(`- walkable floor sampled on a 4 m grid: **${dark} of ${lit + dark} points (${Math.round(dark / (lit + dark) * 100)} %) have no practical light in range**`);
 if (dark) console.log(`- dark points: ${darkAt.slice(0, 80).join(" ")}${darkAt.length > 80 ? ` … +${darkAt.length - 80}` : ""}`);
 
-/* ---------- 7. Team balance ---------- */
-console.log(`\n## 7. Team balance — walked path length from each team's spawns (6v6 fairness)`);
+/* ---------- 7. Balance: what a side actually gets ---------- */
+/**
+ * WHICH sides these are matters more than it looks, and it is easy to measure the wrong thing.
+ *
+ * `map.spawns` carries a `team` field, but in Bomb the room does NOT spawn a team on its own set:
+ * `TdmRoom.ts` picks the side from the ROLE — attackers use the team-0 points, defenders the
+ * team-1 points, every round (`spawnTeam`, ~line 1166). Since `bombAttackTeam` gives each team six
+ * rounds of each role, both teams play both sides of the map and the asymmetry cancels. So for
+ * Bomb the honest comparison is ATTACK set vs DEFENCE set — a property of the map's design, not an
+ * advantage anybody keeps.
+ *
+ * Every other team mode spawns on `p.team` and never swaps. There the same numbers ARE a standing
+ * advantage to one team, which is why the two tables below are separate.
+ */
+console.log(`\n## 7. Balance`);
 const pathLen = (p: { x: number; y: number; z: number }[] | null) =>
   p ? p.slice(1).reduce((acc, c, i) => acc + Math.hypot(c.x - p[i].x, c.z - p[i].z), 0) : null;
-const objectives = [
-  ...sitesOf(map).map((s) => ({ id: `bomb ${s.id} ${s.name}`, ...s })),
-  ...map.flags.map((f) => ({ id: `flag ${f.id} ${f.name}`, ...f })),
-  ...map.stations.map((s) => ({ id: `buy ${s.name}`, ...s })),
-];
-console.log(`\n| objective | team 0 median | team 1 median | gap |\n|---|---|---|---|`);
-for (const o of objectives) {
-  const med = [0, 1].map((team) => {
-    const ds = map.spawns.filter((s) => s.team === team).map((s) => pathLen(findPath(walk, s, o))).filter((v): v is number => v !== null).sort((p, q) => p - q);
-    return ds.length ? ds[Math.floor(ds.length / 2)] : null;
-  });
-  if (med[0] === null || med[1] === null) { console.log(`| ${o.id} | — | — | **unreachable for a team** |`); continue; }
-  const gap = med[0] - med[1];
-  console.log(`| ${o.id} | ${f1(med[0])} m | ${f1(med[1])} m | ${Math.abs(gap) < 3 ? "level" : `**team ${gap > 0 ? 1 : 0} closer by ${f1(Math.abs(gap))} m**`} |`);
-}
-console.log(`\n| team | spawns | x spread | z spread | closest pair | sees map centre |\n|---|---|---|---|---|---|`);
-const cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
+const medianTo = (team: number, o: { x: number; y: number; z: number }): number | null => {
+  const ds = map.spawns.filter((s) => s.team === team).map((s) => pathLen(findPath(walk, s, o)))
+    .filter((v): v is number => v !== null).sort((p, q) => p - q);
+  return ds.length ? ds[Math.floor(ds.length / 2)] : null;
+};
+const row = (label: string, o: { x: number; y: number; z: number }, aName: string, bName: string) => {
+  const a = medianTo(0, o), b = medianTo(1, o);
+  if (a === null || b === null) { console.log(`| ${label} | — | — | **unreachable for a side** |`); return; }
+  const gap = a - b;
+  console.log(`| ${label} | ${f1(a)} m | ${f1(b)} m | ${Math.abs(gap) < 3 ? "level" : `**${gap > 0 ? bName : aName} closer by ${f1(Math.abs(gap))} m**`} |`);
+};
+
+console.log(`\n### 7a. Bomb — the south set attacks and the north set defends, both teams play both halves`);
+console.log(`\n| objective | attack side (south) | defence side (north) | |\n|---|---|---|---|`);
+for (const s of sitesOf(map)) row(`site ${s.id} ${s.name}`, s, "attackers", "defenders");
+for (const s of map.stations) row(`buy ${s.name}`, s, "attackers", "defenders");
+
+console.log(`\n### 7b. Every other team mode — spawns follow the team and never swap, so these DO stick`);
+console.log(`\n| objective | team 0 (FADE, south) | team 1 (TAPER, north) | |\n|---|---|---|---|`);
+for (const f of map.flags) row(`flag ${f.id} ${f.name}`, f, "team 0", "team 1");
+
+console.log(`\n### 7c. Can a six-stack leave spawn together?`);
+console.log(`\n| set | spawns | x spread | z spread | closest pair | widest pair | sees map centre |\n|---|---|---|---|---|---|---|`);
+const bb = map.bounds, cx = (bb.minX + bb.maxX) / 2, cz = (bb.minZ + bb.maxZ) / 2;
 for (const team of [0, 1]) {
   const sp = map.spawns.filter((s) => s.team === team);
   const xs = sp.map((s) => s.x), zs = sp.map((s) => s.z);
-  let closest = Infinity;
-  for (let i = 0; i < sp.length; i++) for (let j = i + 1; j < sp.length; j++) closest = Math.min(closest, Math.hypot(sp[i].x - sp[j].x, sp[i].z - sp[j].z));
+  let closest = Infinity, widest = 0;
+  for (let i = 0; i < sp.length; i++) for (let j = i + 1; j < sp.length; j++) {
+    const d = Math.hypot(sp[i].x - sp[j].x, sp[i].z - sp[j].z);
+    closest = Math.min(closest, d); widest = Math.max(widest, d);
+  }
   const exposed = sp.filter((s) => {
     const dx = cx - s.x, dz = cz - s.z, L = Math.hypot(dx, dz);
     return !world.raycast(s.x, s.y + PLAYER.eyeHeight, s.z, dx / L, 0, dz / L, L, makeRayHit()).hit;
   }).length;
-  console.log(`| ${team} | ${sp.length} | ${f1(Math.max(...xs) - Math.min(...xs))} m | ${f1(Math.max(...zs) - Math.min(...zs))} m | ${f1(closest)} m | ${exposed}/${sp.length} |`);
+  console.log(`| ${team === 0 ? "south (attack)" : "north (defence)"} | ${sp.length} | ${f1(Math.max(...xs) - Math.min(...xs))} m | ${f1(Math.max(...zs) - Math.min(...zs))} m | ${f1(closest)} m | ${f1(widest)} m | ${exposed}/${sp.length} |`);
 }
-console.log(`\n> A team whose spawns spread across the whole map cannot leave spawn as a unit — for a 6v6 that is a layout decision, not a detail.`);
+console.log(`\n> A set whose widest pair is most of the map's width cannot be left as a unit: the six players start in six different lanes.`);

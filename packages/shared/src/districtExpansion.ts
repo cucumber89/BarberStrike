@@ -79,7 +79,9 @@ export function expandDistrict(solids: Solid[], props: PropHint[], lights: Light
   // Gatehouse baffles break the new long lanes without making dead ends.
   for (const [x, z] of [[-39, -3], [-36, 16], [42, -3], [44, 17]]) s(`lane_baffle_${x}`, x, 0, z, 2.8, 1.5, .4, "wall_sand");
   for (const [x, z, title] of [[-35, 24, "A / ZAJEZDNIA"], [43, 24, "B / DZIEDZINIEC"]] as const) {
-    props.push({ kind: "lamp", x, y: 0, z: z - 5, variant: "post" });
+    // Same lamp rule as the core district: a post you can stand behind, with the head on top.
+    s(`lamp_post_${x}_${z - 5}`, x - .1, 0, z - 5.1, .2, 3.6, .2, "metal");
+    props.push({ kind: "lamp", x, y: 3.6, z: z - 5, variant: "head" });
     lights.push({ kind: "point", x, y: 4.3, z: z - 5, color: palette.amber, intensity: 27, range: 14, priority: 6 });
     props.push({ kind: "sign", x: x < 0 ? -44.97 : 52.97, y: 2.5, z, yaw: x < 0 ? Math.PI / 2 : -Math.PI / 2, text: title, w: 4.5, h: 1.3 });
   }
