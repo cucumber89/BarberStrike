@@ -102,3 +102,5 @@ DISTRICT_LANDMARKS.push({area:"shop",anchor:"shop_ceiling",purpose:"Faceted barb
 DISTRICT_LANDMARKS.push({area:"unit",anchor:"industrial_ceiling",purpose:"Broad exhaust hood",pieces:[[6,.125,4,4,.25,4,"metal"],[6,.75,4,2.5,1,2.5,"paint_blue","cylinder"],[6,1.4,4,4,.3,4,"paint_yellow","cylinder"],[6,1.8,4,3,.5,3,"metal","cylinder"]]});
 
 DISTRICT_LANDMARKS.push({area:"hall",anchor:"hall_ceiling",purpose:"Laundry clerestory fins",pieces:[[5,.25,5,5,.5,2,"paint_green"],[3.5,.9,5,.25,1,2,"paint_white"],[5,.9,5,.25,1,2,"paint_white"],[6.5,.9,5,.25,1,2,"paint_white"]]});
+
+DISTRICT_LANDMARKS.push({area:"storage",anchor:"mezzanine_rail",purpose:"Stepped mezzanine relief keeps the deck clear",pieces:[[1,-.1,.1,2,.2,.1,"paint_yellow"],[4,-.35,.1,2,.2,.1,"paint_yellow"],[7,-.6,.1,2,.2,.1,"paint_yellow"],[10,-.85,.1,1,.2,.1,"paint_yellow"]]});
