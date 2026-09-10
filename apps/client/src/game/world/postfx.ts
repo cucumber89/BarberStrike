@@ -1,7 +1,15 @@
+import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
 import { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline";
 import "@babylonjs/core/PostProcesses/RenderPipeline/postProcessRenderPipelineManagerSceneComponent";
 import type { GameModule } from "../context";
 import type { Settings } from "../../settings";
+
+/**
+ * Exposure before the player's brightness slider multiplies it. Higher than the 1.25 it used to be
+ * because ACES tone mapping darkens the midtones it rolls the highlights out of; the pair is tuned
+ * together and neither number means anything alone.
+ */
+export const BASE_EXPOSURE = 1.85;
 
 /** Quality changes optional effects, never the exposure or gamma convention of the map. */
 export function postFxPlan(g: Settings["graphics"]) {
@@ -49,9 +57,17 @@ export const installPostFx: GameModule = (ctx) => {
       }
       previous = key;
     }
-    ip.toneMappingEnabled = false;
-    ip.exposure = 1.25 * s.graphics.brightness;
-    ip.contrast = 1.05;
+    // ACES, not clipping. Rendering straight to the display with no tone curve means every value
+    // over 1 lands on flat white, and at night that is most of what a light touches: RENDERED, the
+    // district's concrete read as near-white paper, every practical was a white blob with no
+    // fixture visible inside it, and the roofs it did not reach were pure black. No amount of
+    // repainting fixes that, because the paint was never what the eye was seeing. ACES rolls the
+    // highlights off instead, which is what puts a lit pool of ground BETWEEN white and black and
+    // lets a lamp read as a lamp. Exposure goes up to pay for the curve's darker midtones.
+    ip.toneMappingEnabled = true;
+    ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES;
+    ip.exposure = BASE_EXPOSURE * s.graphics.brightness;
+    ip.contrast = 1.1;
     ip.vignetteEnabled = false;
     brightness = s.graphics.brightness;
     // Frozen PBR materials otherwise keep the old shader and output linear colour straight

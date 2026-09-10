@@ -188,9 +188,13 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
   // ---- Lighting
   const lights: Light[] = [];
   const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);
-  ambient.intensity = 0.48;
-  ambient.diffuse = new Color3(0.57, 0.62, 0.72);
-  ambient.groundColor = new Color3(0.10, 0.085, 0.09);
+  // MEASURED by rendering: at 0.48 the sky term alone lit every wall the practicals never reach,
+  // so an unlit facade came out as bright as a lit one and the map read as an overcast afternoon.
+  // A night sky is a dim blue fill; what should light a surface is a lamp, and if no lamp reaches
+  // it the surface is meant to be dark. This is what makes the practicals worth having.
+  ambient.intensity = 0.30;
+  ambient.diffuse = new Color3(0.42, 0.50, 0.66);
+  ambient.groundColor = new Color3(0.05, 0.045, 0.05);
   ambient.renderPriority = 100; // must always be among a mesh's lights
   lights.push(ambient);
 
@@ -277,6 +281,11 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
   // Blue distance bands separate amber frontage from the cool service skyline at no pass cost.
   scene.fogDensity = district ? 0.016 : 0.012;
   scene.fogColor = district ? new Color3(0.055, 0.105, 0.14) : new Color3(0.035, 0.035, 0.05);
+  // The sky dome is a 0.55 slice, so everything below its rim is whatever the frame was cleared
+  // to — and Babylon's default is (0.2, 0.2, 0.3), a lavender wedge under the horizon that shows
+  // from any roof and off every edge of the block. Clear to the fog instead: the void then reads
+  // as the same distance haze the geometry fades into.
+  scene.clearColor = scene.fogColor.toColor4(1);
 
   return {
     root, shadowGenerators, materials, lights, setShadowQuality,
@@ -307,7 +316,10 @@ function buildSky(scene: Scene, district = false): Mesh {
   const dt = new DynamicTexture("skyTex", { width: 16, height: size }, scene, false);
   const ctx = dt.getContext() as CanvasRenderingContext2D;
   const g = ctx.createLinearGradient(0, 0, 0, size);
-  g.addColorStop(0, district ? "#050b16" : "#05060c"); g.addColorStop(0.55, district ? "#102b3b" : "#0a0c18"); g.addColorStop(0.85, district ? "#244957" : "#1c1723"); g.addColorStop(1, district ? "#53636a" : "#2a2022");
+  // Night, with the city's own glow on the horizon — not a blue daylight ramp. The old district
+  // stops climbed to #53636a at the skyline, which is a bright overcast afternoon and set the
+  // tone for everything under it.
+  g.addColorStop(0, district ? "#04060f" : "#05060c"); g.addColorStop(0.55, district ? "#0a1322" : "#0a0c18"); g.addColorStop(0.85, district ? "#1b2233" : "#1c1723"); g.addColorStop(1, district ? "#3a2f2c" : "#2a2022");
   ctx.fillStyle = g; ctx.fillRect(0, 0, 16, size);
   dt.update(false);
   const mat = new StandardMaterial("skyMat", scene);
