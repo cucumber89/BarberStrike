@@ -23,6 +23,7 @@ import { buildProps } from "./props";
 import { dressSolid } from "./dressing";
 import { buildArchitecture } from "./architecture";
 import { selectPracticals } from "./lightBudget";
+import { exposedFaces, tileSeams } from "./wallFaces";
 import type { ModelLibrary } from "./models";
 
 export interface MapInstance {
@@ -110,6 +111,9 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
     byMat.set(key, entry);
   };
 
+  // Everything solid enough to hide a face: dressed objects are drawn as their own geometry,
+  // so their collision box is not a surface anybody sees.
+  const occluders = map.solids.filter((v) => !v.invisible && !v.look).map((v) => v.box);
   const toggles = new Map<string, Mesh[]>();
   for (const s of map.solids) {
     if (s.invisible) continue;
@@ -144,8 +148,11 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
         const sx = fullX / nx, sz = fullZ / nz;
         const m = MeshBuilder.CreateBox(s.name ?? "solid", { width: sx, height: sy, depth: sz }, scene);
         if (district && (s.mat.startsWith("wall") || s.mat === "concrete_block") && sy >= .25) {
+          // Bevel only what is on show. A bevel on a face butted against the next box or the next
+          // tile carves a groove down the middle of a continuous wall — see `wallFaces.ts`.
+          const piece = { minX, minY: b.minY, minZ, maxX: minX + sx, maxY: b.maxY, maxZ: minZ + sz };
           const data = new VertexData();
-          Object.assign(data, chamferData(sx,sy,sz));
+          Object.assign(data, chamferData(sx, sy, sz, .05, exposedFaces(piece, occluders, tileSeams(ix, nx, iz, nz), s.box)));
           data.applyToMesh(m);
         }
         m.position.set(minX + sx / 2, b.minY + sy / 2, minZ + sz / 2);
