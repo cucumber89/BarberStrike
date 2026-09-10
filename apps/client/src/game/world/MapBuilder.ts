@@ -73,7 +73,8 @@ export interface MapBuildOptions {
  * practical point/spot lights, a night-sky dome and a touch of exponential fog for depth.
  */
 export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapInstance {
-  const materials = createMaterialLibrary(scene);
+  const district = hasDistrictDressing(map);
+  const materials = createMaterialLibrary(scene, district);
   // Merge per material AND per 12 m zone: Babylon lights a mesh with at most
   // `maxSimultaneousLights` lights, so one map-wide mesh per material would only see a handful
   // of the practical lights. Zoned meshes get their local lights; draw calls stay low.
@@ -166,7 +167,7 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
   for (const m of props.meshes) if (!m.isAnInstance) casters.push(m);
 
   // ---- Sky: an inverted gradient dome, unlit, always behind everything.
-  const sky = buildSky(scene);
+  const sky = buildSky(scene, district);
 
   // ---- Lighting
   const lights: Light[] = [];
@@ -257,8 +258,9 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
 
   // ---- Fog: barely there, sells depth in the long exterior sightlines.
   scene.fogMode = Scene.FOGMODE_EXP2;
-  scene.fogDensity = 0.012;
-  scene.fogColor = new Color3(0.035, 0.035, 0.05);
+  // Blue distance bands separate amber frontage from the cool service skyline at no pass cost.
+  scene.fogDensity = district ? 0.016 : 0.012;
+  scene.fogColor = district ? new Color3(0.055, 0.105, 0.14) : new Color3(0.035, 0.035, 0.05);
 
   return {
     root, shadowGenerators, materials, lights, setShadowQuality,
@@ -284,12 +286,12 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
 }
 
 /** Night-sky dome: vertical gradient (deep blue-black → faint warm city glow at the horizon). */
-function buildSky(scene: Scene): Mesh {
+function buildSky(scene: Scene, district = false): Mesh {
   const size = 256;
   const dt = new DynamicTexture("skyTex", { width: 16, height: size }, scene, false);
   const ctx = dt.getContext() as CanvasRenderingContext2D;
   const g = ctx.createLinearGradient(0, 0, 0, size);
-  g.addColorStop(0, "#05060c"); g.addColorStop(0.55, "#0a0c18"); g.addColorStop(0.85, "#1c1723"); g.addColorStop(1, "#2a2022");
+  g.addColorStop(0, "#050b16"); g.addColorStop(0.55, district ? "#102b3b" : "#0a0c18"); g.addColorStop(0.85, district ? "#244957" : "#1c1723"); g.addColorStop(1, district ? "#53636a" : "#2a2022");
   ctx.fillStyle = g; ctx.fillRect(0, 0, 16, size);
   dt.update(false);
   const mat = new StandardMaterial("skyMat", scene);

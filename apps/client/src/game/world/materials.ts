@@ -81,7 +81,7 @@ const SPECS: Record<MaterialTag, Spec> = {
  * callers. Pixel data is generated once per surface kind and GPU textures once per (kind, tiling),
  * so the ten plaster-based tags share one texture set; materials are still cached per tag.
  */
-export function createMaterialLibrary(scene: Scene): MaterialLibrary {
+export function createMaterialLibrary(scene: Scene, district = false): MaterialLibrary {
   const cache = new Map<MaterialTag, PBRMaterial>();
   const surfaces = new Map<SurfaceKind, Surface>();
   const textures = new Map<string, RawTexture>();
@@ -122,6 +122,19 @@ export function createMaterialLibrary(scene: Scene): MaterialLibrary {
     const spec = SPECS[tag];
     const m = new PBRMaterial(`mat_${tag}`, scene);
     m.albedoColor = Color3.FromHexString(spec.albedo).toLinearSpace();
+    // District: colour blocks carry the silhouette. The baseline repeated concrete stains on
+    // every facade and pavement; only functional checker/fence patterns retain textures here.
+    const colors: Partial<Record<MaterialTag, string>> = {
+      wall_sand: "#ccab7b", wall_teal: "#368b88", wall_plaster: "#b8a58c",
+      wall_concrete: "#879ca5", wall_brick: "#a95b49", wall_tile: "#38616b",
+      floor_concrete: "#596d75", floor_asphalt: "#293947", floor_wood: "#936644",
+      floor_metal: "#506c7a", ceiling: "#354957", wood: "#a87948", counter: "#403d46",
+      paint_red: "#bd594d", corrugated_red: "#bd594d", paint_blue: "#407e9a",
+      corrugated_blue: "#407e9a", paint_green: "#377e70", corrugated_green: "#377e70",
+      paint_yellow: "#e4b650", paint_white: "#dcd4b7", paint_orange: "#cb7b42",
+      foliage: "#458075", metal: "#526976", concrete_block: "#93a6a8",
+    };
+    if (district && colors[tag]) m.albedoColor = Color3.FromHexString(colors[tag]!).toLinearSpace();
     m.roughness = spec.roughness;
     m.metallic = spec.metallic;
     m.environmentIntensity = 0.6;
@@ -133,12 +146,14 @@ export function createMaterialLibrary(scene: Scene): MaterialLibrary {
     // map faintly and range culling would have been visible as popping. GLTF falloff is 1/d² with
     // a smooth cutoff at `range`: what the culling assumes is what the shader draws.
     m.useGLTFLightFalloff = true;
-    if (spec.tex) {
+    if (spec.tex && (!district || spec.cutout || spec.tex === "checker")) {
       const kind = spec.tex, scale = spec.scale ?? 1;
       const s = surface(kind);
       m.albedoTexture = texture(`${kind}_${scale}_albedo`, s.albedo, scale);
-      m.bumpTexture = texture(`${kind}_${scale}_normal`, s.normal, scale);
-      m.bumpTexture.level = kind === "plaster" ? 0.22 : kind === "leaves" ? 0.35 : 0.65;
+      if (!district) {
+        m.bumpTexture = texture(`${kind}_${scale}_normal`, s.normal, scale);
+        m.bumpTexture.level = kind === "plaster" ? 0.22 : kind === "leaves" ? 0.35 : 0.65;
+      }
       // The map has no tangent attributes, so the shader builds its frame from screen derivatives
       // (Babylon's cotangent_frame); with these flags a raised brick shades as raised — verified
       // against the moon direction in a screenshot, see the 2.1 materials pass.
