@@ -183,6 +183,7 @@ export function buildProps(scene: Scene, hints: PropHint[], imported?: Map<strin
   let n = 0;
   for (const h of hints) {
     const a = anchor(h, `prop_${h.kind}_${n++}`);
+    const fixture = () => h.color ? pal.pbr(`fixture_${h.color}`, h.color, .6, 0, h.color, 1.4) : M.pendant();
     const w = h.w ?? 1, hh = h.h ?? 1;
     switch (h.kind) {
       case "barber_chair": {
@@ -258,7 +259,7 @@ export function buildProps(scene: Scene, hints: PropHint[], imported?: Map<strin
       case "neon": {
         // Buy stations (drop 2) glow money-green on a black plate so they read from across the map.
         const station = h.variant === "station";
-        const color = station ? "#7dff9a" : "#c9a7ff";
+        const color = h.color ?? (station ? "#7dff9a" : "#c9a7ff");
         if (station) box("neonPlate", (w || 1.6) + 0.12, (hh || 0.4) + 0.12, 0.05, M.black(), a, 0, 0, -0.035);
         plane(station ? "neon_station" : "neon", w || 1.6, hh || 0.4, pal.text(station ? "neonStation" : "neon", h.text ?? "AFTER HOURS", { w: w || 1.6, h: hh || 0.4, color, bg: "rgba(0,0,0,0)", glow: true, font: station ? "bold" : "normal" }), a, 0, 0, 0, true);
         break;
@@ -287,30 +288,30 @@ export function buildProps(scene: Scene, hints: PropHint[], imported?: Map<strin
           // Head only: the post is a solid in the map (collision). Arm + housing + glow at the anchor.
           box("arm", 0.06, 0.06, 0.7, M.darkmetal(), a, 0, 0, 0.3);
           box("head", 0.36, 0.12, 0.5, M.darkmetal(), a, 0, -0.02, 0.6);
-          box("glow", 0.3, 0.03, 0.44, M.pendant(), a, 0, -0.09, 0.6, true);
+          box("glow", 0.3, 0.03, 0.44, fixture(), a, 0, -0.09, 0.6, true);
         } else if (h.variant === "wall") {
           box("bracket", 0.06, 0.06, 0.28, M.darkmetal(), a, 0, 0, 0.14);
           box("shade", 0.28, 0.12, 0.28, M.darkmetal(), a, 0, -0.04, 0.3);
-          box("bulb", 0.2, 0.03, 0.2, M.pendant(), a, 0, -0.1, 0.3, true);
+          box("bulb", 0.2, 0.03, 0.2, fixture(), a, 0, -0.1, 0.3, true);
         } else {
           cyl("post", 0.1, hh || 3.4, M.darkmetal(), a, 0, (hh || 3.4) / 2, 0);
           box("arm", 0.06, 0.06, 0.7, M.darkmetal(), a, 0, hh || 3.4, 0.3);
           box("head", 0.36, 0.12, 0.5, M.darkmetal(), a, 0, (hh || 3.4) - 0.02, 0.6);
-          box("glow", 0.3, 0.03, 0.44, M.pendant(), a, 0, (hh || 3.4) - 0.09, 0.6, true);
+          box("glow", 0.3, 0.03, 0.44, fixture(), a, 0, (hh || 3.4) - 0.09, 0.6, true);
         }
         break;
       }
       case "tube_light": {
         const len = w || 1.2;
         box("housing", len, 0.06, 0.1, M.darkmetal(), a, 0, 0.03, 0);
-        box("tube", len - 0.08, 0.03, 0.05, h.variant === "cool" ? M.tubeCool() : M.tube(), a, 0, -0.01, 0, true);
+        box("tube", len - 0.08, 0.03, 0.05, h.color ? fixture() : h.variant === "cool" ? M.tubeCool() : M.tube(), a, 0, -0.01, 0, true);
         break;
       }
       case "pendant": {
         cyl("cord", 0.008, hh || 0.6, M.black(), a, 0, (hh || 0.6) / 2, 0, 6);
         const shade = MeshBuilder.CreateCylinder("shade", { diameterTop: 0.1, diameterBottom: 0.34, height: 0.22, tessellation: 14 }, scene);
         shade.material = M.black(); shade.parent = a; shade.position.y = -0.1; shade.isPickable = false; meshes.push(shade);
-        box("bulb", 0.14, 0.05, 0.14, M.pendant(), a, 0, -0.2, 0, true);
+        box("bulb", 0.14, 0.05, 0.14, fixture(), a, 0, -0.2, 0, true);
         break;
       }
       case "trash": {

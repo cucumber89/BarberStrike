@@ -54,6 +54,8 @@ export interface PropHint {
   yaw?: number;
   scale?: number;
   text?: string;
+  /** Optional fixture emission, shared with its practical light. */
+  color?: string;
   /** Kind-specific variant (e.g. lamp: "post" | "wall"; poster: 0..n). */
   variant?: string;
   /** Optional size hints (metres) for kinds that stretch (tube_light length, cable length, sign width). */
@@ -73,6 +75,9 @@ export interface LightHint {
   /** Higher = preferred when a mesh is affected by more lights than the material allows. */
   priority?: number;
 }
+
+/** Amber = public frontage; mercury = work/service routes; rose = destination signs only. */
+export const DISTRICT_LIGHTS = { amber: "#ffbf70", mercury: "#9adce5", accent: "#fa709a" } as const;
 
 export interface SpawnPoint { x: number; y: number; z: number; yaw: number; team: Team }
 
@@ -293,7 +298,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   props.push({ kind: "sign", x: -20, y: 3.1, z: 3.98, yaw: Math.PI, text: "REPAIR / BACKLOT", w: 3.5, h: 0.36 });
   props.push({ kind: "tube_light", x: -20, y: 3.42, z: 7, w: 1.8 });
   props.push({ kind: "crate", x: -21.38, y: 1, z: 6.5, variant: "small" });
-  lights.push({ kind: "point", x: -20, y: 2.9, z: 7, color: "#cce7d8", intensity: 1.1, range: 7 });
+  lights.push({ kind: "point", x: -20, y: 2.9, z: 7, color: DISTRICT_LIGHTS.mercury, intensity: 1.1, range: 7 });
   // Kiosk: small room, doors offset (south x -23..-21, north x -26..-24).
   solids.push(S(-26, 0, 14, 3, 3.0, W, "wall_plaster", "kiosk_s_a"), S(-21, 0, 14, 1, 3.0, W, "wall_plaster", "kiosk_s_b"), S(-23, 2.3, 14, 2, 0.7, W, "wall_plaster", "kiosk_s_top"));
   solids.push(S(-24, 0, 18, 4, 3.0, W, "wall_plaster", "kiosk_n_a"), S(-26, 2.3, 18, 2, 0.7, W, "wall_plaster", "kiosk_n_top"));
@@ -527,46 +532,46 @@ export const NIGHT_DISTRICT: MapDef = (() => {
 
   // ---------- Lights ----------
   // Shop: warm tungsten practicals (main is a shadow-casting spot pointing down).
-  lights.push({ kind: "spot", x: 1.0, y: 3.4, z: 4.5, dx: 0, dy: -1, dz: 0, angle: 2.4, color: "#ffd2a0", intensity: 26, range: 9, shadows: true, priority: 10 });
-  lights.push({ kind: "point", x: 5.0, y: 3.3, z: 2.0, color: "#ffc98a", intensity: 12, range: 7, priority: 6 });
-  lights.push({ kind: "point", x: 5.5, y: 3.3, z: 8.0, color: "#ffc98a", intensity: 10, range: 7, priority: 5 });
-  lights.push({ kind: "point", x: -2.6, y: 2.2, z: 3.2, color: "#fff0d8", intensity: 5, range: 5, priority: 4 });
+  lights.push({ kind: "spot", x: 1.0, y: 3.4, z: 4.5, dx: 0, dy: -1, dz: 0, angle: 2.4, color: DISTRICT_LIGHTS.amber, intensity: 26, range: 9, shadows: true, priority: 10 });
+  lights.push({ kind: "point", x: 5.0, y: 3.3, z: 2.0, color: DISTRICT_LIGHTS.amber, intensity: 12, range: 7, priority: 6 });
+  lights.push({ kind: "point", x: 5.5, y: 3.3, z: 8.0, color: DISTRICT_LIGHTS.amber, intensity: 10, range: 7, priority: 5 });
+  lights.push({ kind: "point", x: -2.6, y: 2.2, z: 3.2, color: DISTRICT_LIGHTS.amber, intensity: 5, range: 5, priority: 4 });
   // Back hall: cool-white fluorescent with a slight green cast.
-  lights.push({ kind: "point", x: 1.0, y: 3.3, z: 14.5, color: "#d6e8e4", intensity: 11, range: 8, priority: 5 });
+  lights.push({ kind: "point", x: 1.0, y: 3.3, z: 14.5, color: DISTRICT_LIGHTS.mercury, intensity: 11, range: 8, priority: 5 });
   // Neighbour unit: cold industrial. Storage: warm sodium.
-  lights.push({ kind: "point", x: 14, y: 5.3, z: 5, color: "#b9c8e6", intensity: 30, range: 11, priority: 6 });
-  lights.push({ kind: "point", x: 13, y: 5.4, z: 15, color: "#ffb070", intensity: 24, range: 10, priority: 6 });
-  lights.push({ kind: "point", x: 11, y: 4.9, z: 11.3, color: "#ffd0a0", intensity: 8, range: 6, priority: 3 });
+  lights.push({ kind: "point", x: 14, y: 5.3, z: 5, color: DISTRICT_LIGHTS.mercury, intensity: 30, range: 11, priority: 6 });
+  lights.push({ kind: "point", x: 13, y: 5.4, z: 15, color: DISTRICT_LIGHTS.amber, intensity: 24, range: 10, priority: 6 });
+  lights.push({ kind: "point", x: 11, y: 4.9, z: 11.3, color: DISTRICT_LIGHTS.amber, intensity: 8, range: 6, priority: 3 });
   // Street lamps: warm sodium pools.
   for (const [lx, lz] of [[-9, -4.5], [4, -6], [18, -4.5], [-14, -19.5], [12, -19.5], [30, -4.5]]) {
     // The head projects 0.6 m from the post; light leaves its underside, not the solid pole.
-    lights.push({ kind: "spot", x: lx, y: 3.5, z: lz + 0.6, dx: 0, dy: -1, dz: 0, angle: 2.6, color: "#ffb86a", intensity: 32, range: 11, shadows: lx === -9, priority: 8 });
+    lights.push({ kind: "spot", x: lx, y: 3.5, z: lz + 0.6, dx: 0, dy: -1, dz: 0, angle: 2.6, color: DISTRICT_LIGHTS.amber, intensity: 32, range: 11, shadows: lx === -9, priority: 8 });
   }
-  lights.push({ kind: "point", x: 2.0, y: 4.0, z: -1.2, color: "#ffc9a0", intensity: 9, range: 6, priority: 4 });
-  lights.push({ kind: "point", x: -4.2, y: 2.2, z: -19.8, color: "#e8f0ff", intensity: 10, range: 7, priority: 5 }); // bus shelter
-  lights.push({ kind: "point", x: 8, y: 4.4, z: -21.5, color: "#ff6aa0", intensity: 8, range: 7, priority: 4 });     // "LATE LATE" neon
+  lights.push({ kind: "point", x: 2.0, y: 4.0, z: -1.2, color: DISTRICT_LIGHTS.amber, intensity: 9, range: 6, priority: 4 });
+  lights.push({ kind: "point", x: -4.2, y: 2.2, z: -19.8, color: DISTRICT_LIGHTS.mercury, intensity: 10, range: 7, priority: 5 }); // bus shelter
+  lights.push({ kind: "point", x: 8, y: 4.4, z: -21.5, color: DISTRICT_LIGHTS.accent, intensity: 8, range: 7, priority: 4 });     // "LATE LATE" neon
   // Alley: cool blue-grey security light + warm bulb over the shop's side door.
-  lights.push({ kind: "point", x: -8, y: 3.9, z: 15.5, color: "#8fa3c4", intensity: 14, range: 9, priority: 5 });
-  lights.push({ kind: "point", x: -4.7, y: 2.9, z: 7, color: "#ffb070", intensity: 8, range: 6, priority: 4 });
-  lights.push({ kind: "point", x: -4.7, y: 2.8, z: 15, color: "#ffb070", intensity: 8, range: 6, priority: 4 });
+  lights.push({ kind: "point", x: -8, y: 3.9, z: 15.5, color: DISTRICT_LIGHTS.mercury, intensity: 14, range: 9, priority: 5 });
+  lights.push({ kind: "point", x: -4.7, y: 2.9, z: 7, color: DISTRICT_LIGHTS.amber, intensity: 8, range: 6, priority: 4 });
+  lights.push({ kind: "point", x: -4.7, y: 2.8, z: 15, color: DISTRICT_LIGHTS.amber, intensity: 8, range: 6, priority: 4 });
   // Backlot / kiosk.
-  lights.push({ kind: "point", x: -20, y: 3.4, z: 2, color: "#a9b8d6", intensity: 14, range: 9, priority: 5 });
-  lights.push({ kind: "point", x: -23, y: 2.8, z: 16, color: "#eaf4ff", intensity: 12, range: 7, priority: 5 });
-  lights.push({ kind: "point", x: -22, y: 3.5, z: 24, color: "#ffb86a", intensity: 20, range: 10, priority: 6 });
+  lights.push({ kind: "point", x: -20, y: 3.4, z: 2, color: DISTRICT_LIGHTS.mercury, intensity: 14, range: 9, priority: 5 });
+  lights.push({ kind: "point", x: -23, y: 2.8, z: 16, color: DISTRICT_LIGHTS.mercury, intensity: 12, range: 7, priority: 5 });
+  lights.push({ kind: "point", x: -22, y: 3.5, z: 24, color: DISTRICT_LIGHTS.amber, intensity: 20, range: 10, priority: 6 });
   // East block: canopy cool tubes, car wash, lane lamp.
-  lights.push({ kind: "point", x: 25, y: 3.0, z: 4, color: "#cfe0ff", intensity: 16, range: 8, priority: 5 });
-  lights.push({ kind: "point", x: 31, y: 3.0, z: 4, color: "#cfe0ff", intensity: 16, range: 8, priority: 5 });
-  lights.push({ kind: "point", x: 27, y: 4.2, z: 19, color: "#d8ecff", intensity: 22, range: 10, priority: 6 });
-  lights.push({ kind: "point", x: 33.5, y: 3.5, z: 18, color: "#ffb86a", intensity: 18, range: 9, priority: 5 });
-  lights.push({ kind: "point", x: 26, y: 2.65, z: 11.6, color: "#ffd0a0", intensity: 8, range: 6, priority: 3 }); // below the gantry deck
+  lights.push({ kind: "point", x: 25, y: 3.0, z: 4, color: DISTRICT_LIGHTS.mercury, intensity: 16, range: 8, priority: 5 });
+  lights.push({ kind: "point", x: 31, y: 3.0, z: 4, color: DISTRICT_LIGHTS.mercury, intensity: 16, range: 8, priority: 5 });
+  lights.push({ kind: "point", x: 27, y: 4.2, z: 19, color: DISTRICT_LIGHTS.mercury, intensity: 22, range: 10, priority: 6 });
+  lights.push({ kind: "point", x: 33.5, y: 3.5, z: 18, color: DISTRICT_LIGHTS.amber, intensity: 18, range: 9, priority: 5 });
+  lights.push({ kind: "point", x: 26, y: 2.65, z: 11.6, color: DISTRICT_LIGHTS.amber, intensity: 8, range: 6, priority: 3 }); // below the gantry deck
   // Yard: cool main flood, purple accent on the west side, warm dock lamp, north floods.
-  lights.push({ kind: "point", x: 3, y: 5.15, z: 23.5, color: "#c9d4ea", intensity: 26, range: 13, priority: 7 });
-  lights.push({ kind: "point", x: -8, y: 4.2, z: 23, color: "#8f6cff", intensity: 16, range: 9, priority: 6 });
-  lights.push({ kind: "point", x: 9, y: 4.3, z: 20, color: "#ffb070", intensity: 18, range: 9, priority: 6 });
-  lights.push({ kind: "point", x: 20, y: 4.3, z: 34, color: "#ffb070", intensity: 20, range: 10, priority: 6 });
-  lights.push({ kind: "point", x: -6, y: 4.3, z: 33, color: "#c9d4ea", intensity: 20, range: 10, priority: 6 });
-  lights.push({ kind: "point", x: -8, y: 4.3, z: 42, color: "#ffb86a", intensity: 22, range: 10, priority: 6 });
-  lights.push({ kind: "point", x: 18, y: 4.3, z: 42, color: "#ffb86a", intensity: 22, range: 10, priority: 6 });
+  lights.push({ kind: "point", x: 3, y: 5.15, z: 23.5, color: DISTRICT_LIGHTS.mercury, intensity: 26, range: 13, priority: 7 });
+  lights.push({ kind: "point", x: -8, y: 4.2, z: 23, color: DISTRICT_LIGHTS.accent, intensity: 16, range: 9, priority: 6 });
+  lights.push({ kind: "point", x: 9, y: 4.3, z: 20, color: DISTRICT_LIGHTS.amber, intensity: 18, range: 9, priority: 6 });
+  lights.push({ kind: "point", x: 20, y: 4.3, z: 34, color: DISTRICT_LIGHTS.amber, intensity: 20, range: 10, priority: 6 });
+  lights.push({ kind: "point", x: -6, y: 4.3, z: 33, color: DISTRICT_LIGHTS.mercury, intensity: 20, range: 10, priority: 6 });
+  lights.push({ kind: "point", x: -8, y: 4.3, z: 42, color: DISTRICT_LIGHTS.amber, intensity: 22, range: 10, priority: 6 });
+  lights.push({ kind: "point", x: 18, y: 4.3, z: 42, color: DISTRICT_LIGHTS.amber, intensity: 22, range: 10, priority: 6 });
 
   // ---------- Spawns ----------
   // Team 0 (FADE): south pavement. Team 1 (TAPER): north compound. All behind cover, none visible
@@ -593,7 +598,33 @@ export const NIGHT_DISTRICT: MapDef = (() => {
     { id: "C", name: "COURTYARD", x: 43, y: 0, z: 24 },
   ];
 
-  const arenaSpawns = expandDistrict(solids, props, lights);
+  const arenaSpawns = expandDistrict(solids, props, lights, DISTRICT_LIGHTS);
+  // Perimeter sconces light empty approaches without adding collision or shadow maps.
+  for (const [x, z, yaw, color] of [
+    [-44.95, -14, Math.PI / 2, DISTRICT_LIGHTS.amber],
+    [-27.65, -16, -Math.PI / 2, DISTRICT_LIGHTS.amber],
+    [-44.95, 38, Math.PI / 2, DISTRICT_LIGHTS.mercury],
+    [-27.65, 40, -Math.PI / 2, DISTRICT_LIGHTS.mercury],
+    [52.95, -14, -Math.PI / 2, DISTRICT_LIGHTS.amber],
+    [35.35, -16, Math.PI / 2, DISTRICT_LIGHTS.amber],
+    [52.95, 38, -Math.PI / 2, DISTRICT_LIGHTS.mercury],
+    [35.35, 40, Math.PI / 2, DISTRICT_LIGHTS.mercury],
+    [-26.95, 39, Math.PI / 2, DISTRICT_LIGHTS.mercury],
+    [0, 44.95, Math.PI, DISTRICT_LIGHTS.mercury],
+    [32, 44.95, Math.PI, DISTRICT_LIGHTS.mercury],
+  ] as const) {
+    props.push({ kind: "lamp", variant: "wall", x, y: 3, z, yaw, color });
+    lights.push({ kind: "point", x: x + Math.sin(yaw) * .35, y: 2.9,
+      z: z + Math.cos(yaw) * .35, color, intensity: 24, range: 14, priority: 5 });
+  }
+  // Fixtures and practicals use one palette; nearest matching source supplies the emission.
+  for (const p of props) {
+    if (!["lamp", "tube_light", "pendant", "neon", "barber_pole"].includes(p.kind) || p.color) continue;
+    const py = p.y + (p.kind === "lamp" && p.variant === "post" ? 3.3 : 0);
+    const nearby = [...lights].sort((a,b) => Math.hypot(a.x-p.x,a.y-py,a.z-p.z)-Math.hypot(b.x-p.x,b.y-py,b.z-p.z))[0];
+    p.color = nearby.color;
+  }
+
   return {
     id: "night_district",
     name: "Night District",

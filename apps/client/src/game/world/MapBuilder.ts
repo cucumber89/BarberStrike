@@ -20,6 +20,7 @@ import { createMaterialLibrary, type MaterialLibrary } from "./materials";
 import { buildProps } from "./props";
 import { dressSolid } from "./dressing";
 import { buildArchitecture } from "./architecture";
+import { selectPracticals } from "./lightBudget";
 import type { ModelLibrary } from "./models";
 
 export interface MapInstance {
@@ -238,24 +239,21 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
     lights.push(light);
   }
 
-  // MEASURED (1.0 beta profiling): Babylon does not cull lights by range, so every mesh was lit
-  // by all 19 practicals and every PBR shader ran with maxSimultaneousLights (8) lights per pixel.
-  // Static meshes exclude every practical whose range sphere misses their bounding box; the
-  // avg went from 19 lights per mesh to ~3. Dynamic meshes (characters, weapons) keep the full
-  // list — their materials cap at 4 and the priority sort picks the closest.
-  const staticMeshes: AbstractMesh[] = [...root, ...props.meshes];
-  for (const light of lights) {
-    if (!(light instanceof PointLight || light instanceof SpotLight)) continue;
-    const p = light.position, r = light.range;
-    const excluded: AbstractMesh[] = [];
-    for (const m of staticMeshes) {
-      const bb = m.getBoundingInfo().boundingBox;
-      const mn = bb.minimumWorld, mx = bb.maximumWorld;
-      const dx = Math.max(mn.x - p.x, 0, p.x - mx.x), dy = Math.max(mn.y - p.y, 0, p.y - mx.y), dz = Math.max(mn.z - p.z, 0, p.z - mx.z);
-      if (dx * dx + dy * dy + dz * dz > r * r) excluded.push(m);
-    }
-    light.excludedMeshes = excluded;
+  // Include toggleable walls and instances. Exclusions retain lighting for characters
+  // constructed later; includedOnlyMeshes would silently leave those characters unlit.
+  // Ambient + moon reserve two slots. Selection is camera-independent and paid once.
+  const practicals = lights.slice(2);
+  const excluded: AbstractMesh[][] = practicals.map(() => []);
+  for (const m of scene.meshes) {
+    if (m === sky) continue;
+    m.computeWorldMatrix(true);
+    const bb = m.getBoundingInfo().boundingBox;
+    const mn = bb.minimumWorld, mx = bb.maximumWorld;
+    const cap = (m.material as { maxSimultaneousLights?: number } | null)?.maxSimultaneousLights ?? 4;
+    const chosen = selectPracticals({minX:mn.x,minY:mn.y,minZ:mn.z,maxX:mx.x,maxY:mx.y,maxZ:mx.z}, map.lights, cap - 2);
+    practicals.forEach((_, i) => { if (!chosen.includes(i)) excluded[i].push(m); });
   }
+  practicals.forEach((l,i) => { l.excludedMeshes = excluded[i]; });
 
   // ---- Fog: barely there, sells depth in the long exterior sightlines.
   scene.fogMode = Scene.FOGMODE_EXP2;
