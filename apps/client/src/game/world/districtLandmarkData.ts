@@ -98,3 +98,5 @@ DISTRICT_LANDMARKS.push({area:"backlot",anchor:"garage_roof",purpose:"Open-jaw r
 DISTRICT_LANDMARKS.push({area:"alley",anchor:"alley_annex",purpose:"Bent extraction duct",pieces:[[4,.125,2,2,.25,2,"metal"],[4,1,2,1.25,1.75,1.25,"paint_green"],[4.5,1.75,2,2.25,.5,1.25,"paint_green"],[5.65,1.75,2,.1,.5,1.25,"paint_yellow"]]});
 
 DISTRICT_LANDMARKS.push({area:"shop",anchor:"shop_ceiling",purpose:"Faceted barber pole",pieces:[[2,.125,2,1.5,.25,1.5,"metal"],[2,.75,2,1,1,1,"paint_red","cylinder"],[2,1.5,2,1,.5,1,"paint_white","cylinder"],[2,2,2,1,.5,1,"paint_blue","cylinder"],[2,2.5,2,1,.5,1,"paint_white","cylinder"],[2,2.85,2,1.5,.2,1.5,"brass","cylinder"]]});
+
+DISTRICT_LANDMARKS.push({area:"unit",anchor:"industrial_ceiling",purpose:"Broad exhaust hood",pieces:[[6,.125,4,4,.25,4,"metal"],[6,.75,4,2.5,1,2.5,"paint_blue","cylinder"],[6,1.4,4,4,.3,4,"paint_yellow","cylinder"],[6,1.8,4,3,.5,3,"metal","cylinder"]]});
