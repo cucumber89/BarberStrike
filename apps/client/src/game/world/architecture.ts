@@ -3,6 +3,7 @@ import type { Scene } from "@babylonjs/core/scene";
 import type { MapDef, MaterialTag } from "@frankibarber/shared";
 import type { AddPiece } from "./dressing";
 import { buildStreetscape } from "./streetscape";
+import { buildDistrictLandmarks } from "./districtLandmarks";
 
 /** Wall-mounted / surface detail only. Walkable architecture and cover live in the shared map. */
 export function buildArchitecture(scene: Scene, map: MapDef, add: AddPiece): void {
@@ -12,6 +13,7 @@ export function buildArchitecture(scene: Scene, map: MapDef, add: AddPiece): voi
     m.position.set(x, y, z); m.rotation.y = ry; add(m, tag); return m;
   };
   buildStreetscape(scene, map, add);
+  buildDistrictLandmarks(scene, map, add);
   // Finish the central shop as a small commercial building, with a capped parapet and
   // masonry piers. These follow solid facade sections, clear of its doors and display glass.
   box("wall_concrete", 1.85, 4.83, -.15, 12.7, .13, .5);
