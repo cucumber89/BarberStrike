@@ -90,3 +90,5 @@ DISTRICT_LANDMARKS.push({area:"west_extension",anchor:"depot_roof",purpose:"Step
 DISTRICT_LANDMARKS.push({area:"east_extension",anchor:"cafe_roof",purpose:"Octagonal cafe cup with open handle",pieces:[[6,.125,5,4,.25,3.5,"paint_green"],[6,1,5,2.5,1.5,2.5,"paint_white","cylinder"],[6,1.8,5,2.75,.1,2.75,"brass","cylinder"],[7.75,1.5,5,1.25,.25,.25,"paint_white"],[8.25,1,5,.25,1.25,.25,"paint_white"],[7.75,.5,5,1.25,.25,.25,"paint_white"]]});
 
 DISTRICT_LANDMARKS.push({area:"north",anchor:"cabin_w",purpose:"Dispatch clock tower",pieces:[[3,.125,2,2,.25,2,"paint_blue"],[3,1.25,2,1.5,2,1.5,"paint_blue"],[3,2.35,2,2,.2,2,"paint_yellow"],[3,1.5,1.2,1,.75,.1,"paint_white"],[3,1.5,1.1,.1,.5,.1,"metal"],[3.2,1.5,1.1,.4,.1,.1,"metal"]]});
+
+DISTRICT_LANDMARKS.push({area:"street",anchor:"shelter_roof",purpose:"Three rising night-bus fins",pieces:[[.75,.5,1,.5,1,1.5,"paint_yellow"],[1.5,.75,1,.5,1.5,1.5,"paint_yellow"],[2.25,1,1,.5,2,1.5,"paint_yellow"],[2.75,.1,1,5.5,.2,2,"metal"]]});
