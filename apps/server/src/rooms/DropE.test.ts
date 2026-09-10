@@ -35,10 +35,20 @@ async function duel(): Promise<{ a: FakeClient; b: FakeClient }> {
   return { a, b };
 }
 
-/** Puts Alpha behind (or in front of) Bravo with the clippers out, and swings. */
+/**
+ * Puts Alpha behind (or in front of) Bravo with the clippers out, and swings.
+ *
+ * Bravo is staged first, on a spawn with clear floor BEHIND him — he is placed facing away from
+ * `openRun`'s open direction — because the swing needs somewhere for the attacker to stand and the
+ * helper used to take whatever the last respawn happened to give it. A defender's spawn has its
+ * back to the map's north wall, so "1.4 m behind Bravo" landed Alpha inside that wall and the
+ * second swing of a two-shave test silently missed.
+ */
 async function clip(a: FakeClient, b: FakeClient, from: "behind" | "front", seq: number): Promise<void> {
   h.send(a, C2S.Equip, 3);
   await h.advance(WEAPONS.clippers.equipMs + 50);
+  const stage = h.openRun(4);
+  await h.place(b.sessionId, { ...stage, yaw: stage.yaw + Math.PI });
   const v = h.session(b.sessionId), s = h.session(a.sessionId);
   const fx = Math.sin(v.lastYaw), fz = Math.cos(v.lastYaw);
   const sign = from === "behind" ? -1 : 1;

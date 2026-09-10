@@ -190,6 +190,13 @@ export class RoomHarness {
   async faceOff(attackerId: string, victimId: string, maxDist = 12): Promise<{ o: [number, number, number]; d: [number, number, number]; dist: number }> {
     const hit = makeRayHit();
     const spawns = this.map.spawns;
+    // The FARTHEST clear pair inside the cap, not the first one found. `maxDist` is the range the
+    // caller wants the duel at — 12 m is chosen so spread cannot turn a chest shot into a miss —
+    // and taking the first pair over 3 m made the staging depend on the order and spacing of the
+    // map's spawn points. When those were tightened into two groups the first pair became a 3.4 m
+    // one, which is a different fight, and three tests that are about bots and clippers started
+    // failing for a reason that had nothing to do with either.
+    let best: { a: SpawnPoint; v: SpawnPoint; dist: number; dx: number; dy: number; dz: number } | null = null;
     for (const a of spawns) {
       for (const v of spawns) {
         if (a === v) continue;
@@ -198,6 +205,12 @@ export class RoomHarness {
         if (dist < 3 || dist > maxDist) continue;
         this.world.raycast(a.x, a.y + PLAYER.eyeHeight, a.z, dx / dist, dy / dist, dz / dist, dist, hit);
         if (hit.hit) continue;
+        if (!best || dist > best.dist) best = { a, v, dist, dx, dy, dz };
+      }
+    }
+    {
+      if (best) {
+        const { a, v, dist, dx, dy, dz } = best;
         await this.place(attackerId, a);
         await this.place(victimId, v);
         // The attacker's last simulated aim IS this direction (a real client sends it as an input;

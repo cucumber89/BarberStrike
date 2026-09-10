@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coplanarTopFaces, siteLoad, siteOf, MIN_OVERLAP_M2 } from "./floorAudit";
+import { coplanarFaces, coplanarTopFaces, siteLoad, siteOf, MIN_OVERLAP_M2 } from "./floorAudit";
 import { MAPS } from "./map";
 
 /**
@@ -43,6 +43,29 @@ for (const map of Object.values(MAPS)) {
     it("the audit only reports overlaps a player could stand on", () => {
       const tiny = coplanarTopFaces(map.solids).filter((p) => p.area < MIN_OVERLAP_M2);
       expect(tiny).toEqual([]);
+    });
+  });
+}
+
+/**
+ * The top-face audit above gates floors. This gates every other direction, for the same reason and
+ * with the same threshold: a wall, a ceiling or a staircase whose surface shares a plane with the
+ * thing it overlaps shimmers exactly as a floor does. It was added after a six-direction sweep
+ * found 54 such pairs on NIGHT_DISTRICT while the top-face audit reported none.
+ */
+for (const map of Object.values(MAPS)) {
+  describe(`no two surfaces of ${map.id} fight for the same plane`, () => {
+    it("has no same-facing coplanar faces on solids that interpenetrate", () => {
+      const detail = coplanarFaces(map.solids).map(
+        (p) => `${p.dir} ${p.a} ⇄ ${p.b}: ${p.area} m² at (${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)})`,
+      );
+      expect(detail, `${detail.length} coplanar face pair(s)`).toEqual([]);
+    });
+
+    it("does not report solids that merely butt, which backface culling settles", () => {
+      // Two boxes sharing a plane with their faces pointing opposite ways are how every wall in the
+      // map is built. If this ever fires, the audit has started reporting normal construction.
+      expect(coplanarFaces(map.solids).every((p) => p.area >= MIN_OVERLAP_M2)).toBe(true);
     });
   });
 }

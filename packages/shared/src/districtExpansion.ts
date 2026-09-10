@@ -2,7 +2,7 @@ import { boxFrom } from "./collision";
 import type { Solid, MaterialTag, PropHint, LightHint, SpawnPoint } from "./map";
 
 /** Two playable blocks, connected to the original district through three portals per side. */
-export function expandDistrict(solids: Solid[], props: PropHint[], lights: LightHint[]): SpawnPoint[] {
+export function expandDistrict(solids: Solid[], props: PropHint[], lights: LightHint[], palette: { amber: string; mercury: string }): SpawnPoint[] {
   const s = (name: string, x: number, y: number, z: number, w: number, h: number, d: number, mat: MaterialTag) =>
     solids.push({ name, box: boxFrom(x, y, z, w, h, d), mat });
   // The buildings' own floor slabs (see `room`) sit at exactly y = 0, so the yard paving is laid
@@ -21,8 +21,11 @@ export function expandDistrict(solids: Solid[], props: PropHint[], lights: Light
     ground(side, "_n", x, bz0 + bd, 18, 45 - (bz0 + bd));
     ground(side, "_w", x, bz0, bx0 - x, bd);
     ground(side, "_e", bx0 + bw, bz0, x + 18 - (bx0 + bw), bd);
-    s(`extension_south_${side}`, x, 0, -22.3, 18, 7, .3, "wall_sand");
-    s(`extension_north_${side}`, x, 0, 45, 18, 7, .3, "wall_teal");
+    // The core block's own perimeter already spans x -27.3..35.3. Starting the extension wall
+    // inside it makes the two butt; overlapping by 0.3 m put both outer faces on one plane.
+    const wx = side < 0 ? x : x + .3;
+    s(`extension_south_${side}`, wx, 0, -22.3, 17.7, 7, .3, "wall_sand");
+    s(`extension_north_${side}`, wx, 0, 45, 17.7, 7, .3, "wall_teal");
     s(`extension_edge_${side}`, side < 0 ? -45.3 : 53, 0, -22, .3, 7, 67, side < 0 ? "wall_sand" : "wall_teal");
   }
   // Reuse the old perimeter as building walls with wide, deliberately staggered entrances.
@@ -39,17 +42,20 @@ export function expandDistrict(solids: Solid[], props: PropHint[], lights: Light
     s(`${name}_east_n`, x + w - .3, 0, z + d * .4 + 2.5, .3, H, d * .6 - 2.5, mat);
     s(`${name}_east_header`, x + w - .3, 2.7, z + d * .4, .3, H - 2.7, 2.5, mat);
     for (const dz of [0, d - .3]) {
-      s(`${name}_front_w_${dz}`, x, 0, z + dz, w * .35, H, .3, mat);
-      s(`${name}_front_e_${dz}`, x + w * .35 + 3, 0, z + dz, w * .65 - 3, H, .3, mat);
+      // Front walls run BETWEEN the side walls. Starting them at the building's corner made the
+      // two boxes overlap there with their outer faces on the same plane — sixteen z-fighting
+      // corners across the depot and the cafe, from this one helper.
+      s(`${name}_front_w_${dz}`, x + .3, 0, z + dz, w * .35 - .3, H, .3, mat);
+      s(`${name}_front_e_${dz}`, x + w * .35 + 3, 0, z + dz, w * .65 - 3.3, H, .3, mat);
       s(`${name}_header_${dz}`, x + w * .35, 2.8, z + dz, 3, H - 2.8, .3, mat);
     }
     s(`${name}_roof`, x - .15, H, z - .15, w + .3, .22, d + .3, "ceiling");
     s(`${name}_counter`, x + .6, 0, z + 3, 1, 1.05, 3.5, "wood");
     s(`${name}_island`, x + w - 3.5, 0, z + d - 4, 2, 1.1, 1.2, "counter");
-    props.push({ kind: "sign", x: x + w / 2, y: 3.5, z: z - .03, yaw: Math.PI, text: name === "cafe" ? "NIGHT OWL / CAFE" : "DEPOT / WORKSHOP", w: w - 1, h: .6 });
+    props.push({ kind: "sign", x: x + w / 2, y: 3.5, z: z - .03, yaw: Math.PI, text: name === "cafe" ? "NOCNA SOWA / KAWA" : "ZAJEZDNIA / SERWIS", w: w - 1, h: .6 });
     props.push({ kind: "tube_light", x: x + w / 2, y: H - .12, z: z + d / 2, w: 2 });
     props.push({ kind: "bottle_row", x: x + 1.1, y: 1.05, z: z + 4.5, yaw: Math.PI / 2, w: 2.5 });
-    lights.push({ kind: "point", x: x + w / 2, y: 3.3, z: z + d / 2, color: name === "cafe" ? "#ffd7aa" : "#c8e1ef", intensity: 24, range: 11, priority: 7 });
+    lights.push({ kind: "point", x: x + w / 2, y: 3.3, z: z + d / 2, color: name === "cafe" ? palette.amber : palette.mercury, intensity: 24, range: 11, priority: 7 });
   };
   room("depot", -43, 0, 11, 12, "wall_sand");
   room("cafe", 38, 1, 12, 12, "wall_teal");
@@ -72,9 +78,11 @@ export function expandDistrict(solids: Solid[], props: PropHint[], lights: Light
   ] as const) solids.push({ name: `district_cover_${x}_${z}`, box: boxFrom(x, 0, z, w, h, d), look, mat });
   // Gatehouse baffles break the new long lanes without making dead ends.
   for (const [x, z] of [[-39, -3], [-36, 16], [42, -3], [44, 17]]) s(`lane_baffle_${x}`, x, 0, z, 2.8, 1.5, .4, "wall_sand");
-  for (const [x, z, title] of [[-35, 24, "A / DEPOT"], [43, 24, "B / COURTYARD"]] as const) {
-    props.push({ kind: "lamp", x, y: 0, z: z - 5, variant: "post" });
-    lights.push({ kind: "point", x, y: 4.3, z: z - 5, color: "#ffd29d", intensity: 27, range: 14, priority: 6 });
+  for (const [x, z, title] of [[-35, 24, "A / ZAJEZDNIA"], [43, 24, "B / DZIEDZINIEC"]] as const) {
+    // Same lamp rule as the core district: a post you can stand behind, with the head on top.
+    s(`lamp_post_${x}_${z - 5}`, x - .1, 0, z - 5.1, .2, 3.6, .2, "metal");
+    props.push({ kind: "lamp", x, y: 3.6, z: z - 5, variant: "head" });
+    lights.push({ kind: "point", x, y: 4.3, z: z - 5, color: palette.amber, intensity: 27, range: 14, priority: 6 });
     props.push({ kind: "sign", x: x < 0 ? -44.97 : 52.97, y: 2.5, z, yaw: x < 0 ? Math.PI / 2 : -Math.PI / 2, text: title, w: 4.5, h: 1.3 });
   }
   return [

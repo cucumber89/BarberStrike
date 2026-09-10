@@ -5,7 +5,7 @@ import {
   MAX_INPUT_QUEUE, MAX_INPUT_RATE, MAX_OTHER_MSG_RATE, MAX_PLAYERS, MatchPhase, MAPS, DEFAULT_MAP_ID, PLAYER,
   RESPAWN_DELAY_MS, SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER,
   isLive, isFrozen, maskInput, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
-  BOMB, sitesOf, bombAttackTeam, resetBomb, stepBomb, type BombPlayer,
+  BOMB, sitesOf, bombAttackTeam, bombSpawnSide, resetBomb, stepBomb, type BombPlayer,
   createBody, quantAngle, quantVel, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
   makeRayHit, mulberry32, pickSpawn, sanitizeName, simulateBody, spreadDirection, traceBullet, unpackInput,
   ECONOMY, GRENADES, THROW_INTERVAL_MS, FIRE_DPS, applyBuy, applySell, buyWindowOpen, giveGrenade, takeGrenade, killReward, weaponForSlot,
@@ -1164,7 +1164,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     }
     // FFA (drop 4): every point on the map is a candidate; everyone alive is an enemy.
     const spawnTeam = this.mode === "bomb" && this.state.phase !== MatchPhase.Waiting && this.state.phase !== MatchPhase.Countdown
-      ? (p.team === this.state.bomb.attackTeam ? 0 : 1) as Team : p.team as Team;
+      ? bombSpawnSide(p.team as Team, this.state.bomb.attackTeam as Team) : p.team as Team;
     // Drop D: a chaser comes back ON THE HUNT, not at the far end of the district. Every other
     // spawn rule maximises distance from the enemy, which for the one player who has to REACH
     // somebody is exactly backwards: MEASURED, a chaser spent its round walking, died, and walked

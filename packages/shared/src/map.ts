@@ -54,6 +54,8 @@ export interface PropHint {
   yaw?: number;
   scale?: number;
   text?: string;
+  /** Optional fixture emission, shared with its practical light. */
+  color?: string;
   /** Kind-specific variant (e.g. lamp: "post" | "wall"; poster: 0..n). */
   variant?: string;
   /** Optional size hints (metres) for kinds that stretch (tube_light length, cable length, sign width). */
@@ -73,6 +75,9 @@ export interface LightHint {
   /** Higher = preferred when a mesh is affected by more lights than the material allows. */
   priority?: number;
 }
+
+/** Amber = public frontage; mercury = work/service routes; rose = destination signs only. */
+export const DISTRICT_LIGHTS = { amber: "#ffbf70", mercury: "#9adce5", accent: "#fa709a" } as const;
 
 export interface SpawnPoint { x: number; y: number; z: number; yaw: number; team: Team }
 
@@ -169,8 +174,8 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(X1, 0, Z0, W, HP, Z1 - Z0, "wall_brick", "east_facade"));
 
   // ---------- Core block ceilings + parapets (unchanged from 0.1) ----------
-  solids.push(S(-4, H, 0, 12, 0.3, 10, "ceiling", "shop_ceiling"));
-  solids.push(S(-4, H, 10, 12, 0.3, 8, "ceiling", "hall_ceiling"));
+  solids.push(S(-4, H, 0, 11.85, 0.3, 10, "ceiling", "shop_ceiling"));
+  solids.push(S(-4, H, 10, 11.85, 0.3, 8, "ceiling", "hall_ceiling"));
   solids.push(S(8, HX, 0, 12, 0.3, 18, "ceiling", "industrial_ceiling"));
   solids.push(S(-4 - W, H, -W, 12 + W, 1.2, W, "wall_plaster", "shop_parapet_s"));
   solids.push(S(-4 - W, H, 18, 12 + W, 1.2, W, "wall_plaster", "hall_parapet_n"));
@@ -183,7 +188,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(3, 1.0, 0.1, 4, 1.8, 0.1, "glass", "shop_window"));
   solids.push(S(3, 0, 0, 4, 1.0, W, "wall_panel", "shop_window_sill"));
   solids.push(S(3, 2.8, 0, 4, H - 2.8, W, "wall_plaster", "shop_window_top"));
-  solids.push(S(7, 0, 0, 1, H, W, "wall_plaster", "shop_front_e"));
+  solids.push(S(7, 0, 0, 0.85, H, W, "wall_plaster", "shop_front_e"));
   solids.push(S(0, 2.4, 0, 2, H - 2.4, W, "wall_plaster", "shop_door_top"));
   solids.push(S(-4 - W, 0, 0, W, H, 6, "wall_plaster", "shop_west_a"));
   solids.push(S(-4 - W, 0, 8, W, H, 2, "wall_plaster", "shop_west_b"));
@@ -210,7 +215,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(11, 0, 10 - W / 2, 2, HX, W, "wall_concrete", "nb_north_a"));
   solids.push(S(13, 2.4, 10 - W / 2, 2, HX - 2.4, W, "wall_concrete", "nb_north_door_top"));
   solids.push(S(15, 0, 10 - W / 2, 5, HX, W, "wall_concrete", "nb_north_b"));
-  solids.push(S(8, 0, 0, 1, HX, W, "wall_concrete", "nb_south_a"));
+  solids.push(S(8.15, 0, 0, 0.85, HX, W, "wall_concrete", "nb_south_a"));
   solids.push(S(9, 0, 0, 6, 3.2, W, "corrugated_blue", "roller_door"));
   solids.push(S(9, 3.2, 0, 6, HX - 3.2, W, "wall_concrete", "nb_south_over_roller"));
   solids.push(S(15, 0, 0, 2, HX, W, "wall_concrete", "nb_south_b"));
@@ -222,7 +227,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(20, 2.4, 4, W, HX - 2.4, 2, "wall_concrete", "nb_east_door_top"));
   for (let i = 0; i < 9; i++) {
     const h = 2.7 - 0.3 * i;
-    solids.push(S(8, 0, 7 - 0.6 * (i + 1), 1.6, h, 0.6, "metal", `nb_stair_${i}`));
+    solids.push(S(8.15, 0, 7 - 0.6 * (i + 1), 1.45, h, 0.6, "metal", `nb_stair_${i}`));
   }
   solids.push(S(8, MEZ - 0.25, 7, 3, 0.25, 5.6, "floor_metal", "catwalk"));
   solids.push(S(10.9, MEZ, 7, 0.1, 1.0, 3, "metal", "catwalk_rail_e"));
@@ -238,7 +243,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(8 - W / 2, 0, 10, W, H, 3, "wall_plaster", "bh_east_a"), S(8 - W / 2, 0, 15, W, H, 3, "wall_plaster", "bh_east_b"), S(8 - W / 2, 2.4, 13, W, H - 2.4, 2, "wall_plaster", "bh_east_door_top"));
   solids.push(S(-4, 0, 18 - W / 2, 3, H, W, "wall_plaster", "bh_north_a"), S(1, 0, 18 - W / 2, 7, H, W, "wall_plaster", "bh_north_b"), S(-1, 2.4, 18 - W / 2, 2, H - 2.4, W, "wall_plaster", "bh_north_door_top"));
   solids.push(S(1.5, 0, 12.5, W, H, 3.5, "wall_tile", "bh_divider"));
-  solids.push(S(1.5, 0, 12.5, 2.0, H, W, "wall_tile", "bh_divider_l"));
+  solids.push(S(1.8, 0, 12.5, 1.7, H, W, "wall_tile", "bh_divider_l"));
   solids.push(S(4.5, 0, 16.5, 2.0, 0.95, 0.7, "counter", "wash_station"));
   solids.push(O(-3.2, 0, 11, 1.2, 1.9, 0.6, "paint_white", "cabinet", "towel_cabinet", Math.PI / 2));
   solids.push(O(5.5, 0, 11, 1.2, 1.0, 0.8, "paint_white", "bin", "laundry_cart"));
@@ -253,7 +258,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   for (let i = 0; i < 10; i++) {
     solids.push(S(17.6, 0, 17 - i * 0.6 - 0.6, 2.4, 0.3 * (i + 1), 0.6, "metal", `stair_${i}`));
   }
-  solids.push(S(17.6, 0, 10, 2.4, MEZ, 1.0, "metal", "stair_landing"));
+  solids.push(S(17.6, 0, 10.15, 2.4, MEZ, 0.85, "metal", "stair_landing"));
   solids.push(S(11, MEZ - 0.25, 10, 6.6, 0.25, 2.6, "floor_metal", "mezzanine"));
   // The landing slab starts where the flight ENDS (z 11.6), and stops at the wall's inner face
   // (x 20). It used to start at z 11 — laid straight over tread 9, whose top is also MEZ — and to
@@ -270,15 +275,15 @@ export const NIGHT_DISTRICT: MapDef = (() => {
 
   // ---------- Alley (x -14..-4, z 0..18) — zigzag lane, now open to the backlot on the west ----------
   solids.push(S(-14, 0, 4, 6.5, 4.2, 4, "wall_brick", "alley_annex"));
-  solids.push(S(-9.5, 0, 10, 5.5, 2.6, 3.5, "corrugated_green", "alley_leanto"));
+  solids.push(S(-9.5, 0, 10, 5.2, 2.6, 3.5, "corrugated_green", "alley_leanto"));
   solids.push(O(-13.5, 0, 8.6, 1.4, 1.4, 1.0, "paint_green", "dumpster", "dumpster_alley", Math.PI));
   solids.push(O(-6, 0, 1.6, 0.9, 1.1, 0.9, "paint", "bin", "bin_1"));
   solids.push(O(-12.5, 0, 15.5, 1.4, 0.7, 1.0, "wood", "pallets", "pallets_alley"));
   solids.push(O(-5.2, 0, 15.2, 1.0, 1.0, 1.0, "paint", "bin", "bin_2"));
   // Low wall between alley and backlot (waist-high, with a gap at z 14..16) keeps the zigzag readable.
-  solids.push(S(-14 - W, 0, 0, W, 1.1, 4, "concrete_block", "alley_wall_s"));
-  solids.push(S(-14 - W, 0, 8, W, 1.1, 6, "concrete_block", "alley_wall_m"));
-  solids.push(S(-14 - W, 0, 16, W, 1.1, 2, "concrete_block", "alley_wall_n"));
+  solids.push(S(-14, 0, 0, W, 1.1, 4, "concrete_block", "alley_wall_s"));
+  solids.push(S(-14, 0, 8, W, 1.1, 6, "concrete_block", "alley_wall_m"));
+  solids.push(S(-14, 0, 16, W, 1.1, 2, "concrete_block", "alley_wall_n"));
 
   // ---------- Backlot (x -27..-14, z 0..28): garage row, kiosk ----------
   // The centre garage is an open repair bay: a second, sheltered west-lane route.
@@ -290,10 +295,10 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(-21.7, 0, 6, 0.65, 1, 2, "metal", "garage_toolbench"));
   solids.push(S(X0, 3.5, 3.6, 13, 0.3, 6.8, "corrugated_green", "garage_roof"));
   for (const i of [0, 2]) solids.push(S(X0 + 1 + i * 4.2, 0, 3.7, 3.2, 2.6, 0.3, "corrugated_blue", `garage_door_${i}`));
-  props.push({ kind: "sign", x: -20, y: 3.1, z: 3.98, yaw: Math.PI, text: "REPAIR / BACKLOT", w: 3.5, h: 0.36 });
+  props.push({ kind: "sign", x: -20, y: 3.1, z: 3.98, yaw: Math.PI, text: "SERWIS / GARAŻE", w: 3.5, h: 0.36 });
   props.push({ kind: "tube_light", x: -20, y: 3.42, z: 7, w: 1.8 });
   props.push({ kind: "crate", x: -21.38, y: 1, z: 6.5, variant: "small" });
-  lights.push({ kind: "point", x: -20, y: 2.9, z: 7, color: "#cce7d8", intensity: 1.1, range: 7 });
+  lights.push({ kind: "point", x: -20, y: 2.9, z: 7, color: DISTRICT_LIGHTS.mercury, intensity: 1.1, range: 7 });
   // Kiosk: small room, doors offset (south x -23..-21, north x -26..-24).
   solids.push(S(-26, 0, 14, 3, 3.0, W, "wall_plaster", "kiosk_s_a"), S(-21, 0, 14, 1, 3.0, W, "wall_plaster", "kiosk_s_b"), S(-23, 2.3, 14, 2, 0.7, W, "wall_plaster", "kiosk_s_top"));
   solids.push(S(-24, 0, 18, 4, 3.0, W, "wall_plaster", "kiosk_n_a"), S(-26, 2.3, 18, 2, 0.7, W, "wall_plaster", "kiosk_n_top"));
@@ -318,18 +323,20 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(20.3, MEZ - 0.25, 10.6, 9.7, 0.25, 2.0, "floor_metal", "gantry"));
   solids.push(S(20.3, MEZ, 10.6, 9.7, 1.0, 0.1, "metal", "gantry_rail_s"));
   solids.push(S(20.3, MEZ, 12.5, 9.5, 1.0, 0.1, "metal", "gantry_rail_n"));
-  solids.push(S(30, MEZ - 0.25, 10.6, 2.4, 0.25, 2.0, "floor_metal", "gantry_landing"));
-  for (let j = 0; j < 9; j++) solids.push(S(30, 0, 12.6 + 0.6 * j, 2.4, 2.7 - 0.3 * j, 0.6, "metal", `east_stair_${j}`));
-  solids.push(S(32.4, MEZ, 10.6, 0.1, 1.0, 2.0, "metal", "gantry_rail_e"));
+  solids.push(S(30, MEZ - 0.25, 10.6, 4.8, 0.25, 2.0, "floor_metal", "gantry_landing"));
+  // In the east lane, clear of the wash: the run used to cross cw_s_b and clip cw_e_a, which cut
+  // the middle out of it — the grid could stand on the bottom three steps and the top three only.
+  for (let j = 0; j < 9; j++) solids.push(S(32.4, 0, 12.6 + 0.6 * j, 2.4, 2.7 - 0.3 * j, 0.6, "metal", `east_stair_${j}`));
+  solids.push(S(34.8, MEZ, 10.6, 0.1, 1.0, 2.0, "metal", "gantry_rail_e"));
   // Car wash hall: doors south x 23..25 and north x 29..31 (offset breaks the straight line).
   const CW = 4.5;
-  solids.push(S(22, 0, 14, 1, CW, W, "wall_concrete", "cw_s_a"), S(25, 0, 14, 7.3, CW, W, "wall_concrete", "cw_s_b"), S(23, 2.4, 14, 2, CW - 2.4, W, "wall_concrete", "cw_s_top"));
-  solids.push(S(22, 0, 24, 7, CW, W, "wall_concrete", "cw_n_a"), S(31, 0, 24, 1.3, CW, W, "wall_concrete", "cw_n_b"), S(29, 2.4, 24, 2, CW - 2.4, W, "wall_concrete", "cw_n_top"));
+  solids.push(S(22.3, 0, 14, 0.7, CW, W, "wall_concrete", "cw_s_a"), S(25, 0, 14, 7, CW, W, "wall_concrete", "cw_s_b"), S(23, 2.4, 14, 2, CW - 2.4, W, "wall_concrete", "cw_s_top"));
+  solids.push(S(22.3, 0, 24, 6.7, CW, W, "wall_concrete", "cw_n_a"), S(31, 0, 24, 1, CW, W, "wall_concrete", "cw_n_b"), S(29, 2.4, 24, 2, CW - 2.4, W, "wall_concrete", "cw_n_top"));
   solids.push(S(22, 0, 14, W, CW, 10.3, "wall_concrete", "cw_w"));
   solids.push(S(32, 0, 14, W, CW, 4, "wall_concrete", "cw_e_a"), S(32, 0, 20, W, CW, 4.3, "wall_concrete", "cw_e_b"), S(32, 2.4, 18, W, CW - 2.4, 2, "wall_concrete", "cw_e_top"));
   solids.push(S(22, CW, 14, 10.3, 0.3, 10.3, "ceiling", "cw_roof"));
   solids.push(O(25, 0, 17.6, 4.2, 1.45, 1.8, "paint_yellow", "car", "cw_car", Math.PI / 2));
-  solids.push(O(29.6, 0, 15, 1.8, 1.8, 1.2, "paint_blue", "machine", "cw_machine_a"));
+  solids.push(O(27.6, 0, 15, 1.8, 1.8, 1.2, "paint_blue", "machine", "cw_machine_a"));
   solids.push(O(22.4, 0, 21, 1.2, 0.9, 1.2, "paint_yellow", "drums", "cw_drums"));
   solids.push(S(23, 0, 14.4, 0.15, 2.0, 9.4, "metal", "cw_rail_w")); // guide rail (thin, waist-blocking? no — 2 m tall pillar strip)
   // East lane (x 32..35): shed + dumpster so the lane is not one straight sightline.
@@ -351,10 +358,14 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(O(-7, 2.3, -20.6, 5.5, 0.15, 2.0, "metal", "shelter_roof", "shelter_roof"));
   solids.push(S(-7, 0.3, -20.6, 5.5, 2.0, 0.08, "glass", "shelter_back"));
   for (const px of [-7, -1.6]) solids.push(S(px, 0, -20.6, 0.1, 2.3, 0.1, "metal", `shelter_post_${px}`));
-  solids.push(S(-6.5, 0, -20.4, 4.5, 0.45, 0.4, "wood", "shelter_bench"));
-  for (const [lx, lz] of [[-9, -4.5], [4, -6], [18, -4.5], [-14, -19.5], [12, -19.5], [30, -4.5]]) solids.push(S(lx - 0.1, 0, lz - 0.1, 0.2, 3.6, 0.2, "metal", `lamp_post_${lx}_${lz}`));
+  solids.push(S(-6.5, 0.15, -20.4, 4.5, 0.3, 0.4, "wood", "shelter_bench"));
+  // EVERY standing lamp is a post you can hide behind, not only the six on Main Street. Ten of the
+  // eighteen used to be drawn entirely by `props.ts` with no solid at all, so the same lamp stopped
+  // a bullet on the street and none in the yard — a coin-flip a 6v6 round can turn on.
+  const LAMPS: [number, number][] = [[-9, -4.5], [4, -6], [18, -4.5], [-14, -19.5], [12, -19.5], [30, -4.5], [-22, 24], [33.5, 18], [-8, 23], [9, 20], [20, 34], [-6, 33], [-8, 42], [18, 42]];
+  for (const [lx, lz] of LAMPS) solids.push(S(lx - 0.1, 0, lz - 0.1, 0.2, 3.6, 0.2, "metal", `lamp_post_${lx}_${lz}`));
   solids.push(O(-2, 0, -5, 1.0, 1.0, 1.0, "paint_green", "cabinet", "utility_box"));
-  solids.push(S(15.5, 0, -2, 0.6, 0.9, 1.8, "wall_concrete", "bollards"));
+  solids.push(S(15.5, 0.15, -2, 0.6, 0.75, 1.8, "wall_concrete", "bollards"));
   solids.push(O(17.2, 0, -7.4, 1.2, 1.2, 1.0, "paint", "bin", "street_bin"));
   solids.push(O(-24, 0, -19, 1.0, 1.0, 1.0, "paint", "bin", "bin_sw"));
   solids.push(O(-23, 0, -13.5, 1.8, 1.9, 1.0, "paint_green", "cabinet", "phone_box"));
@@ -362,7 +373,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
 
   // Night market: two recognisable islands of cover with open sides for flanking.
   // Counters stop bullets; the canopy is high enough to run beneath it.
-  for (const [x, color, title] of [[-19, "paint_red", "NIGHT BITES"], [23, "paint_blue", "MIDNIGHT RECORDS"]] as const) {
+  for (const [x, color, title] of [[-19, "paint_red", "NOCNY BAR"], [23, "paint_blue", "PŁYTY / NOCĄ"]] as const) {
     solids.push(O(x, 0, -5.8, 3.6, 1.05, 0.8, color, "kiosk_counter", `market_counter_${x}`));
     solids.push(S(x - 0.15, 2.85, -7.2, 3.9, 0.16, 2.8, color, `market_canopy_${x}`));
     for (const px of [x, x + 3.4]) solids.push(S(px, 0, -7, 0.12, 2.85, 0.12, "metal", `market_post_${px}`));
@@ -375,7 +386,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(O(18, 0, -9, 2.8, 1.05, 0.7, "paint_yellow", "crate", "market_barrier_e"));
 
   // ---------- Loading yard (z 18..36) ----------
-  solids.push(S(14, 0, 18, 6, 1.0, 10, "floor_concrete", "loading_dock"));
+  solids.push(S(14, 0, 18.15, 6, 1.0, 9.85, "floor_concrete", "loading_dock"));
   solids.push(S(11, 0, 24, 3, 1.0, 4, "floor_concrete", "dock_ramp_base"));
   // Four steps, not five: the fifth was 1.0 - 0.2 * 5 = ZERO high, so its top face sat exactly on
   // the yard slab (2.4 m² of z-fighting) while adding nothing to walk on. The 0.2 m bottom step
@@ -386,7 +397,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(O(1.2, 2.5, 22.4, 2.4, 2.5, 6, "corrugated_green", "container", "container_top"));
   // Climb to the container roof: crate 0.6 → crate 1.2 → pallets 1.8 → container top 2.5.
   solids.push(O(4.8, 0, 27, 1.2, 0.6, 1.2, "wood", "crate", "climb_a"));
-  solids.push(O(4.8, 0, 25.8, 1.2, 1.2, 1.2, "wood", "crate", "climb_b"));
+  solids.push(O(4.8, 0, 25.8, 1.2, 1.0, 1.2, "wood", "crate", "climb_b"));
   solids.push(O(4.8, 0, 24.6, 1.2, 1.8, 1.2, "wood", "pallets", "climb_c"));
   solids.push(S(0, 2.5, 22, 4.8, 0.05, 0.4, "metal", "container_lip"));
 
@@ -397,12 +408,12 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   for (let i = 0; i < 10; i++) solids.push(S(-9 + i * 0.4, 0, 29, 0.4, (i + 1) * 0.25, 2, "floor_concrete", `lookout_step_${i}`));
   for (const px of [-4.8, -0.25]) for (const pz of [28.15, 30.7]) solids.push(S(px, 0, pz, 0.15, 2.3, 0.15, "metal", `lookout_support_${px}_${pz}`));
   solids.push(S(-5, 2.5, 30.9, 5, 0.85, 0.1, "paint_yellow", "lookout_rail_n"));
-  solids.push(S(-5, 2.5, 28, 4, 0.85, 0.1, "paint_yellow", "lookout_rail_s"));
-  props.push({ kind: "sign", x: -2.5, y: 2.06, z: 31.03, text: "ROOFTOP / 02", w: 3.2, h: 0.35 });
+  solids.push(S(-3, 2.5, 28, 3, 0.85, 0.1, "paint_yellow", "lookout_rail_s"));
+  props.push({ kind: "sign", x: -2.5, y: 2.06, z: 31.03, text: "TARAS / 02", w: 3.2, h: 0.35 });
   solids.push(O(-9, 0, 20, 1.6, 1.3, 1.2, "paint_blue", "dumpster", "dumpster_yard", Math.PI));
   solids.push(O(-11, 0, 25, 1.2, 1.2, 1.2, "wood", "crate", "crate_yard_a"));
   solids.push(O(-9.8, 0, 25, 1.2, 0.6, 1.2, "wood", "crate", "crate_yard_b"));
-  solids.push(O(5, 0, 26, 3.0, 1.0, 1.0, "wall_concrete", "planter", "planter"));
+  solids.push(O(6.1, 0, 26, 2.4, 1.0, 1.0, "wall_concrete", "planter", "planter"));
   solids.push(S(-5, 0, 21, 0.3, 1.3, 3, "wall_concrete", "yard_lowwall"));
   solids.push(O(-3.2, 0, 20.2, 2.0, 1.9, 1.0, "paint_green", "cabinet", "yard_cabinet"));
   solids.push(S(-7, 0, 26.5, 0.25, 2.4, 0.25, "metal", "shed_post_a"));
@@ -444,8 +455,8 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   props.push({ kind: "counter_top", x: 5.75, y: 1.05, z: 1.75, w: 2.7, h: 0.9 });
   props.push({ kind: "sign", x: 2, y: 4.25, z: -0.32, yaw: Math.PI, text: "FRANKIBARBER", w: 5.0, h: 0.8 });
   props.push({ kind: "barber_pole", x: -0.7, y: 2.2, z: -0.42, yaw: 0, h: 0.7 }); // drop 6: by the door, on the street side
-  props.push({ kind: "neon", x: 5.0, y: 2.35, z: 0.28, yaw: Math.PI, text: "AFTER HOURS", w: 2.6 });
-  props.push({ kind: "board", x: 2.5, y: 1.9, z: 9.83, yaw: 0, text: "STAFF" });
+  props.push({ kind: "neon", x: 5.0, y: 2.35, z: 0.28, yaw: Math.PI, text: "PO GODZINACH", w: 2.6 });
+  props.push({ kind: "board", x: 2.5, y: 1.9, z: 9.83, yaw: 0, text: "ZAPLECZE" });
   props.push({ kind: "poster", x: 7.83, y: 1.9, z: 4.0, yaw: -Math.PI / 2, variant: "cuts" });
   props.push({ kind: "sticker", x: 4.2, y: 1.5, z: 0.16, yaw: Math.PI, variant: "open" });
   props.push({ kind: "pendant", x: 1.0, y: 3.55, z: 4.5 });
@@ -458,7 +469,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   props.push({ kind: "poster", x: -3.99, y: 1.9, z: 12.5, yaw: Math.PI / 2, variant: "hours" });
   props.push({ kind: "tube_light", x: 2, y: 3.5, z: 14, yaw: 0, w: 1.4 });
   props.push({ kind: "tube_light", x: -2, y: 3.5, z: 16, yaw: Math.PI / 2, w: 1.2 });
-  props.push({ kind: "board", x: -1.0, y: 1.9, z: 17.83, yaw: 0, text: "SHIFTS", variant: "shifts" });
+  props.push({ kind: "board", x: -1.0, y: 1.9, z: 17.83, yaw: 0, text: "DYŻURY", variant: "shifts" });
   props.push({ kind: "vent", x: 19.96, y: 3.2, z: 6, yaw: -Math.PI / 2 });
   props.push({ kind: "pipe", x: 19.7, y: 4.8, z: 5, yaw: 0, w: 9.0 });
   props.push({ kind: "tube_light", x: 14, y: 5.7, z: 5, yaw: Math.PI / 2, w: 1.5 });
@@ -478,99 +489,105 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   props.push({ kind: "poster", x: -7.5, y: 2.0, z: 8.01, yaw: 0, variant: "gig" });
   // Backlot / kiosk.
   props.push({ kind: "sign", x: -23, y: 2.65, z: 13.97, yaw: Math.PI, text: "KIOSK 24H", w: 3.0, h: 0.5 });
-  props.push({ kind: "neon", x: -19.88, y: 1.9, z: 16, yaw: -Math.PI / 2, text: "OPEN", w: 1.2, h: 0.4 });
-  props.push({ kind: "graffiti", x: -16, y: 2.0, z: 10.01, yaw: 0, variant: "big", text: "NO FADE NO GAIN" });
-  props.push({ kind: "lamp", x: -22, y: 0, z: 24, variant: "post" });
+  props.push({ kind: "neon", x: -19.88, y: 1.9, z: 16, yaw: -Math.PI / 2, text: "OTWARTE", w: 1.2, h: 0.4 });
+  props.push({ kind: "graffiti", x: -16, y: 2.0, z: 10.01, yaw: 0, variant: "big", text: "OSTRE CIĘCIE" });
   props.push({ kind: "tube_light", x: -23, y: 2.9, z: 16, yaw: Math.PI / 2, w: 1.2, variant: "cool" });
   props.push({ kind: "trash", x: -25.5, y: 0, z: 26, variant: "bags" });
   props.push({ kind: "poster", x: -26.99, y: 2.0, z: 20, yaw: Math.PI / 2, variant: "gig" });
   // Street.
-  for (const [lx, lz] of [[-9, -4.5], [4, -6], [18, -4.5], [-14, -19.5], [12, -19.5], [30, -4.5]]) props.push({ kind: "lamp", x: lx, y: 3.6, z: lz, variant: "head" });
+  for (const [lx, lz] of LAMPS) props.push({ kind: "lamp", x: lx, y: 3.6, z: lz, variant: "head" });
   props.push({ kind: "pole", x: 17.8, y: 0, z: -2.5, variant: "sign" });
   props.push({ kind: "sticker", x: -3.7, y: 1.2, z: -4.9, yaw: 0, variant: "fb" });
   props.push({ kind: "vent", x: 12, y: 4.2, z: -0.04, yaw: Math.PI, variant: "big" });
-  props.push({ kind: "sign", x: -4.25, y: 2.0, z: -20.5, yaw: 0, text: "NIGHT BUS", w: 1.6, h: 0.4 });
+  props.push({ kind: "sign", x: -4.25, y: 2.0, z: -20.5, yaw: 0, text: "NOCNY / N01", w: 1.6, h: 0.4 });
   props.push({ kind: "poster", x: -8, y: 2.5, z: -21.99, yaw: 0, variant: "gig" });
   props.push({ kind: "poster", x: 24, y: 2.5, z: -21.99, yaw: 0, variant: "cuts" });
   props.push({ kind: "graffiti", x: -22, y: 2.2, z: -21.99, yaw: 0, variant: "big" });
-  props.push({ kind: "neon", x: 8, y: 4.5, z: -21.99, yaw: 0, text: "LATE LATE", w: 3.2, h: 0.6 });
+  props.push({ kind: "neon", x: 8, y: 4.5, z: -21.99, yaw: 0, text: "DO PÓŹNA", w: 3.2, h: 0.6 });
   props.push({ kind: "trash", x: 22, y: 0.15, z: -20.5, variant: "bags" });
   // East block.
   props.push({ kind: "sign", x: 27, y: 2.93, z: 8.03, yaw: 0, text: "PARKING", w: 3.0, h: 0.5 });
   props.push({ kind: "tube_light", x: 25, y: 3.1, z: 4, yaw: Math.PI / 2, w: 1.5, variant: "cool" });
   props.push({ kind: "tube_light", x: 31, y: 3.1, z: 4, yaw: Math.PI / 2, w: 1.5, variant: "cool" });
-  props.push({ kind: "sign", x: 27, y: 3.9, z: 13.97, yaw: Math.PI, text: "CAR WASH", w: 4.0, h: 0.7 });
+  props.push({ kind: "sign", x: 27, y: 3.9, z: 13.97, yaw: Math.PI, text: "MYJNIA", w: 4.0, h: 0.7 });
   props.push({ kind: "tube_light", x: 27, y: 4.4, z: 19, yaw: Math.PI / 2, w: 1.5, variant: "cool" });
   props.push({ kind: "graffiti", x: 34.98, y: 1.8, z: 4, yaw: -Math.PI / 2, variant: "tag" });
-  props.push({ kind: "lamp", x: 33.5, y: 0, z: 18, variant: "post" });
   props.push({ kind: "vent", x: 22.33, y: 3.5, z: 19, yaw: Math.PI / 2, variant: "big" });
   props.push({ kind: "pipe", x: 21.2, y: 0.3, z: 16, yaw: 0, w: 4.0, variant: "vertical" });
   // Yard.
-  props.push({ kind: "lamp", x: -8, y: 0, z: 23, variant: "post" });
-  props.push({ kind: "lamp", x: 9, y: 0, z: 20, variant: "post" });
-  props.push({ kind: "lamp", x: 20, y: 0, z: 34, variant: "post" });
-  props.push({ kind: "lamp", x: -6, y: 0, z: 33, variant: "post" });
   props.push({ kind: "trash", x: -12, y: 0, z: 27, variant: "bags" });
-  props.push({ kind: "wheel", x: 12.5, y: 0, z: 20, variant: "tyres" });
+  // One tyre standing by itself in an open yard reads as a bug, not as set dressing. Three of them
+  // against the wash's north wall read as a place that changes tyres.
+  for (const [wx, wz] of [[22.9, 25.4], [23.6, 25.4], [23.25, 25.9]] as const) props.push({ kind: "wheel", x: wx, y: 0, z: wz, variant: "tyres" });
   props.push({ kind: "crate", x: 17, y: 1.0, z: 26.5, variant: "small" });
   props.push({ kind: "graffiti", x: -0.05, y: 1.4, z: 25, yaw: -Math.PI / 2, variant: "fb" });
   props.push({ kind: "vent", x: 16, y: 4.5, z: 18.18, yaw: 0, variant: "big" });
   props.push({ kind: "pipe", x: 8.5, y: 0.3, z: 22, yaw: Math.PI / 2, w: 5.5, variant: "vertical" });
-  props.push({ kind: "sign", x: 17, y: 4.2, z: 18.18, yaw: 0, text: "LOADING", w: 2.4, h: 0.5 });
+  props.push({ kind: "sign", x: 17, y: 4.2, z: 18.18, yaw: 0, text: "ROZŁADUNEK", w: 2.4, h: 0.5 });
   // North compound.
-  props.push({ kind: "lamp", x: -8, y: 0, z: 42, variant: "post" });
-  props.push({ kind: "lamp", x: 18, y: 0, z: 42, variant: "post" });
-  props.push({ kind: "board", x: -13, y: 1.6, z: 37.98, yaw: Math.PI, text: "SITE OFFICE", w: 1.2, h: 0.4 });
+  props.push({ kind: "board", x: -13, y: 1.6, z: 37.98, yaw: Math.PI, text: "DYŻURKA", w: 1.2, h: 0.4 });
   props.push({ kind: "poster", x: 23.98, y: 1.7, z: 39.5, yaw: -Math.PI / 2, variant: "hours" });
-  props.push({ kind: "graffiti", x: 10, y: 2.4, z: 44.98, yaw: Math.PI, variant: "big", text: "AFTER HOURS" });
+  props.push({ kind: "graffiti", x: 10, y: 2.4, z: 44.98, yaw: Math.PI, variant: "big", text: "PO GODZINACH" });
   props.push({ kind: "trash", x: 29, y: 0, z: 43, variant: "bags" });
 
   // ---------- Lights ----------
   // Shop: warm tungsten practicals (main is a shadow-casting spot pointing down).
-  lights.push({ kind: "spot", x: 1.0, y: 3.4, z: 4.5, dx: 0, dy: -1, dz: 0, angle: 2.4, color: "#ffd2a0", intensity: 26, range: 9, shadows: true, priority: 10 });
-  lights.push({ kind: "point", x: 5.0, y: 3.3, z: 2.0, color: "#ffc98a", intensity: 12, range: 7, priority: 6 });
-  lights.push({ kind: "point", x: 5.5, y: 3.3, z: 8.0, color: "#ffc98a", intensity: 10, range: 7, priority: 5 });
-  lights.push({ kind: "point", x: -2.6, y: 2.2, z: 3.2, color: "#fff0d8", intensity: 5, range: 5, priority: 4 });
+  lights.push({ kind: "spot", x: 1.0, y: 3.4, z: 4.5, dx: 0, dy: -1, dz: 0, angle: 2.4, color: DISTRICT_LIGHTS.amber, intensity: 26, range: 9, shadows: true, priority: 10 });
+  lights.push({ kind: "point", x: 5.0, y: 3.3, z: 2.0, color: DISTRICT_LIGHTS.amber, intensity: 12, range: 7, priority: 6 });
+  lights.push({ kind: "point", x: 5.5, y: 3.3, z: 8.0, color: DISTRICT_LIGHTS.amber, intensity: 10, range: 7, priority: 5 });
+  lights.push({ kind: "point", x: -2.6, y: 2.2, z: 3.2, color: DISTRICT_LIGHTS.amber, intensity: 5, range: 5, priority: 4 });
   // Back hall: cool-white fluorescent with a slight green cast.
-  lights.push({ kind: "point", x: 1.0, y: 3.3, z: 14.5, color: "#d6e8e4", intensity: 11, range: 8, priority: 5 });
+  lights.push({ kind: "point", x: 1.0, y: 3.3, z: 14.5, color: DISTRICT_LIGHTS.mercury, intensity: 11, range: 8, priority: 5 });
   // Neighbour unit: cold industrial. Storage: warm sodium.
-  lights.push({ kind: "point", x: 14, y: 5.3, z: 5, color: "#b9c8e6", intensity: 30, range: 11, priority: 6 });
-  lights.push({ kind: "point", x: 13, y: 5.4, z: 15, color: "#ffb070", intensity: 24, range: 10, priority: 6 });
-  lights.push({ kind: "point", x: 11, y: 4.9, z: 11.3, color: "#ffd0a0", intensity: 8, range: 6, priority: 3 });
+  lights.push({ kind: "point", x: 14, y: 5.3, z: 5, color: DISTRICT_LIGHTS.mercury, intensity: 30, range: 11, priority: 6 });
+  lights.push({ kind: "point", x: 13, y: 5.4, z: 15, color: DISTRICT_LIGHTS.amber, intensity: 24, range: 10, priority: 6 });
+  lights.push({ kind: "point", x: 11, y: 4.9, z: 11.3, color: DISTRICT_LIGHTS.amber, intensity: 8, range: 6, priority: 3 });
   // Street lamps: warm sodium pools.
   for (const [lx, lz] of [[-9, -4.5], [4, -6], [18, -4.5], [-14, -19.5], [12, -19.5], [30, -4.5]]) {
-    lights.push({ kind: "spot", x: lx, y: 3.5, z: lz, dx: 0, dy: -1, dz: 0, angle: 2.6, color: "#ffb86a", intensity: 32, range: 11, shadows: lx === -9, priority: 8 });
+    // The head projects 0.6 m from the post; light leaves its underside, not the solid pole.
+    lights.push({ kind: "spot", x: lx, y: 3.5, z: lz + 0.6, dx: 0, dy: -1, dz: 0, angle: 2.6, color: DISTRICT_LIGHTS.amber, intensity: 32, range: 11, shadows: lx === -9, priority: 8 });
   }
-  lights.push({ kind: "point", x: 2.0, y: 4.0, z: -1.2, color: "#ffc9a0", intensity: 9, range: 6, priority: 4 });
-  lights.push({ kind: "point", x: -4.2, y: 2.2, z: -19.8, color: "#e8f0ff", intensity: 10, range: 7, priority: 5 }); // bus shelter
-  lights.push({ kind: "point", x: 8, y: 4.4, z: -21.5, color: "#ff6aa0", intensity: 8, range: 7, priority: 4 });     // "LATE LATE" neon
+  lights.push({ kind: "point", x: 2.0, y: 4.0, z: -1.2, color: DISTRICT_LIGHTS.amber, intensity: 9, range: 6, priority: 4 });
+  lights.push({ kind: "point", x: -4.2, y: 2.2, z: -19.8, color: DISTRICT_LIGHTS.mercury, intensity: 10, range: 7, priority: 5 }); // bus shelter
+  lights.push({ kind: "point", x: 8, y: 4.4, z: -21.5, color: DISTRICT_LIGHTS.accent, intensity: 8, range: 7, priority: 4 });     // "DO PÓŹNA" neon
   // Alley: cool blue-grey security light + warm bulb over the shop's side door.
-  lights.push({ kind: "point", x: -8, y: 3.9, z: 15.5, color: "#8fa3c4", intensity: 14, range: 9, priority: 5 });
-  lights.push({ kind: "point", x: -4.7, y: 2.9, z: 7, color: "#ffb070", intensity: 8, range: 6, priority: 4 });
+  lights.push({ kind: "point", x: -8, y: 3.9, z: 15.5, color: DISTRICT_LIGHTS.mercury, intensity: 14, range: 9, priority: 5 });
+  lights.push({ kind: "point", x: -4.7, y: 2.9, z: 7, color: DISTRICT_LIGHTS.amber, intensity: 8, range: 6, priority: 4 });
+  lights.push({ kind: "point", x: -4.7, y: 2.8, z: 15, color: DISTRICT_LIGHTS.amber, intensity: 8, range: 6, priority: 4 });
   // Backlot / kiosk.
-  lights.push({ kind: "point", x: -20, y: 3.4, z: 2, color: "#a9b8d6", intensity: 14, range: 9, priority: 5 });
-  lights.push({ kind: "point", x: -23, y: 2.8, z: 16, color: "#eaf4ff", intensity: 12, range: 7, priority: 5 });
-  lights.push({ kind: "point", x: -22, y: 3.5, z: 24, color: "#ffb86a", intensity: 20, range: 10, priority: 6 });
+  lights.push({ kind: "point", x: -20, y: 3.4, z: 2, color: DISTRICT_LIGHTS.mercury, intensity: 14, range: 9, priority: 5 });
+  lights.push({ kind: "point", x: -23, y: 2.8, z: 16, color: DISTRICT_LIGHTS.mercury, intensity: 12, range: 7, priority: 5 });
+  lights.push({ kind: "point", x: -22, y: 3.5, z: 24.6, color: DISTRICT_LIGHTS.amber, intensity: 20, range: 10, priority: 6 }); // at the head, not inside the post
   // East block: canopy cool tubes, car wash, lane lamp.
-  lights.push({ kind: "point", x: 25, y: 3.0, z: 4, color: "#cfe0ff", intensity: 16, range: 8, priority: 5 });
-  lights.push({ kind: "point", x: 31, y: 3.0, z: 4, color: "#cfe0ff", intensity: 16, range: 8, priority: 5 });
-  lights.push({ kind: "point", x: 27, y: 4.2, z: 19, color: "#d8ecff", intensity: 22, range: 10, priority: 6 });
-  lights.push({ kind: "point", x: 33.5, y: 3.5, z: 18, color: "#ffb86a", intensity: 18, range: 9, priority: 5 });
-  lights.push({ kind: "point", x: 26, y: 2.8, z: 11.6, color: "#ffd0a0", intensity: 8, range: 6, priority: 3 }); // gantry
+  lights.push({ kind: "point", x: 25, y: 3.0, z: 4, color: DISTRICT_LIGHTS.mercury, intensity: 16, range: 8, priority: 5 });
+  lights.push({ kind: "point", x: 31, y: 3.0, z: 4, color: DISTRICT_LIGHTS.mercury, intensity: 16, range: 8, priority: 5 });
+  lights.push({ kind: "point", x: 27, y: 4.2, z: 19, color: DISTRICT_LIGHTS.mercury, intensity: 22, range: 10, priority: 6 });
+  lights.push({ kind: "point", x: 33.5, y: 3.5, z: 18.6, color: DISTRICT_LIGHTS.amber, intensity: 18, range: 9, priority: 5 }); // at the head, not inside the post
+  lights.push({ kind: "point", x: 26, y: 2.65, z: 11.6, color: DISTRICT_LIGHTS.amber, intensity: 8, range: 6, priority: 3 }); // below the gantry deck
   // Yard: cool main flood, purple accent on the west side, warm dock lamp, north floods.
-  lights.push({ kind: "point", x: 3, y: 5.0, z: 23.5, color: "#c9d4ea", intensity: 26, range: 13, priority: 7 });
-  lights.push({ kind: "point", x: -8, y: 4.2, z: 23, color: "#8f6cff", intensity: 16, range: 9, priority: 6 });
-  lights.push({ kind: "point", x: 9, y: 4.3, z: 20, color: "#ffb070", intensity: 18, range: 9, priority: 6 });
-  lights.push({ kind: "point", x: 20, y: 4.3, z: 34, color: "#ffb070", intensity: 20, range: 10, priority: 6 });
-  lights.push({ kind: "point", x: -6, y: 4.3, z: 33, color: "#c9d4ea", intensity: 20, range: 10, priority: 6 });
-  lights.push({ kind: "point", x: -8, y: 4.3, z: 42, color: "#ffb86a", intensity: 22, range: 10, priority: 6 });
-  lights.push({ kind: "point", x: 18, y: 4.3, z: 42, color: "#ffb86a", intensity: 22, range: 10, priority: 6 });
+  lights.push({ kind: "point", x: 3, y: 5.15, z: 23.5, color: DISTRICT_LIGHTS.mercury, intensity: 26, range: 13, priority: 7 });
+  lights.push({ kind: "point", x: -8, y: 4.2, z: 23, color: DISTRICT_LIGHTS.accent, intensity: 16, range: 9, priority: 6 });
+  lights.push({ kind: "point", x: 9, y: 4.3, z: 20, color: DISTRICT_LIGHTS.amber, intensity: 18, range: 9, priority: 6 });
+  lights.push({ kind: "point", x: 20, y: 4.3, z: 34, color: DISTRICT_LIGHTS.amber, intensity: 20, range: 10, priority: 6 });
+  lights.push({ kind: "point", x: -6, y: 4.3, z: 33, color: DISTRICT_LIGHTS.mercury, intensity: 20, range: 10, priority: 6 });
+  lights.push({ kind: "point", x: -8, y: 4.3, z: 42, color: DISTRICT_LIGHTS.amber, intensity: 22, range: 10, priority: 6 });
+  lights.push({ kind: "point", x: 18, y: 4.3, z: 42, color: DISTRICT_LIGHTS.amber, intensity: 22, range: 10, priority: 6 });
 
   // ---------- Spawns ----------
-  // Team 0 (FADE): south pavement. Team 1 (TAPER): north compound. All behind cover, none visible
-  // from an enemy spawn (map.test.ts checks eye-to-eye rays).
-  const t0: [number, number, number][] = [[-24.5, -17, 0], [-16, -18, 0.2], [-9.5, -19, 0], [-3.8, -19.2, 0], [4, -19, 0], [12, -18.5, -0.2], [19.5, -18.7, 0], [30.5, -20.3, 0]];
-  const t1: [number, number, number][] = [[-23, 42, Math.PI], [-13, 43.5, Math.PI], [-7, 41, Math.PI], [0, 42.5, Math.PI], [9.5, 41.5, Math.PI], [16, 42.5, Math.PI], [27, 43.5, Math.PI], [33.5, 42, Math.PI * 0.9]];
+  // South set (attack in Bomb, team 0 elsewhere) on the pavement; north set (defence, team 1) in
+  // the compound. All behind cover, none visible from an enemy spawn (map.test.ts rays eye to eye).
+  //
+  // BOTH SETS ARE A GROUP, NOT A LINE. They used to span 55 m of x inside 3 m of z — eight points
+  // strung across the whole width of the district, so a six-player team started in six different
+  // lanes and could not leave spawn as a unit, which is the first thing a 6v6 side wants to do.
+  // Fifteen metres is wide enough that one grenade cannot take the round and narrow enough that the
+  // team is one group; the lane becomes a CHOICE made after the gate rather than an allocation
+  // handed out at it. Two rows, so nobody stands on anybody (`pickSpawn` penalises under 3 m).
+  //
+  // Centring both sets also flattens the two sites against each other: from a line strung across
+  // the map some players began twenty metres from A and sixty from B, and the median hid it.
+  const t0: [number, number, number][] = [[-10, -19.4, 0], [-4, -19.4, 0], [2, -19.4, 0], [8, -19.4, 0], [-7, -17.8, 0], [-1, -17.8, 0], [5, -17.8, 0], [11, -17.8, 0]];
+  const t1: [number, number, number][] = [[-7, 42.4, Math.PI], [-1, 42.4, Math.PI], [5, 42.4, Math.PI], [11, 42.4, Math.PI], [-10, 44, Math.PI], [-4, 44, Math.PI], [2, 44, Math.PI], [8, 44, Math.PI]];
   for (const [x, z, yaw] of t0) spawns.push({ x, y: 0.2, z, yaw, team: 0 });
   for (const [x, z, yaw] of t1) spawns.push({ x, y: 0.05, z, yaw, team: 1 });
 
@@ -591,7 +608,33 @@ export const NIGHT_DISTRICT: MapDef = (() => {
     { id: "C", name: "COURTYARD", x: 43, y: 0, z: 24 },
   ];
 
-  const arenaSpawns = expandDistrict(solids, props, lights);
+  const arenaSpawns = expandDistrict(solids, props, lights, DISTRICT_LIGHTS);
+  // Perimeter sconces light empty approaches without adding collision or shadow maps.
+  for (const [x, z, yaw, color] of [
+    [-44.95, -14, Math.PI / 2, DISTRICT_LIGHTS.amber],
+    [-27.65, -16, -Math.PI / 2, DISTRICT_LIGHTS.amber],
+    [-44.95, 38, Math.PI / 2, DISTRICT_LIGHTS.mercury],
+    [-27.65, 40, -Math.PI / 2, DISTRICT_LIGHTS.mercury],
+    [52.95, -14, -Math.PI / 2, DISTRICT_LIGHTS.amber],
+    [35.35, -16, Math.PI / 2, DISTRICT_LIGHTS.amber],
+    [52.95, 38, -Math.PI / 2, DISTRICT_LIGHTS.mercury],
+    [35.35, 40, Math.PI / 2, DISTRICT_LIGHTS.mercury],
+    [-26.95, 39, Math.PI / 2, DISTRICT_LIGHTS.mercury],
+    [0, 44.95, Math.PI, DISTRICT_LIGHTS.mercury],
+    [32, 44.95, Math.PI, DISTRICT_LIGHTS.mercury],
+  ] as const) {
+    props.push({ kind: "lamp", variant: "wall", x, y: 3, z, yaw, color });
+    lights.push({ kind: "point", x: x + Math.sin(yaw) * .35, y: 2.9,
+      z: z + Math.cos(yaw) * .35, color, intensity: 24, range: 14, priority: 5 });
+  }
+  // Fixtures and practicals use one palette; nearest matching source supplies the emission.
+  for (const p of props) {
+    if (!["lamp", "tube_light", "pendant", "neon", "barber_pole"].includes(p.kind) || p.color) continue;
+    const py = p.y + (p.kind === "lamp" && p.variant === "post" ? 3.3 : 0);
+    const nearby = [...lights].sort((a,b) => Math.hypot(a.x-p.x,a.y-py,a.z-p.z)-Math.hypot(b.x-p.x,b.y-py,b.z-p.z))[0];
+    p.color = nearby.color;
+  }
+
   return {
     id: "night_district",
     name: "Night District",

@@ -6,6 +6,11 @@ today, and what will fail if it is done carelessly — is below. It was assemble
 code and by running the shared map data through `tsx`; every number in §6, §7 and §8 was measured
 on 2026-09-10 against commit `0b18328`, not guessed.
 
+> **PART 2 (below, from §13) is a second brief from the owner on the same day and it WIDENS this
+> one:** layout work is now authorised, the named defects are located with coordinates, and the map
+> has to be fair enough for a 6v6 tournament with a real prize. Read both parts; where they
+> disagree, Part 2 wins.
+
 > **How to start the session.** Read `docs/PLAN_2_1.md` first (it is the contract), then this file
 > in full, then §5 of this file with the code open. Do not start editing `packages/shared/src/map.ts`
 > before you have rendered the map once (§10, step 1) — you cannot improve a look you have not seen.
@@ -537,3 +542,222 @@ Plus, specific to this job:
 
 *Prepared 2026-09-10 against `0b18328`. Measurements in §6 and §7 are reproducible with the
 commands in §9 and with `tsx` over `packages/shared/src/map.ts`.*
+
+---
+---
+
+# PART 2 — the owner's second brief (2026-09-10): rebuild it, don't only repaint it
+
+**Read this part as well as Part 1. Where they disagree, Part 2 wins** — the mandate widened after
+Part 1 was written, and §12's "stop and ask before changing layout" is now partly answered: the
+owner has asked for layout work.
+
+## 13. What changed
+
+> *"chciałem żeby przebudował trochę mapę i poprawił, gdzieś schody wchodzą w ścianę, albo prowadzą
+> donikąd, czy latarnie które wystają ledwo z ziemi, albo same koła od samochodu, mapa musi być
+> logiczna tak samo spawny czy inne rzeczy w budynkach itp itd, mapa musi być ciekawa, ale dobrze
+> zoptymalizowana i co poprawić jak tekstury wchodzą w siebie, chcę fajną grywalną mapę która jest
+> logiczna, ładna i ładnie poukładana oraz nadawała się pod turnieje, bo od następnego tygodnia
+> będziemy robić turnieje 6v6 i najlepsi gracze wygrają darmowe cięcie (irl)"*
+
+Three things follow.
+
+1. **Layout is now in scope.** Moving, deleting and adding geometry is authorised — stairs that end
+   in a wall, roofs nobody can reach, props that read as debris. Part 1 §12's first bullet ("closing
+   or opening a lane is a stop-and-ask") is relaxed to: *tell the owner what you changed and why, in
+   the report, with the sight-line measurement before and after.* You still do not touch `PLAYER`,
+   schema fields, weapon numbers or tick rates.
+2. **The map must be logical.** Every space has to answer "what is this, and why is it here" —
+   including what is inside the buildings. A room with four walls and nothing in it is not finished.
+3. **It has to survive a 6v6 tournament next week, with a real prize** (a free haircut). That makes
+   fairness a hard requirement, not a nicety — §15.
+
+**Before you start: this continues work another agent (Codex) had already begun.** Check
+`git status`, `git log --oneline -20` and `git branch -a` first, and build on whatever is already
+there rather than starting again. If nothing is there, start from `main`.
+
+## 14. The named complaints, located
+
+Every coordinate below was measured on 2026-09-10 against `0b18328`, by running the shared map data
+and the real walk grid (`walkable()` / `reachable()` — the same code `map.test.ts` uses).
+
+### 14.1 "Stairs go into a wall, or lead nowhere"
+
+**The east staircase runs into the car-wash machine.** `east_stair_4` and `east_stair_5`
+(`map.ts:322`) interpenetrate `cw_machine_a` with **coplanar faces at exactly 0 mm** over 2.1 m² and
+1.68 m², at (30.7, 0.8, 15.3) and (30.7, 0.6, 15.9). That is simultaneously the "stairs in a wall"
+and the "textures inside each other" complaint, in one place.
+
+**Two walkable surfaces cannot be reached at all.** Walk grid, from `spawns[0]`:
+
+| surface | height | area | cells you could stand on | cells actually reachable |
+|---|---|---|---|---|
+| `shed_roof` (`map.ts:410`) | 2.52 m | 10.5 m² | 35 | **0** |
+| `container_top` (`map.ts:386`) | 5.00 m | 14.4 m² | 60 | **0** |
+
+`shed_roof` sits 2 cm below `yard_lookout` (2.50 m) and touches it along z = 28 — but
+`lookout_rail_s` stands in the gap, so the roof is sealed off. Either it should be reachable (move
+or open the rail) or it should not read as a floor at all (pitch it, or give it a lip). Same
+question for `container_top`: `map.ts:387` documents the climb as *"crate 0.6 → crate 1.2 →
+pallets 1.8 → container top 2.5"*, so 2.5 m is the intended perch and the third stacked container's
+roof at 5.0 m is cover — but 14.4 m² of standable, unreachable surface is exactly what a player
+reads as "leads nowhere". Decide it, then make the geometry say so.
+
+Every other deck checks out: `catwalk`, `mezzanine`, `mezzanine_east`, `gantry`, `gantry_landing`,
+`stair_landing`, `yard_lookout`, `yard_roof_link`, `dock_ramp_base` are all 100 % reachable.
+
+### 14.2 "Lamps that barely stick out of the ground"
+
+**Eighteen lamp props, three different kinds, and they do not behave the same way.**
+
+- 6 × `lamp(variant: "head")` on Main Street at y 3.6 — these sit on a real `lamp_post_*` solid
+  (metal, y 0..3.6). **They stop bullets and bodies.**
+- 10 × `lamp(variant: "post")` — at (−22, 24), (33.5, 18), (−8, 23), (9, 20), (20, 34), (−6, 33),
+  (−8, 42), (18, 42) and two more from `districtExpansion.ts:76` at (−35, 19) and (43, 19). These
+  are drawn entirely by `props.ts` as a 3.4 m cylinder and **have no collision solid whatsoever** —
+  you walk through them and shoot through them.
+- 2 × `lamp(variant: "wall")` in the shop and back hall.
+
+So the same-looking street lamp is hard cover on Main Street and thin air in the yard. On a
+tournament map that is a fairness bug, not a cosmetic one. Pick one rule and apply it everywhere:
+either every standing lamp gets a post solid, or none do and the drawn post gets thin enough to
+read as decoration.
+
+**And the six that do have posts are lit from inside them.** Each spot light sits at y 3.5, which is
+10 cm *inside* its own 3.6 m post (Part 1 §7.1). Move the source to the head.
+
+**One wall lamp is simply dark:** `lamp(wall) @ (−4.35, 2.9, 15)` — nearest practical light 3.68 m
+away and a different colour. Its twin at z = 7 has one 0.35 m away.
+
+Measured and clean: **every floor-standing prop does sit on its floor** — no lamp, pole, bin, crate,
+dumpster, chair or tyre is sunk into or floating above the ground. So "barely out of the ground" is
+about the *reading*: 3.4 m of thin dark cylinder against a dark wall with no light on it and no
+collision. Fix it with light, silhouette and consistency, not by moving it up.
+
+### 14.3 "Just car wheels"
+
+There is exactly one standalone `wheel` prop, at **(12.5, 0, 20)** in the loading yard
+(`map.ts:514`, variant `"tyres"`), drawn by `props.ts:359` as a 0.62 m tyre plus a chrome rim
+standing upright. One tyre alone in an open yard reads as a bug, not as set dressing. Either give it
+a reason to be there (a stack of them against the dock, beside the box truck, in the car wash) or
+delete it.
+
+Related, and worth checking on screen: `dressing.ts`'s `wheels()` helper puts wheels on every `car`,
+`van` and `truck`. There are 7 cars, 2 vans and 2 trucks. A car's collision box is 4.2 × 1.45 × 1.8
+(`map.ts:313`), its wheels are 0.62 m across at y 0.31, and the body is drawn from a 0.32 m ground
+gap with a dark "chassis skirt" filling that gap. If the skirt reads as shadow at night, what a
+player sees is wheels and a floating body. Render it and look.
+
+### 14.4 "Textures going into each other"
+
+**54 pairs of solids share a coplanar face at exactly 0.0 mm while interpenetrating** — 44 of them
+over 1 m² or more, 11 over 2 m². Two surfaces at the same plane cannot be ordered by the depth
+buffer, so which one wins flips per pixel and per frame: on screen it crawls and shimmers.
+
+`floorAudit.test.ts` only checks **top faces**, which is why these have never been caught — and
+NIGHT_DISTRICT is clean by that test (0 pairs). The audit needs extending to all six face
+directions. The worst offenders:
+
+```
++X  bh_west_a        ⇄ alley_leanto     9.10 m²  @ (−4.2, 1.3, 11.8)   ← the biggest by far
++X  alley_wall_m     ⇄ garage_east      2.20 m²  @ (−14.2, 0.6, 9.0)
+±Z  south_facade     ⇄ extension_south_±1   2.10 m² each  @ (∓27.1 / 35.1, 3.5, −22.1)
+±Z  north_facade     ⇄ extension_north_±1   2.10 m² each  @ (∓27.1 / 35.1, 3.5, 45.1)
+−Z  east_stair_4     ⇄ cw_machine_a     2.10 m²  @ (30.7, 0.8, 15.3)
++Z  east_stair_5     ⇄ cw_machine_a     1.68 m²  @ (30.7, 0.6, 15.9)
+−Y  sidewalk_s       ⇄ shelter_bench    1.80 m²  @ (−4.3, 0.1, −20.2)
+−Y  shop_ceiling     ⇄ party_wall_upper 1.50 m²  @ (7.9, 3.8, 5.0)
+−Y  hall_ceiling     ⇄ party_wall_upper 1.20 m²  @ (7.9, 3.8, 14.0)
+±X/±Z  cw_s_a/cw_s_b/cw_n_a/cw_n_b ⇄ cw_w/cw_e_a/cw_e_b   1.35 m² × 8   ← the car wash's four corners
+±X/±Z  depot_west/depot_east_* ⇄ depot_front_*            1.26 m² × 6   ← the depot's corners
+±X/±Z  cafe_west/cafe_east_*  ⇄ cafe_front_*              1.26 m² × 6   ← the cafe's corners
+−X/−Z  bh_divider  ⇄ bh_divider_l                         1.08 m²
+```
+
+The corner cases (car wash, depot, cafe — 20 pairs) are all the same mistake made by
+`districtExpansion.ts`'s `room()` helper and the car-wash block: two wall boxes overlap in the
+corner and their outer faces land on the same plane. Fix the helper once and twenty pairs go.
+
+**The right fix is a rule, not 54 nudges**: walls butt, they never overlap; when two surfaces must
+be layered (a panel on a wall, a sign on a facade), the front one stands proud by at least 1 cm.
+Then extend `floorAudit.ts` to all six directions and gate it, so it cannot come back.
+
+### 14.5 "The map must be logical, and so must what is in the buildings"
+
+Part 1 §6.1's density table is the argument in numbers: from **2.5 solids per 100 m²** in the east
+extension to **29.2** in the storage block, with **YARD WEST — 221 m², 6 solids, 0 props, 0 lights**.
+Work every area, and give each one an answer to "what is this place". The two extension blocks
+(2 546 m² between them, holding both bomb sites) are the largest and emptiest.
+
+## 15. Tournament requirements — 6v6, next week, real prize
+
+This is new and it is the hardest constraint in the brief, because it is the one a player can lose a
+haircut to. **Measured today, the map is not symmetric.** Walked path length (real walk grid, real
+pathfinder), median over each team's eight spawns:
+
+| objective | T0 FADE (south) | T1 TAPER (north) | gap |
+|---|---|---|---|
+| bomb A / flag A — DEPOT | 61.1 m (min 42.4) | 50.4 m (min 27.5) | **TAPER +10.7 m ≈ 1.9 s** |
+| bomb B / flag C — COURTYARD | 65.9 m (min 51.3) | 48.5 m (min 32.3) | **TAPER +17.4 m ≈ 3.2 s** |
+| flag B — THE SHOP | 33.4 m (min 27.6) | 44.7 m (min 37.9) | FADE +11.3 m ≈ 2.1 s |
+| buy RECEPTION | 31.6 m | 49.2 m | **FADE +17.6 m ≈ 3.2 s** |
+| buy KIOSK | 48.3 m | 47.3 m | level (1.1 m) |
+| buy BOOTH | 42.6 m | 54.3 m | FADE +11.8 m ≈ 2.1 s |
+
+**Both bomb sites are on TAPER's side of the map** — there is no compensating pair, so whichever
+team defends gets the same advantage at A and at B. Meanwhile FADE owns two of the three buy
+stations. Decide deliberately: either bring the two sites onto opposite sides / equalise the
+distances, or state the attacker–defender split as the map's design and make sure the tournament
+format swaps sides.
+
+**Spawns are a firing line, not a team.** Team 0's eight spawns span **55.0 m in x and 3.3 m in z**;
+team 1's span 56.5 m × 2.5 m. A six-player team spawns strung across the entire width of the map, so
+"leave spawn as a unit and execute a site" is impossible — every player starts in a different lane.
+Competitive maps put a team's spawn in one place. Good news: **0 of 16 spawns have an unbroken line
+to the map centre**, and no team-0 spawn sees a team-1 spawn (gated by `map.test.ts`) — keep both
+properties.
+
+The rest of the tournament checklist:
+
+- **12 players in the room.** Every performance measurement should assume a full house, not an empty
+  map. Draw calls must not regress (Part 1 §11).
+- **Callouts.** Every area needs a short Polish name a player can shout mid-round. The data model
+  already carries names for stations, flags and bomb sites; areas do not have them. Whatever you
+  choose, keep the identifiers English and the visible strings Polish.
+- **No unfair perches.** An angle one team can reach in 4 s and the other in 14 s decides rounds.
+  When you open a route, measure it from both sides.
+- **No out-of-map spots.** After the layout work, re-run the walk grid and check nothing reachable
+  sits outside the intended bounds or on top of the perimeter facades.
+- **Rounds have to end.** `killY: −10`, and the collision/nav budgets in Part 1 §8.4 still apply:
+  40 A* searches must average < 8 ms or bots stutter for everyone.
+
+## 16. Order of work for this pass
+
+0. **Re-measure before you trust a coordinate.** Every number in §14 and §15 was taken on
+   2026-09-10 against `0b18328`; another agent has been working on this map in parallel, so the
+   map you have may not be the map that was measured. Run the audit first and work from ITS output:
+   ```
+   ./apps/server/node_modules/.bin/tsx apps/client/e2e/tools/map-audit.ts > apps/client/e2e/out/map1/audit.md
+   ```
+   It re-derives all seven families — coplanar faces on all six directions, standable-but-unreachable
+   surfaces (split into "almost connected" and "isolated"), stair runs and what continues from their
+   top step, props against the floor under them, which props that read as cover actually have a solid,
+   light coverage and palette, and the per-team walked distance to every objective — from the shared
+   map data and the real walk grid. No renderer, no GPU, about a second. Re-run it after every change.
+1. **Continue what is already there** (`git status` / `git log` / `git branch -a`), then render the
+   map (Part 1 §9, §10 step 1) and keep the six `before/` views.
+2. **The rule-level fixes first**, because they clear whole classes at once: the
+   walls-butt-never-overlap rule and the `room()` corner helper (kills ~20 of the 54 z-fighting
+   pairs); one lamp rule; extending `floorAudit.ts` to all six face directions and gating it.
+3. **The located defects** in §14.
+4. **Spawns and objective parity** (§15) — this is the tournament work, and it is layout work, so do
+   it before the art pass rather than after.
+5. **Area-by-area logic and silhouette pass** (Part 1 §2 and §6.1), emptiest first.
+6. **Lighting, materials, fog** (Part 1 §2.E–H).
+7. **Re-render `after/`, diff the metrics, re-measure the balance table and the sight lines**, and
+   put both before/after pairs in the ledger row.
+
+Definition of done is Part 1 §11, plus: the §15 balance table re-measured and either level or
+deliberately, explicitly asymmetric; the coplanar-face count at zero on all six axes with a test
+holding it there; and `pnpm test:e2e` run once, alone.
