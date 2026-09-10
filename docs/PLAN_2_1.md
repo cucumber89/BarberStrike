@@ -255,8 +255,17 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
 | 2026-09-09 | C | drop/c-crates | Added the earned cosmetic loop requested after the Armoury deploy: one automatic local-calendar crate per day, three daily match tasks worth one crate each, and an animated opening panel in SZAFA. A crate yields a weapon finish or an unowned equippable haircut; no purchase path. Expanded the procedural catalog from 6 to 19 finishes across five rarity tiers, while the six launch finishes remain the starter set and new recipes are crate drops. Profile migration defaults every new field and preserves existing progress. | `apps/client/e2e/armoury.spec.ts`; profile and catalog tests | typecheck ✓ client test ✓ (330) skins test ✓ build ✓ targeted armoury e2e ✓ (1/1) | review |
 
 | 2026-09-09 | C | drop/c-crates | Polished the complete cosmetic presentation requested by the owner. Crates now have their own Armoury tab, a full-screen rarity reel with real finish palettes, a centre marker that lands on the actual awarded item, reveal effects and reduced-motion handling. The wardrobe has separate readable skin/haircut collections, haircut thumbnails, locked requirements and immediate equip for the next room; the lobby now presents numbered mode/class/map/bot steps and links appearance editing back to the wardrobe. Added four crate-exclusive cuts (Zaczes, Undercut, Kolce, Platynowy Fade). Marcovia's yellow-green street tracksuit now has white piping, zip/waist trim and a geometric chest crest based on the owner-supplied artwork; both teams retain identical geometry and hitboxes. | `apps/client/e2e/armoury.spec.ts`; `apps/client/e2e/startup.spec.ts`; `apps/client/e2e/out/kits/{kits-front,marcovia-close}.png`; Playwright `haircuts.png`, `crate-rolling.png`, `crate-prize.png` artifacts | typecheck ✓ build ✓ shared 238 ✓ skins 2 ✓ server 175 ✓ client 330 ✓ targeted browser 2/2 ✓ team geometry 24/24 ✓ | review |
+| 2026-09-09 | K (new) | claude/serene-cerf-p40i3w (harness-assigned; the drop's own branch) | **Character body builds: six real silhouettes inside one collision box.** The trap the brief names is real and is why the whole drop is shaped around one module: hitscan reads `PLAYER` and nothing else, so a build that changed the drawn body's size would move the target inside a hitbox that stayed put. `packages/shared/src/builds.ts` therefore SOLVES each body onto a frozen envelope instead of letting a catalog entry name dimensions — `BodyBuild` has no height or width field to set, and `buildRig` derives the joint offsets from `legRatio`/`chest`/`belly`/`limb`/`neck`/`head`/`hunch`. MEASURED across the six: crown 1.87 m, sole −0.01 m and widest point 0.367 m identical to twelve decimals; every chin ≥ 13 cm inside the server's head zone; head footprint inside the AABB's. What differs is what you can see — hip 0.845→1.040 m (19 cm), waist 0.343→0.590 m, sleeve 0.084→0.139 m, neck 0.024→0.105 m, skull 0.221→0.264 m, plus a hunch. **`PLAYER` untouched, no schema field added**: the build rides in the existing bounded `skins` join field as `body=<id>` (default writes no entry, so a player who never opens the wardrobe sends the same bytes as before). Two tests hold it — `builds.test.ts` (13) on the rig, `Character.build.test.ts` (10) on every VERTEX the constructor emits, in world space, so the model cannot describe a body nobody draws. Three defects the measurements found and fixed: the shoulder pad floated 7.7 cm clear of a narrow chest (its length is now derived from the chest, not a knob); scaling the crouch by hip height spread the crouched crown over 69 mm (flat offsets: 28 mm); the sleeve piping scaled with limb mass and so let limb thickness decide the silhouette's width. Wardrobe: POSTAĆ tab, `CharacterPreview` with its own engine released on unmount (10 open/close cycles, 0 engines left). Bots get a build each. Draw calls per body unchanged (one mesh count for all six). | `apps/client/e2e/out/builds/` — `builds-cap.png` (six side by side + the numbers), `builds-{mohawk,pompadour,bleach}.png`, per-build crops, `verification.json`; regenerate with `pnpm shots:builds` | typecheck ✓ test ✓ (797: shared 264, skins 2, server 178, client 353) build ✓ check:weapons ✓ 19/19 e2e ✓ 17/18 in one full run, 18/18 after re-running the one failure alone (see below) | done |
+| 2026-09-09 | K | claude/serene-cerf-p40i3w | Slice 2: **character OUTFITS, thirteen of them, dropping from the crate.** The trap here is not the hitbox (an outfit adds no size) — it is **telling the two sides apart**: repainting a body is the whole point of an outfit and the fastest way to put two identical NIETOPERZs on opposite sides of a doorway. So `OutfitPalette` HAS NO `accent` FIELD. The team's chest panel, back panel, badge, chest band and armband are the side's colour on every outfit and an entry has no way to name them; `outfits.test.ts` checks the reserved role survives the catalog and `Character.outfit.test.ts` reads it back off the materials the meshes actually carry. Two things this found by MEASURING rather than by intending: BRAMKARZ and GARNITUR were black-on-black blobs (shirt/vest contrast 1.10 and 1.12 against the 1.15 floor the two team kits are held to), and — found by LOOKING at a render from behind — **NIETOPERZ's cape hid the team's back panel completely**, the reserved-colour rule defeated through geometry instead of colour. Every back piece now carries the panel out onto its own surface, asserted as "outermost piece on the back is the accent one". Pieces are declarative slots (headgear/face/back/neck/stripes/apron), sized from the `BuildRig` so BARYŁKA's hood is BARYŁKA-sized, bounded inside the AABB footprint and under the same head room a mohawk already takes. **Zero extra draw calls, measured**: a piece may only use a material the body already paints on that joint (`JOINT_ROLES`) — before that rule a beard and a hat band took the body from 32 meshes to 34 — so all thirteen outfits build 32 meshes on all six builds. Materials are now cached per (team, outfit) instead of per team. **Crate rebuilt around it**: outfits 38% / finishes 47% / haircuts 15%, an exhausted pool hands its share to the others so a full collection never rolls a dud, tiers weighted 70/22/6/1.7/0.3 and shared with the finishes; the panel now shows the pool, the odds and three collection bars BEFORE the button, and the reveal names the tier and the blurb. Replication: `fit=<id>` in the same bounded join field, still no schema field. One bug fixed on the way that predated the outfits: the preview rebuilt its whole scene when a camera prop changed but not the body, so it came back as an empty box. | `apps/client/e2e/out/builds/` — `outfits.png` (thirteen side by side + their slots), `outfits-back.png` (the team panel visible from behind on every one), `outfits-barylka.png` / `outfits-tyczka.png` (pieces cut for the build), `fit-*.png`, `back-*.png`; `pnpm shots:builds` | typecheck ✓ test ✓ (835: shared 282, skins 2, server 178, client 373) build ✓ check:weapons ✓ 19/19 e2e ✓ 18/18 in one full run with nothing else on the box | done |
 
 ## Decisions log (append-only)
+- 2026-09-09 — Drop K: the full e2e run finished **17/18**, the failure being `ostrzyzeni` timing out
+  in `waitForFrames` after 60 s. It is the LAST test in a 12-minute file, immediately after the
+  2.9-minute Gun Game, and it **passes alone in 51.6 s** — which is how the 2026-09-09 entry above
+  says such a failure is retired, and the same shape as the two already recorded ("a full run is five
+  minutes of bots shooting at the test's own player"). Not called flaky and not left silent: the
+  drop's own two-client test and twelve other two-client tests passed in that same run on the same
+  code, and a fault in character construction would have taken all of them down, not one. (lead)
 
 - 2026-09-07 — Plan created from the owner's brief: weapons structure + feel, procedural skins with
   crates, party modes, shave mechanic, roles as presets, second map, accounts last.
@@ -602,6 +611,88 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   `ps -eo args --no-headers | grep -v grep`. Paired with never piping a long run through `tail` —
   it buffers, so a running suite and a dead one look identical. Both cost a whole run here. (lead)
 
+- 2026-09-09 — Drop K (new): **character body builds**. The owner's brief is cosmetic-only and does
+  not fit A–H, so it is registered as its own drop the way I and J were. Branch is the
+  harness-assigned `claude/serene-cerf-p40i3w`, not `drop/k-…`. (lead)
+- 2026-09-09 — **D-K1. A build varies the DISTRIBUTION of mass, never the size of the target.**
+  `shared/builds.ts` solves each body onto one frozen envelope instead of letting a catalog entry
+  name dimensions: the crown (1.87 m), the sole (−0.01 m) and the widest point (0.367 m) come out
+  bit-identical for all six, the drawn head stays inside the server's head band with ≥ 13 cm of
+  margin and inside the AABB's footprint, and `BodyBuild` has no height or width field to set. The
+  envelope is frozen AT the numbers the existing character already had, so KLASYK reproduces it. Two
+  things are NOT exactly equal and are bounded and stated rather than hidden: the frontal silhouette
+  area (−7.0% TYCZKA to +6.9% BYK, because a short-legged body genuinely carries more torso) and the
+  posed half-width (18 mm, because a thicker sleeve traces a wider arc off the same shoulder). Both
+  are visual acquisition; neither touches registration, which is the AABB for everyone. (lead)
+- 2026-09-09 — **D-K2. The shoulder line is shared and not a per-build choice.** It is the widest
+  point of the silhouette, so pinning it is what makes "the same width" exact rather than a
+  tolerance; the pad's LENGTH is then derived from the chest so a narrow torso still meets its
+  shoulder. It costs one axis of variation (nobody has broader shoulders than anybody else) and buys
+  the claim that peeking a corner exposes the same centimetres whichever body a player chose. (lead)
+- 2026-09-09 — **D-K3. Builds are NOT gated; every one is available from the first launch.** L1
+  permits gating a cosmetic, so this is a choice, not a constraint: the whole value of builds is that
+  a room of twelve reads as twelve people, and that value is largest on the day a player arrives with
+  nothing. Haircuts, finishes and crates already carry the progression. Recorded in
+  `profile.ts` (`equipBuild` has no ownership test, deliberately) and asserted in
+  `profile.test.ts`. (lead)
+- 2026-09-09 — **D-K4. The build rides in the EXISTING `PlayerState.skins` field, as `body=<id>`.**
+  No schema field was added (the plan gates that). The field is already bounded at 400 chars, already
+  sanitised on join, and already written once per player per match; one more entry costs ~11 bytes
+  once, against a 20 Hz patch stream. The default build writes NO entry, so a player who never opens
+  the wardrobe sends exactly the bytes they sent before. `decodeSkins` has always dropped non-weapon
+  keys, so an older client simply does not see it. (lead)
+- 2026-09-09 — **D-K5. Posture is geometry, never a rest rotation of the torso.** A pitched torso
+  drops the head node by (1 − cos θ) × its offset, and the head's height IS the headshot zone; a hump
+  box and a forward shift keep every Y under the solver. For the same reason the pose loop's vertical
+  moves stay in absolute metres: scaling the crouch by the build's own hip height spread the crouched
+  crown over 69 mm (measured), where flat offsets hold it to 28 mm. (lead)
+- 2026-09-09 — Drop K: the character's idle-sway phase is now seeded from the player id instead of
+  `Math.random()`. The offset was always arbitrary; making it a function of the id costs nothing,
+  gives every client the same body, and is what lets the geometry test measure a silhouette to the
+  millimetre instead of to the breath. (lead)
+- 2026-09-09 — **PROPOSAL, owner to decide. The drawn character does not fit the box it is hit in,
+  and never did.** MEASURED on `main` before this drop: the body spans y −0.010…1.905 against
+  `PLAYER.height` 1.8, so the top 10.1 cm of every head (skull to 1.866, cap to 1.901) is drawn
+  where no bullet can land; the arms hang to ±0.367 against `halfWidth` 0.35; and crouched, the drawn
+  crown sits at ~1.46 while the crouch box tops out at 1.25, leaving ~21 cm of un-hittable head on
+  every crouching player. Drop K neither caused this nor made it worse — the envelope is frozen at
+  today's numbers precisely so that every build is equally affected — but it is a real "aim at the
+  head, miss" and it is a change to how players are hit, which the plan gates. Fixing it means
+  shrinking the drawn body onto `PLAYER` (every haircut is positioned off the skull, so they move
+  with it) or raising `PLAYER.height`, which is a balance change. Not decided here. (lead)
+
+- 2026-09-09 — **D-K6. An outfit owns five material roles and cannot name the sixth.** `accent` — the
+  chest panel, the back panel, the badge, the chest band and the armband — is the team's on every
+  outfit, and `OutfitPalette` has no field for it, so this is the type and not a convention. The
+  reason is the same shape as the hitbox reason for builds: repainting a body is what an outfit IS,
+  and it is also the fastest way to put two identical NIETOPERZs on opposite sides of a doorway and
+  ask players to shoot their own team. Two roles were promoted to accent to pay for it — the chest
+  band and the armband were the club's `trim` back when trim WAS the team's, and trim now belongs to
+  the outfit. (lead)
+- 2026-09-09 — **D-K7. A back piece carries the team's panel out onto its own surface.** Found by
+  looking at a render from behind rather than by reasoning: NIETOPERZ's cape sat behind the chest box
+  and hid the back panel completely, which is D-K6 defeated through GEOMETRY instead of through
+  colour. Reserving a colour is not enough when a piece can be hung in front of it. `outfits.test.ts`
+  now asserts the accent piece is the outermost thing on the back of any outfit that wears one.
+  (lead)
+- 2026-09-09 — **D-K8. A piece may only use a material the body already paints on that joint**
+  (`JOINT_ROLES`). MEASURED before the rule: a beard and a hat band, painted `hair` and `trim` on the
+  head, created merge groups the head did not have and took the body from 32 meshes to 34 — MENEL and
+  KEBAB were the two. The body is merged per (joint, material), so a piece in an existing pair is
+  free and a piece in a new one is a draw call on every body in the room. It costs a moustache its
+  own colour (it wears the outfit's `boots` tone, which is the dark one anyway) and buys thirteen
+  outfits at exactly 32 meshes on all six builds. (lead)
+- 2026-09-09 — **D-K9. Crate odds are 38% outfit / 47% finish / 15% haircut, and an exhausted pool
+  hands its share to the others.** Outfits take the largest single share because a finish changes a
+  gun the player is looking at while an outfit changes the person everyone ELSE is looking at. The
+  re-normalisation is what stops a player who owns every outfit from rolling duds. Tiers are the
+  existing 70/22/6/1.7/0.3 and are now shared by outfits and finishes, so one tier name means one
+  thing in both. (lead)
+- 2026-09-09 — Drop K: the parody outfit is named **NIETOPERZ Z MAREK**, not the licensed name the
+  owner used in the brief. It is the estate's version — a bedsheet and two bits of cardboard — which
+  is both the funnier read and the one that carries no trademark. Say the word and it changes; it is
+  one string. (lead)
+
 ## Deferred (things noticed, deliberately not done)
 
 - **Drop J: prediction runs per rendered frame, so above ~240 fps a client outruns the room.** The
@@ -931,3 +1022,35 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   nickname, which is the lobby's job to ask for, so the panel hands the player to the browser
   instead. If quick-joining from the front page is wanted, the nickname has to move to the title
   screen with it.
+- Drop K: **the crouch pose buries the boots ~23 cm below the floor** (measured: sole at −0.234 m for
+  the default build, −0.212 to −0.254 across the six). Pre-existing — the crouch drops the hips by a
+  flat 0.38 m while the legs only fold by fixed angles — and invisible in play because the floor
+  hides it, but it means a crouching body's feet are inside the geometry. The fix is to bend the legs
+  by the amount that actually reaches the floor rather than by a constant; it is animation work, not
+  builds work, and it belongs with whoever reopens the crouch.
+- Drop K: `CHARACTER_EYE` (`Character.ts`, last line) is exported and imported by nothing. It was the
+  seam for a first-person body that never arrived. One line to delete when something else touches the
+  file.
+- Drop K: the imported `CharacterModel` (drop 6b, one rigged glTF) ignores the build id — it has no
+  proportions to solve. Harmless today, because `Game.ts` empties the manifest's characters and the
+  procedural body is the one that runs, but if imported bodies are ever switched back on, half the
+  room would lose its silhouette. `installCharacters` is where the choice is made.
+- Drop K: bots get a build from `BUILDS[(n * 2 + 1) % 6]`, so eight bots cover five of the six and
+  repeat two. Deterministic on purpose (a bot match must look the same twice), but a room of eight
+  never shows the whole set. Worth revisiting only if the catalog grows past the bot count.
+- Drop K slice 2: the `startup.spec.ts` "clean entry" test asserts the loading overlay is gone with
+  the default 5 s expect window, against an entry that MEASURED 2.5–3.5 s on SwiftShader. That is
+  1.5× of headroom, so the test fails whenever anything else is using the box — it failed in a full
+  run this session because a `pnpm build` was running beside it, and passed alone three times
+  afterwards. Outfits are not the cause: with bot outfits removed the same entry measured 2.5–3.2 s
+  and the scene held the same 169 materials either way. Either the window wants to be explicit
+  (15 s, like the other slow gates in that file) or entry wants profiling; both are somebody's
+  deliberate call rather than a number to nudge while shipping something else.
+- Drop K slice 2: `OutfitPalette.hair` is read (MENEL dyes the player's hair) but no piece uses the
+  `hair` ROLE any more — facial hair moved to `boots` under `JOINT_ROLES`. If the head ever gains a
+  permanent trim or hair element for other reasons, moustaches and beards should move back and get
+  their own colour.
+- Drop K slice 2: an outfit is fixed at construction like a build, so equipping one mid-match does
+  nothing until the next room. That matches haircuts before Drop E gave them a live path, and the
+  same trick would work here (rebuild on a field change) if it ever matters — it costs a mesh rebuild
+  on a frame, which is why it was not done for a field that only changes on join.

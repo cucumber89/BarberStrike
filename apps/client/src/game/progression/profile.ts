@@ -3,7 +3,9 @@ import {
   newBadges, newHaircuts, ownedHaircuts, titleFor, xpForMatch,
   type HaircutDef, type LevelState, type LifetimeStats, type MatchStats, type XpLine,
 } from "@frankibarber/shared";
-import { WEAPON_ORDER, encodeSkins, type WeaponId } from "@frankibarber/shared";
+import { DEFAULT_BUILD, isBuildId } from "@frankibarber/shared";
+import { DEFAULT_OUTFIT, DROPPABLE_OUTFITS, isOutfitId, outfitDef, type OutfitDef, type OutfitRarity } from "@frankibarber/shared";
+import { WEAPON_ORDER, encodeCosmetics, type WeaponId } from "@frankibarber/shared";
 import { catalog, fitsWeapon, skinById, type SkinInstance } from "@frankibarber/skins";
 
 /**
@@ -28,6 +30,22 @@ export interface Profile {
    * and a catalog that grows later hands out what a player already qualifies for.
    */
   haircut: string;
+  /**
+   * The body build (`shared/builds.ts`). Unlike a haircut there is nothing to own — every build is
+   * available from the first launch (Decisions, 2026-09-09) — so the only migration it needs is the
+   * one every field here gets: an id this build does not know falls back to the default rather than
+   * being trusted. A profile edited by hand cannot conjure a seventh body.
+   */
+  build: string;
+  /**
+   * The equipped outfit, and the ones this profile has pulled out of a crate.
+   *
+   * Unlike a build, an outfit IS owned: it is a crate drop, so the list has to be stored — there is
+   * no counter to recompute it from the way `ownedHaircuts` recomputes haircuts from `life`. The kit
+   * is never in the list and never needs to be; `ownedFits` puts it at the front of every profile.
+   */
+  outfit: string;
+  fits: string[];
   skins: SkinInstance[];
   equip: Partial<Record<WeaponId, string>>;
   crates: number;
@@ -37,7 +55,7 @@ export interface Profile {
   challengeBase: { matches: number; kills: number; headshots: number };
 }
 
-export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT, skins: [], equip: {}, crates: 0, crateDay: "", crateCuts: [], challengeClaims: [], challengeBase: { matches: 0, kills: 0, headshots: 0 } });
+export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT, build: DEFAULT_BUILD, outfit: DEFAULT_OUTFIT, fits: [], skins: [], equip: {}, crates: 0, crateDay: "", crateCuts: [], challengeClaims: [], challengeBase: { matches: 0, kills: 0, headshots: 0 } });
 
 /**
  * Reads the profile, repairing anything the shape has outgrown.
@@ -56,6 +74,9 @@ export function loadProfile(): Profile {
       if (!Number.isFinite(life[k])) life[k] = 0;
     }
     const known = new Set(BADGES.map((b) => b.id));
+    const fits: string[] = Array.isArray(p.fits)
+      ? [...new Set(p.fits.filter((id): id is string => typeof id === "string" && isOutfitId(id) && id !== DEFAULT_OUTFIT))]
+      : [];
     const skins: SkinInstance[] = Array.isArray(p.skins) ? p.skins.flatMap(instance => {
       if (!instance || typeof instance !== "object" || typeof instance.skin !== "string" || !skinById(instance.skin)) return [];
       return [{ skin: instance.skin, wear: Number.isFinite(instance.wear) ? Math.max(0, Math.min(1, instance.wear)) : 0,
@@ -79,6 +100,12 @@ export function loadProfile(): Profile {
       // An id from a build that had a haircut this one does not, or one the player has not earned
       // (a cleared profile, an edited blob), falls back to the cap rather than to nothing.
       haircut: isHaircutId(p.haircut) && (ownedHaircuts(life).some((h) => h.id === p.haircut) || (p.crateCuts ?? []).includes(p.haircut as string)) ? (p.haircut as string) : DEFAULT_HAIRCUT,
+      build: isBuildId(p.build) ? p.build : DEFAULT_BUILD,
+      fits,
+      // Equipped only if still owned AND still in the catalog — the same rule the haircut gets, and
+      // for the same reason: a blob from another build, or an edited one, must not dress a player
+      // in something they never rolled.
+      outfit: isOutfitId(p.outfit) && (p.outfit === DEFAULT_OUTFIT || fits.includes(p.outfit)) ? p.outfit : DEFAULT_OUTFIT,
     };
   } catch {
     // A corrupt or unreadable profile is not worth a crash on the way into a match.
@@ -123,6 +150,8 @@ export function applyMatch(profile: Profile, stats: MatchStats, clipperKills: nu
       xp, life,
       badges: [...profile.badges, ...earned.filter((b) => !profile.badges.includes(b))],
       haircut: profile.haircut,
+      build: profile.build,
+      outfit: profile.outfit, fits: profile.fits,
   });
   return {
     profile: next,
@@ -153,7 +182,51 @@ export function equipHaircut(id: string): string {
   return haircutDef(id).id;
 }
 
-export const equippedSkins = (): string => encodeSkins(loadProfile().equip);
+/**
+ * The one cosmetic field for the join options: finishes and body together.
+ *
+ * Storage-first and defensive for the same reason `equippedHaircut` is — this runs on the way INTO
+ * a match, where a throw would cost the player the match rather than the look.
+ */
+export const equippedSkins = (): string => {
+  try { const p = loadProfile(); return encodeCosmetics(p.equip, p.build, p.outfit); } catch { return ""; }
+};
+
+/** The equipped build id, for the wardrobe and the preview. */
+export function equippedBuild(): string {
+  try { return loadProfile().build; } catch { return DEFAULT_BUILD; }
+}
+
+/**
+ * Picks a body. Returns what is equipped afterwards, like `equipHaircut`.
+ *
+ * There is no ownership test, and that is the decision rather than an oversight: builds are not
+ * earned (see `Profile.build`). An unknown id still cannot be stored — `isBuildId` is the same gate
+ * `loadProfile` applies, so the write and the read agree.
+ */
+/** The outfits this profile can wear, catalog order. Always at least the kit. */
+export const ownedFits = (p: Profile = loadProfile()): OutfitDef[] =>
+  [outfitDef(DEFAULT_OUTFIT), ...DROPPABLE_OUTFITS.filter((o) => p.fits.includes(o.id))];
+
+/** The equipped outfit id, for the wardrobe and the join options. */
+export function equippedOutfit(): string {
+  try { return loadProfile().outfit; } catch { return DEFAULT_OUTFIT; }
+}
+
+/** Wears an outfit the player owns. Refused, never thrown, like `equipHaircut`. */
+export function equipOutfit(id: string): string {
+  const p = loadProfile();
+  if (!ownedFits(p).some((o) => o.id === id)) return p.outfit;
+  saveProfile({ ...p, outfit: id });
+  return id;
+}
+
+export function equipBuild(id: string): string {
+  const p = loadProfile();
+  if (!isBuildId(id)) return p.build;
+  saveProfile({ ...p, build: id });
+  return id;
+}
 
 export const CRATE_CHALLENGES = [
   { id: "mecz", label: "Rozegraj 1 mecz", stat: "matches" as const, target: 1 },
@@ -180,21 +253,64 @@ export function claimChallengeCrates(profile: Profile): Profile {
   return { ...profile, crates, challengeClaims: claims };
 }
 
-export type CratePrize = { kind: "skin"; id: string } | { kind: "haircut"; id: string };
+export type CratePrize = { kind: "skin"; id: string } | { kind: "haircut"; id: string } | { kind: "outfit"; id: string };
+
+/**
+ * How often a crate rolls each KIND of prize, before rarity is drawn inside it.
+ *
+ * Outfits get the largest single share, and that is a judgement rather than an accident: a finish
+ * changes a gun the player is looking at, an outfit changes the person everyone ELSE is looking at,
+ * which is the thing that gets talked about after a match. A kind whose pool is exhausted hands its
+ * share to the others, so a player who owns every outfit never rolls a dud.
+ */
+export const CRATE_ODDS = { outfit: 0.38, haircut: 0.15, skin: 0.47 } as const;
+
+/** Rarity weights, shared by outfits and finishes so one tier means one thing in both. */
+const RARITY_WEIGHTS: Record<OutfitRarity, number> = { pospolity: 70, rzadki: 22, epicki: 6, legendarny: 1.7, zloty: 0.3 };
+
+/** Draws a tier, then something in it the player does not already own. */
+function rollByRarity<T extends { rarity: OutfitRarity }>(pool: readonly T[], rng: () => number): T | null {
+  if (!pool.length) return null;
+  const roll = rng() * 100;
+  let cursor = 0;
+  const tier = (Object.keys(RARITY_WEIGHTS) as OutfitRarity[]).find((r) => (cursor += RARITY_WEIGHTS[r]) >= roll) ?? "pospolity";
+  // A tier with nothing left in it falls through to whatever the player is still missing, rather
+  // than handing out a duplicate to satisfy the tier.
+  const inTier = pool.filter((item) => item.rarity === tier);
+  const from = inTier.length ? inTier : pool;
+  return from[Math.floor(rng() * from.length)];
+}
+
 export function openCrate(now = Date.now()): { profile: Profile; prize: CratePrize } | null {
   const p = refreshDailyCrates(new Date(now)); if (p.crates < 1) return null;
-  const rng = mulberry32(hashString(`${p.crateDay}:${now}:${p.skins.length}:${p.crateCuts.length}`));
+  const rng = mulberry32(hashString(`${p.crateDay}:${now}:${p.skins.length}:${p.crateCuts.length}:${p.fits.length}`));
+  const lockedFits = DROPPABLE_OUTFITS.filter((o) => !p.fits.includes(o.id));
   const lockedCuts = HAIRCUTS.filter(h => !h.id.startsWith("shave-") && h.id !== DEFAULT_HAIRCUT && !ownedCuts(p).some(o => o.id === h.id));
-  if (lockedCuts.length && rng() < .18) {
+
+  // The kind first, then the tier inside it. Each kind's share is skipped when its pool is empty,
+  // so the odds re-normalise onto what the player can still be given.
+  const kinds = ([
+    { kind: "outfit", share: CRATE_ODDS.outfit, empty: !lockedFits.length },
+    { kind: "haircut", share: CRATE_ODDS.haircut, empty: !lockedCuts.length },
+    { kind: "skin", share: CRATE_ODDS.skin, empty: false },
+  ] as const).filter((k) => !k.empty);
+  const total = kinds.reduce((sum, k) => sum + k.share, 0);
+  let pick = rng() * total, chosen: CratePrize["kind"] = "skin";
+  for (const k of kinds) { if ((pick -= k.share) <= 0) { chosen = k.kind; break; } }
+
+  if (chosen === "outfit") {
+    const outfit = rollByRarity(lockedFits, rng)!;
+    const profile = { ...p, crates: p.crates - 1, fits: [...p.fits, outfit.id] };
+    saveProfile(profile);
+    return { profile, prize: { kind: "outfit", id: outfit.id } };
+  }
+  if (chosen === "haircut") {
     const cut = lockedCuts[Math.floor(rng() * lockedCuts.length)];
     const profile = { ...p, crates: p.crates - 1, crateCuts: [...p.crateCuts, cut.id] }; saveProfile(profile);
     return { profile, prize: { kind: "haircut", id: cut.id } };
   }
-  const weights = { pospolity: 70, rzadki: 22, epicki: 6, legendarny: 1.7, zloty: .3 };
-  const roll = rng() * 100; let cursor = 0; const rarity = (Object.keys(weights) as (keyof typeof weights)[]).find(r => (cursor += weights[r]) >= roll) ?? "pospolity";
-  const pool = catalog.filter(s => s.rarity === rarity && !p.skins.some(i => i.skin === s.id));
-  const fallback = catalog.filter(s => !p.skins.some(i => i.skin === s.id));
-  const skin = (pool.length ? pool : fallback.length ? fallback : catalog)[Math.floor(rng() * (pool.length || fallback.length || catalog.length))];
+  const unowned = catalog.filter((skin) => !p.skins.some((i) => i.skin === skin.id));
+  const skin = rollByRarity(unowned.length ? unowned : catalog, rng)!;
   const profile = { ...p, crates: p.crates - 1, skins: [...p.skins, { skin: skin.id, wear: rng() * .5, rolledAt: now }] }; saveProfile(profile);
   return { profile, prize: { kind: "skin", id: skin.id } };
 }

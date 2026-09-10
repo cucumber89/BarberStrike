@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BOYS_CLASSES, BOYS, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MODES, MODE_ORDER, isGameMode, type BotLevel, type GameMode } from "@frankibarber/shared";
-import { equippedHaircut, ownedCuts } from "../game/progression/profile";
+import { BOYS_CLASSES, BOYS, BUILDS, OUTFITS, buildDef, outfitDef, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MODES, MODE_ORDER, isGameMode, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { equippedBuild, equippedHaircut, equippedOutfit, ownedCuts } from "../game/progression/profile";
 import { copyText, inviteLink, isMapId, mapChoices, parseInvite } from "./invite";
 import { Connection, defaultServerUrl, type RoomListing } from "../game/net/Connection";
 import type { Settings } from "../settings";
@@ -68,6 +68,10 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   // cannot drift from what earned it; the equipped id is the only thing written down.
   const owned = new Set(ownedCuts().map((h) => h.id));
   const [haircut, setHaircut] = useState(() => equippedHaircut());
+  // Re-read on every return from the wardrobe rather than pushed up through a callback: the build
+  // has no other reader in the lobby, and a second `on…` prop for one label is not worth the wiring.
+  const [build, setBuild] = useState(() => equippedBuild());
+  const [outfit, setOutfit] = useState(() => equippedOutfit());
   const pickMode = (m: GameMode) => { setGameMode(m); try { localStorage.setItem("fb_mode", m); } catch { /* private mode */ } };
   // Drop G: the map the room plays. A link's map wins, then the last one picked here; with neither
   // it is the map the game has always opened on.
@@ -240,7 +244,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                   </button>
                   <button className="mm-nav-btn" onClick={() => setPanel("armoury")} data-testid="btn-armoury">
                     <i className="mm-nav-no">04</i><span className="mm-nav-art"><NAV_ART.armoury /></span>
-                    <b>SZAFA</b><em>Skiny broni i kolekcja</em><span className="mm-nav-go">▸</span>
+                    <b>SZAFA</b><em>Strój, sylwetka, skiny i skrzynki</em><span className="mm-nav-go">▸</span>
                   </button>
                 </nav>
               )}
@@ -382,7 +386,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                   </div>
 
                   <div className="lb-block wide lobby-look" data-testid="haircut-picker">
-                    <div><h2 className="lb-h">WYGLĄD POSTACI</h2><b>{HAIRCUTS.find(h=>h.id===haircut)?.name}</b><small>{owned.size}/{HAIRCUTS.length} fryzur w kolekcji · wybór zapisany dla nowego pokoju</small></div>
+                    <div><h2 className="lb-h">WYGLĄD POSTACI</h2><b>{outfitDef(outfit).name} · {buildDef(build).name} · {HAIRCUTS.find(h=>h.id===haircut)?.name}</b><small>{BUILDS.length} sylwetek · {OUTFITS.length} strojów · {owned.size}/{HAIRCUTS.length} fryzur · wybór zapisany dla nowego pokoju</small></div>
                     <button type="button" onClick={()=>setPanel("armoury")}>OTWÓRZ SZAFĘ ▸</button>
                   </div>
                 </div>
@@ -480,7 +484,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
           )}
 
           {panel === "armoury" && (
-            <div className="mm-content armoury-content"><Armoury onHaircut={setHaircut} /></div>
+            <div className="mm-content armoury-content"><Armoury onHaircut={setHaircut} onBuild={setBuild} onOutfit={setOutfit} /></div>
           )}
         </div>
       )}

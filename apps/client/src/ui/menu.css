@@ -505,3 +505,54 @@
 .crate-reveal.epicki > b { color: #bd75ff; }
 .crate-reveal.legendarny > b { color: #ff65aa; }
 .crate-reveal.zloty > b { color: #ffd04b; }
+
+/* ------------------------------------------------------------- the body (POSTAĆ) */
+/* Four tabs where there were three; the grid was hard-wired to repeat(3). */
+.armoury-tabs { grid-template-columns: repeat(4, 1fr); }
+.armoury-tabs button { padding: 9px 2px; font-size: 11px; }
+/* The weapon column has nothing to say about a body, and the silhouette is what the player is
+   judging here — so the stage takes its width for as long as the POSTAĆ tab is open. */
+.armoury.on-body { grid-template-columns: minmax(320px, 1fr) 300px; }
+.armoury.on-body .armoury-weapons { display: none; }
+.armoury-build-list { min-height: 0; overflow: auto; display: grid; align-content: start; gap: 8px; padding: 10px; scrollbar-width: thin; scrollbar-color: rgba(217, 164, 65, .45) transparent; }
+.armoury-build-list button { display: grid; gap: 3px; padding: 10px 11px; text-align: left; background: #171a20; border: 1px solid var(--line); color: #ddd; cursor: pointer; }
+.armoury-build-list button:hover { background: rgba(255, 255, 255, .05); }
+.armoury-build-list button.on { border-color: var(--brass); background: #211a0e; }
+.armoury-build-list b { font: 17px var(--font-display); letter-spacing: .08em; font-weight: normal; }
+.armoury-build-list small { font-size: 10px; line-height: 1.4; color: var(--tx-3); }
+.armoury-build-list span { justify-self: start; margin-top: 3px; padding: 3px 6px; border: 1px solid rgba(217, 164, 65, .35); color: var(--tx-3); font: 8px var(--font-mono); letter-spacing: .12em; }
+.armoury-build-list button.on span { border-color: var(--brass); color: var(--brass); }
+@media (max-width: 1100px) {
+  .armoury.on-body { grid-template-columns: minmax(300px, 1fr); }
+  .armoury.on-body .armoury-skins { grid-column: 1 / -1; min-height: 310px; }
+}
+
+/* ------------------------------------------------------------- outfits (STRÓJ) and the crate */
+/* Five tabs now: SKINY · FRYZURY · SYLWETKA · STRÓJ · SKRZYNKI. */
+.armoury-tabs { grid-template-columns: repeat(5, 1fr); }
+.armoury-tabs button { padding: 9px 1px; font-size: 10px; letter-spacing: .04em; }
+/* An outfit card carries its tier on the left edge, the way a skin card carries it on its swatch. */
+.armoury-build-list button[class*="fit-"] { border-left-width: 3px; }
+.armoury-build-list .fit-rzadki { border-left-color: #5979ff; }
+.armoury-build-list .fit-epicki { border-left-color: #a34fff; }
+.armoury-build-list .fit-legendarny { border-left-color: #ef4d93; }
+.armoury-build-list .fit-zloty { border-left-color: #ffc52f; }
+.armoury-build-list button.locked { opacity: .42; cursor: not-allowed; }
+.armoury-build-list button.locked span { border-color: rgba(255, 255, 255, .18); color: var(--tx-3); }
+/* The pool and its odds, so the question "what can this give me" is answered before the button. */
+.crate-odds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 10px 0 8px; }
+.crate-odds > div { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 6px; padding: 7px 8px; background: #15171b; border: 1px solid var(--line); }
+.crate-odds i { width: 10px; height: 10px; }
+.crate-odds .odds-outfit { background: linear-gradient(160deg, #e3c02c 45%, #12703a 45%); }
+.crate-odds .odds-skin { background: linear-gradient(135deg, #8d9aa6, #2a3038); }
+.crate-odds .odds-haircut { background: #3a2d24; border-radius: 50% 50% 30% 30%; }
+.crate-odds span { font-size: 8px; letter-spacing: .1em; color: var(--tx-3); }
+.crate-odds b { font: 12px var(--font-display); color: #efb934; }
+/* What the player already has, as three bars rather than three numbers to hunt for. */
+.crate-collection { display: grid; gap: 4px; margin-bottom: 8px; }
+.crate-collection > div { display: grid; grid-template-columns: 1fr 76px auto; align-items: center; gap: 8px; padding: 6px 8px; background: #12151a; }
+.crate-collection span { font-size: 8px; letter-spacing: .1em; color: var(--tx-3); }
+.crate-collection i { height: 3px; background: #262a31; }
+.crate-collection i::after { content: ""; display: block; width: var(--p); height: 100%; background: var(--brass); }
+.crate-collection b { font: 10px var(--font-mono); color: #cfc4a8; }
+.crate-reveal > em { font-style: normal; font-size: 11px; color: var(--tx-3); max-width: 460px; justify-self: center; line-height: 1.5; }

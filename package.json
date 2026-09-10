@@ -21,6 +21,7 @@
     "shots:d6": "node apps/client/e2e/tools/shots-d6.mjs",
     "test:e2e": "pnpm --filter @frankibarber/client test:e2e",
     "check:weapons": "node apps/client/e2e/tools/weapon-parts.mjs",
-    "host": "pnpm --filter @frankibarber/client build && pnpm --filter @frankibarber/server dev"
+    "host": "pnpm --filter @frankibarber/client build && pnpm --filter @frankibarber/server dev",
+    "shots:builds": "cd apps/client && node e2e/tools/body-shots.mjs"
   }
 }
