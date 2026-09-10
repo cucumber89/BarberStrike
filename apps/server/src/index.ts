@@ -20,7 +20,9 @@ app.get("/health", async (_req, res) => {
   try {
     const list = await matchMaker.query({ name: "tdm" });
     rooms = list.length;
-    players = list.reduce((n, r) => n + r.clients, 0);
+    // `clients` counts sockets, and a spectator is one. The room publishes the player count it
+    // alone can tell apart; a room from before this shipped has no such field and falls back.
+    players = list.reduce((n, r) => n + (r.metadata?.players ?? r.clients), 0);
   } catch { /* counts are informational */ }
   // `tick` (task 6): worst and mean simulation tick over the last minute, across rooms — the one
   // number that says whether the core the simulation runs on is keeping up. Watch it with curl.
@@ -31,7 +33,13 @@ app.get("/health", async (_req, res) => {
 app.get("/rooms", async (_req, res) => {
   try {
     const rooms = await matchMaker.query({ name: "tdm", locked: false, private: false });
-    res.json(rooms.map((r) => ({ roomId: r.roomId, clients: r.clients, maxClients: r.maxClients, metadata: r.metadata })));
+    // `clients` and `maxClients` are what the browser prints as "n / 12" and sorts on, so they
+    // have to mean PLAYERS — six people watching must not make a room look full to a seventh who
+    // wants to play. `watching` carries the rest, for anyone who wants to show it.
+    res.json(rooms.map((r) => {
+      const players = r.metadata?.players ?? r.clients;
+      return { roomId: r.roomId, clients: players, maxClients: r.metadata?.slots ?? r.maxClients, watching: Math.max(0, r.clients - players), metadata: r.metadata };
+    }));
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }

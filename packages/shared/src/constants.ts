@@ -16,6 +16,12 @@ export const INTERP_DELAY_MS = 110;
 export const LAG_COMP_MAX_MS = 350;
 
 export const MAX_PLAYERS = 12;
+/**
+ * Watchers a room admits on top of its players (`/viewer`). They hold a socket and receive state
+ * patches, and that is the whole cost — no body, no simulation, no scoreboard row. Six is a
+ * tournament's worth: both captains, a caster and a spare.
+ */
+export const MAX_SPECTATORS = 6;
 export const MAX_NAME_LENGTH = 16;
 export const MIN_NAME_LENGTH = 2;
 

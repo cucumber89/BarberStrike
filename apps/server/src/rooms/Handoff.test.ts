@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Btn, C2S, S2C, DOM, MATCH, MAX_PLAYERS, aimDirection, packInput, type PlayerInput } from "@frankibarber/shared";
+import { Btn, C2S, S2C, DOM, MATCH, MAX_PLAYERS, MAX_SPECTATORS, aimDirection, packInput, type PlayerInput } from "@frankibarber/shared";
 import { RoomHarness, type FakeClient } from "./testHarness";
 
 /** Codex handoff P1 (network fairness): shot direction vs the named input, Fire packet cap, ghosts and flags. */
@@ -99,9 +99,14 @@ describe("dropped players", () => {
   });
   it("counts connected players without walking the map every tick (task 6)", async () => {
     h = await RoomHarness.create({ room: "count", mode: "tdm", bots: 2 });
-    const room = h.room as unknown as { connectedPlayers: number; maxClients: number };
+    const room = h.room as unknown as { connectedPlayers: number; maxClients: number; playerSlots: number };
     expect(room.connectedPlayers, "two bots").toBe(2);
-    expect(room.maxClients, "bots take seats").toBe(MAX_PLAYERS - 2);
+    // Bots take PLAYER seats. `maxClients` stopped being that number when spectators arrived: it is
+    // every socket the room admits, so it carries the watchers' headroom on top and `playerSlots` is
+    // the cap a player is held to. Both are pinned, because collapsing them again is exactly the
+    // mistake that would let six watchers make a room look full to the seventh who wanted to play.
+    expect(room.playerSlots, "bots take seats").toBe(MAX_PLAYERS - 2);
+    expect(room.maxClients, "watchers on top of them").toBe(MAX_PLAYERS - 2 + MAX_SPECTATORS);
     const a = await h.join("Alpha"); await h.join("Bravo");
     expect(room.connectedPlayers).toBe(4);
     a.drop(1006);

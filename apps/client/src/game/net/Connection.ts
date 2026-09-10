@@ -55,9 +55,11 @@ export interface ConnectOptions {
   /** Drop 5: bots added when a room is created (quick play / create). */
   bots?: number;
   botLevel?: BotLevel;
+  /** Join to WATCH (`/viewer`): the room makes no player for us and we send it nothing. */
+  spectator?: boolean;
 }
 
-export interface RoomListing { roomId: string; clients: number; maxClients: number; metadata?: { name?: string; map?: string; mode?: GameMode; bots?: number } }
+export interface RoomListing { roomId: string; clients: number; maxClients: number; /** Spectators, who are not players and do not fill the room. */ watching?: number; metadata?: { name?: string; map?: string; mode?: GameMode; bots?: number } }
 
 /**
  * What the client asks the room for. The map (Drop G) rides next to the mode: the lobby's pick has
@@ -79,6 +81,9 @@ export function joinOptions(opts: ConnectOptions, boysClass: number, haircut: st
     botLevel: opts.botLevel ?? "normal",
     haircut,
     skins,
+    // Always present, never undefined: the room reads it with `=== true`, and a key that is only
+    // sometimes there is the kind of thing that works until a proxy drops it.
+    spectator: opts.spectator === true,
   };
 }
 

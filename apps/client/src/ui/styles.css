@@ -703,3 +703,48 @@ td.sb-shaved.none { opacity: 0.4; }
 .summary-award span { font-size: 11px; color: #cbbfae; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .summary-badge.cut { border-color: rgba(230, 185, 128, 0.45); }
 /* The lobby's wardrobe picker itself lives in `menu.css` (2.6). */
+
+/* ---- /viewer: the spectator page. Its own layout, because it shares nothing with the HUD. ---- */
+.viewer-pick { max-width: 720px; margin: 0 auto; padding: 48px 20px; color: var(--ink, #e9e2d6); }
+.viewer-pick header span { letter-spacing: 4px; font-size: 12px; color: #cfa666; }
+.viewer-pick h1 { font-size: 44px; margin: 10px 0 6px; }
+.viewer-pick header p { color: #9aa8b4; line-height: 1.5; margin: 0 0 22px; }
+.viewer-error { background: #3a1d1d; border: 1px solid #7a3b3b; padding: 10px 12px; margin: 0 0 16px; }
+.viewer-pick ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.viewer-pick li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px;
+  background: #141b22; border: 1px solid #2b3742; padding: 12px 14px; }
+.viewer-pick li b { grid-column: 1; font-size: 18px; letter-spacing: .04em; }
+.viewer-pick li small { grid-column: 1; grid-row: 2; color: #8fa0ad; font-size: 12px; }
+.viewer-pick li button { grid-column: 2; grid-row: 1 / span 2; }
+.viewer-pick li.empty { display: block; color: #8fa0ad; text-align: center; padding: 24px; }
+.viewer-pick footer { display: flex; gap: 10px; align-items: center; margin-top: 20px; }
+.viewer-pick footer a { color: #8fa0ad; margin-left: auto; text-decoration: none; font-size: 13px; }
+.viewer-pick button { background: #1d2731; color: #e4ebf1; border: 1px solid #3a4a58; padding: 10px 16px;
+  font: inherit; letter-spacing: .06em; cursor: pointer; }
+.viewer-pick button:hover { border-color: #cfa666; color: #f5d6a2; }
+
+.viewer-stage { position: fixed; inset: 0; background: #05070b; }
+.viewer-stage canvas { width: 100%; height: 100%; display: block; outline: none; }
+.viewer-toggle { position: absolute; top: 12px; right: 12px; z-index: 2; width: 28px; height: 28px;
+  background: #141b22cc; color: #e4ebf1; border: 1px solid #3a4a58; cursor: pointer; }
+.viewer-stage aside { position: absolute; top: 0; right: 0; bottom: 0; width: 264px; overflow-y: auto;
+  background: #0d131acc; backdrop-filter: blur(6px); border-left: 1px solid #2b3742; padding: 46px 14px 14px; color: #dde5ec; }
+.viewer-head b { display: block; font-size: 17px; letter-spacing: .05em; }
+.viewer-head small { color: #8fa0ad; font-size: 12px; }
+.viewer-stage h2 { font-size: 11px; letter-spacing: .18em; color: #cfa666; margin: 18px 0 8px; }
+.viewer-spots { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.viewer-spots button { position: relative; text-align: left; padding: 7px 8px 7px 24px; font-size: 11px; }
+.viewer-spots i { position: absolute; left: 7px; font-style: normal; color: #6f8494; }
+.viewer-players { display: flex; flex-wrap: wrap; gap: 5px; }
+.viewer-players button { font-size: 12px; padding: 6px 9px; border-left-width: 3px; }
+.viewer-players .t0 { border-left-color: #d8734a; } .viewer-players .t1 { border-left-color: #4a8fd8; }
+.viewer-players .dead { opacity: .45; }
+.viewer-players .empty { color: #8fa0ad; font-size: 12px; }
+.viewer-stage aside button { background: #18222b; color: #d4dce2; border: 1px solid #35424d; font: inherit; cursor: pointer; }
+.viewer-stage aside button[aria-pressed="true"] { border-color: #cfa666; color: #f5d6a2; }
+.viewer-stage dl { margin: 0; display: grid; gap: 3px; }
+.viewer-stage dl > div { display: flex; justify-content: space-between; font: 11px ui-monospace, monospace; color: #8ea0ad; }
+.viewer-stage dd { margin: 0; color: #d8c69c; }
+.viewer-help { color: #8fa0ad; font-size: 11px; line-height: 1.7; margin: 18px 0 12px; }
+.viewer-help b { color: #cfd8e0; }
+.viewer-leave { width: 100%; padding: 9px; }
