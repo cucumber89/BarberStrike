@@ -734,6 +734,17 @@ The rest of the tournament checklist:
 
 ## 16. Order of work for this pass
 
+0. **Re-measure before you trust a coordinate.** Every number in §14 and §15 was taken on
+   2026-09-10 against `0b18328`; another agent has been working on this map in parallel, so the
+   map you have may not be the map that was measured. Run the audit first and work from ITS output:
+   ```
+   ./apps/server/node_modules/.bin/tsx apps/client/e2e/tools/map-audit.ts > apps/client/e2e/out/map1/audit.md
+   ```
+   It re-derives all seven families — coplanar faces on all six directions, standable-but-unreachable
+   surfaces (split into "almost connected" and "isolated"), stair runs and what continues from their
+   top step, props against the floor under them, which props that read as cover actually have a solid,
+   light coverage and palette, and the per-team walked distance to every objective — from the shared
+   map data and the real walk grid. No renderer, no GPU, about a second. Re-run it after every change.
 1. **Continue what is already there** (`git status` / `git log` / `git branch -a`), then render the
    map (Part 1 §9, §10 step 1) and keep the six `before/` views.
 2. **The rule-level fixes first**, because they clear whole classes at once: the
