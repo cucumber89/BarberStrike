@@ -21,8 +21,11 @@ export function expandDistrict(solids: Solid[], props: PropHint[], lights: Light
     ground(side, "_n", x, bz0 + bd, 18, 45 - (bz0 + bd));
     ground(side, "_w", x, bz0, bx0 - x, bd);
     ground(side, "_e", bx0 + bw, bz0, x + 18 - (bx0 + bw), bd);
-    s(`extension_south_${side}`, x, 0, -22.3, 18, 7, .3, "wall_sand");
-    s(`extension_north_${side}`, x, 0, 45, 18, 7, .3, "wall_teal");
+    // The core block's own perimeter already spans x -27.3..35.3. Starting the extension wall
+    // inside it makes the two butt; overlapping by 0.3 m put both outer faces on one plane.
+    const wx = side < 0 ? x : x + .3;
+    s(`extension_south_${side}`, wx, 0, -22.3, 17.7, 7, .3, "wall_sand");
+    s(`extension_north_${side}`, wx, 0, 45, 17.7, 7, .3, "wall_teal");
     s(`extension_edge_${side}`, side < 0 ? -45.3 : 53, 0, -22, .3, 7, 67, side < 0 ? "wall_sand" : "wall_teal");
   }
   // Reuse the old perimeter as building walls with wide, deliberately staggered entrances.
@@ -39,8 +42,11 @@ export function expandDistrict(solids: Solid[], props: PropHint[], lights: Light
     s(`${name}_east_n`, x + w - .3, 0, z + d * .4 + 2.5, .3, H, d * .6 - 2.5, mat);
     s(`${name}_east_header`, x + w - .3, 2.7, z + d * .4, .3, H - 2.7, 2.5, mat);
     for (const dz of [0, d - .3]) {
-      s(`${name}_front_w_${dz}`, x, 0, z + dz, w * .35, H, .3, mat);
-      s(`${name}_front_e_${dz}`, x + w * .35 + 3, 0, z + dz, w * .65 - 3, H, .3, mat);
+      // Front walls run BETWEEN the side walls. Starting them at the building's corner made the
+      // two boxes overlap there with their outer faces on the same plane — sixteen z-fighting
+      // corners across the depot and the cafe, from this one helper.
+      s(`${name}_front_w_${dz}`, x + .3, 0, z + dz, w * .35 - .3, H, .3, mat);
+      s(`${name}_front_e_${dz}`, x + w * .35 + 3, 0, z + dz, w * .65 - 3.3, H, .3, mat);
       s(`${name}_header_${dz}`, x + w * .35, 2.8, z + dz, 3, H - 2.8, .3, mat);
     }
     s(`${name}_roof`, x - .15, H, z - .15, w + .3, .22, d + .3, "ceiling");

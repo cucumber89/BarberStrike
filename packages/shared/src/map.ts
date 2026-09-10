@@ -174,8 +174,8 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(X1, 0, Z0, W, HP, Z1 - Z0, "wall_brick", "east_facade"));
 
   // ---------- Core block ceilings + parapets (unchanged from 0.1) ----------
-  solids.push(S(-4, H, 0, 12, 0.3, 10, "ceiling", "shop_ceiling"));
-  solids.push(S(-4, H, 10, 12, 0.3, 8, "ceiling", "hall_ceiling"));
+  solids.push(S(-4, H, 0, 11.85, 0.3, 10, "ceiling", "shop_ceiling"));
+  solids.push(S(-4, H, 10, 11.85, 0.3, 8, "ceiling", "hall_ceiling"));
   solids.push(S(8, HX, 0, 12, 0.3, 18, "ceiling", "industrial_ceiling"));
   solids.push(S(-4 - W, H, -W, 12 + W, 1.2, W, "wall_plaster", "shop_parapet_s"));
   solids.push(S(-4 - W, H, 18, 12 + W, 1.2, W, "wall_plaster", "hall_parapet_n"));
@@ -188,7 +188,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(3, 1.0, 0.1, 4, 1.8, 0.1, "glass", "shop_window"));
   solids.push(S(3, 0, 0, 4, 1.0, W, "wall_panel", "shop_window_sill"));
   solids.push(S(3, 2.8, 0, 4, H - 2.8, W, "wall_plaster", "shop_window_top"));
-  solids.push(S(7, 0, 0, 1, H, W, "wall_plaster", "shop_front_e"));
+  solids.push(S(7, 0, 0, 0.85, H, W, "wall_plaster", "shop_front_e"));
   solids.push(S(0, 2.4, 0, 2, H - 2.4, W, "wall_plaster", "shop_door_top"));
   solids.push(S(-4 - W, 0, 0, W, H, 6, "wall_plaster", "shop_west_a"));
   solids.push(S(-4 - W, 0, 8, W, H, 2, "wall_plaster", "shop_west_b"));
@@ -215,7 +215,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(11, 0, 10 - W / 2, 2, HX, W, "wall_concrete", "nb_north_a"));
   solids.push(S(13, 2.4, 10 - W / 2, 2, HX - 2.4, W, "wall_concrete", "nb_north_door_top"));
   solids.push(S(15, 0, 10 - W / 2, 5, HX, W, "wall_concrete", "nb_north_b"));
-  solids.push(S(8, 0, 0, 1, HX, W, "wall_concrete", "nb_south_a"));
+  solids.push(S(8.15, 0, 0, 0.85, HX, W, "wall_concrete", "nb_south_a"));
   solids.push(S(9, 0, 0, 6, 3.2, W, "corrugated_blue", "roller_door"));
   solids.push(S(9, 3.2, 0, 6, HX - 3.2, W, "wall_concrete", "nb_south_over_roller"));
   solids.push(S(15, 0, 0, 2, HX, W, "wall_concrete", "nb_south_b"));
@@ -227,7 +227,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(20, 2.4, 4, W, HX - 2.4, 2, "wall_concrete", "nb_east_door_top"));
   for (let i = 0; i < 9; i++) {
     const h = 2.7 - 0.3 * i;
-    solids.push(S(8, 0, 7 - 0.6 * (i + 1), 1.6, h, 0.6, "metal", `nb_stair_${i}`));
+    solids.push(S(8.15, 0, 7 - 0.6 * (i + 1), 1.45, h, 0.6, "metal", `nb_stair_${i}`));
   }
   solids.push(S(8, MEZ - 0.25, 7, 3, 0.25, 5.6, "floor_metal", "catwalk"));
   solids.push(S(10.9, MEZ, 7, 0.1, 1.0, 3, "metal", "catwalk_rail_e"));
@@ -243,7 +243,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(8 - W / 2, 0, 10, W, H, 3, "wall_plaster", "bh_east_a"), S(8 - W / 2, 0, 15, W, H, 3, "wall_plaster", "bh_east_b"), S(8 - W / 2, 2.4, 13, W, H - 2.4, 2, "wall_plaster", "bh_east_door_top"));
   solids.push(S(-4, 0, 18 - W / 2, 3, H, W, "wall_plaster", "bh_north_a"), S(1, 0, 18 - W / 2, 7, H, W, "wall_plaster", "bh_north_b"), S(-1, 2.4, 18 - W / 2, 2, H - 2.4, W, "wall_plaster", "bh_north_door_top"));
   solids.push(S(1.5, 0, 12.5, W, H, 3.5, "wall_tile", "bh_divider"));
-  solids.push(S(1.5, 0, 12.5, 2.0, H, W, "wall_tile", "bh_divider_l"));
+  solids.push(S(1.8, 0, 12.5, 1.7, H, W, "wall_tile", "bh_divider_l"));
   solids.push(S(4.5, 0, 16.5, 2.0, 0.95, 0.7, "counter", "wash_station"));
   solids.push(O(-3.2, 0, 11, 1.2, 1.9, 0.6, "paint_white", "cabinet", "towel_cabinet", Math.PI / 2));
   solids.push(O(5.5, 0, 11, 1.2, 1.0, 0.8, "paint_white", "bin", "laundry_cart"));
@@ -258,7 +258,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   for (let i = 0; i < 10; i++) {
     solids.push(S(17.6, 0, 17 - i * 0.6 - 0.6, 2.4, 0.3 * (i + 1), 0.6, "metal", `stair_${i}`));
   }
-  solids.push(S(17.6, 0, 10, 2.4, MEZ, 1.0, "metal", "stair_landing"));
+  solids.push(S(17.6, 0, 10.15, 2.4, MEZ, 0.85, "metal", "stair_landing"));
   solids.push(S(11, MEZ - 0.25, 10, 6.6, 0.25, 2.6, "floor_metal", "mezzanine"));
   // The landing slab starts where the flight ENDS (z 11.6), and stops at the wall's inner face
   // (x 20). It used to start at z 11 — laid straight over tread 9, whose top is also MEZ — and to
@@ -275,15 +275,15 @@ export const NIGHT_DISTRICT: MapDef = (() => {
 
   // ---------- Alley (x -14..-4, z 0..18) — zigzag lane, now open to the backlot on the west ----------
   solids.push(S(-14, 0, 4, 6.5, 4.2, 4, "wall_brick", "alley_annex"));
-  solids.push(S(-9.5, 0, 10, 5.5, 2.6, 3.5, "corrugated_green", "alley_leanto"));
+  solids.push(S(-9.5, 0, 10, 5.2, 2.6, 3.5, "corrugated_green", "alley_leanto"));
   solids.push(O(-13.5, 0, 8.6, 1.4, 1.4, 1.0, "paint_green", "dumpster", "dumpster_alley", Math.PI));
   solids.push(O(-6, 0, 1.6, 0.9, 1.1, 0.9, "paint", "bin", "bin_1"));
   solids.push(O(-12.5, 0, 15.5, 1.4, 0.7, 1.0, "wood", "pallets", "pallets_alley"));
   solids.push(O(-5.2, 0, 15.2, 1.0, 1.0, 1.0, "paint", "bin", "bin_2"));
   // Low wall between alley and backlot (waist-high, with a gap at z 14..16) keeps the zigzag readable.
-  solids.push(S(-14 - W, 0, 0, W, 1.1, 4, "concrete_block", "alley_wall_s"));
-  solids.push(S(-14 - W, 0, 8, W, 1.1, 6, "concrete_block", "alley_wall_m"));
-  solids.push(S(-14 - W, 0, 16, W, 1.1, 2, "concrete_block", "alley_wall_n"));
+  solids.push(S(-14, 0, 0, W, 1.1, 4, "concrete_block", "alley_wall_s"));
+  solids.push(S(-14, 0, 8, W, 1.1, 6, "concrete_block", "alley_wall_m"));
+  solids.push(S(-14, 0, 16, W, 1.1, 2, "concrete_block", "alley_wall_n"));
 
   // ---------- Backlot (x -27..-14, z 0..28): garage row, kiosk ----------
   // The centre garage is an open repair bay: a second, sheltered west-lane route.
@@ -323,18 +323,20 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(S(20.3, MEZ - 0.25, 10.6, 9.7, 0.25, 2.0, "floor_metal", "gantry"));
   solids.push(S(20.3, MEZ, 10.6, 9.7, 1.0, 0.1, "metal", "gantry_rail_s"));
   solids.push(S(20.3, MEZ, 12.5, 9.5, 1.0, 0.1, "metal", "gantry_rail_n"));
-  solids.push(S(30, MEZ - 0.25, 10.6, 2.4, 0.25, 2.0, "floor_metal", "gantry_landing"));
-  for (let j = 0; j < 9; j++) solids.push(S(30, 0, 12.6 + 0.6 * j, 2.4, 2.7 - 0.3 * j, 0.6, "metal", `east_stair_${j}`));
-  solids.push(S(32.4, MEZ, 10.6, 0.1, 1.0, 2.0, "metal", "gantry_rail_e"));
+  solids.push(S(30, MEZ - 0.25, 10.6, 4.8, 0.25, 2.0, "floor_metal", "gantry_landing"));
+  // In the east lane, clear of the wash: the run used to cross cw_s_b and clip cw_e_a, which cut
+  // the middle out of it — the grid could stand on the bottom three steps and the top three only.
+  for (let j = 0; j < 9; j++) solids.push(S(32.4, 0, 12.6 + 0.6 * j, 2.4, 2.7 - 0.3 * j, 0.6, "metal", `east_stair_${j}`));
+  solids.push(S(34.8, MEZ, 10.6, 0.1, 1.0, 2.0, "metal", "gantry_rail_e"));
   // Car wash hall: doors south x 23..25 and north x 29..31 (offset breaks the straight line).
   const CW = 4.5;
-  solids.push(S(22, 0, 14, 1, CW, W, "wall_concrete", "cw_s_a"), S(25, 0, 14, 7.3, CW, W, "wall_concrete", "cw_s_b"), S(23, 2.4, 14, 2, CW - 2.4, W, "wall_concrete", "cw_s_top"));
-  solids.push(S(22, 0, 24, 7, CW, W, "wall_concrete", "cw_n_a"), S(31, 0, 24, 1.3, CW, W, "wall_concrete", "cw_n_b"), S(29, 2.4, 24, 2, CW - 2.4, W, "wall_concrete", "cw_n_top"));
+  solids.push(S(22.3, 0, 14, 0.7, CW, W, "wall_concrete", "cw_s_a"), S(25, 0, 14, 7, CW, W, "wall_concrete", "cw_s_b"), S(23, 2.4, 14, 2, CW - 2.4, W, "wall_concrete", "cw_s_top"));
+  solids.push(S(22.3, 0, 24, 6.7, CW, W, "wall_concrete", "cw_n_a"), S(31, 0, 24, 1, CW, W, "wall_concrete", "cw_n_b"), S(29, 2.4, 24, 2, CW - 2.4, W, "wall_concrete", "cw_n_top"));
   solids.push(S(22, 0, 14, W, CW, 10.3, "wall_concrete", "cw_w"));
   solids.push(S(32, 0, 14, W, CW, 4, "wall_concrete", "cw_e_a"), S(32, 0, 20, W, CW, 4.3, "wall_concrete", "cw_e_b"), S(32, 2.4, 18, W, CW - 2.4, 2, "wall_concrete", "cw_e_top"));
   solids.push(S(22, CW, 14, 10.3, 0.3, 10.3, "ceiling", "cw_roof"));
   solids.push(O(25, 0, 17.6, 4.2, 1.45, 1.8, "paint_yellow", "car", "cw_car", Math.PI / 2));
-  solids.push(O(29.6, 0, 15, 1.8, 1.8, 1.2, "paint_blue", "machine", "cw_machine_a"));
+  solids.push(O(27.6, 0, 15, 1.8, 1.8, 1.2, "paint_blue", "machine", "cw_machine_a"));
   solids.push(O(22.4, 0, 21, 1.2, 0.9, 1.2, "paint_yellow", "drums", "cw_drums"));
   solids.push(S(23, 0, 14.4, 0.15, 2.0, 9.4, "metal", "cw_rail_w")); // guide rail (thin, waist-blocking? no — 2 m tall pillar strip)
   // East lane (x 32..35): shed + dumpster so the lane is not one straight sightline.
@@ -356,10 +358,10 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(O(-7, 2.3, -20.6, 5.5, 0.15, 2.0, "metal", "shelter_roof", "shelter_roof"));
   solids.push(S(-7, 0.3, -20.6, 5.5, 2.0, 0.08, "glass", "shelter_back"));
   for (const px of [-7, -1.6]) solids.push(S(px, 0, -20.6, 0.1, 2.3, 0.1, "metal", `shelter_post_${px}`));
-  solids.push(S(-6.5, 0, -20.4, 4.5, 0.45, 0.4, "wood", "shelter_bench"));
+  solids.push(S(-6.5, 0.15, -20.4, 4.5, 0.3, 0.4, "wood", "shelter_bench"));
   for (const [lx, lz] of [[-9, -4.5], [4, -6], [18, -4.5], [-14, -19.5], [12, -19.5], [30, -4.5]]) solids.push(S(lx - 0.1, 0, lz - 0.1, 0.2, 3.6, 0.2, "metal", `lamp_post_${lx}_${lz}`));
   solids.push(O(-2, 0, -5, 1.0, 1.0, 1.0, "paint_green", "cabinet", "utility_box"));
-  solids.push(S(15.5, 0, -2, 0.6, 0.9, 1.8, "wall_concrete", "bollards"));
+  solids.push(S(15.5, 0.15, -2, 0.6, 0.75, 1.8, "wall_concrete", "bollards"));
   solids.push(O(17.2, 0, -7.4, 1.2, 1.2, 1.0, "paint", "bin", "street_bin"));
   solids.push(O(-24, 0, -19, 1.0, 1.0, 1.0, "paint", "bin", "bin_sw"));
   solids.push(O(-23, 0, -13.5, 1.8, 1.9, 1.0, "paint_green", "cabinet", "phone_box"));
@@ -380,7 +382,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(O(18, 0, -9, 2.8, 1.05, 0.7, "paint_yellow", "crate", "market_barrier_e"));
 
   // ---------- Loading yard (z 18..36) ----------
-  solids.push(S(14, 0, 18, 6, 1.0, 10, "floor_concrete", "loading_dock"));
+  solids.push(S(14, 0, 18.15, 6, 1.0, 9.85, "floor_concrete", "loading_dock"));
   solids.push(S(11, 0, 24, 3, 1.0, 4, "floor_concrete", "dock_ramp_base"));
   // Four steps, not five: the fifth was 1.0 - 0.2 * 5 = ZERO high, so its top face sat exactly on
   // the yard slab (2.4 m² of z-fighting) while adding nothing to walk on. The 0.2 m bottom step
@@ -391,7 +393,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   solids.push(O(1.2, 2.5, 22.4, 2.4, 2.5, 6, "corrugated_green", "container", "container_top"));
   // Climb to the container roof: crate 0.6 → crate 1.2 → pallets 1.8 → container top 2.5.
   solids.push(O(4.8, 0, 27, 1.2, 0.6, 1.2, "wood", "crate", "climb_a"));
-  solids.push(O(4.8, 0, 25.8, 1.2, 1.2, 1.2, "wood", "crate", "climb_b"));
+  solids.push(O(4.8, 0, 25.8, 1.2, 1.0, 1.2, "wood", "crate", "climb_b"));
   solids.push(O(4.8, 0, 24.6, 1.2, 1.8, 1.2, "wood", "pallets", "climb_c"));
   solids.push(S(0, 2.5, 22, 4.8, 0.05, 0.4, "metal", "container_lip"));
 
@@ -402,12 +404,12 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   for (let i = 0; i < 10; i++) solids.push(S(-9 + i * 0.4, 0, 29, 0.4, (i + 1) * 0.25, 2, "floor_concrete", `lookout_step_${i}`));
   for (const px of [-4.8, -0.25]) for (const pz of [28.15, 30.7]) solids.push(S(px, 0, pz, 0.15, 2.3, 0.15, "metal", `lookout_support_${px}_${pz}`));
   solids.push(S(-5, 2.5, 30.9, 5, 0.85, 0.1, "paint_yellow", "lookout_rail_n"));
-  solids.push(S(-5, 2.5, 28, 4, 0.85, 0.1, "paint_yellow", "lookout_rail_s"));
+  solids.push(S(-3, 2.5, 28, 3, 0.85, 0.1, "paint_yellow", "lookout_rail_s"));
   props.push({ kind: "sign", x: -2.5, y: 2.06, z: 31.03, text: "TARAS / 02", w: 3.2, h: 0.35 });
   solids.push(O(-9, 0, 20, 1.6, 1.3, 1.2, "paint_blue", "dumpster", "dumpster_yard", Math.PI));
   solids.push(O(-11, 0, 25, 1.2, 1.2, 1.2, "wood", "crate", "crate_yard_a"));
   solids.push(O(-9.8, 0, 25, 1.2, 0.6, 1.2, "wood", "crate", "crate_yard_b"));
-  solids.push(O(5, 0, 26, 3.0, 1.0, 1.0, "wall_concrete", "planter", "planter"));
+  solids.push(O(6.1, 0, 26, 2.4, 1.0, 1.0, "wall_concrete", "planter", "planter"));
   solids.push(S(-5, 0, 21, 0.3, 1.3, 3, "wall_concrete", "yard_lowwall"));
   solids.push(O(-3.2, 0, 20.2, 2.0, 1.9, 1.0, "paint_green", "cabinet", "yard_cabinet"));
   solids.push(S(-7, 0, 26.5, 0.25, 2.4, 0.25, "metal", "shed_post_a"));

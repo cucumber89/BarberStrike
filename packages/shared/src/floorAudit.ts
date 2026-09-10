@@ -1,4 +1,5 @@
 import { NIGHT_DISTRICT, sitesOf, type MapDef, type Solid } from "./map";
+import type { Box } from "./collision";
 import { BOMB } from "./bomb";
 
 /**
@@ -70,6 +71,64 @@ export function coplanarTopFaces(solids: readonly Solid[] = NIGHT_DISTRICT.solid
         x: (Math.max(a.box.minX, b.box.minX) + Math.min(a.box.maxX, b.box.maxX)) / 2,
         z: (Math.max(a.box.minZ, b.box.minZ) + Math.min(a.box.maxZ, b.box.maxZ)) / 2,
       });
+    }
+  }
+  return out.sort((p, q) => q.area - p.area);
+}
+
+/** The six face directions of a box, as the audit names them. */
+export type FaceDir = "-X" | "+X" | "-Y" | "+Y" | "-Z" | "+Z";
+
+export interface CoplanarFacePair {
+  a: string;
+  b: string;
+  /** Which face of both solids lies on the shared plane. */
+  dir: FaceDir;
+  dyMm: number;
+  area: number;
+  exact: boolean;
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
+ * The same defect as `coplanarTopFaces`, on all six directions instead of one.
+ *
+ * The top-face audit exists because a floor that z-fights is what a player reported as "the floor
+ * lags". Nothing about that argument is specific to floors: two surfaces facing the same way on the
+ * same plane cannot be ordered by a depth buffer, so the pixels flip as the camera moves, and a
+ * wall does it just as visibly as a floor. NIGHT_DISTRICT passed the top-face audit with zero pairs
+ * while carrying **54** of these — the biggest 9.1 m², and twenty of them one mistake repeated in
+ * the helper that builds the depot and the cafe.
+ *
+ * Two solids that merely BUTT are not a defect and are not reported: their shared plane carries one
+ * face pointing each way, and backface culling settles which is drawn. Only solids that actually
+ * interpenetrate can put two same-facing surfaces on one plane, so that is the whole search.
+ */
+export function coplanarFaces(solids: readonly Solid[] = NIGHT_DISTRICT.solids): CoplanarFacePair[] {
+  const out: CoplanarFacePair[] = [];
+  const lo = (b: Box, axis: number) => (axis === 0 ? b.minX : axis === 1 ? b.minY : b.minZ);
+  const hi = (b: Box, axis: number) => (axis === 0 ? b.maxX : axis === 1 ? b.maxY : b.maxZ);
+  const DIRS: FaceDir[] = ["-X", "+X", "-Y", "+Y", "-Z", "+Z"];
+  for (let i = 0; i < solids.length; i++) for (let j = i + 1; j < solids.length; j++) {
+    const A = solids[i].box, B = solids[j].box;
+    const over = [0, 1, 2].map((axis) => Math.min(hi(A, axis), hi(B, axis)) - Math.max(lo(A, axis), lo(B, axis)));
+    if (over[0] <= 0 || over[1] <= 0 || over[2] <= 0) continue;
+    for (let axis = 0; axis < 3; axis++) {
+      const u = (axis + 1) % 3, v = (axis + 2) % 3;
+      const area = over[u] * over[v];
+      if (area < MIN_OVERLAP_M2) continue;
+      for (const sign of [-1, 1]) {
+        const d = sign < 0 ? lo(A, axis) - lo(B, axis) : hi(A, axis) - hi(B, axis);
+        if (Math.abs(d) > EPS_NEAR) continue;
+        const mid = (axis2: number) => (Math.max(lo(A, axis2), lo(B, axis2)) + Math.min(hi(A, axis2), hi(B, axis2))) / 2;
+        out.push({
+          a: label(solids[i]), b: label(solids[j]), dir: DIRS[axis * 2 + (sign > 0 ? 1 : 0)],
+          dyMm: Math.round(d * 100000) / 100, area: Math.round(area * 100) / 100,
+          exact: Math.abs(d) <= EPS_EXACT, x: mid(0), y: mid(1), z: mid(2),
+        });
+      }
     }
   }
   return out.sort((p, q) => q.area - p.area);

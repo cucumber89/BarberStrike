@@ -71,9 +71,11 @@ export const GORA: MapDef = (() => {
   // ---------- Exterior walls (inside the envelope, so they stand on the floor) ----------
   // South wall, with a window bay in the salon and one in the bedroom (sill / glass / header).
   const southWall = (x: number, sx: number, name: string) => solids.push(S(x, 0, Z0, sx, H, W, "wall_brick", name));
-  southWall(X0, 2, "sc_pd_w1");
+  // Corner walls BUTT the side walls; starting them at the corner put two outer faces on one
+  // plane, which is a shimmering seam the depth buffer cannot order (`floorAudit.coplanarFaces`).
+  southWall(X0 + W, 2 - W, "sc_pd_w1");
   southWall(-10, 20, "sc_pd_mid");
-  southWall(15, 2, "sc_pd_e1");
+  southWall(15, 2 - W, "sc_pd_e1");
   for (const [x, sx, tag] of [[-15, 5, "salon"], [10, 5, "sypialnia"]] as [number, number, string][]) {
     solids.push(S(x, 0, Z0, sx, 0.9, W, "wall_panel", `parapet_okna_${tag}`));
     solids.push(S(x, 0.9, Z0 + 0.1, sx, 1.3, 0.1, "glass", `okno_${tag}`));
@@ -88,9 +90,9 @@ export const GORA: MapDef = (() => {
     solids.push(S(x, 0, 7, W, H, 2, `wall_plaster`, `sc_${side}_b`));
   }
   // North wall of the flat (the balcony is beyond it): two 2 m doors at x -6..-4 and 4..6.
-  solids.push(S(X0, 0, 8.7, 11, H, W, "wall_plaster", "sc_pn_w"));
+  solids.push(S(X0 + W, 0, 8.7, 11 - W, H, W, "wall_plaster", "sc_pn_w"));
   solids.push(S(-4, 0, 8.7, 8, H, W, "wall_plaster", "sc_pn_mid"));
-  solids.push(S(6, 0, 8.7, 11, H, W, "wall_plaster", "sc_pn_e"));
+  solids.push(S(6, 0, 8.7, 11 - W, H, W, "wall_plaster", "sc_pn_e"));
   solids.push(S(-6, DOORH, 8.7, 2, H - DOORH, W, "wall_plaster", "nadproze_balkon_w"));
   solids.push(S(4, DOORH, 8.7, 2, H - DOORH, W, "wall_plaster", "nadproze_balkon_e"));
 
@@ -154,7 +156,7 @@ export const GORA: MapDef = (() => {
   solids.push(S(13.5, H, -2, 2.2, DECK - H, 5.4, "floor_concrete", "dach_pd"));
   solids.push(S(13.5, H, 7.9, 2.2, DECK - H, 1.1, "floor_concrete", "dach_pn"));
   solids.push(S(6, DECK, 8.7, 8, PAR, W, "concrete_block", "attyka_pn_w"));
-  solids.push(S(15.2, DECK, 8.7, 1.8, PAR, W, "concrete_block", "attyka_pn_e"));
+  solids.push(S(15.2, DECK, 8.7, 1.8 - W, PAR, W, "concrete_block", "attyka_pn_e"));
   solids.push(S(X1 - W, DECK, -2, W, PAR, 11, "concrete_block", "attyka_wsch"));
 
   // ---------- Stairs. Both are 0.333 m risers: inside the walk grid's 0.88 m jump-up, so bots
