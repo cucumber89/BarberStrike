@@ -1,6 +1,8 @@
 import { Scene } from "@babylonjs/core/scene";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
+import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
+import { chamferData } from "./chamfer";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
@@ -20,6 +22,7 @@ import { createMaterialLibrary, type MaterialLibrary } from "./materials";
 import { buildProps } from "./props";
 import { dressSolid } from "./dressing";
 import { buildArchitecture } from "./architecture";
+import { selectPracticals } from "./lightBudget";
 import type { ModelLibrary } from "./models";
 
 export interface MapInstance {
@@ -72,7 +75,8 @@ export interface MapBuildOptions {
  * practical point/spot lights, a night-sky dome and a touch of exponential fog for depth.
  */
 export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapInstance {
-  const materials = createMaterialLibrary(scene);
+  const district = hasDistrictDressing(map);
+  const materials = createMaterialLibrary(scene, district);
   // Merge per material AND per 12 m zone: Babylon lights a mesh with at most
   // `maxSimultaneousLights` lights, so one map-wide mesh per material would only see a handful
   // of the practical lights. Zoned meshes get their local lights; draw calls stay low.
@@ -95,6 +99,8 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
 
   const dressRoot = new TransformNode("dressing", scene);
   const addToZone = (m: Mesh, tag: MaterialTag) => {
+    // Flat corrugated paint is the same finish; the ribs are already geometry.
+    if (district && tag.startsWith("corrugated_")) tag = tag.replace("corrugated_", "paint_") as MaterialTag;
     m.computeWorldMatrix(true);
     const p = m.getAbsolutePosition();
     const zone = DETAIL.test(tag) ? DETAIL_ZONE : ZONE;
@@ -137,6 +143,11 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
         const minX = b.minX + (fullX * ix) / nx, minZ = b.minZ + (fullZ * iz) / nz;
         const sx = fullX / nx, sz = fullZ / nz;
         const m = MeshBuilder.CreateBox(s.name ?? "solid", { width: sx, height: sy, depth: sz }, scene);
+        if (district && (s.mat.startsWith("wall") || s.mat === "concrete_block") && sy >= .25) {
+          const data = new VertexData();
+          Object.assign(data, chamferData(sx,sy,sz));
+          data.applyToMesh(m);
+        }
         m.position.set(minX + sx / 2, b.minY + sy / 2, minZ + sz / 2);
         applyWorldUVs(m, sx, sy, sz, minX, b.minY, minZ);
         addToZone(m, s.mat);
@@ -165,7 +176,7 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
   for (const m of props.meshes) if (!m.isAnInstance) casters.push(m);
 
   // ---- Sky: an inverted gradient dome, unlit, always behind everything.
-  const sky = buildSky(scene);
+  const sky = buildSky(scene, district);
 
   // ---- Lighting
   const lights: Light[] = [];
@@ -238,29 +249,27 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
     lights.push(light);
   }
 
-  // MEASURED (1.0 beta profiling): Babylon does not cull lights by range, so every mesh was lit
-  // by all 19 practicals and every PBR shader ran with maxSimultaneousLights (8) lights per pixel.
-  // Static meshes exclude every practical whose range sphere misses their bounding box; the
-  // avg went from 19 lights per mesh to ~3. Dynamic meshes (characters, weapons) keep the full
-  // list — their materials cap at 4 and the priority sort picks the closest.
-  const staticMeshes: AbstractMesh[] = [...root, ...props.meshes];
-  for (const light of lights) {
-    if (!(light instanceof PointLight || light instanceof SpotLight)) continue;
-    const p = light.position, r = light.range;
-    const excluded: AbstractMesh[] = [];
-    for (const m of staticMeshes) {
-      const bb = m.getBoundingInfo().boundingBox;
-      const mn = bb.minimumWorld, mx = bb.maximumWorld;
-      const dx = Math.max(mn.x - p.x, 0, p.x - mx.x), dy = Math.max(mn.y - p.y, 0, p.y - mx.y), dz = Math.max(mn.z - p.z, 0, p.z - mx.z);
-      if (dx * dx + dy * dy + dz * dz > r * r) excluded.push(m);
-    }
-    light.excludedMeshes = excluded;
+  // Include toggleable walls and instances. Exclusions retain lighting for characters
+  // constructed later; includedOnlyMeshes would silently leave those characters unlit.
+  // Ambient + moon reserve two slots. Selection is camera-independent and paid once.
+  const practicals = lights.slice(2);
+  const excluded: AbstractMesh[][] = practicals.map(() => []);
+  for (const m of scene.meshes) {
+    if (m === sky) continue;
+    m.computeWorldMatrix(true);
+    const bb = m.getBoundingInfo().boundingBox;
+    const mn = bb.minimumWorld, mx = bb.maximumWorld;
+    const cap = (m.material as { maxSimultaneousLights?: number } | null)?.maxSimultaneousLights ?? 4;
+    const chosen = selectPracticals({minX:mn.x,minY:mn.y,minZ:mn.z,maxX:mx.x,maxY:mx.y,maxZ:mx.z}, map.lights, cap - 2);
+    practicals.forEach((_, i) => { if (!chosen.includes(i)) excluded[i].push(m); });
   }
+  practicals.forEach((l,i) => { l.excludedMeshes = excluded[i]; });
 
   // ---- Fog: barely there, sells depth in the long exterior sightlines.
   scene.fogMode = Scene.FOGMODE_EXP2;
-  scene.fogDensity = 0.012;
-  scene.fogColor = new Color3(0.035, 0.035, 0.05);
+  // Blue distance bands separate amber frontage from the cool service skyline at no pass cost.
+  scene.fogDensity = district ? 0.016 : 0.012;
+  scene.fogColor = district ? new Color3(0.055, 0.105, 0.14) : new Color3(0.035, 0.035, 0.05);
 
   return {
     root, shadowGenerators, materials, lights, setShadowQuality,
@@ -286,12 +295,12 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
 }
 
 /** Night-sky dome: vertical gradient (deep blue-black → faint warm city glow at the horizon). */
-function buildSky(scene: Scene): Mesh {
+function buildSky(scene: Scene, district = false): Mesh {
   const size = 256;
   const dt = new DynamicTexture("skyTex", { width: 16, height: size }, scene, false);
   const ctx = dt.getContext() as CanvasRenderingContext2D;
   const g = ctx.createLinearGradient(0, 0, 0, size);
-  g.addColorStop(0, "#05060c"); g.addColorStop(0.55, "#0a0c18"); g.addColorStop(0.85, "#1c1723"); g.addColorStop(1, "#2a2022");
+  g.addColorStop(0, district ? "#050b16" : "#05060c"); g.addColorStop(0.55, district ? "#102b3b" : "#0a0c18"); g.addColorStop(0.85, district ? "#244957" : "#1c1723"); g.addColorStop(1, district ? "#53636a" : "#2a2022");
   ctx.fillStyle = g; ctx.fillRect(0, 0, 16, size);
   dt.update(false);
   const mat = new StandardMaterial("skyMat", scene);
