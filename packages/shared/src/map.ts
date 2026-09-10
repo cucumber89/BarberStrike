@@ -539,7 +539,8 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   lights.push({ kind: "point", x: 11, y: 4.9, z: 11.3, color: "#ffd0a0", intensity: 8, range: 6, priority: 3 });
   // Street lamps: warm sodium pools.
   for (const [lx, lz] of [[-9, -4.5], [4, -6], [18, -4.5], [-14, -19.5], [12, -19.5], [30, -4.5]]) {
-    lights.push({ kind: "spot", x: lx, y: 3.5, z: lz, dx: 0, dy: -1, dz: 0, angle: 2.6, color: "#ffb86a", intensity: 32, range: 11, shadows: lx === -9, priority: 8 });
+    // The head projects 0.6 m from the post; light leaves its underside, not the solid pole.
+    lights.push({ kind: "spot", x: lx, y: 3.5, z: lz + 0.6, dx: 0, dy: -1, dz: 0, angle: 2.6, color: "#ffb86a", intensity: 32, range: 11, shadows: lx === -9, priority: 8 });
   }
   lights.push({ kind: "point", x: 2.0, y: 4.0, z: -1.2, color: "#ffc9a0", intensity: 9, range: 6, priority: 4 });
   lights.push({ kind: "point", x: -4.2, y: 2.2, z: -19.8, color: "#e8f0ff", intensity: 10, range: 7, priority: 5 }); // bus shelter
@@ -547,6 +548,7 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   // Alley: cool blue-grey security light + warm bulb over the shop's side door.
   lights.push({ kind: "point", x: -8, y: 3.9, z: 15.5, color: "#8fa3c4", intensity: 14, range: 9, priority: 5 });
   lights.push({ kind: "point", x: -4.7, y: 2.9, z: 7, color: "#ffb070", intensity: 8, range: 6, priority: 4 });
+  lights.push({ kind: "point", x: -4.7, y: 2.8, z: 15, color: "#ffb070", intensity: 8, range: 6, priority: 4 });
   // Backlot / kiosk.
   lights.push({ kind: "point", x: -20, y: 3.4, z: 2, color: "#a9b8d6", intensity: 14, range: 9, priority: 5 });
   lights.push({ kind: "point", x: -23, y: 2.8, z: 16, color: "#eaf4ff", intensity: 12, range: 7, priority: 5 });
@@ -556,9 +558,9 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   lights.push({ kind: "point", x: 31, y: 3.0, z: 4, color: "#cfe0ff", intensity: 16, range: 8, priority: 5 });
   lights.push({ kind: "point", x: 27, y: 4.2, z: 19, color: "#d8ecff", intensity: 22, range: 10, priority: 6 });
   lights.push({ kind: "point", x: 33.5, y: 3.5, z: 18, color: "#ffb86a", intensity: 18, range: 9, priority: 5 });
-  lights.push({ kind: "point", x: 26, y: 2.8, z: 11.6, color: "#ffd0a0", intensity: 8, range: 6, priority: 3 }); // gantry
+  lights.push({ kind: "point", x: 26, y: 2.65, z: 11.6, color: "#ffd0a0", intensity: 8, range: 6, priority: 3 }); // below the gantry deck
   // Yard: cool main flood, purple accent on the west side, warm dock lamp, north floods.
-  lights.push({ kind: "point", x: 3, y: 5.0, z: 23.5, color: "#c9d4ea", intensity: 26, range: 13, priority: 7 });
+  lights.push({ kind: "point", x: 3, y: 5.15, z: 23.5, color: "#c9d4ea", intensity: 26, range: 13, priority: 7 });
   lights.push({ kind: "point", x: -8, y: 4.2, z: 23, color: "#8f6cff", intensity: 16, range: 9, priority: 6 });
   lights.push({ kind: "point", x: 9, y: 4.3, z: 20, color: "#ffb070", intensity: 18, range: 9, priority: 6 });
   lights.push({ kind: "point", x: 20, y: 4.3, z: 34, color: "#ffb070", intensity: 20, range: 10, priority: 6 });
