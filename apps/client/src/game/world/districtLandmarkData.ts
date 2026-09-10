@@ -86,3 +86,5 @@ DISTRICT_LANDMARKS.push({
 });
 
 DISTRICT_LANDMARKS.push({area:"west_extension",anchor:"depot_roof",purpose:"Stepped workshop monitor",pieces:[[5.75,.125,6,8,.25,4,"paint_red"],[3,.75,6,2.5,1,3.5,"paint_red"],[5.5,1,6,2.5,1.5,3.5,"paint_red"],[8,1.25,6,2.5,2,3.5,"paint_red"],[3,1.3,6,2.5,.1,3.5,"paint_white"],[5.5,1.8,6,2.5,.1,3.5,"paint_white"],[8,2.3,6,2.5,.1,3.5,"paint_white"]]});
+
+DISTRICT_LANDMARKS.push({area:"east_extension",anchor:"cafe_roof",purpose:"Octagonal cafe cup with open handle",pieces:[[6,.125,5,4,.25,3.5,"paint_green"],[6,1,5,2.5,1.5,2.5,"paint_white","cylinder"],[6,1.8,5,2.75,.1,2.75,"brass","cylinder"],[7.75,1.5,5,1.25,.25,.25,"paint_white"],[8.25,1,5,.25,1.25,.25,"paint_white"],[7.75,.5,5,1.25,.25,.25,"paint_white"]]});
