@@ -11,7 +11,7 @@ export function chamferData(w: number, h: number, d: number, bevel = .05) {
     if(n.reduce((s,v,i)=>s+v*a[i],0)<0){points.reverse();n=n.map(v=>-v);}
     const len=Math.hypot(...n), start=positions.length/3;
     for(const p of points){positions.push(...p);normals.push(...n.map(v=>v/len));uvs.push(0,0);}
-    for(let i=1;i<points.length-1;i++) indices.push(start,start+i,start+i+1);
+    for(let i=1;i<points.length-1;i++) indices.push(start,start+i+1,start+i);
   };
   for(let axis=0;axis<3;axis++) for(const sign of [-1,1]) {
     const u=(axis+1)%3,v=(axis+2)%3;
