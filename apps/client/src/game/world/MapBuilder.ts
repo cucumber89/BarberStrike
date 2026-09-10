@@ -99,6 +99,8 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
 
   const dressRoot = new TransformNode("dressing", scene);
   const addToZone = (m: Mesh, tag: MaterialTag) => {
+    // Flat corrugated paint is the same finish; the ribs are already geometry.
+    if (district && tag.startsWith("corrugated_")) tag = tag.replace("corrugated_", "paint_") as MaterialTag;
     m.computeWorldMatrix(true);
     const p = m.getAbsolutePosition();
     const zone = DETAIL.test(tag) ? DETAIL_ZONE : ZONE;
@@ -298,7 +300,7 @@ function buildSky(scene: Scene, district = false): Mesh {
   const dt = new DynamicTexture("skyTex", { width: 16, height: size }, scene, false);
   const ctx = dt.getContext() as CanvasRenderingContext2D;
   const g = ctx.createLinearGradient(0, 0, 0, size);
-  g.addColorStop(0, "#050b16"); g.addColorStop(0.55, district ? "#102b3b" : "#0a0c18"); g.addColorStop(0.85, district ? "#244957" : "#1c1723"); g.addColorStop(1, district ? "#53636a" : "#2a2022");
+  g.addColorStop(0, district ? "#050b16" : "#05060c"); g.addColorStop(0.55, district ? "#102b3b" : "#0a0c18"); g.addColorStop(0.85, district ? "#244957" : "#1c1723"); g.addColorStop(1, district ? "#53636a" : "#2a2022");
   ctx.fillStyle = g; ctx.fillRect(0, 0, 16, size);
   dt.update(false);
   const mat = new StandardMaterial("skyMat", scene);
