@@ -106,3 +106,5 @@ DISTRICT_LANDMARKS.push({area:"hall",anchor:"hall_ceiling",purpose:"Laundry cler
 DISTRICT_LANDMARKS.push({area:"storage",anchor:"mezzanine_rail",purpose:"Stepped mezzanine relief keeps the deck clear",pieces:[[1,-.1,.1,2,.2,.1,"paint_yellow"],[4,-.35,.1,2,.2,.1,"paint_yellow"],[7,-.6,.1,2,.2,.1,"paint_yellow"],[10,-.85,.1,1,.2,.1,"paint_yellow"]]});
 
 DISTRICT_LANDMARKS.push({area:"east",anchor:"cw_roof",purpose:"Twin wash-water tanks",pieces:[[5,.125,5,6,.25,3,"metal"],[3.5,1.25,5,2,2,2,"paint_blue","cylinder"],[6.5,1.25,5,2,2,2,"paint_blue","cylinder"],[3.5,2.35,5,2.25,.2,2.25,"paint_white","cylinder"],[6.5,2.35,5,2.25,.2,2.25,"paint_white","cylinder"],[5,1.75,5,1.25,.25,.25,"metal"]]});
+
+DISTRICT_LANDMARKS.push({area:"loading",anchor:"container_top",purpose:"Outlined container stack preserves the climbable roof",pieces:[[1.2,-.1,-.05,2.4,.2,.1,"paint_yellow"],[.05,-1.25,-.05,.1,2.5,.1,"paint_yellow"],[2.35,-1.25,-.05,.1,2.5,.1,"paint_yellow"],[1.2,-2.4,-.05,2.4,.2,.1,"paint_yellow"]]});
