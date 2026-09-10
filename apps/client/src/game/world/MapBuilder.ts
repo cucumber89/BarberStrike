@@ -1,6 +1,8 @@
 import { Scene } from "@babylonjs/core/scene";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
+import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
+import { chamferData } from "./chamfer";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
@@ -139,6 +141,11 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
         const minX = b.minX + (fullX * ix) / nx, minZ = b.minZ + (fullZ * iz) / nz;
         const sx = fullX / nx, sz = fullZ / nz;
         const m = MeshBuilder.CreateBox(s.name ?? "solid", { width: sx, height: sy, depth: sz }, scene);
+        if (district && (s.mat.startsWith("wall") || s.mat === "concrete_block") && sy >= .25) {
+          const data = new VertexData();
+          Object.assign(data, chamferData(sx,sy,sz));
+          data.applyToMesh(m);
+        }
         m.position.set(minX + sx / 2, b.minY + sy / 2, minZ + sz / 2);
         applyWorldUVs(m, sx, sy, sz, minX, b.minY, minZ);
         addToZone(m, s.mat);

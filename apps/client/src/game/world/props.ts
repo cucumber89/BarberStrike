@@ -141,7 +141,7 @@ export function buildProps(scene: Scene, hints: PropHint[], imported?: Map<strin
     return m;
   };
   const cyl = (name: string, dia: number, hgt: number, mat: Material, parent: TransformNode, x = 0, y = 0, z = 0, tess = 12): Mesh => {
-    const m = MeshBuilder.CreateCylinder(name, { diameter: dia, height: hgt, tessellation: tess }, scene);
+    const m = MeshBuilder.CreateCylinder(name, { diameter: dia, height: hgt, tessellation: [6,8,10,12].includes(tess) ? tess : 12 }, scene);
     m.material = mat; m.parent = parent; m.position.set(x, y, z); m.isPickable = false; m.receiveShadows = true;
     meshes.push(m);
     return m;
@@ -219,7 +219,7 @@ export function buildProps(scene: Scene, hints: PropHint[], imported?: Map<strin
         for (let i = 0; i < count; i++) {
           const key = i % 3 === 0 ? "bottle_amber" : i % 3 === 1 ? "bottle_black" : "bottle_clear";
           const mat = i % 3 === 0 ? M.amber() : i % 3 === 1 ? M.plastic() : M.clear();
-          inst(key, () => { const b = MeshBuilder.CreateCylinder(key, { diameter: 0.06, height: 0.2, tessellation: 8 }, scene); b.material = mat; return b; }, a, -w / 2 + 0.06 + i * (w - 0.12) / Math.max(1, count - 1), (small ? 0.06 : 0.1) + 0.01 * (i % 2), 0, small ? 0.6 : 0.8 + (i % 4) * 0.12);
+          inst(key, () => { const b = MeshBuilder.CreateCylinder(key, { diameter: 0.06, height: 0.2, tessellation: 8 }, scene); b.convertToFlatShadedMesh(); b.material = mat; return b; }, a, -w / 2 + 0.06 + i * (w - 0.12) / Math.max(1, count - 1), (small ? 0.06 : 0.1) + 0.01 * (i % 2), 0, small ? 0.6 : 0.8 + (i % 4) * 0.12);
         }
         break;
       }
@@ -309,7 +309,8 @@ export function buildProps(scene: Scene, hints: PropHint[], imported?: Map<strin
       }
       case "pendant": {
         cyl("cord", 0.008, hh || 0.6, M.black(), a, 0, (hh || 0.6) / 2, 0, 6);
-        const shade = MeshBuilder.CreateCylinder("shade", { diameterTop: 0.1, diameterBottom: 0.34, height: 0.22, tessellation: 14 }, scene);
+        const shade = MeshBuilder.CreateCylinder("shade", { diameterTop: 0.1, diameterBottom: 0.34, height: 0.22, tessellation: 12 }, scene);
+        shade.convertToFlatShadedMesh();
         shade.material = M.black(); shade.parent = a; shade.position.y = -0.1; shade.isPickable = false; meshes.push(shade);
         box("bulb", 0.14, 0.05, 0.14, fixture(), a, 0, -0.2, 0, true);
         break;
