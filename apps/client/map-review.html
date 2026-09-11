@@ -10,7 +10,10 @@ const canvas=document.querySelector('canvas');
 const engine=new Engine(canvas,true);const scene=new Scene(engine);
 const camera=new FreeCamera('review',new Vector3(-6,1.7,-5),scene);camera.minZ=.05;camera.fov=1.2;
 camera.setTarget(new Vector3(2,2,2));camera.attachControl(canvas,true);
-scene.imageProcessingConfiguration.exposure=1.25;
+const ip=scene.imageProcessingConfiguration;
+// Same tone curve, exposure and contrast the game sets in postfx.ts — a review at different
+// settings is a picture of a game nobody plays.
+ip.toneMappingEnabled=true;ip.toneMappingType=1;ip.exposure=1.85;ip.contrast=1.1;
 buildMap(scene,NIGHT_DISTRICT,{shadows:true,shadowMapSize:1024});
 // Exercise the real preset implementation, not a second approximation of its bloom settings.
 const preset=new URLSearchParams(location.search).get('preset');

@@ -1,6 +1,15 @@
 # BARBERSTRIKE — jeden obraz: zbudowany klient + serwer gry w jednym procesie.
 #
-# Buduj z katalogu głównego workspace (frankibarber/):
+# WDROŻENIE — to jest komenda, która podmienia działającą grę (z katalogu workspace):
+#   git pull
+#   docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
+#
+# NIE `docker build`. Samo `docker build -t barberstrike .` buduje obraz i na tym kończy: nie
+# zatrzymuje kontenera, nie startuje nowego i nie nazywa obrazu tak, jak nazywa go compose — więc
+# `git pull` + `docker build` zostawia na serwerze dokładnie tę wersję, która działała wcześniej.
+# Zdarzyło się to dwa razy, stąd ten komentarz. Pełna instrukcja: deploy/DEPLOY.md §"Aktualizacja".
+#
+# Sam build (bez wdrożenia), jeśli chcesz tylko sprawdzić, czy obraz się składa:
 #   docker build -f deploy/Dockerfile --build-arg VITE_SERVER_URL=wss://barberstrike.click -t barberstrike .
 #
 # Różnica wobec apps/server/Dockerfile: tamten budował sam serwer, więc kontener nie miał czego

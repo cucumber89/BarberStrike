@@ -9,7 +9,7 @@ vi.mock("@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRendering
     constructor() { created.push(this); }
   },
 }));
-import { installPostFx, postFxPlan } from "./postfx";
+import { installPostFx, postFxPlan, BASE_EXPOSURE } from "./postfx";
 
 describe("live graphics lifecycle", () => {
   it("keeps FXAA independent of the post-processing toggle", () => {
@@ -43,13 +43,13 @@ describe("live graphics lifecycle", () => {
 
     // Brightness is a UNIFORM. It must reach `exposure` and must not touch a single material.
     settings.graphics.brightness = 1.3; events.emit("settings", {});
-    expect(created).toHaveLength(1); expect(ip.exposure).toBeCloseTo(1.625);
+    expect(created).toHaveLength(1); expect(ip.exposure).toBeCloseTo(BASE_EXPOSURE * 1.3);
     expect(material.markDirty).toHaveBeenCalledTimes(1);
 
     // HIGH -> LOW: the pipeline goes, so the conversion changes, so the sweep must run.
     settings.graphics = { ...PRESETS.low, brightness: 1.3 }; events.emit("settings", {});
     expect(first.dispose).toHaveBeenCalledTimes(1); expect(ip.applyByPostProcess).toBe(false);
-    expect(ip.exposure).toBeCloseTo(1.625); expect(material.markDirty).toHaveBeenCalledTimes(2);
+    expect(ip.exposure).toBeCloseTo(BASE_EXPOSURE * 1.3); expect(material.markDirty).toHaveBeenCalledTimes(2);
     expect(ip.vignetteEnabled).toBe(false);
 
     // LOW -> HIGH: it comes back. Also a flip.

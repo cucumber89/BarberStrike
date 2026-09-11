@@ -2,7 +2,7 @@ import { WEAPON_PRICES } from "@frankibarber/shared";
 import { Room, type Client } from "@colyseus/core";
 import {
   Btn, C2S, S2C, DEFAULT_WEAPON, HEADSHOT_MULTIPLIER, LAG_COMP_MAX_MS, MATCH, MAX_INPUT_BATCH, MAX_INPUT_DT_MS,
-  MAX_INPUT_QUEUE, MAX_INPUT_RATE, MAX_OTHER_MSG_RATE, MAX_PLAYERS, MatchPhase, MAPS, DEFAULT_MAP_ID, PLAYER,
+  MAX_INPUT_QUEUE, MAX_INPUT_RATE, MAX_OTHER_MSG_RATE, MAX_PLAYERS, MAX_SPECTATORS, MatchPhase, MAPS, DEFAULT_MAP_ID, PLAYER,
   RESPAWN_DELAY_MS, SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER,
   isLive, isFrozen, maskInput, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
   BOMB, sitesOf, bombAttackTeam, bombSpawnSide, resetBomb, stepBomb, type BombPlayer,
@@ -155,6 +155,14 @@ export interface TdmJoinOptions {
   /** Drop E: the haircut the player has equipped in their profile. Cosmetic; unknown ids fall back. */
   haircut?: string;
   skins?: string;
+  /**
+   * Join to WATCH: no body, no slot, no scoreboard row. A spectator is a Colyseus client with no
+   * `PlayerState`, which is all it takes — the room already replicates the whole match state to
+   * every client, so a viewer sees the game without the room knowing anything new about it. No
+   * schema field, and nothing a spectator sends can move the match (every handler starts by
+   * looking itself up in `state.players` and returns when it is not there).
+   */
+  spectator?: boolean;
 }
 
 const isChatMessage = (v: unknown): v is { text: string; team: boolean } => isRecord(v) && typeof v.text === "string";
@@ -172,8 +180,10 @@ const LOS_CACHE_TICKS = 3;
 const NO_HAZARDS: { x: number; y: number; z: number; radius: number }[] = [];
 const worldHit = makeRayHit();
 
-export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string; mode: GameMode; name: string; map: string; bots: number } }> {
-  override maxClients = MAX_PLAYERS;
+export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string; mode: GameMode; name: string; map: string; bots: number; players: number; slots: number } }> {
+  override maxClients = MAX_PLAYERS + MAX_SPECTATORS;
+  /** Seats a human PLAYER may take, which is the cap Colyseus's own is no longer allowed to be. */
+  private playerSlots = MAX_PLAYERS;
   override state = new MatchState();
 
   /** Drop G: the room's map is a create-time choice (`options.map`); `onCreate` settles it. */
@@ -271,14 +281,18 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     const wantBots = isFiniteNumber(options?.bots) ? Math.max(0, Math.min(MAX_BOTS, Math.round(options.bots))) : 0;
     this.botCount = Math.min(wantBots, MAX_PLAYERS - 2);
     // Bots take seats: 12 is the room, not the human count (task 6). Was 12 humans + bots.
-    this.maxClients = MAX_PLAYERS - this.botCount;
+    // Bots take seats; SPECTATORS do not. Colyseus caps every client with one number, so the cap
+    // carries the watchers' headroom and `onJoin` enforces the player half of it — otherwise a
+    // room with six people watching would report itself full to the seventh who wanted to play.
+    this.playerSlots = MAX_PLAYERS - this.botCount;
+    this.maxClients = this.playerSlots + MAX_SPECTATORS;
     this.botLevel = isBotLevel(options?.botLevel) ? options.botLevel : "normal";
     // Tests and tooling may pin the room's PRNG (spawn picks, pellets, bot aim); never in production.
     if ((DEV_TOOLS || process.env.NODE_ENV === "test") && isFiniteNumber(options?.seed)) this.rand = mulberry32(options.seed >>> 0);
     // `room`, `mode` and `map` must stay in metadata: the matchmaker filterBy(["room", "mode", "map"])
     // matches against them, and it is the ID that must be there — two rooms on different maps can
     // never be the same room, and a display name is not what a client filters on.
-    this.setMetadata({ room: this.state.roomName, mode: this.mode, name: this.state.roomName, map: this.map.id, bots: this.botCount });
+    this.setMetadata({ room: this.state.roomName, mode: this.mode, name: this.state.roomName, map: this.map.id, bots: this.botCount, players: 0, slots: this.playerSlots });
     this.patchRate = SNAPSHOT_MS;
     this.setTimestep((dt) => this.tick(dt), TICK_MS);
     this.onMessage(C2S.Chat, this.guarded((client, msg) => this.onChat(client, msg)));
@@ -530,6 +544,15 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   // ---------------------------------------------------------------- join / leave
 
   override onJoin(client: Client, options: TdmJoinOptions): void {
+    if (options?.spectator === true) {
+      // Everything a watcher needs is already on its way: Colyseus sends the full state to every
+      // client in the room. It gets the clock so its interpolation lines up with the players', and
+      // then it is simply a client the room never thinks about again.
+      client.send(S2C.Welcome, { id: client.sessionId, serverTime: this.now(), tickRate: 1000 / TICK_MS } satisfies WelcomeMessage);
+      return;
+    }
+    // The player cap, now that `maxClients` also has to let watchers in.
+    if (this.state.players.size - this.botCount >= this.playerSlots) throw new Error("room full");
     const name = sanitizeName(options?.name) ?? `PLAYER${Math.floor(Math.random() * 900 + 100)}`;
     const p = new PlayerState();
     p.id = client.sessionId;
@@ -546,6 +569,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.weapon = DEFAULT_WEAPON;
     this.writeWallet(p, freshWallet());
     this.state.players.set(client.sessionId, p); this.connectedCount++;
+    this.publishCount();
 
     const s = new Session();
     s.ready = options?.deferSpawn !== true;
@@ -558,6 +582,21 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       p.alive = false; p.health = 0;
     }
     this.maybeStartCountdown();
+  }
+
+  /**
+   * How full the room is FOR SOMEBODY WHO WANTS TO PLAY.
+   *
+   * `clients` counts sockets, and a spectator is a socket. Left alone, the room browser would show
+   * a match with six watchers as 6/12 and sort it as busy, and `/health` would report those six as
+   * players — so the numbers a tournament looks at would count the people watching it. The room is
+   * the only thing that knows the difference, so it publishes it.
+   */
+  private publishCount(): void {
+    void this.setMetadata({
+      room: this.state.roomName, mode: this.mode, name: this.state.roomName, map: this.map.id,
+      bots: this.botCount, players: this.state.players.size, slots: this.playerSlots,
+    });
   }
 
   /**
@@ -605,6 +644,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     const gone = this.state.players.get(id);
     if (gone?.connected) this.connectedCount--;
     this.state.players.delete(id);
+    this.publishCount();
     this.sessions.delete(id);
   }
 
