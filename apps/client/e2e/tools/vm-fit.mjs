@@ -31,6 +31,10 @@ await p.getByTestId("input-name").fill("VMFIT");
 await p.getByTestId("input-room").fill("vmfit-" + Date.now());
 await p.getByTestId("btn-quickplay").click();
 await p.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().loadStage === "ready", null, { timeout: 90000 });
+await p.getByRole("button", { name: /ENTER MATCH/i }).click({ timeout: 30000 });
+await p.waitForFunction(() => window.__fb.hud.get().alive === true, null, { timeout: 60000 });
+await p.evaluate(() => document.fullscreenElement && document.exitFullscreen());
+await p.waitForTimeout(800);
 await p.evaluate(() => { const c = document.querySelector("canvas"); Object.defineProperty(document, "pointerLockElement", { get: () => c, configurable: true }); document.dispatchEvent(new Event("pointerlockchange")); });
 await p.waitForFunction(() => window.__fb.game.inputState.pointerLocked);
 await p.waitForTimeout(4000);
@@ -109,7 +113,7 @@ const measure = () => p.evaluate(([W, H]) => {
 
 const ads = (on) => p.evaluate((on) => { window.__fb.game.inputState.mouseButtons = on ? 4 : 0; }, on);
 const out = [];
-const WEAPONS = process.env.WEAPONS ? process.env.WEAPONS.split(",") : ["pistol", "revolver", "smg", "smg2", "rifle", "lmg", "shotgun", "dmr", "sniper", "launcher", "clippers"];
+const WEAPONS = process.env.WEAPONS ? process.env.WEAPONS.split(",") : ["pistol", "revolver", "machinepistol", "smg", "smg2", "carbine", "rifle", "lmg", "shotgun", "autoshotgun", "dmr", "sniper", "launcher", "clippers"];
 for (const id of WEAPONS) {
   // Slot 1 holds whatever you last bought; the pistol and the clippers have their own keys.
   if (id === "pistol") await p.keyboard.press("Digit2");
@@ -136,7 +140,13 @@ for (const id of WEAPONS) {
   // 15 times reads 0.5–0.9 px of pure breath where an idle run reads 0.1.
   const samples = [];
   const t0 = Date.now();
-  while (Date.now() - t0 < 9200) { await frames(1); const m = await measure(); if (m?.aimPx) samples.push(m.aimPx); }
+  while (Date.now() - t0 < 9200) {
+    await frames(1);
+    const m = await measure();
+    // A respawn or browser focus transition can briefly release ADS. Those frames describe the
+    // hip pose, not sight alignment, and must not dilute an ADS-only measurement.
+    if (m?.aimPx && m.aimBlend >= 0.999) samples.push(m.aimPx);
+  }
   if (samples.length) {
     const mean = [samples.reduce((a, s) => a + s[0], 0) / samples.length, samples.reduce((a, s) => a + s[1], 0) / samples.length].map((v) => +v.toFixed(2));
     const peak = +Math.max(...samples.map((s) => Math.hypot(s[0], s[1]))).toFixed(2);

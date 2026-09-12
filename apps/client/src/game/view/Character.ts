@@ -509,7 +509,7 @@ export class Character {
     this.meshes.push(hair);
   }
 
-  /** Build only weapons this player actually equips, instead of all eleven for every bot. */
+  /** Build only weapons this player actually equips, instead of the full roster for every bot. */
   private ensureWeapon(id: WeaponId): void {
     if (this.weapons.has(id)) return;
     const model = buildWeaponModel(id, this.weaponMaterials, this.scene, `tp_${this.root.name}_${id}`);

@@ -24,7 +24,7 @@ describe("Drop D modes are in every list the lobby and the matchmaker read", () 
 });
 
 describe("Gun Game ladder", () => {
-  it("is all 11 weapons, each once, clippers last", () => {
+  it("is the complete weapon roster, each once, clippers last", () => {
     expect(GUN_GAME.ladder).toHaveLength(WEAPON_ORDER.length);
     expect([...GUN_GAME.ladder].sort()).toEqual([...WEAPON_ORDER].sort());
     expect(GUN_GAME.ladder[GUN_GAME.ladder.length - 1]).toBe("clippers");
@@ -37,15 +37,15 @@ describe("Gun Game ladder", () => {
     expect(ladderWeapon(-3)).toBe("pistol");
     expect(ladderWeapon(99)).toBe("clippers");
     expect(ladderRung("pistol")).toBe(0);
-    expect(ladderRung("clippers")).toBe(10);
+    expect(ladderRung("clippers")).toBe(13);
     expect(ladderRung("frag")).toBe(-1);
-    expect(ladderDone(10)).toBe(false);
-    expect(ladderDone(11)).toBe(true);
+    expect(ladderDone(13)).toBe(false);
+    expect(ladderDone(14)).toBe(true);
   });
 
   it("a kill with the rung weapon moves the killer up one and leaves the victim alone", () => {
     expect(ladderAfterKill(0, 4, "pistol")).toEqual({ killer: 1, victim: 4 });
-    expect(ladderAfterKill(9, 0, "launcher")).toEqual({ killer: 10, victim: 0 });
+    expect(ladderAfterKill(12, 0, "launcher")).toEqual({ killer: 13, victim: 0 });
   });
 
   it("a clippers kill sets the victim back one, never below the first rung, and does not advance a killer whose rung is a gun", () => {
@@ -54,8 +54,8 @@ describe("Gun Game ladder", () => {
   });
 
   it("on the last rung the clippers are the rung weapon: the kill both finishes the ladder and shaves the victim", () => {
-    const r = ladderAfterKill(10, 7, "clippers");
-    expect(r).toEqual({ killer: 11, victim: 6 });
+    const r = ladderAfterKill(13, 7, "clippers");
+    expect(r).toEqual({ killer: 14, victim: 6 });
     expect(ladderDone(r.killer)).toBe(true);
   });
 
