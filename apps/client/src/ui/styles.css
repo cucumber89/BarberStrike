@@ -670,6 +670,16 @@ button:focus-visible { outline:2px solid #f4cf8e; outline-offset:3px; }
    was for free. */
 .killfeed .kf-weapon { display: inline-flex; align-items: center; gap: 4px; }
 
+/* Headshot: the head icon sits on the same flex line as the weapon's name, so a row with one is the
+   same height as a row without. Brass rather than `currentColor`, because unlike the razor a headshot
+   is a property of the SHOT and not of whose head it was — it should read the same on every row. */
+.killfeed .kf-head { color: var(--brass); flex: none; }
+
+/* Assists: "KILLER + HELPER". Dimmer and a shade smaller than the killer's own name, because the
+   feed's first job is still to say who got the kill — the assist is context, not the headline. It
+   keeps the killer's team colour by inheriting it, so a row still reads as one side's work. */
+.killfeed .kf-assist { opacity: .72; font-size: .92em; }
+
 /* Scoreboard shave column. The dot for "never done" is dimmed by its OWN class rather than by
    `:not(:empty)` — the cell always has content, so an emptiness test never fires (code review). */
 .sb-shaved { text-align: center; color: #e6b980; }

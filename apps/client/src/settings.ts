@@ -238,15 +238,6 @@ export function saveSettings(s: Settings): void {
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* storage unavailable */ }
 }
 
-/**
- * Saves made before the crouch default moved off Ctrl still carry it, and those players are the
- * ones losing tabs. A saved bind that is EXACTLY the old default is treated as "never chosen" and
- * dropped back to the new default; anything a player actually edited is left alone.
- */
-const OLD_CTRL_CROUCH = ["ControlLeft", "ControlRight", "KeyC"];
-const isOldCrouchDefault = (codes: string[]): boolean =>
-  codes.length === OLD_CTRL_CROUCH.length && OLD_CTRL_CROUCH.every((c, i) => codes[i] === c);
-
 /** An untrusted saved blob: keep only known actions bound to plausible key codes. */
 function repairKeys(input: unknown): Settings["keys"] {
   const out: Settings["keys"] = {};
@@ -256,7 +247,6 @@ function repairKeys(input: unknown): Settings["keys"] {
     if (!Array.isArray(v)) continue;
     const codes = v.filter((c): c is string => typeof c === "string" && c.length > 0 && c.length < 32);
     if (!codes.length) continue;
-    if (a.id === "crouch" && isOldCrouchDefault(codes)) continue;   // see above: inherited, not chosen
     out[a.id] = codes;
   }
   return out;

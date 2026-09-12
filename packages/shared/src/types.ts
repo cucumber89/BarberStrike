@@ -97,6 +97,16 @@ export interface BodyState {
   crouching: boolean;
   /** Ms remaining before the body may jump again. */
   jumpCooldown: number;
+  /**
+   * Slide: ms of slide left (0 = not sliding) and ms before the next one may start.
+   *
+   * Part of the body, NOT of the replicated snapshot. Both ends derive it from the same buttons with
+   * the same rule, so they agree without it going on the wire, and a remote's slide is read off the
+   * two fields that are already there — a body cannot be crouching and moving at sprint speed
+   * without sliding, because a crouch walk is capped at `PLAYER.crouchSpeed`. See `slideActive`.
+   */
+  slide: number;
+  slideCd: number;
   /** Tactical sprint budget left (ms); drains while tac-sprinting, refills otherwise (drop 4). */
   tac: number;
 }
@@ -259,6 +269,15 @@ export interface KillEvent {
   /** Weapon or grenade that killed (see `killerName()` in economy.ts for display). */
   weapon: WeaponId | GrenadeId;
   headshot: boolean;
+  /**
+   * Names of the players credited with an assist on this kill, in no particular order.
+   *
+   * A MESSAGE field, not a replicated one: `S2C.Kill` is a broadcast, so this costs nothing in the
+   * snapshot budget and adds no field to `PlayerState`. The server already works out who assisted (to
+   * pay them); it just used to do it AFTER broadcasting, so the feed never had the names. Bounded at
+   * three: the assist window and minimum damage make more than one unusual, and the feed has a width.
+   */
+  assists?: string[];
   /**
    * Drop E: this kill was a SHAVE — the clippers, from behind. The kill feed draws a razor for it.
    * The victim's new head is in their `haircut` field; this flag is only how the feed reads.

@@ -1,3 +1,5 @@
+import { INTERCEPTABLE_CHORDS, RESERVED_BY_BROWSER } from "./browserKeys";
+
 /**
  * Fullscreen, pointer lock and keyboard lock — the three things a browser only grants inside a
  * real user gesture, and each of which can fail on its own.
@@ -28,12 +30,20 @@ type KeyboardLockNavigator = Navigator & {
  * Codes worth locking away from the browser once fullscreen is granted. Escape is included so the
  * pause menu gets it — with keyboard lock a *held* Escape still leaves fullscreen, which is the
  * escape hatch the spec guarantees the user.
+ *
+ * The list is the UNION of the two things that can go wrong, because there is no reason to ask for
+ * less than that: the chords the browser reserves outright (`RESERVED_BY_BROWSER` — Ctrl+W closes the
+ * tab, and with crouch on Ctrl a crouch-walk forward IS Ctrl+W), and the ones `preventDefault()` can
+ * normally handle (`INTERCEPTABLE_CHORDS`) — locking those too means a fullscreen Chromium player
+ * never depends on interception timing at all. `keyboardLock.test.ts` holds it to that.
  */
 export const LOCKED_CODES: readonly string[] = [
   "Escape", "Tab",
-  "KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE", "KeyR", "KeyT", "KeyN", "KeyP", "KeyB", "KeyF", "KeyG",
-  "Digit1", "Digit2", "Digit3", "Digit4",
-];
+  ...RESERVED_BY_BROWSER,
+  ...INTERCEPTABLE_CHORDS,
+  // Movement and action keys that are not chords but are worth having whatever the page does.
+  "KeyW", "KeyQ", "KeyE", "KeyC", "KeyV", "KeyX", "KeyN", "KeyT",
+].filter((c, i, all) => all.indexOf(c) === i);
 
 export function isFullscreen(doc: Document = document): boolean {
   return doc.fullscreenElement != null;

@@ -34,6 +34,8 @@ export interface GameEventMap {
   jump: Record<string, never>;
   landed: { impactSpeed: number };
   footstep: { sprint: boolean; crouch: boolean };
+  /** The local body dropped into a slide (rising edge only). */
+  slide: Record<string, never>;
   matchPhase: MatchEventMessage;
   /** Settings changed at runtime. */
   settings: Record<string, never>;
