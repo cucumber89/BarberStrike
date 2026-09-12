@@ -83,6 +83,8 @@ export function reloadFrame(weapon: WeaponId, t: number, shells = 6): ReloadFram
       break;
     }
     case "smg":
+    case "machinepistol":
+    case "carbine":
     case "rifle": {
       // Lift and cant the gun over, rock the mag out sideways, seat the new one, tug the charging handle.
       const tilt = bump(t, 0.05, 0.92);
@@ -94,7 +96,8 @@ export function reloadFrame(weapon: WeaponId, t: number, shells = 6): ReloadFram
       f.handL = t < 0.84 ? 0.7 * bump(t, 0.08, 0.84) : bump(t, 0.84, 0.98) * 0.45;
       break;
     }
-    case "shotgun": {
+    case "shotgun":
+    case "autoshotgun": {
       // Shell by shell: the gun comes up and rolls so the loading gate on the underside faces the
       // eye, the hand reaches to it once per shell; the hand pumps once at the end.
       const roll = bump(t, 0.04, 0.9);
@@ -469,7 +472,7 @@ export class Viewmodel {
     const w = WEAPONS[this.current];
     this.inspectT = -1;
     if (w.kind === "melee") { this.swingT = 1; return; }
-    const heavy = w.id === "shotgun" || w.id === "dmr" || w.id === "sniper" || w.id === "launcher" || w.id === "revolver";
+    const heavy = w.id === "shotgun" || w.id === "autoshotgun" || w.id === "dmr" || w.id === "sniper" || w.id === "launcher" || w.id === "revolver";
     this.kickZ += (Math.random() - 0.5) * (heavy ? 0.05 : 0.02);
     this.kickBack = Math.min(0.09, this.kickBack + (heavy ? 0.06 : w.id === "pistol" ? 0.03 : 0.02));
     this.kickUp = Math.min(0.12, this.kickUp + (heavy ? 0.08 : 0.035));

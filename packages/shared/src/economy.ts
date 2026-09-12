@@ -31,7 +31,9 @@ export const ECONOMY = {
 
 /** Weapon prices: the pistol and the clippers are free; the rest scale with time-to-kill and range. */
 export const WEAPON_PRICES: Record<WeaponId, number> = {
-  pistol: 0, revolver: 600, smg: 1200, smg2: 1300, shotgun: 1400, rifle: 2600, lmg: 2800, dmr: 2900, sniper: 3400, launcher: 3200, clippers: 0,
+  pistol: 0, revolver: 600, machinepistol: 800, smg: 1200, smg2: 1300, shotgun: 1400,
+  carbine: 2000, autoshotgun: 2200, rifle: 2600, lmg: 2800, dmr: 2900, sniper: 3400,
+  launcher: 3200, clippers: 0,
 };
 
 export type ShopItemId = WeaponId | GrenadeId | PerkId | ArmorId;

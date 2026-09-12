@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 // Relative to THIS tool, not to the shell's cwd: run from the repo root and a bare
 // "e2e/out" lands outside the ignored directory and shows up as untracked files.
 const OUT = process.env.OUT ? resolve(process.env.OUT) : resolve(dirname(fileURLToPath(import.meta.url)), "../out/weapons");
-const WEAPONS = process.env.WEAPONS ? process.env.WEAPONS.split(",") : ["pistol", "revolver", "smg", "smg2", "rifle", "lmg", "shotgun", "dmr", "sniper", "launcher", "clippers"];
+const WEAPONS = process.env.WEAPONS ? process.env.WEAPONS.split(",") : ["pistol", "revolver", "machinepistol", "smg", "smg2", "carbine", "rifle", "lmg", "shotgun", "autoshotgun", "dmr", "sniper", "launcher", "clippers"];
 const SET = JSON.stringify({ graphics: { preset: "medium", renderer: "webgl2", renderScale: 1, shadows: "off", postProcessing: false, effects: 0.3, antialiasing: false, importedModels: true } });
 const b = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
 const ctx = await b.newContext({ viewport: { width: 800, height: 450 } });
@@ -29,6 +29,9 @@ await p.getByTestId("input-room").fill("hand-" + Date.now());
 await p.getByTestId("bots-range").evaluate((el) => { const s = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set; s.call(el, "2"); el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); });
 await p.getByTestId("btn-quickplay").click();
 await p.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().loadStage === "ready", null, { timeout: 90000 });
+await p.getByRole("button", { name: /ENTER MATCH/i }).click({ timeout: 30000 });
+await p.waitForFunction(() => window.__fb.hud.get().alive === true, null, { timeout: 60000 });
+await p.evaluate(() => document.fullscreenElement && document.exitFullscreen());
 await p.waitForTimeout(9000);
 const results = [];
 for (const WEAPON of WEAPONS) {
