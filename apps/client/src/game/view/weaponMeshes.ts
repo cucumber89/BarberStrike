@@ -182,11 +182,15 @@ const SPECS: Record<WeaponId, Spec> = {
   pistol: {
     parts: [
       B(0.028, 0.03, 0.17, 0, 0.022, 0.06, "polymer"),                // frame
+      B(0.032, 0.018, 0.075, 0, 0.006, 0.108, "polymer"),              // squared dust cover
       ...rail(0.09, 0.14, 0.006, 0.018),                               // accessory rail under the dust cover
       ...grip(0, -0.04, -0.02, 0.028, 0.09, 0.04),
+      B(0.004, 0.062, 0.034, -0.016, -0.04, -0.02, "tan"),             // inset grip panel L
+      B(0.004, 0.062, 0.034, 0.016, -0.04, -0.02, "tan"),              // inset grip panel R
       B(0.03, 0.012, 0.042, 0, -0.088, -0.02, "polymer"),              // magazine well lip
       C(0.012, 0.03, 0, 0.05, 0.165, "steel"),                         // barrel tip
       ...triggerGuard(-0.005, 0.02, 0.045),
+      C(0.012, 0.034, -0.018, 0.022, 0.065, "brass", "x"),             // takedown pin
       B(0.014, 0.02, 0.012, 0, 0.04, -0.03, "steel"),                  // hammer
       // Flush side medallions replace the tall ornament that obstructed the sight picture.
       C(0.014, 0.032, 0, -0.025, -0.025, "brass", "x"),
@@ -198,7 +202,8 @@ const SPECS: Record<WeaponId, Spec> = {
       kind: "slide", parts: [
         B(0.032, 0.045, 0.19, 0, 0.05, 0.06),                          // slide
         ejectionPort(0.017, 0.058, 0.03),
-        B(0.034, 0.02, 0.03, 0, 0.05, -0.02, "steel"),                 // rear serrations block
+        ...Array.from({ length: 5 }, (_, i) => B(0.034, 0.022, 0.004, 0, 0.05, -0.035 + i * 0.008, "steel", { rx: -0.25 })), // rear slide serrations
+        B(0.004, 0.012, 0.042, 0.017, 0.054, 0.074, "steel"),           // extractor
         B(0.006, 0.012, 0.01, 0, 0.078, 0.14, "steel"),                // front sight
         B(0.004, 0.012, 0.012, -0.008, 0.078, -0.02),                 // rear notch L
         B(0.004, 0.012, 0.012, 0.008, 0.078, -0.02),                  // rear notch R
@@ -213,10 +218,16 @@ const SPECS: Record<WeaponId, Spec> = {
       B(0.03, 0.034, 0.12, 0, 0.02, 0.02, "steel"),                    // frame
       C(0.036, 0.05, 0, 0.032, 0.02, "steel"),                         // cylinder
       ...Array.from({ length: 6 }, (_, i) => C(0.008, 0.052, Math.cos((i / 6) * Math.PI * 2) * 0.012, 0.032 + Math.sin((i / 6) * Math.PI * 2) * 0.012, 0.02, "metal")), // chambers
+      B(0.036, 0.012, 0.055, 0, 0.008, 0.025, "metal"),                 // cylinder crane
+      B(0.006, 0.014, 0.018, -0.017, 0.042, -0.018, "brass"),           // cylinder release
       ...grip(0, -0.045, -0.03, 0.024, 0.09, 0.04, "wood"),
+      B(0.004, 0.065, 0.032, -0.014, -0.045, -0.03, "brass"),           // grip escutcheon L
+      B(0.004, 0.065, 0.032, 0.014, -0.045, -0.03, "brass"),            // grip escutcheon R
       C(0.012, 0.12, 0, 0.05, 0.11, "steel"),                          // barrel
       B(0.03, 0.018, 0.12, 0, 0.062, 0.1, "steel"),                    // barrel rib
       B(0.024, 0.01, 0.1, 0, 0.032, 0.11, "steel"),                    // under-lug
+      C(0.007, 0.105, 0, 0.032, 0.108, "metal"),                        // ejector rod
+      ...Array.from({ length: 4 }, (_, i) => B(0.032, 0.004, 0.008, 0, 0.071, 0.065 + i * 0.025, "metal")), // ventilated rib cuts
       B(0.006, 0.014, 0.008, 0, 0.078, 0.16, "brass"),                 // front sight blade
       B(0.02, 0.008, 0.01, 0, 0.074, -0.03),                           // rear notch
       ...triggerGuard(-0.005, 0.0, 0.045),
@@ -232,11 +243,17 @@ const SPECS: Record<WeaponId, Spec> = {
       ...rail(-0.04, 0.26, 0.078, 0.022),                              // top rail
       B(0.04, 0.04, 0.12, 0, 0.03, 0.3, "polymer"),                    // fore-end
       B(0.044, 0.008, 0.1, 0, 0.008, 0.3, "rubber"),                   // fore-end grip pad
+      B(0.03, 0.075, 0.034, 0, -0.022, 0.29, "rubber", { rx: -0.16 }), // compact vertical foregrip
+      ...Array.from({ length: 4 }, (_, i) => B(0.052, 0.018, 0.005, 0, 0.04, 0.255 + i * 0.027, "steel")), // stamped cooling ribs
       C(0.018, 0.09, 0, 0.055, 0.4, "steel"),                          // barrel
       ...muzzleDevice(0.44, 0.022, 0.03, 2),
       ...grip(0, -0.04, -0.02, 0.03, 0.09, 0.045),
-      B(0.03, 0.05, 0.19, 0, 0.03, -0.165, "polymer"),                 // folded stock (butts against the receiver)
+      B(0.044, 0.055, 0.034, 0, 0.035, -0.087, "polymer"),             // stock latch block
+      B(0.018, 0.022, 0.17, 0, 0.058, -0.175, "steel"),                // high telescoping bar
+      B(0.026, 0.05, 0.11, 0, 0.03, -0.205, "polymer"),                // compact shoulder stock
       B(0.034, 0.02, 0.02, 0, 0.03, -0.27, "rubber"),                  // stock pad
+      B(0.054, 0.025, 0.035, 0, 0.01, 0.105, "steel"),                 // flared magazine well
+      ...Array.from({ length: 4 }, (_, i) => B(0.004, 0.045, 0.026, -0.027, 0.035, 0.0 + i * 0.045, "steel")), // receiver stamp ribs
       ...frontSight(0.102, 0.2, 0.082),
       ...rearSight(0.098, -0.02, 0.082),
       ejectionPort(0.026, 0.05, 0.1),
@@ -296,10 +313,13 @@ const SPECS: Record<WeaponId, Spec> = {
       B(0.045, 0.05, 0.26, 0, 0.045, 0.5, "tan"),                      // handguard
       ...rail(0.4, 0.62, 0.072, 0.02),                                 // handguard rail
       ...Array.from({ length: 5 }, (_, i) => B(0.047, 0.006, 0.02, 0, 0.03, 0.4 + i * 0.05, "metal")), // vent slots
+      ...Array.from({ length: 4 }, (_, i) => B(0.004, 0.022, 0.035, -0.024, 0.048, 0.41 + i * 0.058, "polymer")), // left M-LOK panels
+      B(0.034, 0.065, 0.035, 0, 0.045, 0.635, "steel"),                 // gas block
       C(0.016, 0.16, 0, 0.055, 0.7, "steel"),                          // barrel
       ...muzzleDevice(0.78, 0.024, 0.05, 3),
       ...grip(0, -0.06, 0.0, 0.034, 0.1, 0.05),
-      B(0.04, 0.06, 0.24, 0, 0.03, -0.24, "tan"),                      // stock
+      B(0.036, 0.035, 0.23, 0, 0.058, -0.235, "tan"),                  // adjustable stock cheek
+      B(0.03, 0.04, 0.18, 0, -0.002, -0.255, "tan", { rx: -0.12 }),    // angled stock toe
       B(0.044, 0.07, 0.02, 0, 0.03, -0.36, "rubber"),                  // butt pad
       B(0.02, 0.02, 0.2, 0, 0.005, -0.15, "polymer"),                  // buffer tube (receiver to stock)
       ...frontSight(0.117, 0.55, 0.076),
@@ -307,8 +327,9 @@ const SPECS: Record<WeaponId, Spec> = {
       ejectionPort(0.026, 0.06, 0.2),
       chargingHandle(-0.02, 0.075, -0.04),
       B(0.012, 0.03, 0.025, 0.03, 0.03, 0.12, "steel"),                // bolt release
+      C(0.014, 0.056, -0.028, 0.026, 0.26, "brass", "x"),             // forward assist / receiver pin
       ...triggerGuard(-0.02, 0.06, 0.05),
-      slingLoop(-0.024, 0.02, -0.3), slingLoop(0.024, 0.03, 0.6),
+      slingLoop(-0.021, 0.02, -0.3), slingLoop(0.024, 0.03, 0.6),
     ],
     muzzle: [0, 0.055, 0.8], eject: [0.03, 0.06, 0.2],
     magazine: [B(0.03, 0.18, 0.07, 0, 0, 0, "polymer"), B(0.032, 0.008, 0.072, 0, -0.092, 0, "rubber"), B(0.031, 0.004, 0.06, 0, -0.03, 0, "metal")], magazinePos: [0, -0.1, 0.2], length: 0.8,
@@ -318,6 +339,8 @@ const SPECS: Record<WeaponId, Spec> = {
     parts: [
       B(0.056, 0.085, 0.46, 0, 0.045, 0.18),                           // fat receiver
       B(0.05, 0.03, 0.2, 0, 0.1, 0.16),                                // feed cover
+      B(0.072, 0.014, 0.12, 0, 0.078, 0.16, "brass"),                  // exposed feed tray
+      ...Array.from({ length: 6 }, (_, i) => C(0.014, 0.065, -0.03, 0.045, 0.115 + i * 0.018, "brass", "y")), // visible belt links
       ...rail(0.06, 0.26, 0.118, 0.022),
       C(0.022, 0.3, 0, 0.055, 0.6, "steel"),                           // heavy barrel
       ...Array.from({ length: 4 }, (_, i) => C(0.03, 0.006, 0, 0.055, 0.5 + i * 0.04, "metal")), // barrel rings
@@ -330,7 +353,10 @@ const SPECS: Record<WeaponId, Spec> = {
       B(0.045, 0.08, 0.34, 0, 0.03, -0.22, "polymer"),                 // stock
       B(0.048, 0.09, 0.02, 0, 0.03, -0.39, "rubber"),                  // butt pad
       B(0.06, 0.02, 0.05, 0, 0.09, 0.06, "steel"),                     // carry handle base
-      B(0.012, 0.03, 0.12, 0, 0.115, 0.06, "polymer"),                 // carry handle
+      B(0.012, 0.055, 0.04, -0.025, 0.12, 0.06, "steel", { rz: -0.4 }), // carry handle leg L
+      B(0.012, 0.055, 0.04, 0.025, 0.12, 0.06, "steel", { rz: 0.4 }),  // carry handle leg R
+      B(0.06, 0.018, 0.12, 0, 0.145, 0.06, "polymer"),                 // carry handle grip
+      B(0.064, 0.028, 0.07, 0, -0.004, 0.18, "steel"),                 // belt-box latch / magwell
       ...frontSight(0.142, 0.46, 0.066),
       ...rearSight(0.14, 0.06, 0.115),
       ejectionPort(0.029, 0.05, 0.2),
@@ -348,11 +374,16 @@ const SPECS: Record<WeaponId, Spec> = {
       C(0.036, 0.42, 0, 0.02, 0.4, "steel"),                           // tube magazine
       C(0.04, 0.02, 0, 0.02, 0.6, "metal"),                            // tube cap
       B(0.014, 0.01, 0.4, 0, 0.078, 0.4, "steel"),                     // vent rib
+      ...Array.from({ length: 5 }, (_, i) => B(0.012, 0.02, 0.012, 0, 0.069, 0.24 + i * 0.085, "steel")), // vent-rib posts
+      B(0.052, 0.058, 0.014, 0, 0.04, 0.29, "metal"),                  // barrel/tube band
+      B(0.052, 0.058, 0.014, 0, 0.04, 0.57, "metal"),                  // front barrel/tube band
       ...grip(0, -0.05, -0.02, 0.036, 0.1, 0.05, "wood"),
-      B(0.04, 0.07, 0.33, 0, 0.025, -0.215, "wood"),                   // stock
-      B(0.044, 0.08, 0.02, 0, 0.025, -0.38, "rubber"),                 // butt pad
+      B(0.04, 0.07, 0.27, 0, 0.025, -0.185, "wood"),                   // stock
+      B(0.038, 0.024, 0.18, 0, 0.071, -0.22, "wood"),                  // raised comb
+      B(0.044, 0.08, 0.02, 0, 0.025, -0.325, "rubber"),                // butt pad
       B(0.01, 0.015, 0.01, 0, 0.085, 0.68, "brass"),                   // bead
       ejectionPort(0.026, 0.045, 0.08),
+      ...Array.from({ length: 4 }, (_, i) => C(0.011, 0.045, 0.028, 0.045, 0.005 + i * 0.052, "brass")), // receiver shell carrier
       B(0.012, 0.03, 0.03, 0, 0.005, -0.02, "steel"),                  // loading gate
       ...triggerGuard(-0.01, 0.02, 0.05),
       slingLoop(-0.024, 0.0, -0.3),
@@ -362,6 +393,7 @@ const SPECS: Record<WeaponId, Spec> = {
     action: {
       kind: "pump", parts: [
         B(0.05, 0.05, 0.16, 0, 0.005, 0.42, "wood"),
+        B(0.054, 0.028, 0.13, 0, -0.03, 0.42, "rubber"),                // deep pump belly
         ...Array.from({ length: 6 }, (_, i) => B(0.052, 0.004, 0.006, 0, 0.005, 0.36 + i * 0.024, "rubber")), // pump grooves
       ],
     },
@@ -381,6 +413,7 @@ const SPECS: Record<WeaponId, Spec> = {
       ...Array.from({ length: 5 }, (_, i) => B(0.044, 0.004, 0.012, 0, 0.042, 0.35 + i * 0.045, "metal")), // handguard vents
       C(0.017, 0.4, 0, 0.055, 0.72, "steel"),                          // barrel
       C(0.02, 0.12, 0, 0.032, 0.59, "steel"),                          // gas cylinder
+      B(0.034, 0.05, 0.028, 0, 0.043, 0.62, "steel"),                  // gas block and handguard ferrule
       B(0.016, 0.008, 0.02, 0, 0.068, 0.905),                          // front sight base
       B(0.004, 0.014, 0.006, 0, 0.079, 0.905, "steel"),                // front sight blade
       C(0.024, 0.06, 0, 0.055, 0.94, "steel"),                         // flash hider
@@ -391,7 +424,9 @@ const SPECS: Record<WeaponId, Spec> = {
       B(0.038, 0.026, 0.16, 0, 0.066, -0.26, "wood"),                  // raised comb
       B(0.04, 0.006, 0.1, 0, 0.081, -0.27, "rubber"),                  // cheek pad
       B(0.048, 0.09, 0.02, 0, 0.015, -0.42, "rubber"),                 // butt pad
+      C(0.014, 0.05, -0.024, 0.02, -0.31, "brass", "x"),              // stock medallion
       ...scope(0.11, 0.11, 0.16, 0.03, 0.038, 0.078),
+      C(0.041, 0.035, 0, 0.11, 0.208, "polymer"),                      // compact sunshade
       ejectionPort(0.025, 0.06, 0.2),
       ...triggerGuard(-0.015, 0.05, 0.05),
       slingLoop(-0.024, 0.0, -0.36), slingLoop(0.024, -0.02, 0.5),
@@ -407,15 +442,21 @@ const SPECS: Record<WeaponId, Spec> = {
       ...rail(-0.08, 0.34, 0.075, 0.022),
       B(0.044, 0.06, 0.42, 0, -0.005, 0.44, "tan"),                    // long stock forend
       ...Array.from({ length: 5 }, (_, i) => B(0.046, 0.004, 0.024, 0, 0.02, 0.32 + i * 0.06, "metal")),
+      B(0.052, 0.025, 0.16, 0, -0.032, 0.48, "polymer"),               // flat bag-rider fore-end
       C(0.017, 0.73, 0, 0.055, 0.735, "steel"),                        // long barrel, free-floated from the receiver
       ...Array.from({ length: 8 }, (_, i) => C(0.022, 0.012, 0, 0.055, 0.66 + i * 0.05, "metal")), // fluting rings
       ...muzzleDevice(1.12, 0.034, 0.08, 4),
       ...grip(0, -0.05, -0.01, 0.034, 0.1, 0.05),
       B(0.044, 0.09, 0.39, 0, 0.015, -0.245, "tan"),                   // stock (butts against the receiver)
       B(0.044, 0.05, 0.1, 0, 0.075, -0.32, "polymer"),                 // cheek riser
+      B(0.026, 0.05, 0.14, 0, -0.035, -0.31, "polymer"),               // thumbhole lower bridge
       B(0.048, 0.1, 0.02, 0, 0.015, -0.45, "rubber"),                  // butt pad
       B(0.03, 0.04, 0.05, 0, -0.045, -0.4, "polymer"),                 // monopod
+      B(0.06, 0.018, 0.035, 0, -0.04, 0.57, "steel"),                  // bipod saddle
+      B(0.012, 0.15, 0.012, -0.025, -0.105, 0.58, "steel", { rz: -0.15 }), // folded bipod L
+      B(0.012, 0.15, 0.012, 0.025, -0.105, 0.58, "steel", { rz: 0.15 }),  // folded bipod R
       ...scope(0.12, 0.115, 0.26, 0.04, 0.056, 0.078),
+      C(0.06, 0.045, 0, 0.115, 0.27, "polymer"),                       // deep objective shade
       ejectionPort(0.024, 0.06, 0.2),
       ...triggerGuard(-0.02, 0.05, 0.05),
       slingLoop(-0.024, 0.0, -0.38), slingLoop(0.024, -0.03, 0.55),
@@ -431,10 +472,13 @@ const SPECS: Record<WeaponId, Spec> = {
       C(0.08, 0.04, 0, 0.05, 0.47, "steel"),                           // muzzle ring
       ...Array.from({ length: 3 }, (_, i) => C(0.074, 0.008, 0, 0.05, 0.16 + i * 0.1, "steel")), // tube bands
       B(0.05, 0.07, 0.16, 0, 0.03, 0.02, "polymer"),                   // receiver block
+      C(0.085, 0.035, 0, 0.05, 0.095, "steel"),                        // oversized break-open breech collar
+      C(0.026, 0.065, 0, 0.012, 0.09, "brass", "x"),                  // hinge pin
       ...grip(0, -0.06, -0.01, 0.034, 0.1, 0.05),
       B(0.04, 0.06, 0.25, 0, 0.025, -0.185, "tan"),                    // stock (butts against the receiver block)
       B(0.044, 0.07, 0.02, 0, 0.025, -0.31, "rubber"),                 // butt pad
       B(0.03, 0.05, 0.08, 0, -0.01, 0.24, "rubber"),                   // fore grip (reaches up to the tube)
+      B(0.044, 0.018, 0.09, 0, -0.032, 0.22, "polymer"),               // fore grip hand stop
       // Flip-up ladder sight: the eye looks THROUGH it. A 9.8 mm square peep is centred on aimPoint
       // (0, 0.135, 0.05); its frame stays 4.9 mm clear of that point (the parts oracle wants a part
       // within 5 mm of the anchor, so the window cannot be wider).
@@ -447,6 +491,7 @@ const SPECS: Record<WeaponId, Spec> = {
       B(0.002, 0.0138, 0.004, -0.0059, 0.135, 0.05, "steel"),          // peep left post (inner edge 4.9 mm off-axis)
       B(0.002, 0.0138, 0.004, 0.0059, 0.135, 0.05, "steel"),           // peep right post
       ...Array.from({ length: 4 }, (_, i) => B(0.028, 0.002, 0.004, 0, 0.078 + i * 0.012, 0.05, "brass")), // range rungs, below the peep only
+      B(0.018, 0.018, 0.024, -0.027, 0.04, -0.02, "brass"),            // break-action safety
       ...triggerGuard(-0.02, 0.04, 0.05),
     ],
     muzzle: [0, 0.05, 0.49], eject: [0.03, 0.05, 0.06],
@@ -458,13 +503,18 @@ const SPECS: Record<WeaponId, Spec> = {
   clippers: {
     parts: [
       B(0.04, 0.07, 0.13, 0, -0.01, 0.02, "polymer"),                  // body
+      B(0.044, 0.052, 0.065, 0, -0.018, -0.065, "rubber"),             // rounded hand grip block
       ...Array.from({ length: 4 }, (_, i) => B(0.042, 0.004, 0.006, 0, -0.028 + i * 0.01, -0.02, "rubber")), // grip ribs
       B(0.034, 0.02, 0.05, 0, 0.012, 0.11, "steel"),                   // blade head
+      B(0.044, 0.012, 0.034, 0, 0.022, 0.088, "metal"),                // blade heel
       B(0.04, 0.006, 0.02, 0, 0.026, 0.13, "steel"),                   // comb
       ...Array.from({ length: 6 }, (_, i) => B(0.004, 0.008, 0.014, -0.015 + i * 0.006, 0.03, 0.135, "steel")), // teeth
       B(0.012, 0.016, 0.03, 0.018, 0.026, 0.03, "brass"),              // switch
+      B(0.007, 0.012, 0.055, -0.023, 0.006, 0.055, "brass", { rz: -0.18 }), // taper lever
       C(0.008, 0.08, 0, -0.01, -0.09, "rubber"),                       // cord stub
       B(0.02, 0.004, 0.04, 0, 0.026, 0.04, "steel"),                   // lever plate
+      C(0.018, 0.044, 0, -0.01, -0.052, "steel"),                      // cord strain relief
+      B(0.024, 0.004, 0.036, 0, 0.026, 0.002, "brass"),                // maker badge
     ],
     muzzle: [0, 0.026, 0.14], eject: [0, 0, 0],
     magazine: null, magazinePos: [0, 0, 0], length: 0.16,
