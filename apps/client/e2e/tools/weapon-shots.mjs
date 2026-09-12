@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 // Relative to THIS tool, not to the shell's cwd: run from the repo root and a bare
 // "e2e/out" lands outside the ignored directory and shows up as untracked files.
 const OUT = process.env.OUT ? resolve(process.env.OUT) : resolve(dirname(fileURLToPath(import.meta.url)), "../out/weapons");
-const WEAPONS = process.env.WEAPONS ? process.env.WEAPONS.split(",") : ["pistol", "revolver", "smg", "smg2", "rifle", "lmg", "shotgun", "dmr", "sniper", "launcher", "clippers"];
+const WEAPONS = process.env.WEAPONS ? process.env.WEAPONS.split(",") : ["pistol", "revolver", "machinepistol", "smg", "smg2", "carbine", "rifle", "lmg", "shotgun", "autoshotgun", "dmr", "sniper", "launcher", "clippers"];
 /** TP_ONLY=1 skips the first-person set (the third-person room is the slow, bot-dependent half). */
 const TP_ONLY = !!process.env.TP_ONLY;
 const FP_ONLY = !!process.env.FP_ONLY;

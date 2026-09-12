@@ -56,7 +56,7 @@ describe("weapon feel", () => {
       expect(feelOf(id).casings, id).toBe(0);
       expect(feelOf(id).actionMs, id).toBeGreaterThan(0);
     }
-    for (const id of ["pistol", "smg", "smg2", "rifle", "lmg", "dmr"] as const) {
+    for (const id of ["pistol", "machinepistol", "smg", "smg2", "carbine", "rifle", "lmg", "autoshotgun", "dmr"] as const) {
       expect(feelOf(id).casings, id).toBe(1);
     }
     // Nothing fires on the melee weapon, and the shell is its own tracer.
@@ -82,7 +82,8 @@ describe("weapon feel", () => {
 
   it("draws the spread ring only where a cone the crosshair cannot show exists (C1)", () => {
     expect(pelletRing("shotgun")).toBe(true);
-    for (const id of WEAPON_ORDER.filter((w) => w !== "shotgun")) expect(pelletRing(id), id).toBe(false);
+    for (const id of WEAPON_ORDER.filter((w) => w !== "shotgun" && w !== "autoshotgun")) expect(pelletRing(id), id).toBe(false);
+    expect(pelletRing("autoshotgun")).toBe(true);
   });
 
   it("scopes the sniper and the DMR, and holds breath only for the sniper (D-B2)", () => {

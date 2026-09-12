@@ -82,6 +82,12 @@ export const WEAPON_FEEL: Record<WeaponId, WeaponFeel> = {
     flash: 0.30, shake: 0.008, tracer: 1.15, casings: 0, casingScale: 1.0, ejectDown: false, tracerCount: 1, beltLink: false,
     actionMs: 120, scope: null, breath: false, scopeDrift: 0, bipod: false, hum: 0,
   },
+  // A tiny sideways saw: quicker than either sidearm, but visibly unstable through a full magazine.
+  machinepistol: {
+    sway: 0.7, sprintOutMs: 70, raise: 0.45,
+    flash: 0.12, shake: 0.0025, tracer: 0.72, casings: 1, casingScale: 0.65, ejectDown: false, tracerCount: 1, beltLink: false,
+    actionMs: 0, scope: null, breath: false, scopeDrift: 0, bipod: false, hum: 0,
+  },
   // Sewing machine. The brass fountain is the picture; the tail never overlaps the next shot.
   smg: {
     sway: 0.8, sprintOutMs: 110, raise: 0.7,
@@ -92,6 +98,12 @@ export const WEAPON_FEEL: Record<WeaponId, WeaponFeel> = {
   smg2: {
     sway: 0.5, sprintOutMs: 80, raise: 0.5,
     flash: 0.14, shake: 0.002, tracer: 0.85, casings: 1, casingScale: 0.7, ejectDown: true, tracerCount: 1, beltLink: false,
+    actionMs: 0, scope: null, breath: false, scopeDrift: 0, bipod: false, hum: 0,
+  },
+  // Light and exact when paced: a compact rifle report with a deliberate semi-auto diagonal hop.
+  carbine: {
+    sway: 0.75, sprintOutMs: 125, raise: 0.68,
+    flash: 0.2, shake: 0.005, tracer: 1.05, casings: 1, casingScale: 0.9, ejectDown: false, tracerCount: 1, beltLink: false,
     actionMs: 0, scope: null, breath: false, scopeDrift: 0, bipod: false, hum: 0,
   },
   // The reference rifle: every other row is louder, heavier or lighter than this one.
@@ -111,6 +123,12 @@ export const WEAPON_FEEL: Record<WeaponId, WeaponFeel> = {
     sway: 1.2, sprintOutMs: 180, raise: 0.9,
     flash: 0.40, shake: 0.012, tracer: 0.8, casings: 0, casingScale: 1.6, ejectDown: false, tracerCount: 9, beltLink: false,
     actionMs: 250, scope: null, breath: false, scopeDrift: 0, bipod: false, hum: 0,
+  },
+  // A short gas-driven shove and a metallic bolt snap; the broad pattern returns before the pump would.
+  autoshotgun: {
+    sway: 1.35, sprintOutMs: 210, raise: 0.92,
+    flash: 0.32, shake: 0.009, tracer: 0.7, casings: 1, casingScale: 1.45, ejectDown: false, tracerCount: 8, beltLink: false,
+    actionMs: 70, scope: null, breath: false, scopeDrift: 0, bipod: false, hum: 0,
   },
   // Heavy, precise, slow to settle. D-B2: a light ring the eye can see past, and no breath hold.
   dmr: {
@@ -196,8 +214,8 @@ export interface SignatureAxes {
  * proportionally: 420 rpm against 1000 rpm is the same size of difference as 45 against 107, and
  * in raw seconds those two gaps are 0.083 s and 0.79 s — a tenfold lie. So each axis is compared in
  * OCTAVES (log2) and then divided by the roster's own spread in that space (standard deviations
- * measured over all eleven weapons, 2026-09-08). A distance of 1.0 means one standard deviation on
- * one axis; the roster's median pair sits near 4.
+ * measured over the original eleven weapons, 2026-09-08). That calibration stays frozen as the
+ * roster grows. A distance of 1.0 means one standard deviation on one axis.
  */
 const AXIS_SCALE: Record<keyof SignatureAxes, number> = {
   climb: 1 / 1.318, wander: 1 / 0.616, interval: 1 / 1.561, adsMs: 1 / 0.478, zoom: 1 / 0.459,

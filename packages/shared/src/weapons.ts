@@ -1,10 +1,11 @@
 /**
  * Weapon roster. Numbers are shared by client and server. 1.0 shipped five hitscan weapons;
  * 1.1 drop 3 adds a revolver (second sidearm), a second SMG, an LMG, a scoped sniper, a grenade
- * launcher (fires the shared projectile sim) and the clippers (melee, always carried, V).
+ * launcher (fires the shared projectile sim) and the clippers (melee, always carried, V). The
+ * roster extension adds an automatic sidearm, a compact semi-auto carbine and a semi-auto shotgun.
  */
 
-export type WeaponId = "pistol" | "revolver" | "smg" | "smg2" | "rifle" | "lmg" | "shotgun" | "dmr" | "sniper" | "launcher" | "clippers";
+export type WeaponId = "pistol" | "revolver" | "machinepistol" | "smg" | "smg2" | "carbine" | "rifle" | "lmg" | "shotgun" | "autoshotgun" | "dmr" | "sniper" | "launcher" | "clippers";
 
 /** One deterministic recoil step: [up, side] in radians. Patterns loop when exhausted. */
 export type RecoilStep = readonly [number, number];
@@ -109,6 +110,19 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     adsZoom: 0.78, adsMs: 120, scoped: false,
     range: 28, rangeMax: 55, damageMin: 34, mobility: 0.98, sound: "revolver",
   },
+  machinepistol: {
+    id: "machinepistol", name: "MP-11 Taper Fade", slot: 2, kind: "hitscan",
+    damage: 17, rpm: 900, automatic: true, magazine: 18, reserve: 72,
+    reloadMs: 1450, equipMs: 280, pellets: 1,
+    spread: 0.018, spreadPerShot: 0.011, spreadMax: 0.095, spreadRecoveryPerSec: 0.065,
+    spreadAim: 0.72, spreadMove: 1.2, spreadAir: 2.1,
+    // Very light vertical push, but a hard alternating side kick: controllable in taps, unruly as a hose.
+    recoilUp: 0.006, recoilSide: 0.012, recoilRecoverPerSec: 14,
+    recoilPattern: [[0.005, 0.011], [0.006, -0.013], [0.005, 0.014], [0.007, -0.012], [0.006, 0.015], [0.007, -0.014]],
+    recoilJitter: 0.32, recoilRecoverDelayMs: 45,
+    adsZoom: 0.88, adsMs: 80, scoped: false,
+    range: 11, rangeMax: 27, damageMin: 10, mobility: 1.04, sound: "smg2",
+  },
   smg: {
     id: "smg", name: "K-7 Buzzcut", slot: 1, kind: "hitscan",
     damage: 18, rpm: 840, automatic: true, magazine: 32, reserve: 128,
@@ -138,6 +152,19 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     recoilJitter: 0.20, recoilRecoverDelayMs: 60,
     adsZoom: 0.8, adsMs: 90, scoped: false,
     range: 13, rangeMax: 32, damageMin: 9, mobility: 1.03, sound: "smg2",
+  },
+  carbine: {
+    id: "carbine", name: "C-20 Side Part", slot: 1, kind: "hitscan",
+    damage: 34, rpm: 400, automatic: false, magazine: 20, reserve: 80,
+    reloadMs: 1850, equipMs: 390, pellets: 1,
+    spread: 0.005, spreadPerShot: 0.018, spreadMax: 0.055, spreadRecoveryPerSec: 0.075,
+    spreadAim: 0.32, spreadMove: 1.5, spreadAir: 2.6,
+    // A quick two-beat diagonal that rewards paced trigger pulls instead of rifle-length sprays.
+    recoilUp: 0.026, recoilSide: 0.009, recoilRecoverPerSec: 9,
+    recoilPattern: [[0.025, -0.008], [0.027, 0.010], [0.024, -0.011], [0.029, 0.009]],
+    recoilJitter: 0.12, recoilRecoverDelayMs: 75,
+    adsZoom: 0.7, adsMs: 115, scoped: false,
+    range: 38, rangeMax: 78, damageMin: 22, mobility: 0.98, sound: "rifle",
   },
   rifle: {
     id: "rifle", name: "AR-31 Pompadour", slot: 1, kind: "hitscan",
@@ -190,6 +217,20 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     recoilJitter: 0.25, recoilRecoverDelayMs: 120,
     adsZoom: 0.85, adsMs: 130, scoped: false,
     range: 9, rangeMax: 22, damageMin: 3, mobility: 0.92, sound: "shotgun",
+  },
+  autoshotgun: {
+    id: "autoshotgun", name: "SG-6 Hot Towel", slot: 1, kind: "hitscan",
+    // 8 x 11 = 88 to the body; two head pellets lift a centred blast to 101.2.
+    damage: 11, rpm: 210, automatic: false, magazine: 8, reserve: 32,
+    reloadMs: 3000, equipMs: 560, pellets: 8,
+    spread: 0.064, spreadPerShot: 0.008, spreadMax: 0.09, spreadRecoveryPerSec: 0.08,
+    spreadAim: 0.78, spreadMove: 1.15, spreadAir: 1.45,
+    // Three shorter gas-driven shoves; faster follow-up, but less settled than the pump.
+    recoilUp: 0.046, recoilSide: 0.018, recoilRecoverPerSec: 7,
+    recoilPattern: [[0.044, -0.017], [0.049, 0.020], [0.046, -0.019]],
+    recoilJitter: 0.28, recoilRecoverDelayMs: 90,
+    adsZoom: 0.88, adsMs: 145, scoped: false,
+    range: 7, rangeMax: 18, damageMin: 4, mobility: 0.9, sound: "shotgun",
   },
   dmr: {
     id: "dmr", name: "M-1 Clean Line", slot: 1, kind: "hitscan",
@@ -254,10 +295,10 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
 };
 
-export const WEAPON_ORDER: WeaponId[] = ["pistol", "revolver", "smg", "smg2", "rifle", "lmg", "shotgun", "dmr", "sniper", "launcher", "clippers"];
+export const WEAPON_ORDER: WeaponId[] = ["pistol", "revolver", "machinepistol", "smg", "smg2", "carbine", "rifle", "lmg", "shotgun", "autoshotgun", "dmr", "sniper", "launcher", "clippers"];
 /** Primaries in shop order (cheap to expensive). */
-export const PRIMARY_ORDER: WeaponId[] = ["smg", "smg2", "shotgun", "rifle", "lmg", "dmr", "sniper", "launcher"];
-export const SECONDARY_ORDER: WeaponId[] = ["pistol", "revolver"];
+export const PRIMARY_ORDER: WeaponId[] = ["smg", "smg2", "shotgun", "carbine", "autoshotgun", "rifle", "lmg", "dmr", "sniper", "launcher"];
+export const SECONDARY_ORDER: WeaponId[] = ["pistol", "revolver", "machinepistol"];
 export const DEFAULT_WEAPON: WeaponId = "pistol";
 export const FREE_SIDEARM: WeaponId = "pistol";
 export const MELEE_WEAPON: WeaponId = "clippers";

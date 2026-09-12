@@ -33,7 +33,7 @@ export const MODES: Record<GameMode, ModeDef> = {
   ffa: { id: "ffa", name: "FREE FOR ALL", short: "FFA", blurb: "Everyone for themselves · first to 30 kills", teams: false, scoreLimit: 30, shop: "all", winner: "player" },
   dom: { id: "dom", name: "DOMINATION", short: "DOM", blurb: `Hold A / B / C · first to ${DOM.scoreLimit} points`, teams: true, scoreLimit: DOM.scoreLimit, shop: "all", winner: "team" },
   bomb: { id: "bomb", name: "BOMB PLANT", short: "BOMB", blurb: "Tactical rounds · B to buy · T to plant / defuse · first to 7 · sides swap after 6", teams: true, scoreLimit: BOMB.wins, shop: "all", winner: "team" },
-  gungame: { id: "gungame", name: "GUN GAME", short: "GUN", blurb: "Everyone for themselves · every kill hands you the next gun · a clippers kill shaves a rung off the victim · first through all 11 wins", teams: false, scoreLimit: 11, shop: "none", winner: "player" },
+  gungame: { id: "gungame", name: "GUN GAME", short: "GUN", blurb: "Everyone for themselves · every kill hands you the next gun · a clippers kill shaves a rung off the victim · first through all 14 wins", teams: false, scoreLimit: 14, shop: "none", winner: "player" },
   ostrzyzeni: { id: "ostrzyzeni", name: "OSTRZYŻENI", short: "OSTRZ", blurb: "One shaved barber with clippers hunts the rest · a clippers kill shaves you onto their side · survive the clock", teams: true, scoreLimit: 5, shop: "survivors", winner: "player" },
 };
 
@@ -53,7 +53,7 @@ export const MODE_ORDER: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "g
  * ladder). Bots and humans play by the same table.
  */
 export const GUN_GAME = {
-  ladder: ["pistol", "revolver", "smg", "smg2", "shotgun", "rifle", "lmg", "dmr", "sniper", "launcher", "clippers"] as readonly WeaponId[],
+  ladder: ["pistol", "revolver", "machinepistol", "smg", "smg2", "shotgun", "autoshotgun", "carbine", "rifle", "lmg", "dmr", "sniper", "launcher", "clippers"] as readonly WeaponId[],
   /** Back on your feet in three seconds: a party mode has no waves and no shop to spend them in. */
   respawnMs: 3000,
   /** A clippers kill sets the victim back this many rungs (never below the first). */

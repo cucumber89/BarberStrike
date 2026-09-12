@@ -237,6 +237,38 @@ const SPECS: Record<WeaponId, Spec> = {
     magazine: null, magazinePos: [0, 0, 0], length: 0.2,
     aimPoint: [0, 0.086, 0.16],
   },
+  machinepistol: {
+    // MP-11 Taper Fade: a squared machine-pistol upper, forward compensator and long stick magazine.
+    parts: [
+      B(0.04, 0.055, 0.21, 0, 0.04, 0.07, "polymer"),                 // compact frame / receiver
+      B(0.044, 0.04, 0.055, 0, -0.005, 0.07, "steel"),                // deep magazine well
+      ...grip(0, -0.04, -0.025, 0.03, 0.1, 0.045, "rubber"),
+      B(0.038, 0.045, 0.07, 0, 0.025, 0.17, "tan"),                    // forward thumb rest
+      ...Array.from({ length: 4 }, (_, i) => B(0.042, 0.012, 0.005, 0, 0.045, 0.145 + i * 0.016, "steel")), // cooling cuts
+      C(0.014, 0.13, 0, 0.06, 0.23, "steel"),                          // exposed barrel
+      ...muzzleDevice(0.32, 0.026, 0.05, 3),
+      ...rail(0.10, 0.20, 0.071, 0.018),
+      ...frontSight(0.105, 0.23, 0.069),
+      ...rearSight(0.102, 0.0, 0.071),
+      ...triggerGuard(-0.01, 0.025, 0.04),
+      ejectionPort(0.022, 0.05, 0.08),
+      chargingHandle(-0.027, 0.06, 0.035),
+      slingLoop(-0.021, 0.02, -0.02),
+    ],
+    muzzle: [0, 0.055, 0.345], eject: [0.028, 0.05, 0.08],
+    magazine: [
+      B(0.025, 0.14, 0.035, 0, 0, 0, "polymer", { rx: -0.08 }),
+      B(0.029, 0.008, 0.04, 0, -0.073, 0.006, "rubber", { rx: -0.08 }),
+      B(0.027, 0.004, 0.038, 0, -0.025, 0.002, "brass"),
+    ], magazinePos: [0, -0.08, 0.07], length: 0.35,
+    action: {
+      kind: "slide", parts: [
+        B(0.044, 0.04, 0.23, 0, 0.065, 0.08, "metal"),
+        ...Array.from({ length: 5 }, (_, i) => B(0.046, 0.018, 0.004, 0, 0.065, -0.015 + i * 0.009, "steel", { rx: -0.25 })),
+      ],
+    },
+    aimPoint: [0, 0.105, 0.23],
+  },
   smg: {
     parts: [
       B(0.05, 0.07, 0.34, 0, 0.04, 0.1),                               // receiver
@@ -304,6 +336,35 @@ const SPECS: Record<WeaponId, Spec> = {
       B(0.026, 0.004, 0.04, 0, -0.005, 0, "metal"),                                  // seam band
     ], magazinePos: [0, -0.07, 0.06], length: 0.3,
     aimPoint: [0, 0.092, 0.16],
+  },
+  carbine: {
+    // C-20 Side Part: short bullpup, with its magazine behind the hand and a full-length sight rail.
+    parts: [
+      B(0.05, 0.08, 0.28, 0, 0.02, -0.005, "metal"),                  // rear receiver / stock body
+      B(0.055, 0.05, 0.38, 0, 0.0, 0.12, "tan"),                      // lower receiver into fore-end
+      B(0.052, 0.052, 0.28, 0, 0.045, 0.32, "polymer"),               // short handguard
+      ...Array.from({ length: 5 }, (_, i) => B(0.054, 0.014, 0.006, 0, 0.045, 0.22 + i * 0.045, "steel")), // broad cooling slots
+      ...rail(-0.16, 0.46, 0.088, 0.022),
+      C(0.017, 0.22, 0, 0.06, 0.56, "steel"),                          // compact barrel
+      ...muzzleDevice(0.66, 0.026, 0.04, 3),
+      ...grip(0, -0.055, 0.12, 0.034, 0.1, 0.05, "rubber"),
+      B(0.052, 0.035, 0.075, 0, -0.008, -0.085, "steel"),             // rear magazine well
+      B(0.054, 0.075, 0.03, 0, 0.02, -0.17, "rubber"),                // flush shoulder pad
+      B(0.038, 0.025, 0.16, 0, 0.067, -0.1, "tan"),                   // cheek rest
+      ...frontSight(0.112, 0.45, 0.082),
+      ...rearSight(0.108, 0.03, 0.088),
+      ...triggerGuard(-0.02, 0.13, 0.05),
+      ejectionPort(0.027, 0.045, -0.02),
+      chargingHandle(-0.032, 0.06, 0.13),
+      slingLoop(-0.027, 0.015, -0.17), slingLoop(0.027, 0.025, 0.39),
+    ],
+    muzzle: [0, 0.055, 0.68], eject: [0.032, 0.05, -0.02],
+    magazine: [
+      B(0.032, 0.16, 0.06, 0, 0, 0, "polymer", { rx: -0.16 }),
+      B(0.035, 0.008, 0.064, 0, -0.083, 0.013, "rubber", { rx: -0.16 }),
+      ...Array.from({ length: 3 }, (_, i) => B(0.034, 0.005, 0.062, 0, -0.025 - i * 0.035, 0.005 + i * 0.006, "steel", { rx: -0.16 })),
+    ], magazinePos: [0, -0.09, -0.09], length: 0.68,
+    aimPoint: [0, 0.112, 0.45],
   },
   rifle: {
     parts: [
@@ -398,6 +459,40 @@ const SPECS: Record<WeaponId, Spec> = {
       ],
     },
     aimPoint: [0, 0.094, 0.68],
+  },
+  autoshotgun: {
+    // SG-6 Hot Towel: a gas-operated tactical shotgun with a boxy action and long tube magazine.
+    parts: [
+      B(0.055, 0.08, 0.34, 0, 0.04, 0.08, "metal"),                   // tall self-loading receiver
+      B(0.06, 0.022, 0.16, 0, 0.088, 0.09, "steel"),                  // raised action cover
+      ...rail(-0.02, 0.24, 0.102, 0.022),
+      C(0.032, 0.52, 0, 0.065, 0.51, "steel"),                         // barrel
+      C(0.034, 0.41, 0, 0.028, 0.455, "metal"),                        // tube magazine
+      B(0.058, 0.06, 0.02, 0, 0.045, 0.255, "steel"),                 // receiver / twin-tube collar
+      B(0.058, 0.06, 0.016, 0, 0.045, 0.63, "steel"),                 // front twin-tube collar
+      C(0.04, 0.02, 0, 0.065, 0.77, "steel"),                          // muzzle ring
+      B(0.05, 0.055, 0.2, 0, 0.02, 0.42, "tan"),                      // ventilated fore-end
+      ...Array.from({ length: 6 }, (_, i) => B(0.052, 0.015, 0.006, 0, 0.02, 0.35 + i * 0.03, "rubber")), // broad grip ribs
+      ...grip(0, -0.055, -0.015, 0.036, 0.1, 0.05, "rubber"),
+      B(0.05, 0.075, 0.34, 0, 0.025, -0.245, "tan"),                   // straight tactical stock
+      B(0.045, 0.026, 0.18, 0, 0.073, -0.25, "polymer"),              // raised comb
+      B(0.056, 0.09, 0.022, 0, 0.025, -0.42, "rubber"),               // broad recoil pad
+      ...frontSight(0.115, 0.66, 0.085),
+      ...rearSight(0.111, 0.02, 0.102),
+      ejectionPort(0.03, 0.055, 0.12),
+      B(0.014, 0.032, 0.035, 0, 0.002, 0.11, "steel"),                 // loading gate
+      ...triggerGuard(-0.018, 0.04, 0.055),
+      slingLoop(-0.027, 0.0, -0.34), slingLoop(0.023, 0.0, 0.55),
+    ],
+    muzzle: [0, 0.065, 0.78], eject: [0.032, 0.055, 0.12],
+    magazine: null, magazinePos: [0, 0, 0], length: 0.8,
+    action: {
+      kind: "slide", parts: [
+        B(0.052, 0.026, 0.11, 0, 0.065, 0.13, "steel"),                // reciprocating bolt
+        B(0.025, 0.012, 0.018, 0.035, 0.06, 0.12, "brass"),            // charging handle
+      ],
+    },
+    aimPoint: [0, 0.115, 0.66],
   },
   dmr: {
     // M-1 Clean Line: a semi-auto marksman rifle, not the bolt sniper. One-piece walnut stock with a
