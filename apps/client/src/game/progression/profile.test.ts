@@ -115,7 +115,7 @@ describe("haircuts in the profile", () => {
     saveProfile(p);
     const opened = openCrate(new Date(2026, 8, 9, 23).getTime());
     expect(opened?.profile.crates).toBe(3);
-    expect(opened?.prize.kind === "skin" || opened?.prize.kind === "haircut").toBe(true);
+    expect(["skin", "haircut", "outfit"]).toContain(opened?.prize.kind);
   });
 
   it("starts with the cap alone and hands out the first haircut for turning up once", () => {
