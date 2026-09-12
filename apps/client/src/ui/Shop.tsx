@@ -8,6 +8,7 @@ import { MatchPhase,
 import type { HudState } from "../game/store";
 import { uiSound } from "../game/audio";
 import { feelOf } from "../game/combat/weaponFeel";
+import { SHOP_ART } from "./shopArt";
 
 export interface ShopApi {
   /** "The Boys" mode: pick the role you respawn as. */
@@ -110,7 +111,7 @@ export function Shop({ h, api, now }: Props) {
     // `verdict` closes over the wallet, which changes on every purchase — rebinding is the point.
   });
 
-  /** One row. `cat`/`pos` render the two-key shortcut; `art` is a 26 px glyph, not a card. */
+  /** One row. `cat`/`pos` render the two-key shortcut; `art` is a large scan silhouette. */
   const row = (
     key: string, cat: CatId, pos: number, art: React.ReactNode, name: React.ReactNode,
     price: number, stats: React.ReactNode, blurb: string,
@@ -140,6 +141,7 @@ export function Shop({ h, api, now }: Props) {
 
   const weaponRow = (cat: CatId) => (id: WeaponId, i: number) => {
     const w = WEAPONS[id];
+    const Art = SHOP_ART[id];
     const starter = boys && id === boysClass(h.boysClass).starter;
     const carried = id === secondary || id === primary;
     const v = verdict(id);
@@ -147,12 +149,14 @@ export function Shop({ h, api, now }: Props) {
     const swapping = w.slot === 1 ? primary : secondary !== "pistol" ? secondary : null;
     // The SCOPE badge follows the glass the player will actually look through (matrix D-B2), not
     // WeaponDef.scoped, which stays the sniper-only balance predicate it has always been.
-    return row(id, cat, i + 1, null,
+    const decidingStat = w.kind === "launcher" ? `BLAST ${GRENADES.shell.radius} M`
+      : w.pellets > 1 ? `${w.pellets}×${w.damage} PELLETS`
+      : w.automatic ? `${w.rpm} RPM`
+      : `${w.damage} DAMAGE`;
+    return row(id, cat, i + 1, <Art />,
       <>{w.name}{feelOf(w.id).scope !== null && <span className="shop-slot">SCOPE</span>}</>,
       starter ? 0 : WEAPON_PRICES[id],
-      w.kind === "launcher"
-        ? <>BLAST {GRENADES.shell.damage} · R {GRENADES.shell.radius} m · MAG {w.magazine}</>
-        : <>DMG {w.damage}{w.pellets > 1 ? `×${w.pellets}` : ""} · RPM {w.rpm} · MAG {w.magazine}</>,
+      <>{decidingStat}</>,
       w.name,
       {
         carried, verdict: v,
@@ -179,12 +183,13 @@ export function Shop({ h, api, now }: Props) {
 
   const grenadeRow = (id: GrenadeId, i: number) => {
     const g = GRENADES[id];
+    const Art = SHOP_ART[id];
     const count = g.slot === "lethal" ? (wallet.lethal === id ? wallet.lethalCount : 0) : (wallet.tactical === id ? wallet.tacticalCount : 0);
     const v = verdict(id);
-    return row(id, 3, i + 1, null,
+    return row(id, 3, i + 1, <Art />,
       <>{g.name}<span className={`shop-slot ${g.slot}`}>{g.slot === "lethal" ? "G" : "4"}</span></>,
       g.price,
-      <>{g.damage > 0 ? `DMG ${g.damage} · R ${g.radius} m` : `R ${g.radius} m`}{g.slot === "lethal" ? " · cook with G" : ""}</>,
+      <>{g.damage > 0 ? `${g.damage} DAMAGE` : `${g.radius} M RADIUS`}</>,
       g.name,
       {
         carried: count > 0, verdict: v, tag: count > 0 ? `×${count}` : undefined,
@@ -199,13 +204,16 @@ export function Shop({ h, api, now }: Props) {
     const out: React.ReactNode[] = [];
     for (const id of ARMOR_ORDER) {
       const a = ARMOR[id]; const worn = h.armor >= a.armor; const v = verdict(id); pos++;
-      out.push(row(id, 4, pos, null, a.name, a.price, <>PLATE {a.armor} · halves every hit</>, a.blurb,
+      const Art = SHOP_ART[id];
+      out.push(row(id, 4, pos, <Art />, a.name, a.price, <>{a.armor} PLATE</>, a.blurb,
         { carried: worn, verdict: v, tag: worn ? "WORN" : undefined, label: v.ok ? (h.armor > 0 ? "TOP UP" : "BUY") : v.reason === "money" ? "TOO POOR" : "—", onBuy: () => api.buy(id) }));
     }
     if (h.mode !== "bomb") for (const id of PERK_ORDER) {
       const p = PERKS[id]; const active = perkActive(wallet.perks, id, h.serverNow); const v = verdict(id); pos++;
       const leftS = active && p.durationMs > 0 ? Math.ceil((wallet.perks[id] - h.serverNow) / 1000) : null;
-      out.push(row(id, 4, pos, null, p.name, p.price, <>{p.blurb}</>, p.blurb,
+      const Art = SHOP_ART[id];
+      const stat = { flask: "20% LESS DAMAGE", roids: "REGEN 6 HP/S", energy: "+15% SPRINT", fade: "RESPAWN −1 S" }[id];
+      out.push(row(id, 4, pos, <Art />, p.name, p.price, <>{stat}</>, p.blurb,
         { carried: active, verdict: v, tag: active ? (leftS !== null ? `RUNNING ${leftS}s` : "ARMED") : undefined, label: v.ok ? "USE" : v.reason === "money" ? "TOO POOR" : active ? "ACTIVE" : "—", onBuy: () => api.buy(id) }));
     }
     return out;
