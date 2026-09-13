@@ -213,11 +213,11 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
           <div className="mm-title-grid">
             <div className="mm-title-left">
               <header className="mm-hero">
-                <div className="mm-pole" aria-hidden="true" />
                 <div>
-                  <h1 className="wordmark">BARBERSTRIKE</h1>
-                  <div className="subtitle">AFTER HOURS</div>
-                  <p className="mm-tagline">The district is closed. The chairs are empty. Nobody is here for a haircut.</p>
+                  <div className="mm-kicker"><span /> NIGHT DISTRICT / AFTER HOURS</div>
+                  <h1 className="wordmark"><span>BARBER</span><strong>STRIKE</strong></h1>
+                  <div className="mm-brand-rule" aria-hidden="true"><i /><b>✂</b><i /></div>
+                  <p className="mm-tagline">The district is closed. The chairs are empty.<br />Nobody is here for a haircut.</p>
                 </div>
               </header>
 

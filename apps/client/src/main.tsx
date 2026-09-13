@@ -9,6 +9,7 @@ import "@fontsource/inter/600.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "./ui/styles.css";
+import "./ui/cinematic.css";
 
 /**
  * `/viewer` is its own page, not a mode of the game.
