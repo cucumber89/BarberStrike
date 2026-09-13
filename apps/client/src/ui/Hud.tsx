@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { boysClass, BOMB, GAME_VERSION, GRENADES, GUN_GAME, HAIRCUTS, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, PLAYER, TEAM_NAMES, WEAPONS, BADGES, killerName, ladderDone, ladderWeapon, parseHaircut, perkActive, worstHaircut, type GameMode, type WeaponId } from "@frankibarber/shared";
+import { boysClass, BOMB, DUEL, GAME_VERSION, GRENADES, GUN_GAME, HAIRCUTS, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, PLAYER, TEAM_NAMES, WEAPONS, BADGES, killerName, ladderDone, ladderWeapon, parseHaircut, perkActive, worstHaircut, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import { pelletRing } from "../game/combat/weaponFeel";
 import { TeamPicker } from "./TeamPicker";
@@ -226,6 +226,8 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   // Drop D: Ostrzyżeni. The sides are the teams, so the only new reads are who is still unshaved
   // (counted from the scoreboard rows the HUD already has) and which side I am on.
   const infection = h.mode === "ostrzyzeni";
+  // GÓRA's 1 v 1: the round number, the score, the clock; one life a round.
+  const duel = h.mode === "duel";
   // The bar is a fraction of what THIS player can hold: a Boys class, an Ostrzyżony's bigger pool,
   // or the ordinary hundred. Without this a 220 HP chaser draws a bar twice the width of its box.
   const maxHealth = h.mode === "boys" ? boysClass(h.boysClass).health
@@ -267,6 +269,14 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
             ? (meShaved ? "OSTRZYSZ ICH ZA CHWILĘ — maszynka w dłoni" : `PRZYGOTOWANIE · B TO BUY · RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`)
             : meShaved ? "JESTEŚ OSTRZYŻONY — goń ich z maszynką"
             : "PRZEŻYJ — nie daj się ostrzyc"}</span>
+        </div>
+      )}
+      {duel && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && (
+        <div className="bomb-hud duel" data-testid="duel-line">
+          <b>RUNDA {h.round + 1} · {TEAM_NAMES[h.myTeam]} {h.myTeam === 0 ? h.scoreA : h.scoreB} : {h.myTeam === 0 ? h.scoreB : h.scoreA} · DO {DUEL.wins} · {fmtTime(timeLeft)}</b>
+          <span>{h.phase === MatchPhase.Prep
+            ? (h.alive ? `${h.round > 0 && h.round % DUEL.halfRounds === 0 ? "ZMIANA STRON · " : ""}B TO BUY · RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s` : `NASTĘPNA RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`)
+            : "JEDNO ŻYCIE · po czasie wygrywa więcej zdrowia"}</span>
         </div>
       )}
       {/* Damage vignette / direction */}
@@ -474,7 +484,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           <div className="death-title">{h.killerName ? <>ELIMINATED BY <b>{h.killerName}</b></> : "ELIMINATED"}</div>
           {h.killerWeapon && h.killerName && <div className="death-weapon">{killerName(h.killerWeapon)}</div>}
           <div className="death-respawn">
-            {h.mode === "bomb" && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) ? "BACK NEXT ROUND" : `RESPAWN IN ${Math.max(0, Math.ceil((h.respawnAt - now) / 1000))}`}
+            {(h.mode === "bomb" || h.mode === "duel") && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) ? "BACK NEXT ROUND" : `RESPAWN IN ${Math.max(0, Math.ceil((h.respawnAt - now) / 1000))}`}
           </div>
         </div>
       )}

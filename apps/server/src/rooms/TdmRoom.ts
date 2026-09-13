@@ -16,6 +16,7 @@ import {
   CHAT, MARK, MAX_BOTS, BOT_NAMES, botId, isBotLevel,
   GUN_GAME, MELEE_WEAPON, ladderAfterKill, ladderDone, ladderWeapon,
   OSTRZYZENI, PERK_ARMED_MS, convertsOnKill, infectionRoundWinner, pickFirstShaved,
+  DUEL, duelRoundWinner, duelSpawnSide,
   DEFAULT_HAIRCUT, HAIRCUTS, encodeHaircut, isHaircutId, isShave, resetShaves, shaveOnce,
   type BodyState, type CollisionWorld, type DamagedEvent, type FireMessage, type HitEvent, type InputTuple, type KillEvent,
   type MapDef, type PlayerInput, type SpawnPoint, type ShotEvent, type SpawnEvent, type Target, type Team, type WeaponId, type WelcomeMessage,
@@ -242,6 +243,13 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   /** Which Prep an infection round is in: the buy window before the round, or the break after it. */
   private infectionStage: "buy" | "break" = "buy";
   /**
+   * GÓRA's tournament pass: the 1 v 1. Two seats, one life a round, first to `DUEL.wins`, sides
+   * swapped every `DUEL.halfRounds`. The same Prep / Playing machine as Bomb and Ostrzyżeni, the
+   * same `state.bomb.round` counter, the same `scoreA` / `scoreB` — no new field, no new message.
+   */
+  private get duel(): boolean { return this.mode === "duel"; }
+  private duelStage: "buy" | "break" = "buy";
+  /**
    * How long a casualty waits. Gun Game has its own short timer (a party mode: no waves, no shop to
    * spend the wait in) and no perks, so the fade never applies there. A shaved chaser (infection)
    * is back on a short timer too; an unshaved survivor is not respawned by the timer at all during a
@@ -285,6 +293,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // carries the watchers' headroom and `onJoin` enforces the player half of it — otherwise a
     // room with six people watching would report itself full to the seventh who wanted to play.
     this.playerSlots = MAX_PLAYERS - this.botCount;
+    // A duel is two seats and nothing fills an empty one: at most one bot, and only if asked for.
+    if (this.duel) { this.botCount = Math.min(this.botCount, DUEL.players - 1); this.playerSlots = DUEL.players - this.botCount; }
     this.maxClients = this.playerSlots + MAX_SPECTATORS;
     this.botLevel = isBotLevel(options?.botLevel) ? options.botLevel : "normal";
     // Tests and tooling may pin the room's PRNG (spawn picks, pellets, bot aim); never in production.
@@ -320,7 +330,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       if (!p || !s || s.ready || this.rateLimited(s, "other")) return;
       s.ready = true;
       this.spawn(p.id);
-      if (this.mode === "bomb" && this.state.phase === MatchPhase.Playing) { p.alive = false; p.health = 0; }
+      if ((this.mode === "bomb" || this.duel) && this.state.phase === MatchPhase.Playing) { p.alive = false; p.health = 0; }
       this.maybeStartCountdown();
     }));
     this.onMessage(C2S.Rematch, () => { /* handled by the phase timer; kept for future vote logic */ });
@@ -577,7 +587,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (NET_STATS) this.instrumentClient(client);
     client.send(S2C.Welcome, { id: client.sessionId, serverTime: this.now(), tickRate: 1000 / TICK_MS } satisfies WelcomeMessage);
     this.spawn(client.sessionId);
-    if (this.mode === "bomb" && this.state.phase === MatchPhase.Playing) {
+    if ((this.mode === "bomb" || this.duel) && this.state.phase === MatchPhase.Playing) {
       // Late joins spectate until the next round instead of buying a second life by reconnecting.
       p.alive = false; p.health = 0;
     }
@@ -646,6 +656,12 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.state.players.delete(id);
     this.publishCount();
     this.sessions.delete(id);
+    // A duel with one side gone for good is over — a walkover on the score as it stands, so the
+    // result screen and the rematch loop run instead of a lone player winning empty rounds.
+    if (this.duel && (this.state.phase === MatchPhase.Playing || this.state.phase === MatchPhase.Prep)) {
+      const sides = new Set([...this.state.players.values()].filter((p) => p.connected).map((p) => p.team));
+      if (sides.size < 2) this.endMatch();
+    }
   }
 
   // ---------------------------------------------------------------- inputs
@@ -1203,15 +1219,20 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       (this.teams && q.team === p.team ? allies : enemies).push({ x: q.x, y: q.y, z: q.z });
     }
     // FFA (drop 4): every point on the map is a candidate; everyone alive is an enemy.
-    const spawnTeam = this.mode === "bomb" && this.state.phase !== MatchPhase.Waiting && this.state.phase !== MatchPhase.Countdown
-      ? bombSpawnSide(p.team as Team, this.state.bomb.attackTeam as Team) : p.team as Team;
+    const inRound = this.state.phase !== MatchPhase.Waiting && this.state.phase !== MatchPhase.Countdown;
+    const spawnTeam = this.mode === "bomb" && inRound ? bombSpawnSide(p.team as Team, this.state.bomb.attackTeam as Team)
+      : this.duel && inRound ? duelSpawnSide(p.team as Team, this.state.bomb.round + 1)
+      : p.team as Team;
     // Drop D: a chaser comes back ON THE HUNT, not at the far end of the district. Every other
     // spawn rule maximises distance from the enemy, which for the one player who has to REACH
     // somebody is exactly backwards: MEASURED, a chaser spent its round walking, died, and walked
     // again. It returns at the nearest spawn point that is still `huntSpawnMinM` away — close
     // enough to keep the pressure on, far enough that nobody is killed as they respawn.
     const hunting = this.infection && p.shaved && this.state.phase === MatchPhase.Playing;
-    const sp = hunting ? this.huntSpawn() ?? pickSpawn(this.map, spawnTeam, {
+    // A duel starts from the map's FIRST point of the set, every round: two players who begin the
+    // same distance from everything, with no roll of the dice in it.
+    const sp = this.duel ? this.map.spawns.find((v) => v.team === spawnTeam) ?? pickSpawn(this.map, spawnTeam, { enemies, allies, rand: this.rand })
+      : hunting ? this.huntSpawn() ?? pickSpawn(this.map, spawnTeam, {
       enemies, allies, rand: this.rand,
       danger: () => false,
     }, true) : pickSpawn(this.map, spawnTeam, {
@@ -1312,13 +1333,14 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // clock long enough for every round they can play, so the match ends on rounds, not on time.
     this.state.matchEndsAt = this.now() + (this.mode === "bomb" ? 30 * 60000
       : this.infection ? OSTRZYZENI.rounds * (OSTRZYZENI.prepMs + OSTRZYZENI.roundMs + OSTRZYZENI.breakMs) + 60000
+      : this.duel ? DUEL.matchMs
       : MATCH.durationMs);
     this.state.phaseEndsAt = this.state.matchEndsAt;
     this.state.scoreA = 0; this.state.scoreB = 0; this.state.winner = -1;
     this.state.winnerId = ""; this.state.winnerName = "";
     this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
     if (this.mode === "bomb") { this.state.bomb.round = 0; this.state.bomb.attackTeam = 0; this.bombLosses = [0, 0]; }
-    if (this.infection) this.state.bomb.round = 0;
+    if (this.infection || this.duel) this.state.bomb.round = 0;
     // Drop 4: flags go back to neutral; the first score tick is a full interval away.
     for (let i = 0; i < this.flagSims.length; i++) { this.flagSims[i] = neutralFlag(); this.syncFlag(i, false); }
     this.nextDomTickAt = this.now() + DOM.tickMs;
@@ -1330,7 +1352,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       if (s) s.rung = 0; // drop D: everyone starts the ladder on the first rung
       this.writeWallet(p, freshWallet());
       if (this.mode === "bomb") p.money = BOMB.startMoney;
-      else if (!this.infection) this.spawn(id); // infection spawns everyone in `beginInfectionRound`
+      else if (!this.infection && !this.duel) this.spawn(id); // infection and the duel spawn everyone in their round start
       // AFTER the spawn, because the spawn is what decides the wallet in a mode that overrides it:
       // Gun Game hands out a rung and no money, so announcing the fresh wallet first told those
       // clients they had $2000 they were never going to have, and the HUD believed it until the
@@ -1339,7 +1361,62 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     }
     if (this.mode === "bomb") this.beginBombRound(true);
     else if (this.infection) this.beginInfectionRound();
+    else if (this.duel) this.beginDuelRound();
     else this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Playing, winner: -1, endsAt: this.state.phaseEndsAt } satisfies MatchEventMessage);
+  }
+
+  // ---------------------------------------------------------------- 1 v 1 (GÓRA tournament pass)
+
+  /** A round: fresh wallets with the round money, both players on their side's start, a 4 s freeze to buy. */
+  private beginDuelRound(): void {
+    const st = this.state, now = this.now();
+    st.phase = MatchPhase.Prep;
+    st.phaseEndsAt = now + DUEL.prepMs;
+    this.duelStage = "buy";
+    this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
+    this.flushPendingTeams();
+    for (const [id, p] of st.players) {
+      if (!p.connected) continue;
+      this.writeWallet(p, { ...freshWallet(), money: DUEL.roundMoney });
+      this.spawn(id);
+      this.clientOf(id)?.send(S2C.Money, { delta: 0, reason: "reset", total: p.money } satisfies MoneyEvent);
+    }
+    this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Prep, winner: -1, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
+  }
+
+  private releaseDuelRound(): void {
+    const st = this.state;
+    st.phase = MatchPhase.Playing;
+    st.phaseEndsAt = this.now() + DUEL.roundMs;
+    this.duelStage = "break";
+    this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Playing, winner: -1, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
+  }
+
+  /**
+   * Is the round over? A kill, a trade (nobody scores), or the clock (more health wins; even is
+   * nobody). The match ends at `DUEL.wins`, or at the match cap once somebody is ahead.
+   */
+  private stepDuel(now: number): void {
+    if (!this.duel || this.state.phase !== MatchPhase.Playing) return;
+    const st = this.state;
+    const roster = [...st.players.values()].map((p) => ({ team: p.team, alive: p.alive, connected: p.connected && !!this.sessions.get(p.id)?.ready, health: p.health }));
+    const result = duelRoundWinner(roster, now, st.phaseEndsAt);
+    if (!result) {
+      // A side with nobody connected (a reconnect in progress) holds the clock rather than losing on it.
+      if (!roster.some((p) => p.connected && p.team === 0) || !roster.some((p) => p.connected && p.team === 1)) st.phaseEndsAt = Math.max(st.phaseEndsAt, now + 5000);
+      return;
+    }
+    if (result.winner === 0) st.scoreA++;
+    else if (result.winner === 1) st.scoreB++;
+    st.bomb.round++;
+    st.bomb.result = result.reason;
+    this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
+    const decided = Math.max(st.scoreA, st.scoreB) >= DUEL.wins || (now >= st.matchEndsAt && st.scoreA !== st.scoreB);
+    if (decided) { this.endMatch(); return; }
+    st.phase = MatchPhase.Prep;
+    st.phaseEndsAt = now + DUEL.breakMs;
+    this.duelStage = "break";
+    this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Prep, winner: result.winner, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
   }
 
   // ---------------------------------------------------------------- Ostrzyżeni (drop D)
@@ -1659,6 +1736,15 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       }
       return;
     }
+    // The duel: the same two Preps; the round's end is `stepDuel`'s, and the match cap only ends a
+    // match somebody is winning — a tie at the cap plays on until a round is won.
+    if (this.duel && connected > 0 && (st.phase === MatchPhase.Playing || st.phase === MatchPhase.Prep)) {
+      if (now >= st.matchEndsAt && st.scoreA !== st.scoreB && st.phase === MatchPhase.Prep) this.endMatch();
+      else if (st.phase === MatchPhase.Prep && now >= st.phaseEndsAt) {
+        if (this.duelStage === "buy") this.releaseDuelRound(); else this.beginDuelRound();
+      }
+      return;
+    }
     // Drop D: infection runs on rounds too — Prep is either the buy window (release it) or the
     // break after a round (start the next one). The round's own end is decided by `stepInfection`.
     if (this.infection && connected > 0 && (st.phase === MatchPhase.Playing || st.phase === MatchPhase.Prep)) {
@@ -1715,7 +1801,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         // Drop D: in infection only the chasers come back inside a round — an unshaved survivor who
         // dies without being converted is out until the next round, or the last one standing would
         // never be the last one standing.
-        const returns = warmUp || (this.state.phase === MatchPhase.Playing && this.mode !== "bomb"
+        const returns = warmUp || (this.state.phase === MatchPhase.Playing && this.mode !== "bomb" && !this.duel
           && (!this.infection || p.shaved));
         if (returns && s.respawnAt && now >= s.respawnAt && p.connected) { s.respawnAt = 0; this.spawn(id); }
         continue;
@@ -1809,6 +1895,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.stepFlags(now);
     this.stepBombMode(now);
     this.stepInfection(now);
+    this.stepDuel(now);
   }
 
   // ---------------------------------------------------------------- economy (drop 2)
@@ -1853,7 +1940,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private buyContext(p: PlayerState, s: Session): BuyContext {
     return {
       boysClass: this.mode === "boys" ? p.boysClass : undefined,
-      bombBuying: this.mode === "bomb" ? this.state.phase === MatchPhase.Prep && this.state.bomb.stage === "buy" : undefined,
+      bombBuying: this.mode === "bomb" ? this.state.phase === MatchPhase.Prep && this.state.bomb.stage === "buy"
+        : this.duel ? this.state.phase === MatchPhase.Prep : undefined,
       now: this.now(), spawnedAt: s.spawnedAt, phase: this.state.phase as MatchPhase, alive: p.alive,
       nearStation: this.nearStation(s.body),
       releaseAt: this.state.phase === MatchPhase.Prep ? this.state.phaseEndsAt : 0,

@@ -84,7 +84,9 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   const [botCount, setBotCount] = useState(() => { try { return Math.max(0, Math.min(MAX_BOTS, Number(localStorage.getItem("fb_bots") ?? 0) || 0)); } catch { return 0; } });
   const [botLevel, setBotLevel] = useState<BotLevel>(() => { try { const l = localStorage.getItem("fb_botlevel"); return l === "easy" || l === "hard" ? l : "normal"; } catch { return "normal"; } });
   const pickBots = (n: number, l: BotLevel) => { setBotCount(n); setBotLevel(l); try { localStorage.setItem("fb_bots", String(n)); localStorage.setItem("fb_botlevel", l); } catch { /* private mode */ } };
-  const bots = { count: botCount, level: botLevel };
+  // A duel has two seats: at most one of them a bot, and none unless asked for.
+  const botMax = gameMode === "duel" ? 1 : MAX_BOTS;
+  const bots = { count: Math.min(botMax, botCount), level: botLevel };
   const [rooms, setRooms] = useState<RoomListing[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -371,10 +373,10 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                   </div>
 
                   <div className="lb-block">
-                    <h2 className="lb-h"><em>{gameMode === "boys" ? "04" : "03"}</em> BOTY <span data-testid="bots-count">{botCount === 0 ? "BRAK" : `${botCount} · ${BOT_PRESETS[botLevel].name}`}</span></h2>
+                    <h2 className="lb-h"><em>{gameMode === "boys" ? "04" : "03"}</em> BOTY <span data-testid="bots-count">{bots.count === 0 ? "BRAK" : `${bots.count} · ${BOT_PRESETS[botLevel].name}`}</span></h2>
                     <div className="bots-row">
-                      <input type="range" min={0} max={MAX_BOTS} step={1} value={botCount} onChange={(e) => pickBots(Number(e.target.value), botLevel)} data-testid="bots-range" aria-label="Bots" />
-                      <b className="bots-num">{botCount}</b>
+                      <input type="range" min={0} max={botMax} step={1} value={bots.count} onChange={(e) => pickBots(Number(e.target.value), botLevel)} data-testid="bots-range" aria-label="Bots" />
+                      <b className="bots-num">{bots.count}</b>
                     </div>
                     <div className="seg" role="radiogroup" aria-label="Bot level">
                       {BOT_LEVELS.map((l) => (
