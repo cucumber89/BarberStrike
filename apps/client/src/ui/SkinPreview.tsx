@@ -35,6 +35,10 @@ export function SkinPreview({ weapon, skinId, rotate = true }: { weapon: WeaponI
     const s = state.current; if (!s) return;
     s.binding.clear(); s.model?.root.dispose(false, false);
     s.model = buildWeaponModel(weapon, s.mats, s.scene, `preview_${weapon}`);
+    // Every selection starts in a three-quarter side view, where the silhouette, magazine and
+    // stock are readable. Continuous rotation may have left the previous gun pointing end-on.
+    s.camera.alpha = .12;
+    s.camera.beta = 1.32;
     s.camera.radius = Math.max(.65, s.model.length * 1.65);
     s.camera.target.set(0, .08, s.model.length * .22);
     elementReady(false);
