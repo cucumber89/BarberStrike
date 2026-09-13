@@ -32,7 +32,7 @@ export interface ViewpointSpec { id: string; label: string; pos: [number, number
  * Somewhere to start, and somewhere to jump to. The list is the district's own areas, in the order
  * a person walks them, plus the two bomb sites — the places a report is most often about.
  */
-export const VIEWPOINTS: readonly ViewpointSpec[] = [
+export const DISTRICT_VIEWPOINTS: readonly ViewpointSpec[] = [
   { id: "street", label: "ULICA", pos: [-10, 1.7, -12], look: [2, 3, 0] },
   { id: "shop", label: "ZAKŁAD", pos: [2, 1.7, 1.2], look: [5, 1.7, 7] },
   { id: "hall", label: "ZAPLECZE", pos: [1, 1.7, 11], look: [3, 2, 17] },
@@ -46,6 +46,24 @@ export const VIEWPOINTS: readonly ViewpointSpec[] = [
   { id: "north", label: "PÓŁNOC", pos: [7, 1.7, 38], look: [-10, 3, 42] },
   { id: "overview", label: "Z GÓRY", pos: [-30, 26, -32], look: [4, 0, 9] },
 ];
+
+/** GÓRA (DACH): the two starts, the crossroads, the perch, a court, a yard, the lane, and the roof from above. */
+export const GORA_VIEWPOINTS: readonly ViewpointSpec[] = [
+  { id: "start_w", label: "START W", pos: [-13.6, 1.62, -6.0], look: [-15.2, 1.6, -1.0] },
+  { id: "podest_w", label: "PODEST W", pos: [-7.0, 1.62, 0], look: [0, 2.6, 0] },
+  { id: "perch", label: "MASZYNOWNIA", pos: [0, 3.62, 0.6], look: [0, 0.5, -7] },
+  { id: "court_s", label: "DZIEDZINIEC S", pos: [-5.5, 1.62, -4.5], look: [1, 1.5, -7] },
+  { id: "yard_w", label: "PODWÓRKO W", pos: [-11.5, 1.62, 0.5], look: [-13, 1.5, 9] },
+  { id: "lane_s", label: "PASMO S", pos: [7.0, 1.62, -9.4], look: [-3, 1.5, -9.4] },
+  { id: "start_e", label: "START E", pos: [13.6, 1.62, 6.0], look: [15.2, 1.6, 1.0] },
+  { id: "podest_e", label: "PODEST E", pos: [7.0, 1.62, 0], look: [0, 2.6, 0] },
+  { id: "overview", label: "Z GÓRY", pos: [-10, 24, -30], look: [0, 0, 0] },
+];
+
+/** The spots for a map: the district's areas, or the roof's. */
+export const viewpointsFor = (mapId: string): readonly ViewpointSpec[] => mapId === MAPS.gora.id ? GORA_VIEWPOINTS : DISTRICT_VIEWPOINTS;
+/** Kept as the district's list for the tools that address its spots by id. */
+export const VIEWPOINTS = DISTRICT_VIEWPOINTS;
 
 export interface ViewerStats { fps: number; drawCalls: number; meshes: number; players: number; x: number; y: number; z: number }
 
@@ -140,7 +158,7 @@ export class ViewerScene {
 
   /** Jump to a named viewpoint, or to a bomb site by its id ("A" / "B"). */
   go(id: string): void {
-    const v = VIEWPOINTS.find((p) => p.id === id);
+    const v = viewpointsFor(this.conn.state.mapId).find((p) => p.id === id);
     if (v) {
       this.following = "";
       this.pose = { ...this.pose, x: v.pos[0], y: v.pos[1], z: v.pos[2] };

@@ -8,12 +8,14 @@ export type Team = 0 | 1;
  * team 0 with no friendly checks. Drop D: Gun Game (FFA on a weapon ladder) and Ostrzyżeni
  * (infection: sides are survivors / shaved, reusing the team plumbing).
  *
+ * GÓRA's tournament pass adds `duel`: two players, short rounds, sides swapped, first to `DUEL.wins`.
+ *
  * `GAME_MODES` is the lobby's list and FFA is deliberately not in it — The Boys replaced it in the
  * picker (PR #14) while the mode itself stays playable for rooms that already ask for it, which is
  * why `isGameMode` still accepts it.
  */
-export type GameMode = "tdm" | "ffa" | "dom" | "bomb" | "boys" | "gungame" | "ostrzyzeni";
-export const GAME_MODES: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni"] as const;
+export type GameMode = "tdm" | "ffa" | "dom" | "bomb" | "boys" | "gungame" | "ostrzyzeni" | "duel";
+export const GAME_MODES: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni", "duel"] as const;
 export const isGameMode = (v: unknown): v is GameMode =>
   typeof v === "string" && (v === "ffa" || (GAME_MODES as readonly string[]).includes(v));
 

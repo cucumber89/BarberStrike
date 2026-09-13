@@ -10,8 +10,8 @@
  *   2. what a corner and a flight of stairs actually cost in this model (answer: nothing);
  *   3. NIGHT_DISTRICT's real rotations, walked on its real walk grid with its real geometry, and
  *      its sight-line distribution — the reference the second map is compared against;
- *   4. the drafted GÓRA routes and sight lines (a polyline on flat ground: the geometry does not
- *      exist yet, so these are the drawn distances timed with the real movement model).
+ *   4. GÓRA (DACH), the 1v1 roof, walked from BOTH starts on its real geometry — the rotation
+ *      table `docs/MAP_2.md` quotes (the full fairness audit is `map-duel.ts`).
  */
 import { CollisionWorld, boxFrom, makeRayHit } from "../../../../packages/shared/src/collision";
 import { PLAYER } from "../../../../packages/shared/src/constants";
@@ -198,90 +198,52 @@ for (const [name, from, to] of [
   console.log(`Of the clear lines, ${over(20)} % are over 20 m, ${over(30)} % over 30 m, ${over(50)} % over 50 m.\n`);
 }
 
-console.log(`\n## 4. GÓRA — the drafted routes (polyline on flat ground; geometry does not exist yet)\n`);
-console.log(`| Rotation | Path (m) | Sprint (s) |`);
-console.log(`|---|---|---|`);
-table([
-  ["T0 spawn → bomb B HOL (0,0)", [[-13, -2.5], [-9.5, -0.2], [-4, 0], [0, 0]]],
-  ["T1 spawn → bomb B HOL (0,0)", [[13, -2.5], [9.5, -0.2], [4, 0], [0, 0]]],
-  ["T0 spawn → bomb A BALKON (0,10), west ring", [[-13, -2.5], [-12.5, 1], [-12, 5], [-9.5, 6], [-6, 8], [0, 10]]],
-  ["T1 spawn → bomb A BALKON (0,10), east ring", [[13, -2.5], [12.5, 1], [12, 5], [9.5, 6], [6, 8], [0, 10]]],
-  ["T0 spawn → bomb A, inner (core passage)", [[-13, -2.5], [-9, 0], [-3.2, 0], [-3.2, 3], [-3.2, 6], [-6, 8], [0, 10]]],
-  ["site B HOL ↔ site A BALKON (core passage)", [[0, 0], [3.2, 1], [3.2, 4], [3.2, 6.5], [6, 8], [0, 10]]],
-  ["site B HOL ↔ site A BALKON (west wing)", [[0, 0], [-6, 0], [-9.5, 1], [-12, 5], [-9.5, 6], [-6, 8], [0, 10]]],
-  ["T0 spawn → flag A SALON (home)", [[-13, -2.5], [-13, -3]]],
-  ["T0 spawn → flag C BALKON", [[-13, -2.5], [-12.5, 1], [-12, 5], [-9.5, 6], [-6, 8], [0, 10]]],
-  ["T1 spawn → flag C BALKON", [[13, -2.5], [12.5, 1], [12, 5], [9.5, 6], [6, 8], [0, 10]]],
-  ["T0 spawn → flag B SYPIALNIA (the far flag)", [[-13, -2.5], [-9, 0], [0, 0], [9, 0], [13, -3]]],
-  ["T0 spawn → T1 spawn (first contact)", [[-13, -2.5], [-9, 0], [0, 0], [9, 0], [13, -2.5]]],
-  ["KUCHNIA → SKŁAD (the north crossing, blocked by the well)", [[-13, 6.5], [-9.5, 6], [-6, 8], [6, 8], [9.5, 6], [13, 6.5]]],
-  ["balcony east → roof (fire escape, +2.9 m)", [[11, 10], [14, 10], [16, 9], [16, 6]]],
-  ["SKŁAD → roof (shelf + hatch, +2.9 m)", [[13, 6.5], [11.5, 6.2], [11, 6]]],
-  ["roof north parapet → the balcony (0,10)", [[11, 7.5], [13, 9], [11, 10], [0, 10]]],
-  ["ŁAZIENKA → south hall (the dead end)", [[0.5, -4], [0.5, -1.5], [0.5, 0]]],
-]);
-
-console.log(`\n## 5. GÓRA — the drafted sight lines (straight line, metres)\n`);
-console.log(`| Line | m |`);
-console.log(`|---|---|`);
-for (const [name, a, b] of [
-  ["BALKON, west end → east end (the long one)", [-8, 10], [12, 10]],
-  ["HOL POŁUDNIOWY, salon door → bedroom door", [-8, 0], [8, 0]],
-  ["DACH, south-west corner → north-east corner", [6, -2], [17, 8]],
-  ["DACH north parapet → bomb site A on the balcony", [11, 8], [0, 10]],
-  ["DACH north parapet → the balcony's west end", [8, 8], [-8, 10]],
-  ["SALON, corner to corner", [-17, -7], [-8, 1]],
-  ["SYPIALNIA, corner to corner", [8, 1], [17, -7]],
-  ["KUCHNIA, corner to corner", [-8, 3], [-17, 9]],
-  ["SKŁAD, corner to corner", [8, 3], [17, 9]],
-  ["HOL PÓŁNOCNY, west leg corner to corner", [-8, 5], [-2.5, 9]],
-  ["across the SZYB (the light well)", [-2.5, 7], [2.5, 7]],
-  ["ŁAZIENKA, door → far corner", [0.5, -1], [-2, -6]],
-] as [string, P, P][]) console.log(`| ${name} | ${line(a, b).toFixed(1)} |`);
-
 // ---------------------------------------------------------------------------------------------
-// 6. GÓRA as BUILT. Sections 4 and 5 above are the drafted polylines that were signed off; this
-//    section re-measures the same routes on the real geometry and the real walk grid, so the doc's
-//    "As built" table is a measurement rather than a drawing.
+// 4. GÓRA (DACH) — the 1v1 roof, as built. The flat's drafted polylines that used to sit here were
+//    the drawing the flat was signed off on; the roof is measured on its real geometry and its real
+//    walk grid, from BOTH starts, so the fairness claim is a number. `map-duel.ts` is the full
+//    audit (spawn lines, symmetry, choices, climbing, floating); this is the rotation table.
 // ---------------------------------------------------------------------------------------------
-console.log(`\n## 6. GÓRA as built (real geometry, real walk grid)\n`);
+console.log(`\n## 4. GÓRA (DACH) as built (real geometry, real walk grid, both starts)\n`);
 const gora = buildCollisionWorld(GORA);
 const gwalk = walkable(GORA);
 prepareNav(gwalk);
 const g0 = GORA.spawns.find((s) => s.team === 0)!;
 const g1 = GORA.spawns.find((s) => s.team === 1)!;
+const grot = (p: { x: number; y: number; z: number }) => ({ x: -p.x, y: p.y, z: -p.z });
 const gsite = (id: string) => { const s = GORA.sites!.find((v) => v.id === id)!; return { x: s.x, y: 0, z: s.z }; };
-const gflag = (id: string) => { const f = GORA.flags.find((v) => v.id === id)!; return { x: f.x, y: 0, z: f.z }; };
-console.log(`| Rotation | Straight (m) | Path (m) | Sprint (s) |`);
-console.log(`|---|---|---|---|`);
+const gflag = (id: string) => { const f = GORA.flags.find((v) => v.id === id)!; return { x: f.x, y: f.y, z: f.z }; };
+console.log(`| Rotation (from T0; T1 walks the 180° twin) | Straight (m) | Path (m) | T0 (s) | T1 (s) |`);
+console.log(`|---|---|---|---|---|`);
 for (const [name, from, to] of [
-  ["T0 spawn → bomb B HOL", { x: g0.x, y: g0.y, z: g0.z }, gsite("B")],
-  ["T1 spawn → bomb B HOL", { x: g1.x, y: g1.y, z: g1.z }, gsite("B")],
-  ["T0 spawn → bomb A BALKON", { x: g0.x, y: g0.y, z: g0.z }, gsite("A")],
-  ["T1 spawn → bomb A BALKON", { x: g1.x, y: g1.y, z: g1.z }, gsite("A")],
-  ["bomb B HOL → bomb A BALKON", gsite("B"), gsite("A")],
-  ["T0 spawn → flag C HOL (the contested one)", { x: g0.x, y: g0.y, z: g0.z }, gflag("C")],
-  ["T0 spawn → flag B SKŁAD (the far flag)", { x: g0.x, y: g0.y, z: g0.z }, gflag("B")],
-  ["T0 spawn → T1 spawn (first contact)", { x: g0.x, y: g0.y, z: g0.z }, { x: g1.x, y: g1.y, z: g1.z }],
-  ["KUCHNIA → SKŁAD (the well is in the way)", { x: -13, y: 0, z: 7 }, { x: 13, y: 0, z: 7 }],
-  ["BALKON → DACH (fire escape)", { x: 8, y: 0, z: 10 }, { x: 14, y: 3, z: 5 }],
-  ["SKŁAD → DACH (loft stair)", { x: 10, y: 0, z: 6 }, { x: 12, y: 3, z: 1.5 }],
-  ["DACH → the balcony below", { x: 12, y: 3, z: 1.5 }, { x: 0, y: 0, z: 10 }],
+  ["start → own crossroads (podest W)", { x: g0.x, y: g0.y, z: g0.z }, { x: -6.2, y: 0, z: 0 }],
+  ["start → the perch", { x: g0.x, y: g0.y, z: g0.z }, gflag("C")],
+  ["start → own lane nook", { x: g0.x, y: g0.y, z: g0.z }, { x: -3.2, y: 0, z: -9.4 }],
+  ["start → bomb A (own yard)", { x: g0.x, y: g0.y, z: g0.z }, gsite("A")],
+  ["start → bomb B (far yard)", { x: g0.x, y: g0.y, z: g0.z }, gsite("B")],
+  ["start → flag A (own gate)", { x: g0.x, y: g0.y, z: g0.z }, gflag("A")],
+  ["start → flag B (far gate)", { x: g0.x, y: g0.y, z: g0.z }, gflag("B")],
+  ["start → the other start (first contact)", { x: g0.x, y: g0.y, z: g0.z }, { x: g1.x, y: g1.y, z: g1.z }],
+  ["bomb A ↔ bomb B", gsite("A"), gsite("B")],
+  ["perch → own lane nook", gflag("C"), { x: -3.2, y: 0, z: -9.4 }],
 ] as [string, { x: number; y: number; z: number }, { x: number; y: number; z: number }][]) {
-  const path = findPath(gwalk, from, to, 60000);
-  if (!path) { console.log(`| ${name} | — | NO PATH | — |`); continue; }
-  const pts: P[] = path.map((p) => [p.x, p.z]);
-  const r = runRoute(gora, pts, from.y);
-  console.log(`| ${name} | ${Math.hypot(to.x - from.x, to.z - from.z).toFixed(1)} | ${polyLen(pts).toFixed(1)} | ${r.stuck ? (polyLen(pts) / 7.6).toFixed(1) + " (est)" : r.s.toFixed(1)} |`);
+  const walkFrom = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) => {
+    const path = findPath(gwalk, a, b, 60000);
+    if (!path) return null;
+    const pts: P[] = path.map((p) => [p.x, p.z]);
+    return { m: polyLen(pts), ...runRoute(gora, pts, a.y) };
+  };
+  const a = walkFrom(from, to), b = walkFrom(grot(from), grot(to));
+  if (!a || !b) { console.log(`| ${name} | — | NO PATH | — | — |`); continue; }
+  console.log(`| ${name} | ${Math.hypot(to.x - from.x, to.z - from.z).toFixed(1)} | ${a.m.toFixed(1)} | ${a.stuck ? (a.m / 7.6).toFixed(1) + " (est)" : a.s.toFixed(2)} | ${b.stuck ? (b.m / 7.6).toFixed(1) + " (est)" : b.s.toFixed(2)} |`);
 }
 {
   const cells: { x: number; z: number; y: number }[] = [];
   for (const [key, ys] of gwalk.cells) {
     const [cx, cz] = key.split(",").map(Number);
-    for (const y of ys) cells.push({ x: cx / 2, z: cz / 2, y });
+    // `cellKey` is round(centre × 2) with centres at .25 offsets: key K is the centre K / 2 − 0.25.
+    for (const y of ys) cells.push({ x: cx / 2 - 0.25, z: cz / 2 - 0.25, y });
   }
-  // Only surfaces a player can actually stand on: the cell AND the height have to be reachable,
-  // or the tops of the ceiling slab (y 4.4, unreachable by design) pollute the sample.
   const reach = reachable(gwalk, GORA.spawns[0]);
   const live = cells.filter((c) => reach.has(`${cellKey(c.x, c.z)}@${c.y}`));
   const rnd = rnd32(12345);
@@ -301,7 +263,7 @@ for (const [name, from, to] of [
   clear.sort((p, q) => p - q);
   const pc = (f: number) => clear[Math.floor(clear.length * f)].toFixed(1);
   const over = (m: number) => ((clear.filter((c) => c >= m).length / clear.length) * 100).toFixed(1);
-  console.log(`\n**Sight lines.** ${gwalk.cells.size} walkable cells (${live.length} surfaces reachable from spawn 0 = ${(live.length * WALK_GRID * WALK_GRID).toFixed(0)} m²). ${N} random eye-to-eye pairs, ${clear.length} unobstructed (${((clear.length / N) * 100).toFixed(1)} %):`);
+  console.log(`\n**Sight lines.** ${gwalk.cells.size} walkable cells (${live.length} surfaces reachable from the start = ${(live.length * WALK_GRID * WALK_GRID).toFixed(0)} m²). ${N} random eye-to-eye pairs, ${clear.length} unobstructed (${((clear.length / N) * 100).toFixed(1)} %):`);
   console.log(`median **${pc(0.5)} m**, p90 ${pc(0.9)} m, p99 ${pc(0.99)} m, longest **${max.toFixed(1)} m** ${pair}.`);
   console.log(`Of the clear lines, ${over(10)} % are over 10 m, ${over(20)} % over 20 m, ${over(30)} % over 30 m.\n`);
 }

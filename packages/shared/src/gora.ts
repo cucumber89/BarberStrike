@@ -2,329 +2,304 @@ import { type Box, boxFrom } from "./collision";
 import type { Flag, LightHint, MapDef, MaterialTag, PropHint, Solid, SolidLook, SpawnPoint, Station } from "./map";
 
 /**
- * GÓRA — the flat above the shop (2.1, Drop G).
+ * GÓRA — DACH (the roof of the block), the 1v1 tournament arena.
  *
- * The layout was drafted and signed off in `docs/MAP_2.md` before any of this was written; that
- * document is the reason for every number here, and its §3 table is these extents. In one line:
- * a 34 x 18 m flat, two rings around a solid stair core with an open light well beside it, a back
- * balcony and a roof over the east wing.
+ * Rebuilt from the flat above the shop into the roof of the same block: a 34 × 22 m deck ten
+ * storeys up, fenced all round, with the lift machine room in the middle turned into a perch, the
+ * two stair heads hiding the two starts, and the barber's overflow — chairs, mirrors, a neon —
+ * bolted to the roof felt for after-hours fights.
  *
- *        z=11 ┌────────────────────────────────────────────────────────────┐
- *             │              B A L K O N  (flag C / bomb A)      /SCHODY/  │  fire escape → DACH
- *        z= 9 ├──────────────┬─────────────┬──────────────┬───────────────┤
- *             │  KUCHNIA     │  HOL PN-W   │ SZYB (void)  │  HOL PN-E     │  SKŁAD
- *        z= 5 │  (bomb-free) ├─────────────┼──────────────┼───────────────┤  (loft stair → DACH)
- *             │              │ KLATKA ▸ ▪ RDZEŃ ▪ ◂ PRZEDPOKÓJ            │
- *        z= 1 ├──────────────┴─────────────┴──────────────┴───────────────┤
- *             │              H O L   P O Ł U D N I O W Y  (bomb B)        │
- *        z=-1 ├──────────────┬─────────────┬──────────────┬───────────────┤
- *             │  SALON       │  zabudowa   │  ŁAZIENKA    │  zabudowa     │  SYPIALNIA
- *        z=-7 └──────────────┴─────────────┴──────────────┴───────────────┘
- *            x=-17         x=-8          x=-2.5         x=2.5           x=8   x=17
+ * FAIRNESS IS A CONSTRUCTION, NOT A TUNING. Every solid, prop and light that is not on the centre
+ * line is placed through `pair()`, which also places its 180° twin about the origin:
+ * (x, z) → (−x, −z). The two starts are therefore identical in every distance, every angle and every
+ * route, but a player's LEFT is the other player's LEFT too (a mirror would swap them), so both sides
+ * play the same map from the same hand. `gora.test.ts` re-derives that symmetry from the finished
+ * solids instead of trusting this file, and `apps/client/e2e/tools/map-duel.ts` measures the walks.
  *
- * Why it plays differently from NIGHT_DISTRICT (measured, `docs/MAP_2.md` §1): that map's median
- * clear sight line is 24 m and its longest is 111 m; this one's longest is 20 m (the balcony) and
- * its longest interior line is 16 m (the south hall, through two doorframes). Rooms and doorways
- * instead of lanes.
+ *        z=11 ┌──────────────────────────────────────────────────────────────────┐
+ *             │ PRANIE (pasmo N zach.)   │ PRALNIA ▓▓▓ │  PASMO N wsch. │ KIESZEŃ E │
+ *        z= 8 │ ───────────────────────  └─ lustra ─┘  szafki ───────── │ ┌───────┤
+ *             │ ZBIORNIK   PODWÓRKO W    DZIEDZINIEC N (fotele)         │ │KLATKA │
+ *        z= 3 │ ▓▓▓        palety        ┌──────────────┐             ──┤ │  E    │
+ *             │ ─brama─  PODEST W   ╱╱╱  │ MASZYNOWNIA  │ ╲╲╲  PODEST E │ └───────┤
+ *        z=-3 ├───────┐  (skrzyżowanie)  │  perch y=2.0 │   (skrzyżow.) │ ZBIORNIK │
+ *             │KLATKA │                  └──────────────┘               │ ▓▓▓      │
+ *             │  W    │  DZIEDZINIEC S (fotele, szafa)     PODWÓRKO E   │          │
+ *        z=-8 ├───────┘ ── kanał ── ┌─ lustra ─┐ ── szafki ──────────────────────  │
+ *             │ KIESZEŃ W (spawn)   │ WENTYL. ▓▓▓ │  PASMO S wsch.        FLAGI    │
+ *        z=-11└──────────────────────────────────────────────────────────────────┘
+ *            x=-17     x=-12      x=-7    x=-4    x=0    x=4     x=7    x=12    x=17
  *
- * Two things the geometry has to respect and a reader should not "tidy":
- *  - the floor is laid as NON-OVERLAPPING panels butted against each other (floorAudit: two
- *    coplanar top faces sharing ≥ 0.25 m² is a z-fighting defect, and an interior with a slab per
- *    room is exactly where that happens);
- *  - the light well is 5.0 m across because a sprint jump covers a measured 4.43 m. Narrowing it
- *    turns the map's centre into a shortcut.
+ * The three fights it is built to produce:
+ *  1. THE COURTS (dziedzińce, green neon): open, chairs for crouch cover, a 2.0 m cabinet for a
+ *     corner — the risk space, and the way to the stairs.
+ *  2. THE LANES (pasma, warm white): each long side is cut in two by a fan house, so no line runs
+ *     the length of the roof; behind lockers and a duct they are the covered way round.
+ *  3. THE PERCH (maszynownia, yellow): 2.0 m up, a 1.35 m lip on the court sides (crouch = hidden,
+ *     stand = head out), OPEN on the stair ends, so whoever holds it is exposed to both crossroads
+ *     while they look down into the courts. Two stairs, one each side, both in the open.
+ *
+ * Cover speaks one language everywhere: 0.8 m = low, jump on it; 1.3 m = crouch behind it, cannot
+ * be climbed (mantle is 1.25 m); ≥ 2.0 m = full cover; 2.8–3.9 m = structures nobody gets onto.
+ * `gora.test.ts` proves the last two from the geometry by chaining every mantle a body can make.
  */
 
-const W = 0.3;      // wall thickness
-const H = 2.8;      // ceiling height inside the flat (domestic, half the shop's industrial 6.0)
-const SLAB = 3.0;   // ceiling slab over the west + centre: top 5.8 (see the comment at "Ceilings")
-const DECK = 3.0;   // roof deck over the east wing
-const PAR = 1.2;    // roof parapet
-const DOORH = 2.1;  // door head height (lintels run DOORH..H)
-const X0 = -17, X1 = 17, Z0 = -7, Z1 = 11;
+const X0 = -17, X1 = 17, Z0 = -11, Z1 = 11;   // the deck
+const PW = 0.4;      // parapet thickness
+const PH = 1.0;      // parapet concrete
+const FH = 3.4;      // the cage on top of it: 4.4 m all round — higher than any roof-top plus a mantle
+const PERCH = 2.0;   // machine-room roof
+const LIP = 1.35;    // its lip: crouch-hidden (1.25), head out when standing (eye 1.62), no mantle (1.25)
+const RISE = 0.3334; // stair riser (6 × 0.3334 = 2.0)
 
-const S = (minX: number, minY: number, minZ: number, sx: number, sy: number, sz: number, mat: MaterialTag, name?: string, invisible?: boolean): Solid =>
+const S = (minX: number, minY: number, minZ: number, sx: number, sy: number, sz: number, mat: MaterialTag, name: string, invisible?: boolean): Solid =>
   ({ box: boxFrom(minX, minY, minZ, sx, sy, sz), mat, name, invisible });
 const O = (minX: number, minY: number, minZ: number, sx: number, sy: number, sz: number, mat: MaterialTag, look: SolidLook, name: string, yaw = 0): Solid =>
   ({ box: boxFrom(minX, minY, minZ, sx, sy, sz), mat, name, look, yaw });
+
+/** The 180° twin of a solid about the origin (its own material unless the twin is dressed differently). */
+export const rotSolid = (s: Solid, name: string, mat: MaterialTag = s.mat): Solid => ({
+  ...s, name, mat,
+  box: { minX: -s.box.maxX, maxX: -s.box.minX, minY: s.box.minY, maxY: s.box.maxY, minZ: -s.box.maxZ, maxZ: -s.box.minZ },
+  yaw: s.yaw === undefined ? undefined : s.yaw + Math.PI,
+});
 
 export const GORA: MapDef = (() => {
   const solids: Solid[] = [];
   const props: PropHint[] = [];
   const lights: LightHint[] = [];
+
+  /** A solid on the south-west half and its twin on the north-east half. */
+  const pair = (s: Solid, matB: MaterialTag = s.mat): void => {
+    solids.push({ ...s, name: `${s.name}_a` });
+    solids.push(rotSolid(s, `${s.name}_b`, matB));
+  };
+  const pairProp = (p: PropHint, twin: Partial<PropHint> = {}): void => {
+    props.push(p);
+    props.push({ ...p, x: -p.x, z: -p.z, yaw: (p.yaw ?? 0) + Math.PI, ...twin });
+  };
+  const pairLight = (l: LightHint, twin: Partial<LightHint> = {}): void => {
+    lights.push(l);
+    lights.push({ ...l, x: -l.x, z: -l.z, ...twin });
+  };
+
+  // ---------- The deck: one panel, so nothing can share its top face. ----------
+  solids.push(S(X0, -1, Z0, X1 - X0, 1, Z1 - Z0, "floor_asphalt", "dach"));
+
+  // ---------- Parapet + cage: 4.4 m all round. Nothing leaves the roof. ----------
+  // 4.4 because the tallest thing a body can chain onto (the 3.0 m stair heads, if it ever got
+  // there) plus the 1.25 m mantle is 4.25. A lower fence was climbable from a crate beside a vent
+  // unit, then from the unit onto the wire — `gora.test.ts` chains every real jump to prove it.
+  pair(S(X0, 0, Z0, X1 - X0, PH, PW, "concrete_block", "attyka_pd"));
+  pair(S(X0, 0, Z0 + PW, PW, PH, Z1 - Z0 - 2 * PW, "concrete_block", "attyka_w"));
+  pair(S(X0, PH, Z0, X1 - X0, FH, PW, "fence", "siatka_pd"));
+  pair(S(X0, PH, Z0 + PW, PW, FH, Z1 - Z0 - 2 * PW, "fence", "siatka_w"));
+
+  // ---------- Stair heads (klatki): 3.0 m, the walls the two starts hide behind ----------
+  pair(S(-12.6, 0, -7.6, 5.0, 3.0, 4.6, "wall_concrete", "klatka"));
+  // The gate wall: closes the start's north exit to a 2.4 m door along the parapet, so the only
+  // line into the start from the yard is from the door itself.
+  pair(S(-14.2, 0, -3.0, 1.6, 2.2, 0.4, "paint_green", "brama"));
+  // And a wing off the stair head's far corner: the door opens into a vestibule that faces the
+  // machine room, so the first steps out are in the perch's shadow, not on a 30 m line to the
+  // other yard.
+  pair(S(-12.6, 0, -3.0, 0.4, 3.0, 2.4, "wall_concrete", "skrzydlo"));
+
+  // ---------- The perch: lift machine room, 2.0 m, lips on the court sides only ----------
+  solids.push(S(-4, 0, -2.5, 8, PERCH, 5, "concrete_block", "maszynownia"));
+  solids.push(S(-4, PERCH, -2.5, 8, LIP, 0.3, "paint_yellow", "attyka_maszynowni_pd"));
+  solids.push(S(-4, PERCH, 2.2, 8, LIP, 0.3, "paint_yellow", "attyka_maszynowni_pn"));
+  // Two stairs, in the open: 6 risers of 0.3334 (inside the 0.4 step, so bots climb them too).
+  for (let i = 0; i < 6; i++) pair(S(-6.4 + i * 0.4, 0, -1, 0.4, (i + 1) * RISE, 2, "floor_metal", `schody_${i}`));
+
+  // ---------- The bands (pasma): a fan house cuts each long side in two ----------
+  pair(O(-1.0, 0, -10.6, 3.0, 3.9, 3.2, "metal", "machine", "wentylatornia"), "metal");
+  // The barber's station on its court face: a tiled mirror wall, two chairs in front of it.
+  pair(S(-1.0, 0, -7.4, 3.0, 3.9, 0.3, "wall_tile", "lustra"));
+  // Chairs are cover, so they carry a collision proxy the size of the drawn chair (0.8 × 1.45 × 0.9,
+  // lifted 5 cm so the prop test can see the anchor stands on the deck). `barber_chair` is a prop
+  // and props never collide; a chair you could shoot through would be a fake cover.
+  for (const [x, tag] of [[-0.6, "1"], [0.9, "2"]] as const) {
+    pair(S(x, 0.05, -6.8, 0.8, 0.45, 0.9, "none", `fotel_${tag}_siedzisko`, true));
+    pair(S(x, 0.62, -6.8, 0.8, 0.83, 0.9, "none", `fotel_${tag}_oparcie`, true));
+    pairProp({ kind: "barber_chair", x: x + 0.4, y: 0.55, z: -6.35, yaw: Math.PI });
+  }
+  // West nook: a 1.3 m duct (crouch cover) with a 1.6 m opening beside the fan house.
+  pair(S(-4.6, 0, -8.0, 2.0, 1.3, 0.6, "metal", "kanal"));
+  // East half: the lockers, full cover, backs to the lane.
+  pair(O(2.0, 0, -8.0, 3.4, 2.2, 0.6, "paint_green", "lockers", "szafki"), "paint_yellow");
+  // The mouth of the start is a dog-leg: a wing wall off the stair head and a 3.9 m vent stack
+  // beside the duct leave a 1.4 m throat along the parapet into the nook, so the start's strip
+  // sees the lane and nothing of the court, and the court sees the throat and nothing of the strip.
+  pair(S(-7.6, 0, -9.2, 0.4, 3.0, 1.6, "wall_concrete", "parawan"));
+  pair(S(-6.2, 0, -9.2, 1.4, 3.9, 1.8, "metal", "komin_pasma"));
+  // A crouch-high vent unit further along the east half, at the yard end.
+  pair(O(10.6, 0, -10.6, 1.4, 1.3, 1.4, "paint_white", "machine", "wentylator_pasma"), "paint_white");
+
+  // ---------- The courts (dziedzińce): the risk space ----------
+  pair(O(-6.6, 0, -6.6, 1.2, 0.8, 1.2, "paint_green", "crate", "skrzynia"), "paint_yellow");   // low, jump on it
+  pair(O(-0.8, 0, -5.5, 1.2, 2.0, 1.6, "paint_yellow", "cabinet", "rozdzielnia", Math.PI), "paint_green"); // full, narrow: a corner, and the end of the long diagonal
+  pair(O(4.4, 0, -5.2, 2.0, 0.8, 0.8, "concrete_block", "planter", "donica"));                  // low
+  // A 3.6 m billboard where the court meets the yard: breaks the long north–south line past the
+  // crossroads, and is the yard's own landmark (MARCOVIA on one, FRANKIBARBER on the other).
+  pair(S(-8.2, 0, 3.4, 1.6, 3.6, 0.3, "paint_white", "tablica"));
+
+  // ---------- The yards (podwórka): the flank ----------
+  pair(S(-16.0, 0, 2.4, 2.4, 2.8, 2.4, "metal", "zbiornik"));                                    // the vent tank, full
+  // Crouch cover; no low crate within a jump of it, or the crate is a step onto it and it a step
+  // onto the next thing (`gora.test.ts` chains every real jump).
+  pair(O(-16.6, 0, 5.4, 1.4, 1.3, 1.4, "paint_white", "machine", "klimatyzator"), "paint_white");
+  pair(O(-10.4, 0, 4.8, 1.4, 2.2, 1.4, "wood", "pallets", "palety"));                            // full, a pallet tower
+
+  // Bins are solids with the `bin` look, never the `trash` prop: a drawn bin that a bullet passes
+  // through is a fake cover. Low (0.8), so they read as something to hop onto, not hide behind.
+  pair(O(-16.6, 0, -10.6, 0.4, 0.8, 0.4, "metal", "bin", "kosz_kieszeni"));
+  pair(O(-7.2, 0, -10.6, 0.4, 0.8, 0.4, "paint_green", "bin", "kosz_pasma"), "paint_yellow");
+
+  // ---------- Laundry (west) / Marcovia bunting (east): posts, a line, cloth above head height ----------
+  // Hung at 3.0–3.7 m: a sprint jump tops out at 2.73 m, so nobody bumps it and nothing is cover.
+  pair(S(-15.85, 0, 9.55, 0.1, 3.8, 0.1, "metal", "slup_pralni_1"));
+  pair(S(-8.45, 0, 9.55, 0.1, 3.8, 0.1, "metal", "slup_pralni_2"));
+  for (let i = 0; i < 4; i++) {
+    pair(S(-14.8 + i * 1.7, 3.0, 9.58, 0.9, 0.7, 0.04, "paint_white", `pranie_${i}`), i % 2 ? "paint_yellow" : "paint_green");
+  }
+  pairProp({ kind: "cable", x: -12.15, y: 3.74, z: 9.6, yaw: Math.PI / 2, w: 7.4 });
+
+  // ---------- The block below and the estate around: seen through the fence, never reached ----------
+  solids.push(S(-90, -31, -80, 180, 1, 160, "floor_asphalt", "podworko_dol"));
+  solids.push(S(-62, -30, -34, 22, 27, 40, "wall_concrete", "blok_w"));
+  solids.push(S(38, -30, -8, 22, 39, 38, "wall_brick", "blok_e"));
+  solids.push(S(-24, -30, 36, 38, 24, 22, "wall_concrete", "blok_n"));
+  solids.push(S(-8, -30, -58, 38, 42, 24, "wall_plaster", "blok_s"));
+  solids.push(S(-72, -30, 28, 30, 30, 32, "wall_brick", "blok_nw"));
+  solids.push(S(40, -30, -62, 30, 34, 30, "wall_concrete", "blok_se"));
+
+  // ---------- Props: the roof's own furniture. Nothing here is cover; cover is a solid. ----------
+  // Stair heads: the door the start comes out of, a lamp over it, antennas on the roof.
+  pairProp({ kind: "board", x: -10.1, y: 1.2, z: -7.66, yaw: Math.PI, text: "", w: 1.0, h: 2.1 });
+  pairProp({ kind: "sign", x: -10.1, y: 2.5, z: -7.75, yaw: Math.PI, text: "KLATKA W", w: 1.4, h: 0.4 }, { text: "KLATKA E" });
+  pairProp({ kind: "graffiti", x: -12.66, y: 1.6, z: -5.3, yaw: -Math.PI / 2, text: "MARCOVIA", w: 2.4, h: 0.9 });
+  pairProp({ kind: "graffiti", x: -7.54, y: 1.5, z: -5.3, yaw: Math.PI / 2, text: "GÓRA 1v1", w: 2.6, h: 1.0 });
+  pairProp({ kind: "poster", x: -7.54, y: 1.4, z: -3.8, yaw: Math.PI / 2, variant: "0", w: 0.7, h: 1.0 }, { variant: "1" });
+  pairProp({ kind: "sticker", x: -12.66, y: 1.1, z: -6.6, yaw: -Math.PI / 2, scale: 0.6 });
+  pairProp({ kind: "vent", x: -11.6, y: 2.6, z: -7.66, yaw: Math.PI, w: 0.7, h: 0.4 });
+  pairProp({ kind: "pipe", x: -12.68, y: 0, z: -7.0, h: 3.0 });
+  pairProp({ kind: "pole", x: -11.4, y: 3.0, z: -4.6, h: 2.6 });
+  pairProp({ kind: "pole", x: -8.6, y: 3.0, z: -6.4, h: 2.6 });
+  pairProp({ kind: "cable", x: -10.0, y: 5.55, z: -5.5, yaw: 2.14, w: 3.3 });
+  pairProp({ kind: "ac_unit", x: -12.85, y: 2.2, z: -3.9, yaw: -Math.PI / 2 });
+  pairProp({ kind: "sign", x: -10.1, y: 2.5, z: -2.85, yaw: 0, text: "STRZYŻENIE 24H", w: 2.2, h: 0.5 }, { text: "AFTER HOURS" });
+  pairProp({ kind: "lamp", x: -12.9, y: 2.4, z: -5.4, yaw: -Math.PI / 2, variant: "wall" });
+  pairProp({ kind: "lamp", x: -9.0, y: 2.6, z: -7.9, yaw: Math.PI, variant: "wall" });
+  // The gate: the door frame the north exit runs through.
+  pairProp({ kind: "sign", x: -13.4, y: 1.5, z: -3.15, yaw: Math.PI, text: "→ PODWÓRKO", w: 1.2, h: 0.4 });
+  // The station: mirrors over the chairs, the neon over the mirrors, bottles on a shelf.
+  pairProp({ kind: "mirror", x: -0.2, y: 1.5, z: -7.08, yaw: 0, w: 1.0, h: 1.1 });
+  pairProp({ kind: "mirror", x: 1.3, y: 1.5, z: -7.08, yaw: 0, w: 1.0, h: 1.1 });
+  pairProp({ kind: "neon", x: 0.5, y: 2.35, z: -7.06, yaw: 0, text: "FRANKIBARBER", w: 2.6, h: 0.42, color: "#b8ff3a" }, { text: "AFTER HOURS", color: "#ffd84a" });
+  pairProp({ kind: "shelf", x: 0.5, y: 0.95, z: -7.02, yaw: 0, w: 2.4 });
+  pairProp({ kind: "bottle_row", x: 0.5, y: 0.98, z: -7.02, w: 1.8 });
+  pairProp({ kind: "clippers", x: 1.6, y: 0.98, z: -7.0, yaw: 0.4 });
+  pairProp({ kind: "towel_stack", x: -6.0, y: 0.8, z: -6.0 });
+  pairProp({ kind: "vent", x: -1.02, y: 1.4, z: -9.0, yaw: -Math.PI / 2, w: 1.4, h: 0.8 });
+  pairProp({ kind: "pipe", x: 2.1, y: 0, z: -9.0, h: 2.6 });
+  pairProp({ kind: "tube_light", x: -3.6, y: 2.15, z: -10.55, yaw: Math.PI / 2, w: 1.6 });
+  pairProp({ kind: "tube_light", x: 5.2, y: 2.15, z: -10.55, yaw: Math.PI / 2, w: 1.6 });
+  pairProp({ kind: "poster", x: 3.7, y: 1.3, z: -8.02, yaw: Math.PI, variant: "2", w: 0.6, h: 0.85 });
+  // The perch: a lamp post on the machine-room roof, the map's name on its court faces.
+  // The post stands at the perch's corner, not in the middle of the view from it.
+  props.push({ kind: "lamp", x: -3.5, y: PERCH, z: 1.8, variant: "post", h: 1.7 });
+  props.push({ kind: "graffiti", x: 0, y: 1.2, z: -2.52, yaw: Math.PI, text: "GÓRA", w: 2.2, h: 1.0 });
+  props.push({ kind: "graffiti", x: 0, y: 1.2, z: 2.52, yaw: 0, text: "GÓRA", w: 2.2, h: 1.0 });
+  pairProp({ kind: "sticker", x: -4.02, y: 1.3, z: -1.6, yaw: -Math.PI / 2, scale: 0.7 });
+  pairProp({ kind: "vent", x: -4.02, y: 0.9, z: 1.4, yaw: -Math.PI / 2, w: 0.6, h: 0.5 });
+  // The yards: the tank's fittings, the sign board's face, a lamp on the tank.
+  pairProp({ kind: "vent", x: -13.58, y: 1.6, z: 3.6, yaw: Math.PI / 2, w: 0.8, h: 0.6 });
+  pairProp({ kind: "pipe", x: -13.4, y: 0, z: 2.2, h: 2.9 });
+  pairProp({ kind: "lamp", x: -13.55, y: 2.3, z: 4.4, yaw: Math.PI / 2, variant: "wall" });
+  pairProp({ kind: "sign", x: -7.4, y: 1.6, z: 3.72, yaw: 0, text: "MARCOVIA", w: 1.5, h: 0.6 }, { text: "FRANKIBARBER" });
+  pairProp({ kind: "sticker", x: -6.58, y: 1.0, z: 3.72, yaw: 0, scale: 0.5 });
+  pairProp({ kind: "receipt", x: -15.4, y: 2.82, z: 3.2 });
+  pairProp({ kind: "tube_light", x: -12.1, y: 2.15, z: 10.55, yaw: Math.PI / 2, w: 2.0 });
+  pairProp({ kind: "graffiti", x: -16.58, y: 1.7, z: 1.0, yaw: Math.PI / 2, text: "FADE ✂ TAPER", w: 2.2, h: 0.8 });
+
+  // ---------- Lights: one colour per kind of place, so a player reads where they are. ----------
+  const AMBER = "#ffbf70", NEON = "#b8ff3a", GOLD = "#ffd84a", CYAN = "#9adce5", ROSE = "#fa709a", WARM = "#ffe6c8";
+  pairLight({ kind: "point", x: -10.1, y: 2.5, z: -8.3, color: AMBER, intensity: 14, range: 9, priority: 7 });   // start pockets
+  pairLight({ kind: "point", x: -13.3, y: 2.3, z: -5.4, color: AMBER, intensity: 10, range: 7, priority: 6 });
+  pairLight({ kind: "point", x: 0.5, y: 2.7, z: -6.4, color: NEON, intensity: 16, range: 11, priority: 8 }, { color: GOLD }); // courts
+  lights.push({ kind: "point", x: -3.2, y: PERCH + 1.55, z: 1.6, color: GOLD, intensity: 18, range: 12, priority: 8 });      // perch
+  pairLight({ kind: "point", x: -13.2, y: 2.3, z: 4.8, color: CYAN, intensity: 18, range: 12, priority: 7 });   // yards
+  pairLight({ kind: "point", x: -12.1, y: 2.0, z: 10.2, color: ROSE, intensity: 14, range: 9, priority: 6 });   // laundry / bunting corners
+  pairLight({ kind: "point", x: -3.6, y: 2.0, z: -10.2, color: WARM, intensity: 14, range: 9, priority: 6 });   // lane nooks
+  pairLight({ kind: "point", x: 5.2, y: 2.0, z: -10.2, color: WARM, intensity: 14, range: 9, priority: 6 });
+  pairLight({ kind: "point", x: 3.0, y: 2.6, z: -8.8, color: WARM, intensity: 10, range: 7, priority: 5 });    // the fan house's lane face
+  pairLight({ kind: "point", x: -6.8, y: 2.2, z: 3.9, color: CYAN, intensity: 8, range: 6, priority: 4 });      // sign boards
+  // The estate: window glow on the neighbouring blocks, well out of range of the deck.
+  lights.push({ kind: "point", x: -36, y: -6, z: -14, color: AMBER, intensity: 60, range: 30, priority: 1 });
+  lights.push({ kind: "point", x: 34, y: 0, z: 12, color: CYAN, intensity: 60, range: 30, priority: 1 });
+  lights.push({ kind: "point", x: 6, y: -8, z: 34, color: AMBER, intensity: 60, range: 30, priority: 1 });
+  lights.push({ kind: "point", x: 8, y: 2, z: -32, color: ROSE, intensity: 50, range: 28, priority: 1 });
+
+  // ---------- Spawns: the two starts. Index 0 of each side is the duel start. ----------
+  // The duel start stands in the strip west of the stair head, behind the gate wall, where nothing
+  // but the doorway itself can see it; the other five are for the team modes and sit in the south
+  // strip, out of every line the other pocket can draw.
+  const t0: [number, number, number][] = [
+    [-13.6, -6.0, 0.1],
+    [-15.5, -9.6, 1.35], [-13.5, -9.6, 1.35], [-11.5, -9.6, 1.35], [-9.5, -9.6, 1.35],
+    [-13.6, -4.6, 0.1],
+  ];
   const spawns: SpawnPoint[] = [];
+  for (const [x, z, yaw] of t0) spawns.push({ x, y: 0, z, yaw, team: 0 });
+  for (const [x, z, yaw] of t0) spawns.push({ x: -x, y: 0, z: -z, yaw: yaw + Math.PI, team: 1 });
 
-  // ---------- Floor: one panel per area, butted, never overlapping. No panel over the SZYB. ----------
-  solids.push(S(X0, -1, Z0, 9, 1, 8, "floor_wood", "podloga_salon"));            // salon
-  solids.push(S(X0, -1, 1, 9, 1, 2, "floor_tile", "podloga_prog_w"));            // salon → kitchen threshold
-  solids.push(S(X0, -1, 3, 9, 1, 6, "floor_tile", "podloga_kuchnia"));
-  solids.push(S(8, -1, Z0, 9, 1, 8, "floor_wood", "podloga_sypialnia"));
-  solids.push(S(8, -1, 1, 9, 1, 2, "floor_concrete", "podloga_prog_e"));
-  solids.push(S(8, -1, 3, 9, 1, 6, "floor_concrete", "podloga_sklad"));
-  solids.push(S(-2.5, -1, Z0, 5, 1, 6, "floor_tile", "podloga_lazienka"));
-  solids.push(S(-8, -1, -1, 16, 1, 6, "floor_wood", "podloga_hol"));
-  solids.push(S(-8, -1, 5, 5.5, 1, 4, "floor_wood", "podloga_hol_pn_w"));
-  solids.push(S(2.5, -1, 5, 5.5, 1, 4, "floor_wood", "podloga_hol_pn_e"));
-  solids.push(S(-10, -1, 9, 20, 1, 2, "floor_concrete", "podloga_balkon"));
-  solids.push(S(10, -1, 9, 4, 1, 2, "floor_metal", "podest_schodow"));
-
-  // ---------- Exterior walls (inside the envelope, so they stand on the floor) ----------
-  // South wall, with a window bay in the salon and one in the bedroom (sill / glass / header).
-  const southWall = (x: number, sx: number, name: string) => solids.push(S(x, 0, Z0, sx, H, W, "wall_brick", name));
-  // Corner walls BUTT the side walls; starting them at the corner put two outer faces on one
-  // plane, which is a shimmering seam the depth buffer cannot order (`floorAudit.coplanarFaces`).
-  southWall(X0 + W, 2 - W, "sc_pd_w1");
-  southWall(-10, 20, "sc_pd_mid");
-  southWall(15, 2 - W, "sc_pd_e1");
-  for (const [x, sx, tag] of [[-15, 5, "salon"], [10, 5, "sypialnia"]] as [number, number, string][]) {
-    solids.push(S(x, 0, Z0, sx, 0.9, W, "wall_panel", `parapet_okna_${tag}`));
-    solids.push(S(x, 0.9, Z0 + 0.1, sx, 1.3, 0.1, "glass", `okno_${tag}`));
-    solids.push(S(x, 2.2, Z0, sx, H - 2.2, W, "wall_brick", `nadproze_okna_${tag}`));
-  }
-  // West and east walls, each with a window in the kitchen / stock room.
-  for (const [x, side] of [[X0, "w"], [X1 - W, "e"]] as [number, string][]) {
-    solids.push(S(x, 0, Z0, W, H, 11, `wall_plaster`, `sc_${side}_a`));
-    solids.push(S(x, 0, 4, W, 0.9, 3, "wall_panel", `parapet_okna_${side}`));
-    solids.push(S(x, 0.9, 4, W, 1.3, 3, "glass", `okno_${side}`));
-    solids.push(S(x, 2.2, 4, W, H - 2.2, 3, "wall_plaster", `nadproze_okna_${side}`));
-    solids.push(S(x, 0, 7, W, H, 2, `wall_plaster`, `sc_${side}_b`));
-  }
-  // North wall of the flat (the balcony is beyond it): two 2 m doors at x -6..-4 and 4..6.
-  solids.push(S(X0 + W, 0, 8.7, 11 - W, H, W, "wall_plaster", "sc_pn_w"));
-  solids.push(S(-4, 0, 8.7, 8, H, W, "wall_plaster", "sc_pn_mid"));
-  solids.push(S(6, 0, 8.7, 11 - W, H, W, "wall_plaster", "sc_pn_e"));
-  solids.push(S(-6, DOORH, 8.7, 2, H - DOORH, W, "wall_plaster", "nadproze_balkon_w"));
-  solids.push(S(4, DOORH, 8.7, 2, H - DOORH, W, "wall_plaster", "nadproze_balkon_e"));
-
-  // ---------- The solid south band: built-in wardrobes, risers and the bathroom's shell ----------
-  solids.push(S(-8, 0, Z0 + W, 5.5, H, 6 - W, "wall_plaster", "zabudowa_w"));
-  solids.push(S(2.5, 0, Z0 + W, 5.5, H, 6 - W, "wall_plaster", "zabudowa_e"));
-  solids.push(S(-2.5, 0, Z0 + W, 5, H, 1 - W, "wall_tile", "lazienka_pd"));
-  // Bathroom's north wall, door at x -1..1.
-  solids.push(S(-2.5, 0, -1.3, 1.5, H, W, "wall_tile", "lazienka_pn_w"));
-  solids.push(S(1, 0, -1.3, 1.5, H, W, "wall_tile", "lazienka_pn_e"));
-  solids.push(S(-1, DOORH, -1.3, 2, H - DOORH, W, "wall_tile", "nadproze_lazienki"));
-
-  // ---------- The middle band: the core, the two passages, the two side rooms ----------
-  solids.push(S(-2.5, 0, 1, 5, H, 4, "wall_plaster", "rdzen"));               // boarded stair to the shop
-  solids.push(S(-8, 0, 5, 3.5, H, W, "wall_plaster", "klatka_pn"));           // no door: the passage is the way through
-  solids.push(S(4.5, 0, 5, 3.5, H, W, "wall_plaster", "przedpokoj_pn"));
-  solids.push(S(-4.8, 0, 1, W, H, 1, "wall_plaster", "klatka_wsch_a"));
-  solids.push(S(-4.8, 0, 4, W, H, 1, "wall_plaster", "klatka_wsch_b"));
-  solids.push(S(-4.8, DOORH, 2, W, H - DOORH, 2, "wall_plaster", "nadproze_klatki"));
-  solids.push(S(4.5, 0, 1, W, H, 1, "wall_plaster", "przedpokoj_zach_a"));
-  solids.push(S(4.5, 0, 4, W, H, 1, "wall_plaster", "przedpokoj_zach_b"));
-  solids.push(S(4.5, DOORH, 2, W, H - DOORH, 2, "wall_plaster", "nadproze_przedpokoju"));
-
-  // ---------- The light well: a 5 m hole with a 1 m parapet on the two hall sides ----------
-  solids.push(S(-2.8, 0, 5, W, 1.0, 3, "wall_tile", "szyb_parapet_w"));
-  solids.push(S(2.5, 0, 5, W, 1.0, 3, "wall_tile", "szyb_parapet_e"));
-  solids.push(S(-2.5, 0, 8, 5, H, 0.7, "wall_plaster", "szyb_pn"));           // duct: the halls do NOT meet here
-
-  // ---------- Party walls between the wings and the centre ----------
-  // x = -8: solid beside the klatka, a door into HOL PN-W at z 6..8, solid again to the back wall.
-  for (const [x, side] of [[-8.15, "w"], [7.85, "e"]] as [number, string][]) {
-    solids.push(S(x, 0, 1, W, H, 5, "wall_plaster", `sc_dzialowa_${side}_a`));
-    solids.push(S(x, 0, 8, W, H, 0.7, "wall_plaster", `sc_dzialowa_${side}_b`));
-    solids.push(S(x, DOORH, 6, W, H - DOORH, 2, "wall_plaster", `nadproze_${side}`));
-  }
-  // The wardrobe run between each end room's two halves, with a 1.5 m doorway.
-  solids.push(S(X0 + W, 0, 1, 4 - W, H, 2, "wall_plaster", "zabudowa_salon_a"));
-  solids.push(S(-11.5, 0, 1, 3.35, H, 2, "wall_plaster", "zabudowa_salon_b"));
-  solids.push(S(-13, DOORH, 1, 1.5, H - DOORH, 2, "wall_plaster", "nadproze_salon"));
-  solids.push(S(8.15, 0, 1, 3.35, H, 2, "wall_plaster", "zabudowa_syp_a"));
-  solids.push(S(13, 0, 1, 4 - W, H, 2, "wall_plaster", "zabudowa_syp_b"));
-  solids.push(S(11.5, DOORH, 1, 1.5, H - DOORH, 2, "wall_plaster", "nadproze_syp"));
-
-  // ---------- Ceilings. The west + centre roof is deliberately NOT walkable, and "deliberately"
-  // has to be measured from every surface a player can actually stand on, not from the deck. It was
-  // 1.6 m thick (top 4.4) and a code review found the chain: the air-conditioner tops at 3.9, which
-  // is a 0.9 m hop from the deck — under the real 0.93 m jump apex, and over the walk grid's 0.88 m
-  // JUMP_UP, so it was invisible to every reachability test — and from 3.9 the slab was half a
-  // metre up. The east parapet gave a second route at 1.2 m, inside the 1.25 m crouch-jump mantle.
-  // The slab is now 3.0 m thick (top 5.8), which is 1.6 m above the highest thing anyone can stand
-  // on up there. `gora.test.ts` re-derives that margin from the geometry rather than trusting it.
-  solids.push(S(X0, H, Z0, 14.5, SLAB, 16, "ceiling", "strop_w"));
-  solids.push(S(2.5, H, Z0, 3.5, SLAB, 16, "ceiling", "strop_e"));
-  solids.push(S(-2.5, H, Z0, 5, SLAB, 12, "ceiling", "strop_c_pd"));
-  solids.push(S(-2.5, H, 8, 5, SLAB, 1, "ceiling", "strop_c_pn"));
-  solids.push(S(6, H, Z0, 11, SLAB, 5, "ceiling", "strop_sypialnia_pd"));
-
-  // ---------- DACH: the deck over the east wing, with the loft-stair opening cut out ----------
-  solids.push(S(6, H, -2, 7.5, DECK - H, 11, "floor_concrete", "dach_w"));
-  solids.push(S(15.7, H, -2, 1.3, DECK - H, 11, "floor_concrete", "dach_e"));
-  solids.push(S(13.5, H, -2, 2.2, DECK - H, 5.4, "floor_concrete", "dach_pd"));
-  solids.push(S(13.5, H, 7.9, 2.2, DECK - H, 1.1, "floor_concrete", "dach_pn"));
-  solids.push(S(6, DECK, 8.7, 8, PAR, W, "concrete_block", "attyka_pn_w"));
-  solids.push(S(15.2, DECK, 8.7, 1.8 - W, PAR, W, "concrete_block", "attyka_pn_e"));
-  solids.push(S(X1 - W, DECK, -2, W, PAR, 11, "concrete_block", "attyka_wsch"));
-
-  // ---------- Stairs. Both are 0.333 m risers: inside the walk grid's 0.88 m jump-up, so bots
-  // climb them like anyone else, and measured to cost no time at all (docs/MAP_2.md §6).
-  for (let i = 0; i < 9; i++) {
-    solids.push(S(10 + i * 0.444, 0, 9, 0.444, (i + 1) * 0.3334, 2, "floor_metal", `schody_poz_${i}`));
-    solids.push(S(13.5, 0, 3.4 + i * 0.5, 2.2, (i + 1) * 0.3334, 0.5, "floor_metal", `schody_strych_${i}`));
-  }
-  solids.push(S(14, 0, 9, 1.2, DECK, 2, "floor_metal", "podest_gorny"));
-  solids.push(S(15.2, 0, 10.7, 0.1, 1.1, 0.3, "metal", "porecz_schodow"));
-
-  // ---------- Balcony railing ----------
-  solids.push(S(-10, 0, 10.7, 20, 1.1, W, "metal", "balustrada"));
-  solids.push(S(-10, 0, 9, W, 1.1, 1.7, "metal", "balustrada_w"));
-
-  // ---------- Furniture: every piece is cover, and none of it stands on a spawn ----------
-  // SALON
-  solids.push(S(-12, 0, -5.5, 0.9, 0.75, 2.5, "leather", "kanapa"));
-  solids.push(S(-11, 0, -5.2, 1.2, 0.45, 0.9, "wood", "lawa"));
-  solids.push(O(-16.4, 0, 0.4, 2, 1.0, 0.6, "wood", "cabinet", "kredens"));
-  solids.push(S(-8.6, 0, -6.5, 0.5, 2.0, 1.5, "wood", "regal_salon"));
-  solids.push(O(-9.2, 0, -1.9, 1.1, 0.55, 0.5, "paint_white", "cabinet", "szafka_rtv", Math.PI));
-  // KUCHNIA
-  solids.push(S(-13.5, 0, 5.2, 2.6, 0.95, 1.0, "counter", "wyspa"));
-  solids.push(S(-16.7, 0, 3.2, 0.7, 0.9, 3.2, "counter", "blat_kuchenny"));
-  solids.push(O(-16.7, 0, 7.2, 0.7, 1.9, 0.8, "paint_white", "cabinet", "lodowka"));
-  solids.push(S(-10.6, 0, 6.4, 1.4, 0.75, 1.4, "wood", "stol_kuchenny"));
-  // SYPIALNIA
-  solids.push(S(13.6, 0, -6.5, 2, 0.55, 2.2, "leather", "lozko"));
-  solids.push(O(16.1, 0, -2.2, 0.6, 2.1, 2.2, "wood", "cabinet", "szafa", -Math.PI / 2));
-  solids.push(S(8.6, 0, -6.5, 0.5, 2.0, 1.5, "wood", "regal_syp"));
-  solids.push(O(9.2, 0, -1.9, 1.1, 0.55, 0.5, "paint_white", "cabinet", "komoda", Math.PI));
-  // ŁAZIENKA
-  solids.push(S(-2.2, 0, -5.7, 1.7, 0.6, 0.8, "paint_white", "wanna"));
-  solids.push(O(1.3, 0, -5.6, 0.65, 0.85, 0.65, "paint_white", "cabinet", "pralka"));
-  // SKŁAD — the shop's overflow, and the reason the loft stair is here
-  solids.push(S(16.0, 0, 3.2, 0.7, 2.2, 4.6, "metal", "regaly_skladu"));
-  solids.push(O(8.4, 0, 6.4, 1.2, 1.2, 1.2, "wood", "crate", "skrzynia_a"));
-  solids.push(O(9.6, 0, 6.4, 1.2, 0.8, 1.2, "wood", "crate", "skrzynia_b"));
-  solids.push(O(11.0, 0, 5.6, 1.1, 0.9, 1.1, "paint_yellow", "crate", "pudlo"));
-  solids.push(O(8.4, 0, 3.4, 1.2, 1.0, 0.9, "paint_blue", "lockers", "szafka_sklad", Math.PI));
-  // KLATKA / PRZEDPOKÓJ / halls
-  solids.push(O(-7.6, 0, 3.6, 1.0, 0.9, 0.5, "wood", "cabinet", "komoda_klatka"));
-  solids.push(O(6.6, 0, 3.6, 1.0, 0.9, 0.5, "wood", "cabinet", "komoda_przedpokoj"));
-  solids.push(O(-7.6, 0, 6.2, 0.9, 1.1, 0.9, "paint_green", "bin", "kosz_hol"));
-  // BALKON + DACH
-  solids.push(O(-9.2, 0, 9.05, 1.2, 0.7, 0.6, "paint_orange", "planter", "donica"));
-  solids.push(O(6.6, 0, 9.05, 0.7, 0.9, 0.6, "metal", "bin", "kosz_balkon"));
-  solids.push(O(14.6, DECK, 0.4, 1.6, 1.4, 1.6, "metal", "drums", "zbiornik_wody"));
-  solids.push(O(7.4, DECK, 4.6, 1.4, 0.9, 1.1, "metal", "machine", "klimatyzacja"));
-  solids.push(S(8.8, DECK, -0.8, 0.8, 1.3, 0.8, "wall_brick", "komin"));
-
-  // ---------- Props (visual only; the map test judges every one of them for floating) ----------
-  props.push({ kind: "pendant", x: -13.5, y: 2.55, z: 5.7, w: 0.4, h: 0.5 });
-  props.push({ kind: "pendant", x: -10.6, y: 2.55, z: 6.4, w: 0.35, h: 0.5 });
-  props.push({ kind: "tube_light", x: 0, y: 2.72, z: 0, yaw: Math.PI / 2, w: 7.0 });
-  props.push({ kind: "tube_light", x: -5.2, y: 2.72, z: 6.6, w: 2.4 });
-  props.push({ kind: "tube_light", x: 5.2, y: 2.72, z: 6.6, w: 2.4 });
-  props.push({ kind: "tube_light", x: 0, y: 2.72, z: -4, w: 2.0 });
-  props.push({ kind: "tube_light", x: 13, y: 2.72, z: 5.5, w: 3.0 });
-  props.push({ kind: "mirror", x: 2.44, y: 1.6, z: -3.5, yaw: -Math.PI / 2, w: 1.2, h: 0.9 });
-  props.push({ kind: "mirror", x: -14.5, y: 1.6, z: 0.94, yaw: Math.PI, w: 1.0, h: 1.6 });
-  props.push({ kind: "sink", x: -0.9, y: 0, z: -1.9 });
-  props.push({ kind: "bottle_row", x: -13.5, y: 0.95, z: 5.2, w: 1.2 });
-  props.push({ kind: "towel_stack", x: -2.0, y: 0.6, z: -5.7 });
-  props.push({ kind: "barber_chair", x: 12.9, y: 0, z: 8.2, yaw: -0.4 });
-  props.push({ kind: "barber_pole", x: 9.4, y: 0, z: 9.5, scale: 0.9 });
-  props.push({ kind: "clippers", x: -13.5, y: 1.0, z: 0.4, yaw: 0.3 });
-  props.push({ kind: "receipt", x: 13.2, y: 0.9, z: 4.2 });
-  props.push({ kind: "counter_top", x: -16.35, y: 0.9, z: 4.8, yaw: Math.PI / 2, w: 3.2 });
-  props.push({ kind: "poster", x: -8.06, y: 1.7, z: -4.2, yaw: -Math.PI / 2, variant: "0", w: 0.8, h: 1.1 });
-  props.push({ kind: "poster", x: 8.06, y: 1.7, z: -4.2, yaw: Math.PI / 2, variant: "1", w: 0.8, h: 1.1 });
-  props.push({ kind: "graffiti", x: 0, y: 1.5, z: 9.06, yaw: Math.PI, text: "GÓRA", w: 2.4, h: 1.0 });
-  props.push({ kind: "sticker", x: -16.62, y: 1.5, z: 5.4, yaw: Math.PI / 2, scale: 0.5 });
-  props.push({ kind: "board", x: -7.8, y: 1.7, z: 2.4, yaw: -Math.PI / 2, w: 1.0, h: 0.7 });
-  props.push({ kind: "vent", x: -16.62, y: 2.3, z: 6.6, yaw: Math.PI / 2, w: 0.6, h: 0.4 });
-  props.push({ kind: "ac_unit", x: 16.5, y: 2.3, z: 9.1, yaw: 0 });
-  props.push({ kind: "pipe", x: -16.5, y: 1.4, z: 8.5, h: 2.8 });
-  props.push({ kind: "pipe", x: 16.5, y: 1.4, z: 3.2, h: 2.8 });
-  props.push({ kind: "cable", x: -2.7, y: 2.6, z: 6.5, w: 3.0 });
-  props.push({ kind: "lamp", x: 0, y: 2.35, z: 9.15, variant: "wall" });
-  props.push({ kind: "lamp", x: -14.6, y: 0, z: -6.2, variant: "post", scale: 0.7 });
-  props.push({ kind: "trash", x: -9.5, y: 0, z: 8.2 });
-  props.push({ kind: "trash", x: 9.5, y: 0, z: 8.2 });
-  props.push({ kind: "crate", x: 14.0, y: DECK, z: 3.2, yaw: 0.4 });
-
-  // ---------- Lights: practicals only. Two shadow casters (ARCHITECTURE.md: at most two). ----------
-  lights.push({ kind: "point", x: -13.5, y: 2.4, z: 5.8, color: "#ffd9a8", intensity: 14, range: 8, priority: 6 });
-  lights.push({ kind: "point", x: -12.5, y: 2.2, z: -3.2, color: "#ffc98a", intensity: 13, range: 8, shadows: true, priority: 7 });
-  lights.push({ kind: "point", x: -9.4, y: 1.1, z: -2.2, color: "#7fb0ff", intensity: 5, range: 4, priority: 3 });
-  lights.push({ kind: "point", x: 13.6, y: 1.1, z: -5.0, color: "#ffbe7a", intensity: 8, range: 5, priority: 4 });
-  lights.push({ kind: "point", x: 13.0, y: 2.5, z: 5.5, color: "#cfe0ff", intensity: 13, range: 8, priority: 5 });
-  lights.push({ kind: "point", x: -4.0, y: 2.6, z: 0, color: "#dfe8ff", intensity: 10, range: 7, priority: 5 });
-  lights.push({ kind: "point", x: 4.0, y: 2.6, z: 0, color: "#dfe8ff", intensity: 10, range: 7, priority: 5 });
-  lights.push({ kind: "point", x: -5.2, y: 2.6, z: 6.6, color: "#dfe8ff", intensity: 10, range: 7, priority: 5 });
-  lights.push({ kind: "point", x: 5.2, y: 2.6, z: 6.6, color: "#dfe8ff", intensity: 10, range: 7, priority: 5 });
-  lights.push({ kind: "point", x: 0, y: 2.3, z: 9.4, color: "#ffb86a", intensity: 16, range: 9, shadows: true, priority: 7 });
-  lights.push({ kind: "point", x: 0, y: 4.6, z: 6.5, color: "#9fb6e8", intensity: 12, range: 9, priority: 6 });
-  lights.push({ kind: "point", x: 0, y: 1.6, z: -6.6, color: "#ff9d5c", intensity: 8, range: 7, priority: 4 });
-  lights.push({ kind: "point", x: 11.5, y: 3.7, z: 3.0, color: "#c9d4ea", intensity: 14, range: 9, priority: 5 });
-  lights.push({ kind: "point", x: 0, y: 2.3, z: -3.6, color: "#eaf2ff", intensity: 8, range: 5, priority: 4 });
-
-  // ---------- Spawns. Every point sits at z ≤ -1.5, south of the two hall doors, so no line
-  // between the two end rooms is ever open: it always crosses the solid band or the bathroom.
-  const t0: [number, number][] = [[-16, -6], [-16, -3.5], [-15.5, -1.5], [-13, -6.2], [-11, -1.8], [-9, -4.5]];
-  for (const [x, z] of t0) {
-    spawns.push({ x, y: 0, z, yaw: 1.2, team: 0 });
-    spawns.push({ x: -x, y: 0, z, yaw: -1.2, team: 1 });
-  }
-
-  // FFA, Gun Game and the Ostrzyżeni chaser draw from these as well, so they cover the ring.
+  // FFA, Gun Game and the Ostrzyżeni chaser draw from these as well: the ring, not the starts.
   const arenaSpawns: SpawnPoint[] = [
-    { x: -6.5, y: 0, z: 3.0, yaw: 0, team: 0 },
-    { x: 6.5, y: 0, z: 3.0, yaw: 0, team: 1 },
-    { x: -6.5, y: 0, z: 10, yaw: Math.PI, team: 0 },
-    { x: 6, y: 0, z: 10, yaw: Math.PI, team: 1 },
-    { x: -5, y: 0, z: 6.6, yaw: 0, team: 0 },
-    { x: 5, y: 0, z: 6.6, yaw: 0, team: 1 },
-    { x: 8.6, y: DECK, z: 0.6, yaw: 1.4, team: 0 },
-    { x: 11.5, y: DECK, z: 6.5, yaw: -2.2, team: 1 },
+    { x: -14.4, y: 0, z: 9.6, yaw: Math.PI / 2, team: 0 }, { x: 14.4, y: 0, z: -9.6, yaw: -Math.PI / 2, team: 1 },
+    { x: -9.6, y: 0, z: -0.4, yaw: Math.PI / 2, team: 0 }, { x: 9.6, y: 0, z: 0.4, yaw: -Math.PI / 2, team: 1 },
+    { x: -3.4, y: 0, z: -9.4, yaw: 0, team: 0 }, { x: 3.4, y: 0, z: 9.4, yaw: Math.PI, team: 1 },
+    { x: 6.2, y: 0, z: -9.4, yaw: 0, team: 0 }, { x: -6.2, y: 0, z: 9.4, yaw: Math.PI, team: 1 },
   ];
 
-  // ---------- Buy stations: the furniture the barber keeps his float in ----------
+  // ---------- Buy stations: one in each start, one on the perch ----------
   const stations: Station[] = [
-    { x: -15.6, y: 0, z: -2.0, name: "KREDENS" },
-    { x: -7.2, y: 0, z: 2.6, name: "KOMODA" },
-    { x: 15.6, y: 0, z: -2.0, name: "SZAFA" },
+    { x: -15.4, y: 0, z: -5.6, name: "KLATKA W" },
+    { x: 15.4, y: 0, z: 5.6, name: "KLATKA E" },
+    { x: 0, y: PERCH, z: 0.2, name: "PODEST" },
   ];
-  for (const st of stations) props.push({ kind: "neon", x: st.x, y: 2.2, z: st.z, yaw: 0, text: "$ BUY", w: 1.2, h: 0.4, variant: "station" });
+  for (const st of stations) props.push({ kind: "neon", x: st.x, y: st.y + 2.2, z: st.z, yaw: 0, text: "$ BUY", w: 1.2, h: 0.4, variant: "station" });
 
-  // ---------- Domination: the two outer-ring rooms and the inner crossroads ----------
-  // NOT the two home rooms, which is where they were drafted: `DOM.radius` is 3.5 m and four spawn
-  // points a side sat 2.33 m from their own flag, so both teams captured a flag by existing and
-  // only the third was ever fought over — and in Boys, standing in a zone is what opens the class
-  // change, so a player could re-class from their spawn. NIGHT_DISTRICT's nearest spawn to a flag
-  // is 20.35 m; these are 6.7 m, outside every zone, and `map.test.ts` now checks it on every map.
+  // ---------- Domination: the two yards and the perch ----------
   const flags: Flag[] = [
-    { id: "A", name: "KUCHNIA", x: -14.5, y: 0, z: 6.5 },
-    { id: "B", name: "SKŁAD", x: 12.5, y: 0, z: 7.5 },
-    { id: "C", name: "HOL", x: 0, y: 0, z: 0 },
+    { id: "A", name: "BRAMA W", x: -15.4, y: 0, z: 0.6 },
+    { id: "B", name: "BRAMA E", x: 15.4, y: 0, z: -0.6 },
+    { id: "C", name: "PODEST", x: 0, y: PERCH, z: 0 },
   ];
 
   return {
     id: "gora",
-    name: "GÓRA (THE FLAT)",
+    name: "GÓRA (DACH)",
     solids, props, lights, spawns, arenaSpawns, stations, flags,
-    // Bomb sites on the centre line: both sides are 1.8 s from HOL and 2.7 s from BALKON, before
-    // and after the half-time swap (docs/MAP_2.md, D-G4).
+    // Bomb sites in the two yards: each side is the same distance from its near one, and the
+    // attack/defence swap gives both teams both.
     sites: [
-      { id: "A", name: "BALKON", x: 0, y: 0, z: 10 },
-      { id: "B", name: "HOL", x: 0, y: 0, z: 0 },
+      { id: "A", name: "PODWÓRKO W", x: -12.2, y: 0, z: 6.4 },
+      { id: "B", name: "PODWÓRKO E", x: 12.2, y: 0, z: -6.4 },
     ],
-    // The chase mode's respawn distance is a per-map number (docs/MAP_2.md, D-G3). Drafted at 8 m
-    // by proportion — 14 m on NIGHT_DISTRICT's 121 m diagonal against this map's 39 m — and then
-    // MEASURED: with five survivors spread one to an area, no point in the pool is 7 m from all of
-    // them, so the rule would fall through to the ordinary spawn pick, which maximises distance
-    // from enemies and is the opposite of hunting. At 6 m every arrangement sampled keeps at least
-    // four legal points, and 6 m is still eight body-widths and a whole spawn-protection window.
     huntSpawnMinM: 6,
-    // Falling down the light well, off the balcony or off the roof is a death (D-G5).
+    // The fence keeps everyone on the roof; the plane only exists so an impossible fall still ends.
     killY: -8,
-    bounds: boxFrom(-20, -12, -10, 40, 20, 23),
+    bounds: boxFrom(-18, -12, -12, 36, 20, 24),
   } satisfies MapDef;
 })();
 
-/** Kept for the tools and tests that want the raw extents rather than the built map. */
+/** Raw extents for the tools and tests that draw or measure the map rather than build it. */
 export const GORA_EXTENTS: Readonly<Record<string, Box>> = {
-  envelope: boxFrom(X0, 0, Z0, X1 - X0, H, Z1 - Z0),
-  szyb: boxFrom(-2.5, -8, 5, 5, 11, 3),
-  dach: boxFrom(6, DECK, -2, 11, 0, 11),
+  deck: boxFrom(X0, 0, Z0, X1 - X0, 0, Z1 - Z0),
+  perch: boxFrom(-4, PERCH, -2.5, 8, 0, 5),
+  klatkaW: boxFrom(-12.6, 0, -7.6, 5, 3, 4.6),
+  klatkaE: boxFrom(7.6, 0, 3.0, 5, 3, 4.6),
 };
+export const GORA_PERCH_Y = PERCH;
+export const GORA_LIP = LIP;

@@ -1,78 +1,69 @@
 /**
- * map-plan — Drop G. Renders the top-down ASCII plan in `docs/MAP_2.md` FROM the extents table in
- * that document, so the picture and the numbers cannot drift apart.
+ * map-plan — Drop G, redrawn for the tournament pass. Renders the top-down ASCII plan of GÓRA
+ * (DACH) in `docs/MAP_2.md` FROM the built solids, so the picture and the geometry cannot drift
+ * apart.
  *
  * Run: ./apps/server/node_modules/.bin/tsx apps/client/e2e/tools/map-plan.ts \
  *        > apps/client/e2e/out/g/plan.txt
  *
  * 2 characters per metre in X, 1 line per metre in Z (a terminal cell is about 1×2, so the plan is
- * roughly true to scale). +X east, +Z north — north is UP, as in `map.ts`.
+ * roughly true to scale). +X east, +Z north — north is UP, as in `map.ts`. Glyphs by the height a
+ * body meets: `#` a structure nobody gets onto (≥ 2.8 m), `=` full cover (2.0–2.6 m), `+` crouch
+ * cover (1.3 m), `.` low, jump on it (0.8 m), `/` a stair tread, `^` the perch (2.0 m, walkable),
+ * `~` the cage, `o` a spawn, `$` a buy station.
  */
-type Rect = { x0: number; x1: number; z0: number; z1: number; fill: string; label?: string };
+import { GORA } from "../../../../packages/shared/src/gora";
 
-const X0 = -18, X1 = 18, Z0 = -8, Z1 = 12;
+const X0 = -18, X1 = 18, Z0 = -12, Z1 = 12;
 const COLS = (X1 - X0) * 2, ROWS = Z1 - Z0;
 const col = (x: number) => Math.round((x - X0) * 2);
 const row = (z: number) => Math.round(Z1 - z);
 
-const LEVEL0: Rect[] = [
-  { x0: -17, x1: -8, z0: -7, z1: 1, fill: " ", label: "SALON" },
-  { x0: -17, x1: -8, z0: 3, z1: 9, fill: " ", label: "KUCHNIA" },
-  { x0: 8, x1: 17, z0: -7, z1: 1, fill: " ", label: "SYPIALNIA" },
-  { x0: 8, x1: 17, z0: 3, z1: 9, fill: " ", label: "SKLAD" },
-  { x0: -8, x1: 8, z0: -1, z1: 1, fill: " ", label: "HOL POL." },
-  { x0: -2.5, x1: 2.5, z0: -6, z1: -1, fill: " ", label: "LAZIENKA" },
-  { x0: -8, x1: -4.5, z0: 1, z1: 5, fill: " ", label: "KLATKA" },
-  { x0: 4.5, x1: 8, z0: 1, z1: 5, fill: " ", label: "PRZEDP." },
-  { x0: -4.5, x1: -2.5, z0: 1, z1: 5, fill: " " },
-  { x0: 2.5, x1: 4.5, z0: 1, z1: 5, fill: " " },
-  { x0: -2.5, x1: 2.5, z0: 1, z1: 5, fill: "#", label: "RDZEN" },
-  { x0: -8, x1: -2.5, z0: 5, z1: 8, fill: " ", label: "HOL PN-W" },
-  { x0: 2.5, x1: 8, z0: 5, z1: 8, fill: " ", label: "HOL PN-E" },
-  { x0: -2.5, x1: 2.5, z0: 5, z1: 8, fill: ":", label: "SZYB" },
-  { x0: -6, x1: -4, z0: 8, z1: 9, fill: " " },
-  { x0: 4, x1: 6, z0: 8, z1: 9, fill: " " },
-  { x0: -10, x1: 10, z0: 9, z1: 11, fill: " ", label: "BALKON" },
-  { x0: 10, x1: 14, z0: 9, z1: 11, fill: "/", label: "SCHODY" },
-];
-
-const LEVEL1: Rect[] = [
-  { x0: 6, x1: 13.5, z0: -2, z1: 9, fill: " ", label: "DACH  y=3.0" },
-  { x0: 15.7, x1: 17, z0: -2, z1: 9, fill: " " },
-  { x0: 13.5, x1: 15.7, z0: -2, z1: 3.4, fill: " " },
-  { x0: 13.5, x1: 15.7, z0: 7.9, z1: 9, fill: " " },
-  { x0: 13.5, x1: 15.7, z0: 3.4, z1: 7.9, fill: "/", label: "STRYCH" },
-  { x0: 10, x1: 15.2, z0: 9, z1: 11, fill: "/", label: "SCHODY" },
-];
-
-function render(rects: Rect[], title: string): void {
-  const g: string[][] = Array.from({ length: ROWS }, () => Array(COLS).fill("░"));
-  // rooms
-  for (const r of rects) for (let z = r.z0; z < r.z1; z++) for (let cx = col(r.x0); cx < col(r.x1); cx++) {
-    const ry = row(z) - 1;
-    if (ry >= 0 && ry < ROWS && cx >= 0 && cx < COLS) g[ry][cx] = r.fill;
+const g: string[][] = Array.from({ length: ROWS }, () => Array(COLS).fill(" "));
+const paint = (x0: number, x1: number, z0: number, z1: number, ch: string) => {
+  for (let ry = row(z1); ry < row(z0); ry++) for (let cx = col(x0); cx < col(x1); cx++) {
+    if (ry >= 0 && ry < ROWS && cx >= 0 && cx < COLS) g[ry][cx] = ch;
   }
-  // outline: any floor cell with a non-floor neighbour gets a wall char on the boundary
-  const solid = (cx: number, ry: number) => cx < 0 || ry < 0 || cx >= COLS || ry >= ROWS || g[ry][cx] === "░";
-  const out = g.map((line, ry) => line.map((c, cx) => {
-    if (c !== "░") return c;
-    return solid(cx - 1, ry) && solid(cx + 1, ry) && solid(cx, ry - 1) && solid(cx, ry + 1) ? " " : "#";
-  }));
-  // labels, centred
-  for (const r of rects) {
-    if (!r.label) continue;
-    const ry = row((r.z0 + r.z1) / 2) - 1;
-    const start = Math.round((col(r.x0) + col(r.x1) - r.label.length) / 2);
-    for (let i = 0; i < r.label.length; i++) if (ry >= 0 && ry < ROWS && start + i >= 0 && start + i < COLS) out[ry][start + i] = r.label[i];
-  }
-  console.log(title);
-  console.log("        " + [-15, -10, -5, 0, 5, 10, 15].map((x) => `x=${x}`.padStart(x < 0 ? 6 : 5)).join("    "));
-  for (let ry = 0; ry < ROWS; ry++) {
-    const z = Z1 - ry - 1;
-    console.log(`z=${String(z).padStart(3)}  |${out[ry].join("")}|`);
-  }
-  console.log("");
+};
+const glyph = (name: string, h: number, invisible: boolean): string | null => {
+  if (name === "dach") return "·";
+  if (/^(blok_|podworko_dol)/.test(name)) return null;
+  if (name.startsWith("siatka_")) return "~";
+  if (name.startsWith("attyka_") && !name.includes("maszynowni")) return null;
+  if (name.startsWith("schody_")) return "/";
+  if (name === "maszynownia") return "^";
+  if (name.startsWith("attyka_maszynowni")) return "=";
+  if (invisible) return "+";
+  if (h >= 2.8) return "#";
+  if (h >= 2.0) return "=";
+  if (h >= 1.2) return "+";
+  if (h >= 0.5) return ".";
+  return null;
+};
+// Floor first, then everything else in height order so the tallest wins a cell.
+const sorted = [...GORA.solids].sort((a, b) => a.box.maxY - b.box.maxY);
+for (const s of sorted) {
+  const ch = glyph(s.name ?? "", s.box.maxY, !!s.invisible);
+  if (!ch) continue;
+  paint(s.box.minX, s.box.maxX, s.box.minZ, s.box.maxZ, ch);
 }
+for (const s of GORA.spawns) g[row(s.z) - 1][col(s.x)] = "o";
+for (const st of GORA.stations) g[row(st.z) - 1][col(st.x)] = "$";
+const label = (x: number, z: number, text: string) => {
+  const ry = row(z) - 1, start = Math.round(col(x) - text.length / 2);
+  for (let i = 0; i < text.length; i++) if (ry >= 0 && ry < ROWS && start + i >= 0 && start + i < COLS) g[ry][start + i] = text[i];
+};
+label(-10.1, -5.3, "KLATKA W"); label(10.1, 5.3, "KLATKA E");
+label(0, 0, "MASZYNOWNIA"); label(0, -5.0, "DZIEDZINIEC S"); label(0, 5.0, "DZIEDZINIEC N");
+label(-12, 6.5, "PODWORKO W"); label(12, -6.5, "PODWORKO E");
+label(-14.8, -0.5, "brama"); label(14.8, 0.5, "brama");
+label(0.5, -9.0, "WENT."); label(-0.5, 9.0, "PRALN.");
+label(-6.3, 0, "pod.W"); label(6.3, 0, "pod.E");
 
-render(LEVEL0, "LEVEL 0 — the flat (floor y = 0, ceiling 2.8)   N ↑ (+Z)   E → (+X)   # wall/solid   : open shaft   / stair");
-render(LEVEL1, "LEVEL +1 — DACH, the roof over the east wing (deck y = 3.0, parapet 1.2). / = the fire escape up from the balcony and the loft-stair opening down into the SKŁAD.");
+console.log("GÓRA (DACH) — the roof, y = 0; the perch (^) at y = 2.0.   N ↑ (+Z)   E → (+X)");
+console.log("# structure (≥ 2.8)   = full cover (2.0–2.6)   + crouch cover (1.3)   . low, jump on (0.8)   / stair   ~ cage 4.4 m   o spawn   $ buy");
+console.log("        " + [-15, -10, -5, 0, 5, 10, 15].map((x) => `x=${x}`.padStart(x < 0 ? 6 : 5)).join("    "));
+for (let ry = 0; ry < ROWS; ry++) {
+  const z = Z1 - ry - 1;
+  console.log(`z=${String(z).padStart(3)}  |${g[ry].join("")}|`);
+}

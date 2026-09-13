@@ -1,7 +1,7 @@
 import { MATCH } from "./constants";
 import { DOM } from "./dom";
 import { BOMB } from "./bomb";
-import type { GameMode } from "./types";
+import type { GameMode, Team } from "./types";
 import type { WeaponId } from "./weapons";
 import type { PerkId } from "./perks";
 
@@ -35,9 +35,10 @@ export const MODES: Record<GameMode, ModeDef> = {
   bomb: { id: "bomb", name: "BOMB PLANT", short: "BOMB", blurb: "Tactical rounds · B to buy · T to plant / defuse · first to 7 · sides swap after 6", teams: true, scoreLimit: BOMB.wins, shop: "all", winner: "team" },
   gungame: { id: "gungame", name: "GUN GAME", short: "GUN", blurb: "Everyone for themselves · every kill hands you the next gun · a clippers kill shaves a rung off the victim · first through all 14 wins", teams: false, scoreLimit: 14, shop: "none", winner: "player" },
   ostrzyzeni: { id: "ostrzyzeni", name: "OSTRZYŻENI", short: "OSTRZ", blurb: "One shaved barber with clippers hunts the rest · a clippers kill shaves you onto their side · survive the clock", teams: true, scoreLimit: 5, shop: "survivors", winner: "player" },
+  duel: { id: "duel", name: "1 v 1", short: "DUEL", blurb: "Two players · B to buy in the 4 s freeze · a round is one life or 60 s · sides swap every 3 rounds · first to 6", teams: true, scoreLimit: 6, shop: "all", winner: "team" },
 };
 
-export const MODE_ORDER: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni"];
+export const MODE_ORDER: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni", "duel"];
 
 
 // ---------------------------------------------------------------- Gun Game (Drop D)
@@ -176,4 +177,61 @@ export function pickFirstShaved<T extends { connected: boolean }>(players: reado
   const pool = players.filter((p) => p.connected);
   if (pool.length === 0) return null;
   return pool[Math.min(pool.length - 1, Math.floor(rand() * pool.length))];
+}
+
+// ---------------------------------------------------------------- 1 v 1 (GÓRA tournament pass)
+
+/**
+ * The duel: two players, one life a round, first to `wins`. Built on the same Prep / Playing round
+ * machine as Bomb and Ostrzyżeni (the round counter is `state.bomb.round`, the scores are
+ * `scoreA` / `scoreB`), so it adds no replicated field and no message.
+ *
+ * Why these numbers: a round is a single fight, so 60 s is a cap, not a target — most rounds end in
+ * a third of that; the 4 s freeze is long enough to buy and short enough that a match of eleven
+ * rounds is under ten minutes; `roundMoney` buys any one gun on the roster plus armour, so the
+ * choice each round is the loadout and never the wallet (L1: nothing is gated). Sides swap every
+ * `halfRounds` so a map that is not perfectly symmetric still gives both players both starts.
+ */
+export const DUEL = {
+  players: 2,
+  /** The frozen buy window at the start of every round. */
+  prepMs: 4000,
+  roundMs: 60000,
+  /** Result pause between rounds. */
+  breakMs: 3000,
+  wins: 6,
+  /** Sides swap every this many rounds: 1–3 on the first set, 4–6 on the other, and so on. */
+  halfRounds: 3,
+  /** Every round starts with this much and a clean wallet; nothing carries over. */
+  roundMoney: 6000,
+  /** A cap on the whole match; at the cap a tie is played out, a lead ends it. */
+  matchMs: 15 * 60000,
+} as const;
+
+/** The smallest view of a player the duel rule needs. */
+export interface DuelPlayer { team: number; alive: boolean; connected: boolean; health: number }
+
+/** Which spawn SET a team uses for the round about to be played (1-based). */
+export const duelSpawnSide = (team: Team, round: number): Team =>
+  ((team + Math.floor((Math.max(1, round) - 1) / DUEL.halfRounds)) % 2) as Team;
+
+/**
+ * Who has won the round, if anyone. A side with nobody standing loses; a mutual wipe is a draw
+ * (nobody scores); at the clock the side with more health left wins, and equal health is a draw.
+ * Null while the round is still on. Sides that have nobody CONNECTED are not judged at all — the
+ * room holds the clock while a player is reconnecting.
+ */
+export function duelRoundWinner(players: readonly DuelPlayer[], now: number, roundEndsAt: number): { winner: Team | -1; reason: string } | null {
+  const side = (t: number) => players.filter((p) => p.connected && p.team === t);
+  const a = side(0), b = side(1);
+  if (a.length === 0 || b.length === 0) return null;
+  const hp = (s: DuelPlayer[]) => s.reduce((sum, p) => sum + (p.alive ? p.health : 0), 0);
+  const aAlive = a.some((p) => p.alive), bAlive = b.some((p) => p.alive);
+  if (!aAlive && !bAlive) return { winner: -1, reason: "TRADE" };
+  if (!aAlive) return { winner: 1, reason: "ELIMINATED" };
+  if (!bAlive) return { winner: 0, reason: "ELIMINATED" };
+  if (now < roundEndsAt) return null;
+  const ha = hp(a), hb = hp(b);
+  if (ha === hb) return { winner: -1, reason: "TIME · EVEN" };
+  return { winner: ha > hb ? 0 : 1, reason: "TIME · MORE HEALTH" };
 }

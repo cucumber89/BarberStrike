@@ -24,7 +24,7 @@ describe("invite links", () => {
   it("offers every map the build has, in the shared order and under the name the map calls itself", () => {
     expect(mapChoices()).toEqual(MAP_ORDER.map((id) => ({ id, name: MAPS[id].name })));
     expect(mapChoices().map((m) => m.id)).toEqual(["night_district", "gora"]);
-    expect(mapChoices().map((m) => m.name)).toEqual(["Night District", "GÓRA (THE FLAT)"]);
+    expect(mapChoices().map((m) => m.name)).toEqual(["Night District", "GÓRA (DACH)"]);
   });
 
   it("still reads the older ?room= query, which is not a link join", () => {

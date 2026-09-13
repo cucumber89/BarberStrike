@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { GUN_GAME, MODES, MODE_ORDER, OSTRZYZENI, convertsOnKill, infectionRoundWinner, ladderAfterKill, ladderDone, ladderRung, ladderWeapon, pickFirstShaved } from "./modes";
+import { DUEL, GUN_GAME, MODES, MODE_ORDER, OSTRZYZENI, convertsOnKill, duelRoundWinner, duelSpawnSide, infectionRoundWinner, ladderAfterKill, ladderDone, ladderRung, ladderWeapon, pickFirstShaved } from "./modes";
 import { GAME_MODES, isGameMode } from "./types";
 import { WEAPONS, WEAPON_ORDER } from "./weapons";
+import { WEAPON_PRICES } from "./economy";
 
 describe("Drop D modes are in every list the lobby and the matchmaker read", () => {
   it("names every mode once, in the picker order", () => {
@@ -20,6 +21,38 @@ describe("Drop D modes are in every list the lobby and the matchmaker read", () 
     expect(MODES.ostrzyzeni.teams).toBe(true);
     expect(MODES.ostrzyzeni.shop).toBe("survivors");
     expect(MODES.ostrzyzeni.winner).toBe("player");
+    expect(MODES.duel.teams).toBe(true);
+    expect(MODES.duel.scoreLimit).toBe(DUEL.wins);
+  });
+});
+
+describe("1 v 1 (GÓRA tournament pass)", () => {
+  const P = (team: number, alive: boolean, health: number, connected = true) => ({ team, alive, connected, health });
+
+  it("swaps the spawn sets every halfRounds, so both players get both starts", () => {
+    expect(duelSpawnSide(0, 1)).toBe(0); expect(duelSpawnSide(1, 1)).toBe(1);
+    expect(duelSpawnSide(0, DUEL.halfRounds)).toBe(0);
+    expect(duelSpawnSide(0, DUEL.halfRounds + 1)).toBe(1); expect(duelSpawnSide(1, DUEL.halfRounds + 1)).toBe(0);
+    expect(duelSpawnSide(0, 2 * DUEL.halfRounds + 1)).toBe(0);
+    // Never both on one set.
+    for (let r = 1; r <= 2 * DUEL.wins; r++) expect(duelSpawnSide(0, r)).not.toBe(duelSpawnSide(1, r));
+  });
+
+  it("ends a round on a kill, calls a trade a draw, and settles the clock on health", () => {
+    const t = 10000;
+    expect(duelRoundWinner([P(0, true, 100), P(1, true, 100)], 0, t)).toBeNull();
+    expect(duelRoundWinner([P(0, true, 37), P(1, false, 0)], 0, t)).toEqual({ winner: 0, reason: "ELIMINATED" });
+    expect(duelRoundWinner([P(0, false, 0), P(1, true, 1)], 0, t)).toEqual({ winner: 1, reason: "ELIMINATED" });
+    expect(duelRoundWinner([P(0, false, 0), P(1, false, 0)], 0, t)?.winner).toBe(-1);
+    expect(duelRoundWinner([P(0, true, 80), P(1, true, 45)], t, t)?.winner).toBe(0);
+    expect(duelRoundWinner([P(0, true, 45), P(1, true, 80)], t, t)?.winner).toBe(1);
+    expect(duelRoundWinner([P(0, true, 60), P(1, true, 60)], t, t)?.winner).toBe(-1);
+    // A side that is not connected is not judged: the clock is held for them.
+    expect(duelRoundWinner([P(0, true, 60), P(1, true, 60, false)], t, t)).toBeNull();
+  });
+
+  it("gives every gun on the roster a price under the round money", () => {
+    for (const w of WEAPON_ORDER) expect(WEAPON_PRICES[w]).toBeLessThan(DUEL.roundMoney);
   });
 });
 

@@ -543,3 +543,138 @@ The numbers below are re-measured on the REAL geometry and the REAL walk grid (�
   (survivors placed by farthest-point sampling over the spawn pool); GÓRA fails that test at 8.
   What is still unproven is the same thing as on NIGHT_DISTRICT: whether the chase is fun. That
   needs humans.
+
+---
+
+## Rebuilt as the 1v1 roof — GÓRA (DACH) (2026-09-13, tournament pass)
+
+**The flat above is gone; the map is now the roof of the same block, built for a two-player
+tournament.** Everything above this line is the record of the flat — its draft, its sign-off and
+its as-built numbers — and stays as history. The roof is `packages/shared/src/gora.ts`, and every
+number below comes from `apps/client/e2e/tools/map-duel.ts` (the fairness audit) and
+`map-rotation.ts` §4 (the rotation table), both run on the built solids and the real walk grid.
+Regenerate with:
+
+```
+./apps/server/node_modules/.bin/tsx apps/client/e2e/tools/map-duel.ts     > apps/client/e2e/out/g/duel.md
+./apps/server/node_modules/.bin/tsx apps/client/e2e/tools/map-rotation.ts > apps/client/e2e/out/g/rotation.md
+./apps/server/node_modules/.bin/tsx apps/client/e2e/tools/map-plan.ts     > apps/client/e2e/out/g/plan.txt
+node apps/client/e2e/tools/gora-shots.mjs                                  # renders + a live duel
+```
+
+### The plan (rendered from the built solids by `map-plan.ts`)
+
+```
+GÓRA (DACH) — the roof, y = 0; the perch (^) at y = 2.0.   N ↑ (+Z)   E → (+X)
+# structure (≥ 2.8)   = full cover (2.0–2.6)   + crouch cover (1.3)   . low, jump on (0.8)   / stair   ~ cage 4.4 m   o spawn   $ buy
+         x=-15     x=-10      x=-5      x=0      x=5     x=10     x=15
+z= 11  |                                                                        |
+z= 10  |  ~·········+++·················######·················o···o···o···o.~  |
+z=  9  |  ~·········+++·················PRALN.·······························~  |
+z=  8  |  ~·····························######········##··#··················~  |
+z=  7  |  ~······················=======######···++++·##···##########········~  |
+z=  6  |  ~+++·PODWORKO W················+··+··········..··##########··o···$·~  |
+z=  5  |  ~+++·········===············DZIEDZINIEC N····..··#KLATKA E#··o·····~  |
+z=  4  |  ~·#####··············....········===·············##########········~  |
+z=  3  |  ~·#####···········###····························##########········~  |
+z=  2  |  ~·#####···················································#········~  |
+z=  1  |  ~·························^^^^^^^^^^^^^^^^················#········~  |
+z=  0  |  ~··················pod.W//^^^MASZYNOWNIA^^///pod.E············brama~  |
+z= -1  |  ~·brama··············/////^^^^^^^^^^^^^^^^/////····················~  |
+z= -2  |  ~········#················^^^^^^^^^^^^^^^^·························~  |
+z= -3  |  ~········#················================···················#####·~  |
+z= -4  |  ~········##########····························###···········#####·~  |
+z= -5  |  ~······o·#KLATKA W#·········DZIEDZINIEC S··....··············#####·~  |
+z= -6  |  ~··$···o·##########··..·········===·················===·········+++~  |
+z= -7  |  ~········##########··..··········+··+················PODWORKO E·+++~  |
+z= -8  |  ~········##########···##·++++···######=======······················~  |
+z= -9  |  ~··················#··##········#WENT.·····························~  |
+z=-10  |  ~··o···o···o···o················######·················+++·········~  |
+z=-11  |  ~.······························######·················+++·········~  |
+z=-12  |                                                                        |
+```
+
+### Why a roof, and why it is fair by construction
+
+A 1v1 needs two things the flat could not give: starts that are equivalent to the metre, and a
+map small enough that a round is decided by aim, movement and a guess about the other player,
+not by a tour. The roof is a **34 × 22 m** fenced deck with the lift machine room in the middle
+turned into a **perch** (2.0 m, a 1.35 m lip on the court sides, open on the stair ends), a
+**stair head** in the south-west and north-east corners hiding the two starts, a **court** with
+the barber's chairs and mirror on each long side, a **yard** with a vent tank on each short side,
+and each long edge cut into two covered **lane** halves by a 3.9 m fan house. Around it all a
+4.4 m cage — the illegal arena — and beyond the wire the estate at night: the block below, five
+neighbouring blocks with window glow, nothing else.
+
+Fairness is not tuned, it is built: every solid, prop and light off the centre line is placed by
+`pair()` with its 180° twin about the origin, `(x, z) → (−x, −z)`. A rotation, not a mirror, so
+both players play the map from the same hand (your left is their left). `gora.test.ts` checks the
+symmetry on the finished solids, and the audit walks the same places from both starts:
+
+| Place (from the west start; the east start walks the twin) | Path (m) | West (s) | East (s) | Δ |
+|---|---|---|---|---|
+| own crossroads (podest) | 13.1 | 1.78 | 1.78 | 0 ms |
+| the perch, by own stairs | 19.6 | 2.87 | 2.87 | 0 ms |
+| own lane nook | 12.5 | 1.60 | 1.60 | 0 ms |
+| own yard, the tank | 9.5 | 1.22 | 1.22 | 0 ms |
+| own laundry / bunting corner | 15.6 | 2.18 | 2.18 | 0 ms |
+| far crossroads | 25.6 | 3.65 | 3.65 | 0 ms |
+| far court, beside the chairs | 18.3 | 2.40 | 2.40 | 0 ms |
+| far yard, the tank | 32.0 | 4.62 | 4.62 | 0 ms |
+| the other start's door | 35.4 | 4.95 | 4.95 | 0 ms |
+| the other start | 39.3 | 5.45 | 5.45 | 0 ms |
+
+Each side walks both its own A* route and the twin of the other side's, and the better time
+counts — the grid's tie-breaking is not a property of the map. The brief allowed 250 ms.
+
+### The three fights
+
+1. **The courts** (green neon south, gold north): open, two chairs each (1.45 m, crouch cover,
+   with a collision proxy the size of the drawn chair — a prop is never cover), a 2.0 m cabinet
+   for a corner, a 0.8 m crate to jump on. The risk space, and the way to the stairs.
+2. **The lanes** (warm white): behind lockers and a duct, hidden from the perch, each half about
+   12 m long, cut by the fan house so nothing runs the length of the roof. The safer way round.
+3. **The perch** (gold): whoever is up there looks down into both courts over a lip that hides a
+   crouched player and shows a standing one's head, and is open to both crossroads at the stair
+   ends. Two stairs, one each side, both in the open. It sees **30 %** of the ground; 298 m² of
+   the deck is out of its view, the lanes and the yards' far sides most of all.
+
+The starts: each is a strip west of its stair head, behind a gate wall and a wing wall off the
+stair head's far corner, so the first steps out are in the perch's shadow. **No team-0 point can
+see any team-1 point standing or crouching, either way round**; the west start has a line to
+**152 of 1 940** reachable surfaces (7.9 %) and none of them is further than 9 m — the doorway
+and the strip itself. Within 15 m of path each start has five exits (the door, the mouth, the
+stairs, the nook, the tank); within 30 m all seven.
+
+### Sight lines and cover
+
+Median clear line **7.6 m**, p90 15.0 m, p99 20.7 m; 1.6 % of clear lines are over 20 m and
+none over 34. The longest is a diagonal from one yard's parapet to the other's, past the perch's
+face, and it needs both players at a parapet. Cover speaks one language: **0.8 m** low (jump on
+it), **1.3 m** crouch (the mantle is 1.25, so it cannot be climbed), **≥ 2.0 m** full,
+**2.8–3.9 m** structures. Every jump a body can make — a standing jump plus the crouch mantle
+beside a top, a 4.4 m sprint jump across a gap on the real parabola — is chained from the deck by
+`gora.test.ts`: the highest thing a body can stand on is the lockers behind a court (2.2 m), the
+cage is 2.2 m above that, and no stair head, tank, fan house, chimney, billboard or pallet stack
+can be reached. A lower cage failed that test (a crate beside a vent unit, the unit, the wire),
+which is why the cage is 4.4 m.
+
+### The mode
+
+`duel` (`packages/shared/src/modes.ts`, `DUEL`): two seats, at most one of them a bot and only
+when asked for; every round a 4 s freeze with `roundMoney` (6 000, more than any gun) and a clean
+wallet, both players on their side's FIRST spawn point (no roll of the dice), one life, 60 s;
+a kill wins the round, a trade is a draw, the clock goes to the side with more health left and
+an even clock scores nobody; sides swap every 3 rounds; first to 6 wins; a 15-minute cap ends
+only a match somebody is winning. The result screen and the automatic return to Waiting →
+Countdown are the rematch — same two players, same room. Same Prep / Playing machine, same
+`state.bomb.round` and `scoreA` / `scoreB` as Bomb and Ostrzyżeni: no new replicated field, no
+new message (`apps/server/src/rooms/Duel.test.ts`, seven tests).
+
+### What is still not proven
+
+- **No humans have played it.** The lip height (1.35 m), the perch's 30 % view and the 60 s round
+  clock are numbers that want two people and a real GPU.
+- **The lockers' top is reachable** by a jump off the perch onto the cabinet and on: a 2.2 m ledge
+  behind a court, exposed from the whole court and the yard. Left as a risky boost rather than
+  walled off; the test pins that nothing higher is.

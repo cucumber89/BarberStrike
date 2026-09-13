@@ -3,18 +3,20 @@ import { Engine } from '@babylonjs/core/Engines/engine';
 import { Scene } from '@babylonjs/core/scene';
 import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
-import { NIGHT_DISTRICT } from '@frankibarber/shared';
+import { MAPS, NIGHT_DISTRICT } from '@frankibarber/shared';
 import { buildMap } from './src/game/world/MapBuilder';
 import { installPostFx } from './src/game/world/postfx';
 const canvas=document.querySelector('canvas');
 const engine=new Engine(canvas,true);const scene=new Scene(engine);
-const camera=new FreeCamera('review',new Vector3(-6,1.7,-5),scene);camera.minZ=.05;camera.fov=1.2;
-camera.setTarget(new Vector3(2,2,2));camera.attachControl(canvas,true);
+// `?map=gora` reviews the roof; anything else the district.
+const map=MAPS[new URLSearchParams(location.search).get('map')??'']??NIGHT_DISTRICT;
+const camera=new FreeCamera('review',map===NIGHT_DISTRICT?new Vector3(-6,1.7,-5):new Vector3(-13.6,1.62,-6),scene);camera.minZ=.05;camera.fov=1.2;
+camera.setTarget(map===NIGHT_DISTRICT?new Vector3(2,2,2):new Vector3(-15.2,1.6,-1));camera.attachControl(canvas,true);
 const ip=scene.imageProcessingConfiguration;
 // Same tone curve, exposure and contrast the game sets in postfx.ts — a review at different
 // settings is a picture of a game nobody plays.
 ip.toneMappingEnabled=true;ip.toneMappingType=1;ip.exposure=1.85;ip.contrast=1.1;
-buildMap(scene,NIGHT_DISTRICT,{shadows:true,shadowMapSize:1024});
+buildMap(scene,map,{shadows:true,shadowMapSize:1024});
 // Exercise the real preset implementation, not a second approximation of its bloom settings.
 const preset=new URLSearchParams(location.search).get('preset');
 if(preset==='medium'||preset==='ultra') installPostFx({scene,camera,settings:{graphics:{preset,postProcessing:true,antialiasing:true,brightness:1}},events:{on:()=>()=>{}}});

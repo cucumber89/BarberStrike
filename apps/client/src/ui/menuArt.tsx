@@ -74,6 +74,14 @@ const Ostrzyzeni = (): ReactElement => (
   </svg>
 );
 
+/** Two razors, point to point: the 1 v 1. */
+const Duel = (): ReactElement => (
+  <svg {...stroke}>
+    <path d="M4 5l7 7-7 7M20 5l-7 7 7 7" />
+    <path d="M9 12h6" />
+  </svg>
+);
+
 /** Everyone for themselves. Kept for completeness — the picker does not offer FFA. */
 const Ffa = (): ReactElement => (
   <svg {...stroke}>
@@ -82,7 +90,7 @@ const Ffa = (): ReactElement => (
 );
 
 export const MODE_ART: Record<GameMode, () => ReactElement> = {
-  tdm: Tdm, boys: Boys, dom: Dom, bomb: Bomb, gungame: GunGame, ostrzyzeni: Ostrzyzeni, ffa: Ffa,
+  tdm: Tdm, boys: Boys, dom: Dom, bomb: Bomb, gungame: GunGame, ostrzyzeni: Ostrzyzeni, duel: Duel, ffa: Ffa,
 };
 
 /**
@@ -109,8 +117,10 @@ const NightDistrictPlan = (): ReactElement => (
 const GoraPlan = (): ReactElement => (
   <svg {...plan}>
     <rect x="4" y="3" width="40" height="18" rx="1" opacity=".55" />
-    <rect x="14" y="8" width="9" height="8" rx="1" />
-    <path d="M27 3v18M14 8h-10M23 16h21" opacity=".7" />
+    <rect x="18" y="9" width="12" height="6" rx="1" />
+    <rect x="7" y="13" width="6" height="5" rx=".5" opacity=".8" />
+    <rect x="35" y="6" width="6" height="5" rx=".5" opacity=".8" />
+    <path d="M13 12h5M30 12h5" opacity=".7" />
   </svg>
 );
 

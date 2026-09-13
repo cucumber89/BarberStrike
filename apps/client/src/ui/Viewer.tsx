@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MAPS, MatchPhase } from "@frankibarber/shared";
 import { Connection, defaultServerUrl, httpUrl, type RoomListing } from "../game/net/Connection";
-import { VIEWPOINTS, ViewerScene, type ViewerStats } from "../game/viewer/ViewerScene";
+import { viewpointsFor, ViewerScene, type ViewerStats } from "../game/viewer/ViewerScene";
 
 /**
  * `/viewer` — watch a live match, and look at the map.
@@ -125,7 +125,7 @@ function Stage({ conn, onLeave }: { conn: Connection; onLeave(): void }) {
 
           <h2>MIEJSCA</h2>
           <div className="viewer-spots" data-testid="viewer-spots">
-            {VIEWPOINTS.map((v, i) => (
+            {viewpointsFor(conn.state.mapId).map((v, i) => (
               <button key={v.id} data-testid={`viewer-go-${v.id}`} onClick={() => sceneRef.current?.go(v.id)}>
                 <i>{i + 1}</i>{v.label}
               </button>
