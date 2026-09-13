@@ -1,5 +1,5 @@
 import { useMemo, useState, type CSSProperties } from "react";
-import { DROPPABLE_OUTFITS, HAIRCUTS, outfitDef, type OutfitDef } from "@frankibarber/shared";
+import { DROPPABLE_OUTFITS, HAIRCUTS, outfitDef, type HaircutDef, type HaircutStyle, type OutfitDef } from "@frankibarber/shared";
 import { catalog, skinById, type Rarity, type SkinDef } from "@frankibarber/skins";
 import {
   CRATE_CHALLENGES,
@@ -10,6 +10,7 @@ import {
   type Profile,
 } from "../game/progression/profile";
 import { uiSound } from "../game/audio";
+import { HaircutArt } from "./HaircutArt";
 
 /**
  * The crate: what is in it, what the odds are, and what you just got.
@@ -28,6 +29,7 @@ type ReelItem = {
   name: string;
   rarity: Rarity;
   swatch: string;
+  haircut?: HaircutStyle;
 };
 
 const rarityLabel: Record<Rarity, string> = {
@@ -65,17 +67,18 @@ function outfitItem(outfit: OutfitDef): ReelItem {
   return { id: outfit.id, kind: "outfit", name: outfit.name, rarity: outfit.rarity, swatch: outfitSwatch(outfit) };
 }
 
+function haircutItem(haircut: HaircutDef): ReelItem {
+  return {
+    id: haircut.id, kind: "haircut", name: haircut.name, rarity: haircut.rarity,
+    swatch: haircut.style.tone === "bleach" ? "#ead78f" : "#2b211b", haircut: haircut.style,
+  };
+}
+
 function prizeItem(prize: CratePrize): ReelItem {
   if (prize.kind === "skin") return skinItem(skinById(prize.id) ?? catalog[0]);
   if (prize.kind === "outfit") return outfitItem(outfitDef(prize.id));
-  const haircut = HAIRCUTS.find((item) => item.id === prize.id);
-  return {
-    id: prize.id,
-    kind: "haircut",
-    name: haircut?.name ?? prize.id,
-    rarity: "epicki",
-    swatch: haircut?.style.tone === "bleach" ? "#e8d99f" : "#29201a",
-  };
+  const haircut = HAIRCUTS.find((item) => item.id === prize.id) ?? HAIRCUTS[0];
+  return haircutItem(haircut);
 }
 
 export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
@@ -89,7 +92,8 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
    * marker; the rest are scenery.
    */
   const reel = useMemo(() => {
-    const pool: ReelItem[] = [...DROPPABLE_OUTFITS.map(outfitItem), ...catalog.map(skinItem)];
+    const crateCuts = HAIRCUTS.filter((item) => item.requirement === "Ze skrzynki");
+    const pool: ReelItem[] = [...DROPPABLE_OUTFITS.map(outfitItem), ...crateCuts.map(haircutItem), ...catalog.map(skinItem)];
     const items = Array.from({ length: 31 }, (_, index) => pool[(index * 7 + 3) % pool.length]);
     if (result) items[27] = prizeItem(result);
     return items;
@@ -110,25 +114,27 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
     setResult(rolled.prize);
     setPhase("rolling");
     uiSound("open");
+    const revealMs = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 250 : 3000;
     window.setTimeout(() => {
       setPhase("won");
       uiSound("click");
-    }, 4300);
+    }, revealMs);
   };
 
   return (
     <section className="crate-panel" data-testid="crates">
       <div className="crate-top">
-        <div><b>SKRZYNKI DZIELNICY</b><small>Codzienny odbiór i nagrody za zadania</small></div>
-        <strong data-testid="crate-count">{profile.crates}</strong>
+        <div><b>SKRZYNKA DZIELNICY</b><small>Jedna dziennie · kolejne za zadania</small></div>
+        <strong data-testid="crate-count"><span>MASZ</span>{profile.crates}</strong>
       </div>
 
       <button className="crate-case" type="button" onClick={open} disabled={!profile.crates || phase === "rolling"} data-testid="crate-open">
-        <i /><span>M</span><b>{phase === "rolling" ? "LOSOWANIE…" : profile.crates ? "OTWÓRZ" : "WRÓĆ JUTRO"}</b>
+        <i className="crate-lid" /><i className="crate-lock">M</i>
+        <span><small>{profile.crates ? "GOTOWA DO OTWARCIA" : "DZIŚ JUŻ ODEBRANA"}</small><b>{phase === "rolling" ? "LOSOWANIE…" : profile.crates ? "OTWÓRZ SKRZYNKĘ" : "WRÓĆ JUTRO"}</b></span>
+        <em>→</em>
       </button>
 
-      {/* What is inside, before the button is pressed. */}
-      <div className="crate-odds" data-testid="crate-odds">
+      <div className="crate-odds" data-testid="crate-odds" aria-label="Szanse nagród">
         {(Object.keys(CRATE_ODDS) as PrizeKind[]).map((kind) => (
           <div key={kind}>
             <i className={`odds-${kind}`} />
@@ -138,16 +144,16 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
         ))}
       </div>
 
-      <div className="crate-collection" data-testid="crate-collection">
+      <div className="crate-collection" data-testid="crate-collection" aria-label="Stan kolekcji">
         {collection.map((row) => (
           <div key={row.label}>
             <span>{row.label}</span>
-            <i style={{ "--p": `${Math.round(row.have / row.all * 100)}%` } as CSSProperties} />
             <b>{row.have}/{row.all}</b>
           </div>
         ))}
       </div>
 
+      <div className="crate-task-title"><b>ZDOBĄDŹ KOLEJNE</b><span>Zadania odnawiają się codziennie</span></div>
       <div className="crate-tasks">
         {CRATE_CHALLENGES.map((task) => {
           const progress = Math.max(0, profile.life[task.stat] - profile.challengeBase[task.stat]);
@@ -172,11 +178,10 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
               <div className="reel-track">
                 {reel.map((item, index) => (
                   <div key={`${item.id}-${index}`} className={item.rarity} data-winning={index === 27 ? "true" : undefined}>
-                    <span
-                      className={item.kind === "haircut" ? "haircut-drop" : ""}
-                      style={{ "--swatch": item.swatch } as CSSProperties}
-                    />
-                    <b>{item.name}</b><small>{item.kind === "haircut" ? "FRYZURA" : rarityLabel[item.rarity]}</small>
+                    {item.kind === "haircut" && item.haircut
+                      ? <HaircutArt style={item.haircut} className="haircut-drop" />
+                      : <span style={{ "--swatch": item.swatch } as CSSProperties} />}
+                    <b>{item.name}</b><small>{rarityLabel[item.rarity]}</small>
                   </div>
                 ))}
               </div>
@@ -186,7 +191,7 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
                 <span>{kindLabel[result.kind]} · {rarityLabel[prizeItem(result).rarity]}</span>
                 <b>{prizeItem(result).name}</b>
                 {result.kind === "outfit" && <em data-testid="crate-prize-blurb">{outfitDef(result.id).blurb}</em>}
-                <button onClick={() => setPhase("closed")}>DODAJ DO KOLEKCJI</button>
+                <button onClick={() => setPhase("closed")}>GOTOWE</button>
               </div>
             )}
             <p>Każda nagroda jest kosmetyczna. Rzadkie przedmioty nie dają przewagi.</p>

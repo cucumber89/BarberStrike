@@ -274,3 +274,110 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); out
   .mm-nav-btn::before { display: none; }
   .enter-game span { transition: none; }
 }
+
+/* -------------------------------- hair studio */
+.armoury-cut-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding: 10px;
+  scrollbar-color: rgba(231,182,46,.45) transparent;
+}
+.armoury-cut-grid button {
+  min-height: 88px; position: relative; display: grid; grid-template-columns: 72px minmax(0,1fr);
+  grid-template-areas: "art name" "art state"; place-items: initial; align-items: center; gap: 1px 9px;
+  padding: 7px 9px; overflow: hidden; text-align: left; cursor: pointer;
+  background: rgba(13,28,35,.88); border: 1px solid rgba(169,193,202,.18); color: var(--tx);
+}
+.armoury-cut-grid button:hover:not(:disabled) { background: rgba(22,43,51,.95); border-color: rgba(231,182,46,.58); }
+.armoury-cut-grid button.on { background: linear-gradient(110deg, rgba(231,182,46,.19), rgba(11,26,32,.95)); border-color: var(--brass); box-shadow: inset 3px 0 var(--brass); }
+.armoury-cut-grid button.locked { opacity: .66; filter: saturate(.7); cursor: pointer; }
+.armoury-cut-grid button::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: #778994; }
+.armoury-cut-grid button.hair-rzadki::after { background: #5979ff; }
+.armoury-cut-grid button.hair-epicki::after { background: #a34fff; }
+.armoury-cut-grid button.hair-legendarny::after { background: #ef4d93; }
+.armoury-cut-grid button.hair-zloty::after { background: #ffc52f; box-shadow: 0 0 12px #ffc52f88; }
+.armoury-cut-grid .haircut-art { grid-area: art; width: 70px; height: 70px; display: block; filter: drop-shadow(0 7px 7px #0008); }
+.armoury-cut-grid b { grid-area: name; align-self: end; font: 17px var(--font-display); letter-spacing: .06em; }
+.armoury-cut-grid small { grid-area: state; align-self: start; color: var(--tx-3); font: 8px var(--font-mono); letter-spacing: .07em; }
+.armoury-cut-grid button.on small { color: var(--brass); }
+
+/* Crates own the full wardrobe stage. A weapon preview beside a crate made both too small. */
+.armoury.on-crates { grid-template-columns: minmax(0, 1fr); }
+.armoury.on-crates .armoury-weapons, .armoury.on-crates .armoury-stage { display: none; }
+.armoury.on-crates .armoury-skins { min-height: 0; }
+.armoury.on-crates .crate-panel { width: min(900px, calc(100% - 24px)); margin: 12px auto; }
+
+/* -------------------------------- simple district crate */
+.crate-panel {
+  padding: clamp(14px,2vw,24px); background: linear-gradient(145deg,rgba(11,27,34,.98),rgba(5,15,20,.96));
+  border: 1px solid rgba(169,193,202,.2); border-top: 2px solid var(--brass); box-shadow: 0 18px 55px #0007;
+}
+.crate-top { align-items: center; margin-bottom: 13px; }
+.crate-top div { gap: 3px; }
+.crate-top div>b { font: 28px var(--font-display); letter-spacing: .1em; }
+.crate-top small { color: var(--tx-3); font: 9px var(--font-mono); letter-spacing: .08em; }
+.crate-top>strong { display: flex; align-items: baseline; gap: 8px; color: var(--brass); font-size: 40px; }
+.crate-top>strong span { color: var(--tx-3); font: 8px var(--font-mono); letter-spacing: .18em; }
+.crate-case {
+  height: 126px!important; margin: 0 0 10px; display: grid; grid-template-columns: 126px minmax(0,1fr) 38px;
+  align-items: center; gap: 18px; padding: 15px 22px!important; text-align: left;
+  background: linear-gradient(110deg,#e9bb38,#d79a17 68%,#a8670b)!important;
+  border: 1px solid #f4d66b!important; box-shadow: inset 0 0 0 3px #10191bbb,0 13px 34px #0008!important;
+  color: #061015!important; clip-path: polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+}
+.crate-case:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-2px); }
+.crate-case:disabled { filter: grayscale(.75) brightness(.62); cursor: default; }
+.crate-case>.crate-lid {
+  position: static; width: 116px; height: 68px; background: linear-gradient(#17252c 0 15px,#31424a 15px 20px,#142027 20px)!important;
+  border: 2px solid #071014; box-shadow: inset 0 0 0 4px #24343a,0 8px 0 #0a1317; transform: perspective(80px) rotateX(-4deg);
+}
+.crate-case>.crate-lock {
+  position: absolute; left: 73px; top: 48px; width: 34px; height: 34px; display: grid; place-items: center;
+  background: #e5bd2e!important; border: 5px solid #126b3e; border-radius: 50%; color: #126b3e; font: 18px var(--font-display); font-style: normal;
+}
+.crate-case>span { display: grid; gap: 3px; width: auto; height: auto; margin: 0; border: 0; background: none; color: inherit; }
+.crate-case>span small { font: 8px var(--font-mono); letter-spacing: .18em; opacity: .7; }
+.crate-case>span b { font: 30px var(--font-display); letter-spacing: .08em; }
+.crate-case>em { position: static; justify-self: end; font: 35px var(--font-ui); font-style: normal; transition: transform .15s ease; }
+.crate-case:hover:not(:disabled)>em { transform: translateX(5px); }
+.crate-odds { grid-template-columns: repeat(3,1fr); gap: 7px; margin: 0 0 8px; }
+.crate-odds>div { min-height: 36px; padding: 8px 10px; background: rgba(15,32,39,.84); border-color: rgba(169,193,202,.17); }
+.crate-odds span { font-size: 9px; }
+.crate-odds b { color: var(--tx); font-size: 15px; }
+.crate-collection { grid-template-columns: repeat(3,1fr); gap: 7px; margin: 0 0 18px; }
+.crate-collection>div { display: flex; justify-content: space-between; padding: 6px 10px; background: rgba(7,19,25,.7); border-left: 2px solid rgba(231,182,46,.45); }
+.crate-collection span { font-size: 8px; }
+.crate-collection b { color: #cbd6da; }
+.crate-task-title { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0 7px; border-top: 1px solid rgba(169,193,202,.17); }
+.crate-task-title b { font: 16px var(--font-display); letter-spacing: .12em; }
+.crate-task-title span { color: var(--tx-3); font-size: 9px; }
+.crate-tasks { grid-template-columns: repeat(3,1fr); gap: 7px; }
+.crate-tasks>div { min-height: 44px; align-items: center; padding: 9px 10px; background: rgba(15,32,39,.84); font-size: 10px; }
+.crate-tasks>div>i { height: 3px; background: linear-gradient(90deg,#b77b0d,var(--brass)); box-shadow: 0 0 8px var(--gold-glow); }
+
+.crate-opening { background: radial-gradient(circle at 50% 42%,rgba(101,75,17,.38),rgba(3,9,13,.96) 63%); }
+.crate-dialog { width: min(1000px,94vw); padding: clamp(22px,3vw,38px); background: linear-gradient(145deg,#0d1d24,#050e13); border: 1px solid rgba(231,182,46,.6); border-top: 3px solid var(--brass); }
+.crate-dialog header b { font-size: 34px; }
+.crate-close { cursor: pointer; }
+.reel-window { height: 176px; margin: 24px 0; border: 1px solid rgba(169,193,202,.18); border-block: 2px solid var(--brass); background: #030a0e; }
+.reel-window::before, .reel-window::after { content: ""; position: absolute; z-index: 3; top: 0; bottom: 0; width: 15%; pointer-events: none; }
+.reel-window::before { left: 0; background: linear-gradient(90deg,#030a0e,transparent); }
+.reel-window::after { right: 0; background: linear-gradient(-90deg,#030a0e,transparent); }
+.reel-track { animation-duration: 2.9s; gap: 8px; }
+.reel-track>div { background: linear-gradient(145deg,#15262e,#0a151b); }
+.reel-track .haircut-art { width: 76px; height: 76px; justify-self: center; filter: drop-shadow(0 8px 8px #0008); }
+.reel-track span.haircut-drop { transform: none; box-shadow: none; }
+.crate-reveal>button { cursor: pointer; background: var(--brass); color: #071117; min-width: 170px; font: 18px var(--font-display); letter-spacing: .11em; }
+.crate-dialog>p { margin-bottom: 0; color: var(--tx-3); }
+
+@media (max-width: 760px) {
+  .armoury-cut-grid { grid-template-columns: 1fr; }
+  .crate-case { grid-template-columns: 82px minmax(0,1fr) 24px; gap: 10px; padding: 12px!important; }
+  .crate-case>.crate-lid { width: 76px; }
+  .crate-case>.crate-lock { left: 42px; }
+  .crate-case>span b { font-size: 22px; }
+  .crate-odds, .crate-collection, .crate-tasks { grid-template-columns: 1fr; }
+  .crate-task-title span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crate-case, .crate-case>em { transition: none; }
+  .reel-track { animation-duration: .01ms; }
+}

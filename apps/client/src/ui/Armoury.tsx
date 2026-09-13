@@ -6,6 +6,7 @@ import { uiSound } from "../game/audio";
 import { SkinPreview } from "./SkinPreview";
 import { CharacterPreview } from "./CharacterPreview";
 import { Crates } from "./Crates";
+import { HaircutArt } from "./HaircutArt";
 
 const rarityLabel: Record<SkinDef["rarity"], string> = {
   pospolity: "POSPOLITY", rzadki: "RZADKI", epicki: "EPICKI", legendarny: "LEGENDARNY", zloty: "ZŁOTY",
@@ -24,6 +25,7 @@ export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: str
   const [owned, setOwned] = useState(() => new Set(initial.skins.map(instance => instance.skin)));
   const [section, setSection] = useState<"skins" | "haircuts" | "body" | "outfits" | "crates">("skins");
   const [haircut, setHaircut] = useState(initial.haircut);
+  const [hairPreview, setHairPreview] = useState(initial.haircut);
   const [build, setBuild] = useState(initial.build);
   const [outfit, setOutfit] = useState(initial.outfit);
   const [fits, setFits] = useState(() => new Set(initial.fits));
@@ -31,8 +33,8 @@ export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: str
   const skins = catalog.filter((skin) => fitsWeapon(skin, weapon) && owned.has(skin.id));
   const ownedHaircutIds = new Set(ownedCuts().map((item) => item.id));
 
-  // POSTAĆ and STRÓJ are two pickers onto ONE body, so they share the stage and the preview.
-  const onBody = section === "body" || section === "outfits";
+  // Hair is judged on a head, not beside a gun: all three character pickers share the body stage.
+  const onBody = section === "haircuts" || section === "body" || section === "outfits";
 
   const chooseWeapon = (id: WeaponId) => {
     setWeapon(id); setPreview(equip[id] ?? catalog.find((skin) => fitsWeapon(skin, id))?.id ?? "");
@@ -56,7 +58,9 @@ export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: str
     setOutfit(equipped); onOutfit?.(equipped);
     uiSound("click");
   };
-  const chooseHaircut = (id: string) => {
+  const chooseHaircut = (id: string, available: boolean) => {
+    setHairPreview(id);
+    if (!available) { uiSound("hover"); return; }
     const equipped = equipHaircut(id);
     setHaircut(equipped);
     onHaircut?.(equipped);
@@ -64,7 +68,7 @@ export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: str
   };
 
   return (
-    <section className={onBody ? "armoury on-body" : "armoury"} data-testid="armoury">
+    <section className={onBody ? "armoury on-body" : section === "crates" ? "armoury on-crates" : "armoury"} data-testid="armoury">
       <aside className="armoury-weapons">
         <div className="armoury-heading"><span>01</span><div><b>BROŃ</b><small>Wybierz model</small></div></div>
         <div className="armoury-weapon-list">
@@ -83,14 +87,16 @@ export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: str
             contexts in one panel is a context a browser may take back without warning. */}
         <div className="armoury-canvas">
           {onBody
-            ? <CharacterPreview build={build} haircut={haircut} outfit={outfit} />
+            ? <CharacterPreview build={build} haircut={section === "haircuts" ? hairPreview : haircut} outfit={outfit} />
             : <SkinPreview weapon={weapon} skinId={preview} />}
         </div>
         <div className="armoury-current">
           {onBody
-            ? <div><small>{buildDef(build).name}</small><b>{outfitDef(outfit).name}</b></div>
+            ? section === "haircuts"
+              ? <div><small>FRYZURA</small><b>{HAIRCUTS.find((item) => item.id === hairPreview)?.name}</b></div>
+              : <div><small>{buildDef(build).name}</small><b>{outfitDef(outfit).name}</b></div>
             : <div><small>{WEAPONS[weapon].name}</small><b>{preview ? catalog.find((skin) => skin.id === preview)?.name : "Fabryczny"}</b></div>}
-          <span>{onBody ? "ZAŁOŻONE" : equip[weapon] === preview ? "ZAŁOŻONY" : "PODGLĄD"}</span>
+          <span>{section === "haircuts" ? hairPreview === haircut ? "ZAŁOŻONA" : "PODGLĄD" : onBody ? "ZAŁOŻONE" : equip[weapon] === preview ? "ZAŁOŻONY" : "PODGLĄD"}</span>
         </div>
       </div>
 
@@ -126,18 +132,14 @@ export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: str
                 return (
                   <button
                     key={item.id}
-                    disabled={!available}
-                    className={`${haircut === item.id ? "on" : ""} ${available ? "" : "locked"}`}
-                    onClick={() => chooseHaircut(item.id)}
+                    className={`${haircut === item.id ? "on" : ""} ${available ? "" : "locked"} hair-${item.rarity}`}
+                    onClick={() => chooseHaircut(item.id, available)}
+                    title={available ? "Załóż fryzurę" : "Podejrzyj nagrodę ze skrzynki"}
                     data-testid={`armoury-haircut-${item.id}`}
                   >
-                    <i className={item.style.cap ? "cut-head cap" : "cut-head"} style={{
-                      "--hair": item.style.tone === "bleach" ? "#e8d99f" : "#2a211b",
-                      "--height": `${Math.max(8, item.style.crown * 300)}px`,
-                      "--width": `${Math.max(10, item.style.width * 160)}px`,
-                    } as React.CSSProperties} />
+                    <HaircutArt style={item.style} />
                     <b>{item.name}</b>
-                    <small>{available ? haircut === item.id ? "ZAŁOŻONA" : "POSIADANA" : item.requirement}</small>
+                    <small>{available ? haircut === item.id ? "ZAŁOŻONA" : "POSIADANA" : `${rarityLabel[item.rarity]} · ${item.requirement}`}</small>
                   </button>
                 );
               })}
@@ -195,7 +197,8 @@ export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: str
             setFits(new Set(nextProfile.fits));
           }} />
         )}
-        {onBody && <p className="armoury-note">Sylwetka i strój nie ruszają hitboxa, wzrostu ani strefy głowy — zmienia się wygląd, nie trafienia. Barwy drużyny zostają na piersi i na opasce, cokolwiek nosisz.</p>}
+        {section === "haircuts" && <p className="armoury-note">Kliknij każdą fryzurę, żeby zobaczyć ją na postaci. Zablokowane modele wypadają ze Skrzynki Dzielnicy.</p>}
+        {(section === "body" || section === "outfits") && <p className="armoury-note">Sylwetka i strój nie ruszają hitboxa, wzrostu ani strefy głowy — zmienia się wygląd, nie trafienia. Barwy drużyny zostają na piersi i na opasce, cokolwiek nosisz.</p>}
         {!onBody && section !== "crates" && <p className="armoury-note">Wybór zapisuje się od razu i pojawi się w następnym meczu.</p>}
       </aside>
     </section>

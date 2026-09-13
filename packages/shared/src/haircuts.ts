@@ -65,13 +65,20 @@ export interface HaircutStyle {
   scalp: boolean;
   /** Which of the three head tones the hair takes. */
   tone: "hair" | "bleach" | "stubble";
+  /** The construction the renderer uses. Measurements tune it; this gives it a recognisable profile. */
+  shape: "crop" | "quiff" | "sidepart" | "curtains" | "bowl" | "topknot" | "mohawk" |
+    "sweep" | "spikes" | "hightop" | "mullet" | "afro" | "braids" | "dreadlocks" | "waves";
 }
+
+export type HaircutRarity = "pospolity" | "rzadki" | "epicki" | "legendarny" | "zloty";
 
 export interface HaircutDef {
   id: string;
   /** Shown in the picker and on the summary screen. */
   name: string;
   style: HaircutStyle;
+  /** Crate tier. Earned cuts also carry one so the wardrobe has one consistent visual language. */
+  rarity: HaircutRarity;
   /** What a player did to get it, in words, for the picker. */
   requirement: string;
   /**
@@ -85,7 +92,7 @@ export interface HaircutDef {
 export const FULL_CROWN = 0.222;
 
 const style = (s: Partial<HaircutStyle>): HaircutStyle =>
-  ({ cap: false, crown: 0, width: FULL_CROWN, sides: 0, fringe: 0, track: 0, tuft: 0, tuftWide: false, scalp: false, tone: "hair", ...s });
+  ({ cap: false, crown: 0, width: FULL_CROWN, sides: 0, fringe: 0, track: 0, tuft: 0, tuftWide: false, scalp: false, tone: "hair", shape: "crop", ...s });
 
 /** The default look: the shop cap, which is what every character has worn until now. */
 export const DEFAULT_HAIRCUT = "cap";
@@ -100,45 +107,56 @@ export const DEFAULT_HAIRCUT = "cap";
 export const HAIRCUTS: readonly HaircutDef[] = [
   {
     id: DEFAULT_HAIRCUT, name: "CZAPKA FIRMOWA", requirement: "Zawsze",
-    style: style({ cap: true }), unlockedBy: () => true,
+    style: style({ cap: true }), rarity: "pospolity", unlockedBy: () => true,
   },
   {
     id: "buzz", name: "NA JEŻA", requirement: "Rozegraj mecz",
-    style: style({ crown: 0.012, sides: 0.01 }), unlockedBy: (s) => s.matches >= 1,
+    style: style({ crown: 0.012, sides: 0.006 }), rarity: "pospolity", unlockedBy: (s) => s.matches >= 1,
   },
   {
     id: "pompadour", name: "POMPADOUR", requirement: "50 zabójstw",
-    style: style({ crown: 0.075, sides: 0.012, fringe: 0.05 }), unlockedBy: (s) => s.kills >= 50,
+    style: style({ crown: 0.082, sides: 0.01, fringe: 0.048, shape: "quiff" }), rarity: "epicki", unlockedBy: (s) => s.kills >= 50,
   },
   {
     id: "taper", name: "CIENIOWANY", requirement: "25 trafień w głowę",
-    style: style({ crown: 0.04, sides: 0.006 }), unlockedBy: (s) => s.headshots >= 25,
+    style: style({ crown: 0.046, sides: 0.004, width: .205, shape: "sidepart" }), rarity: "rzadki", unlockedBy: (s) => s.headshots >= 25,
   },
   {
     id: "curtains", name: "NA ZASŁONKI", requirement: "25 asyst",
-    style: style({ crown: 0.03, sides: 0.028, fringe: 0.055 }), unlockedBy: (s) => s.assists >= 25,
+    style: style({ crown: 0.036, sides: 0.02, fringe: 0.068, shape: "curtains" }), rarity: "rzadki", unlockedBy: (s) => s.assists >= 25,
   },
   {
     id: "bowl", name: "NA GARNEK", requirement: "10 meczów",
-    style: style({ crown: 0.035, sides: 0.032, fringe: 0.045 }), unlockedBy: (s) => s.matches >= 10,
+    style: style({ crown: 0.03, sides: 0.038, fringe: 0.04, shape: "bowl" }), rarity: "pospolity", unlockedBy: (s) => s.matches >= 10,
   },
   {
     id: "topknot", name: "KUCYK", requirement: "5 wygranych",
-    style: style({ crown: 0.02, sides: 0.008, tuft: 0.09 }), unlockedBy: (s) => s.wins >= 5,
+    style: style({ crown: 0.018, sides: 0.003, tuft: 0.092, shape: "topknot" }), rarity: "epicki", unlockedBy: (s) => s.wins >= 5,
   },
   {
     id: "mohawk", name: "IROKEZ", requirement: "5 ogoleń",
     // A strip of hair LEFT, not taken: a narrow, tall crown with the sides clipped to the skin.
-    style: style({ crown: 0.115, width: 0.058, sides: 0 }), unlockedBy: (s) => s.shaves >= 5,
+    style: style({ crown: 0.115, width: 0.058, sides: 0, shape: "mohawk" }), rarity: "legendarny", unlockedBy: (s) => s.shaves >= 5,
   },
   {
     id: "bleach", name: "BLOND", requirement: "20 ogoleń",
-    style: style({ crown: 0.045, sides: 0.02, fringe: 0.03, tone: "bleach" }), unlockedBy: (s) => s.shaves >= 20,
+    style: style({ crown: 0.072, width: .19, sides: 0.006, tone: "bleach", shape: "hightop" }), rarity: "zloty", unlockedBy: (s) => s.shaves >= 20,
   },
-  { id: "slickback", name: "ZACZES", requirement: "Ze skrzynki", style: style({ crown: .032, sides: .012, fringe: .012 }), unlockedBy: () => false },
-  { id: "undercut", name: "UNDERCUT", requirement: "Ze skrzynki", style: style({ crown: .06, sides: .003, fringe: .025 }), unlockedBy: () => false },
-  { id: "liberty", name: "KOLCE", requirement: "Ze skrzynki", style: style({ crown: .09, width: .13, sides: .006, tuft: .045 }), unlockedBy: () => false },
-  { id: "platinum", name: "PLATYNOWY FADE", requirement: "Ze skrzynki", style: style({ crown: .052, sides: .008, fringe: .035, tone: "bleach" }), unlockedBy: () => false },
+  { id: "slickback", name: "ZACZES", requirement: "Ze skrzynki", rarity: "rzadki", style: style({ crown: .038, sides: .016, shape: "sweep" }), unlockedBy: () => false },
+  { id: "undercut", name: "UNDERCUT", requirement: "Ze skrzynki", rarity: "rzadki", style: style({ crown: .065, width: .19, sides: .002, fringe: .02, shape: "sidepart" }), unlockedBy: () => false },
+  { id: "liberty", name: "KOLCE WOLNOŚCI", requirement: "Ze skrzynki", rarity: "legendarny", style: style({ crown: .108, width: .17, sides: .003, shape: "spikes" }), unlockedBy: () => false },
+  { id: "platinum", name: "PLATYNOWA FALA", requirement: "Ze skrzynki", rarity: "epicki", style: style({ crown: .05, sides: .008, tone: "bleach", shape: "waves" }), unlockedBy: () => false },
+  { id: "mullet", name: "CZESKI PIŁKARZ", requirement: "Ze skrzynki", rarity: "rzadki", style: style({ crown: .038, sides: .012, fringe: .018, shape: "mullet" }), unlockedBy: () => false },
+  { id: "afro", name: "AFRO NOCĄ", requirement: "Ze skrzynki", rarity: "legendarny", style: style({ crown: .12, width: .29, sides: .04, shape: "afro" }), unlockedBy: () => false },
+  { id: "braids", name: "WARKOCZYKI", requirement: "Ze skrzynki", rarity: "epicki", style: style({ crown: .025, sides: .008, shape: "braids" }), unlockedBy: () => false },
+  { id: "dreadlocks", name: "DŁUGIE DREDY", requirement: "Ze skrzynki", rarity: "legendarny", style: style({ crown: .044, width: .235, sides: .014, shape: "dreadlocks" }), unlockedBy: () => false },
+  { id: "rockabilly", name: "ROCKABILLY", requirement: "Ze skrzynki", rarity: "epicki", style: style({ crown: .105, width: .205, sides: .008, fringe: .055, shape: "quiff" }), unlockedBy: () => false },
+  { id: "flatline", name: "FLAT TOP", requirement: "Ze skrzynki", rarity: "rzadki", style: style({ crown: .085, width: .205, sides: .006, shape: "hightop" }), unlockedBy: () => false },
+  { id: "surfer", name: "SURFER", requirement: "Ze skrzynki", rarity: "epicki", style: style({ crown: .052, sides: .024, fringe: .07, tone: "bleach", shape: "sweep" }), unlockedBy: () => false },
+  { id: "fauxhawk", name: "FAUX HAWK", requirement: "Ze skrzynki", rarity: "rzadki", style: style({ crown: .076, width: .092, sides: .004, shape: "mohawk" }), unlockedBy: () => false },
+  { id: "goldbun", name: "ZŁOTY KOK", requirement: "Ze skrzynki", rarity: "zloty", style: style({ crown: .024, width: .18, sides: .006, tuft: .078, tone: "bleach", shape: "topknot" }), unlockedBy: () => false },
+  { id: "neonspikes", name: "ZŁOTE KOLCE", requirement: "Ze skrzynki", rarity: "zloty", style: style({ crown: .12, width: .19, sides: .002, tone: "bleach", shape: "spikes" }), unlockedBy: () => false },
+  { id: "fingerwaves", name: "FALA 360", requirement: "Ze skrzynki", rarity: "epicki", style: style({ crown: .026, sides: .014, width: .215, shape: "waves" }), unlockedBy: () => false },
 ];
 
 const BY_ID = new Map(HAIRCUTS.map((h) => [h.id, h]));
@@ -158,18 +176,21 @@ export const SHAVE_STAGES: readonly HaircutDef[] = [
     id: "shave-1", name: "PODCIĘCIE", requirement: "Ogolony raz",
     // Still a head of hair, with one gash taken out of it.
     style: style({ crown: 0.05, sides: 0.03, fringe: 0.02, track: 0.10, scalp: true }),
+    rarity: "pospolity",
     unlockedBy: () => false,
   },
   {
     id: "shave-2", name: "SCHODY", requirement: "Ogolony dwa razy",
     // Two ridges and a clump on a scalp that is now showing.
     style: style({ crown: 0.05, sides: 0.014, track: 0.16, tuft: 0.05, scalp: true }),
+    rarity: "pospolity",
     unlockedBy: () => false,
   },
   {
     id: "shave-3", name: "DOLINA", requirement: "Ogolony trzy razy",
     // The crown is gone; a rim around the sides and one lopsided clump survive.
     style: style({ crown: 0, sides: 0.01, tuft: 0.055, scalp: true }),
+    rarity: "pospolity",
     unlockedBy: () => false,
   },
   {
@@ -179,6 +200,7 @@ export const SHAVE_STAGES: readonly HaircutDef[] = [
     // or a render fault to two reviewers, and a clean bald head read as LESS ruined than the patchy
     // stage before it. What makes this the worst one is the tone of the whole head, not a spike.
     style: style({ crown: 0, sides: 0, tuft: 0.03, tuftWide: true, scalp: true }),
+    rarity: "pospolity",
     unlockedBy: () => false,
   },
 ];

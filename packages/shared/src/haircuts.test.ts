@@ -131,6 +131,10 @@ describe("the catalog is cosmetic only (L1)", () => {
     expect(owned.map((h) => h.id)).toEqual([DEFAULT_HAIRCUT]);
     expect(HAIRCUTS.every((h) => h.id && h.name && h.requirement)).toBe(true);
     expect(new Set(HAIRCUTS.map((h) => h.id)).size).toBe(HAIRCUTS.length);
+    // A catalog card may share a construction family, but never the whole recipe. If two recipes
+    // are identical, they become the same haircut as soon as they reach the character builder.
+    expect(new Set(HAIRCUTS.map((h) => JSON.stringify(h.style))).size).toBe(HAIRCUTS.length);
+    expect(new Set(HAIRCUTS.map((h) => h.style.shape)).size).toBeGreaterThanOrEqual(12);
   });
 
   it("unlocks on lifetime counters alone — no level, no money, no ownership", () => {
@@ -147,7 +151,7 @@ describe("the catalog is cosmetic only (L1)", () => {
     // The style is geometry and a tone. If a stat ever appears here, this test is the alarm.
     const keys = new Set<string>();
     for (const h of [...HAIRCUTS, ...SHAVE_STAGES]) for (const k of Object.keys(h.style)) keys.add(k);
-    expect([...keys].sort()).toEqual(["cap", "crown", "fringe", "scalp", "sides", "tone", "track", "tuft", "tuftWide", "width"]);
+    expect([...keys].sort()).toEqual(["cap", "crown", "fringe", "scalp", "shape", "sides", "tone", "track", "tuft", "tuftWide", "width"]);
   });
 });
 

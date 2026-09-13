@@ -258,12 +258,11 @@ export type CratePrize = { kind: "skin"; id: string } | { kind: "haircut"; id: s
 /**
  * How often a crate rolls each KIND of prize, before rarity is drawn inside it.
  *
- * Outfits get the largest single share, and that is a judgement rather than an accident: a finish
- * changes a gun the player is looking at, an outfit changes the person everyone ELSE is looking at,
- * which is the thing that gets talked about after a match. A kind whose pool is exhausted hands its
- * share to the others, so a player who owns every outfit never rolls a dud.
+ * Haircuts have enough share to make the expanded barber collection a real part of the loop while
+ * weapon finishes remain the largest pool. A kind whose pool is exhausted hands its share to the
+ * others, so a completed collection never turns a crate into a dud.
  */
-export const CRATE_ODDS = { outfit: 0.38, haircut: 0.15, skin: 0.47 } as const;
+export const CRATE_ODDS = { outfit: 0.28, haircut: 0.30, skin: 0.42 } as const;
 
 /** Rarity weights, shared by outfits and finishes so one tier means one thing in both. */
 const RARITY_WEIGHTS: Record<OutfitRarity, number> = { pospolity: 70, rzadki: 22, epicki: 6, legendarny: 1.7, zloty: 0.3 };
@@ -305,7 +304,7 @@ export function openCrate(now = Date.now()): { profile: Profile; prize: CratePri
     return { profile, prize: { kind: "outfit", id: outfit.id } };
   }
   if (chosen === "haircut") {
-    const cut = lockedCuts[Math.floor(rng() * lockedCuts.length)];
+    const cut = rollByRarity(lockedCuts, rng)!;
     const profile = { ...p, crates: p.crates - 1, crateCuts: [...p.crateCuts, cut.id] }; saveProfile(profile);
     return { profile, prize: { kind: "haircut", id: cut.id } };
   }

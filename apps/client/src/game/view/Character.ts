@@ -206,9 +206,9 @@ const headCuts = (r: BuildRig): HeadCuts => ({
 /**
  * The boxes one `HaircutStyle` asks for, in head-local space, unparented and ready to be merged.
  *
- * Cosmetic only (L1): every clump lives inside the volume the cap already occupied, so a haircut
- * never changes the silhouette a shooter reads — and it could not change how a player is hit in any
- * case, since the hitbox is the shared AABB and nothing here touches it.
+ * Cosmetic only (L1): the expressive cuts may extend past the old cap silhouette, but they never
+ * change how a player is hit because collision and head zones use the shared AABB, not these meshes.
+ * Every clump is sunk into the skull or another clump so nothing hovers.
  */
 function hairParts(style: HaircutStyle, scene: Scene, cuts: HeadCuts): Mesh[] {
   const parts: Mesh[] = [];
@@ -227,7 +227,75 @@ function hairParts(style: HaircutStyle, scene: Scene, cuts: HeadCuts): Mesh[] {
       const track = style.track * k;
       const ridge = Math.max(0.01, (w - track) / 2);
       for (const s of [-1, 1]) add("hair_ridge", ridge, h, cuts.crownD, s * (track + ridge) / 2, y, 0);
-    } else add("hair_crown", w, h, cuts.crownD, 0, y, 0);
+    } else {
+      // A haircut needs a profile, not another recoloured slab. Every part begins at `base`, so the
+      // stylised construction still bites into the skull and merges to the same one draw call.
+      switch (style.shape) {
+        case "quiff": {
+          add("hair_quiff_back", w, h * .58, cuts.crownD * .62, 0, base + h * .29, -cuts.crownD * .18);
+          add("hair_quiff_front", w * .84, h, cuts.crownD * .48, .012 * k, y, cuts.crownD * .26);
+          break;
+        }
+        case "sidepart": {
+          add("hair_part_main", w * .68, h, cuts.crownD, -w * .14, y, 0);
+          add("hair_part_short", w * .28, h * .55, cuts.crownD, w * .36, base + h * .275, 0);
+          break;
+        }
+        case "curtains": {
+          add("hair_curtain_l", w * .46, h, cuts.crownD, -w * .27, y, 0);
+          add("hair_curtain_r", w * .46, h, cuts.crownD, w * .27, y, 0);
+          break;
+        }
+        case "mohawk": {
+          const d = cuts.crownD / 4 + .005;
+          const heights = [.62, .9, 1, .72];
+          for (let i = 0; i < 4; i++) {
+            const sh = h * heights[i];
+            add("hair_crest", w, sh, d, 0, base + sh / 2, -cuts.crownD * .39 + i * cuts.crownD * .26);
+          }
+          break;
+        }
+        case "sweep": {
+          const strip = w / 3 + .006;
+          for (let i = 0; i < 3; i++) {
+            const sh = h * (.55 + i * .2);
+            add("hair_sweep", strip, sh, cuts.crownD, -w * .31 + i * w * .31, base + sh / 2, .012 * i * k);
+          }
+          break;
+        }
+        case "spikes": {
+          const points = [[-.32,-.22,.72], [0,-.3,1], [.32,-.15,.8], [-.2,.25,.92], [.22,.28,.66]];
+          for (const [px, pz, ph] of points) {
+            const sh = h * ph;
+            add("hair_spike", w * .22, sh, cuts.crownD * .24, px * w, base + sh / 2, pz * cuts.crownD);
+          }
+          break;
+        }
+        case "hightop": {
+          add("hair_high_top", w, h, cuts.crownD * .92, 0, y, 0);
+          add("hair_high_step", w * .88, h * .18, cuts.crownD, 0, base + h * .09, 0);
+          break;
+        }
+        case "afro": {
+          const clumpW = w * .42, clumpD = cuts.crownD * .42;
+          for (const [x, z, level] of [[-.28,-.25,.72],[.28,-.25,.8],[-.34,.2,.76],[.34,.2,.86],[0,-.08,1],[0,.32,.92]] as const) {
+            const sh = h * level;
+            add("hair_afro", clumpW, sh, clumpD, x * w, base + sh / 2, z * cuts.crownD);
+          }
+          break;
+        }
+        case "waves": {
+          const d = cuts.crownD / 3 + .008;
+          for (let i = 0; i < 3; i++) {
+            const sh = h * (i === 1 ? 1 : .7);
+            add("hair_wave", w, sh, d, 0, base + sh / 2, -cuts.crownD * .31 + i * cuts.crownD * .31);
+          }
+          break;
+        }
+        default:
+          add("hair_crown", w, h, cuts.crownD, 0, y, 0);
+      }
+    }
   }
   if (style.sides > 0) {
     // Left, right and back, from ear height to the crown. It stops a quarter of the way up the skull
@@ -238,12 +306,39 @@ function hairParts(style: HaircutStyle, scene: Scene, cuts: HeadCuts): Mesh[] {
     for (const s of [-1, 1]) add("hair_side", t, h, cuts.halfZ * 2, s * (cuts.halfX + sides / 2 - SINK / 2), y, 0);
     add("hair_back", cuts.halfX * 2, h, t, 0, y, -(cuts.halfZ + sides / 2 - SINK / 2));
   }
-  if (style.fringe > 0) {
+  if (style.fringe > 0 && style.shape !== "curtains") {
     // Hangs off the front of the crown, forward of the skull's +Z face, and stops just ABOVE the
     // goggle frame: a fringe that reached the brow would bury the goggles, and the goggles are how
     // a head reads at gameplay range.
     const top = cuts.top + 0.005, bottom = cuts.browTop + 0.004, d = style.fringe * k + SINK;
     add("hair_fringe", cuts.halfX * 2 - 0.004, top - bottom, d, 0, (top + bottom) / 2, cuts.halfZ - SINK + d / 2);
+  }
+  if (style.shape === "curtains" && style.fringe > 0) {
+    const top = cuts.top + .008, bottom = cuts.browTop + .006, d = style.fringe * k + SINK;
+    for (const s of [-1, 1]) add("hair_curtain_lock", cuts.halfX * .82, top - bottom, d, s * cuts.halfX * .48, (top + bottom) / 2, cuts.halfZ - SINK + d / 2);
+  }
+  if (style.shape === "mullet") {
+    const h = (cuts.top - cuts.bottom) * .86;
+    add("hair_mullet", cuts.halfX * 1.82, h, .044 * k, 0, cuts.top - h / 2, -cuts.halfZ - .01 * k);
+    for (const s of [-1, 1]) {
+      const tailH = (cuts.top - cuts.bottom) * .62;
+      add("hair_mullet_tail", cuts.halfX * .62, tailH, .038 * k, s * cuts.halfX * .52, cuts.top - tailH / 2, -cuts.halfZ - .02 * k);
+    }
+  }
+  if (style.shape === "braids" || style.shape === "dreadlocks") {
+    const dread = style.shape === "dreadlocks";
+    const count = dread ? 5 : 4;
+    const lockW = (dread ? .038 : .026) * k;
+    const lockH = Math.min((dread ? .22 : .15) * k, cuts.top - cuts.bottom);
+    // Rear locks make the back view; two temple locks carry that silhouette into front and profile.
+    for (let i = 0; i < count; i++) {
+      const x = (i - (count - 1) / 2) * lockW * (dread ? 1.18 : 1.35);
+      add("hair_lock_back", lockW, lockH * (i % 2 ? .86 : 1), .032 * k, x, cuts.top - lockH * (i % 2 ? .43 : .5), -cuts.halfZ - .008 * k);
+    }
+    for (const s of [-1, 1]) {
+      const sideH = lockH * (dread ? .92 : .78);
+      add("hair_lock_side", lockW, sideH, .038 * k, s * (cuts.halfX + lockW / 2 - SINK), cuts.top - sideH / 2, -.03 * k);
+    }
   }
   if (style.tuft > 0) {
     // The one clump the clippers missed: off-centre, and taller than the crown, so on a shaved head
