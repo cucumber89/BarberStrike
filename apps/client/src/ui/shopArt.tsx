@@ -1,23 +1,23 @@
 import type { ReactElement } from "react";
 import type { ShopItemId } from "@frankibarber/shared";
 
-/** Flat 48×24 silhouettes sized for the shop's 28 px scan slot. */
-const icon = { viewBox: "0 0 48 24", fill: "currentColor", "aria-hidden": true } as const;
+/** Flat silhouettes with enough canvas for a readable 52 px shop slot. */
+const icon = { viewBox: "0 0 64 28", fill: "currentColor", "aria-hidden": true } as const;
 
-const Pistol = (): ReactElement => <svg {...icon}><path d="M3 7h29v7H20l-2 9h-8l2-9H3zm29 2h12v3H32z" /></svg>;
-const Revolver = (): ReactElement => <svg {...icon}><path d="M3 8h13v7H3zm13-2h9l4 3h15v4H29l-4 3h-5l-3 7h-7l4-9h2z" /><circle cx="21" cy="11" r="4" /></svg>;
-const MachinePistol = (): ReactElement => <svg {...icon}><path d="M2 6h28v8H19l-1 9h-7l1-9H6v3H3zm28 2h14v4H30zM21 14h5l2 9h-6z" /></svg>;
-const Smg = (): ReactElement => <svg {...icon}><path d="M2 8h7l5-4h4v4h18v7H23l-2 8h-6l1-8H8l-6 4zm34 2h10v3H36z" /></svg>;
-const Smg2 = (): ReactElement => <svg {...icon}><path d="M2 9h7l7-5h2v5h17v5H22l3 9h-6l-4-9H9L2 18zm33-1h11v7H35z" /><path fillRule="evenodd" d="M5 10h10v3H8v2H5z" /></svg>;
-const Carbine = (): ReactElement => <svg {...icon}><path d="M2 7h17l5 3h15v6H23l-5-3H9l-3 6H2zm37 4h7v3h-7zM11 13h5l2 10h-6z" /></svg>;
-const Rifle = (): ReactElement => <svg {...icon}><path d="M1 8h10l5-4h4v4h18v7H22l-3 8h-6l2-8H9l-8 4zm37 2h9v3h-9zM25 15h6l2 8h-7z" /></svg>;
-const Lmg = (): ReactElement => <svg {...icon}><path d="M1 7h11l4-3h5v3h18v8H22l-3 8h-6l2-8H8l-7 3zm38 3h8v4h-8zM23 14h12v9H23z" /></svg>;
-const Shotgun = (): ReactElement => <svg {...icon}><path d="M1 9h15l4-3h5v3h22v3H25v4h-7l-3 7H9l4-8H1zM24 14h23v3H24z" /></svg>;
-const AutoShotgun = (): ReactElement => <svg {...icon}><path d="M1 7h17l4-3h5v3h20v4H27v6h-8l-3 6H9l5-8H1zm25 6h21v3H26z" /></svg>;
-const Dmr = (): ReactElement => <svg {...icon}><path d="M1 9h13l5-4h4v4h24v3H27l-4 5h-7l-4 6H5l7-9H1zM21 3h12v3H21zm4 11h7l2 9h-7z" /></svg>;
-const Sniper = (): ReactElement => <svg {...icon}><path d="M1 10h14l4-3h28v3H25v5h-8l-5 8H4l8-10H1zM18 3h18v4H18zm16 1h6v2h-6zM24 15h6l2 8h-7z" /></svg>;
-const Launcher = (): ReactElement => <svg {...icon}><path d="M2 7h35v11H2zm35 2h10v7H37zM13 18h7l-2 5h-7zm12 0h5v5h-5z" /></svg>;
-const Clippers = (): ReactElement => <svg {...icon}><path d="M13 7h22v15H13zM10 2h28v6H10zM11 1h3v4h3V1h3v4h3V1h3v4h3V1h3v4h3V1h3v4h3v3H8V5h3z" /></svg>;
+const Pistol = (): ReactElement => <svg {...icon}><path d="M8 7h35v5H30v4H19l-2 11H9l3-12H6V9h2zm35 2h13v3H43zM20 16h8l-3 4h-6z" /></svg>;
+const Revolver = (): ReactElement => <svg {...icon}><path d="M6 9h13V7h12l5 3h21v4H36l-5 3h-7l-4 10h-8l5-12H6z" /><circle cx="27" cy="12" r="6" /></svg>;
+const MachinePistol = (): ReactElement => <svg {...icon}><path d="M7 6h36v9H29l-2 12h-8l2-12H11v4H7zm36 3h14v4H43zM33 15h7l4 12h-8z" /><path d="M48 6h3v3h-3zm5 0h3v3h-3z" /></svg>;
+const Smg = (): ReactElement => <svg {...icon}><path d="M3 9h9l8-6h5v5h27v8H31l-3 11h-8l2-11H13L3 21zm49 2h9v3h-9zM35 16h7v7h-7z" /></svg>;
+const Smg2 = (): ReactElement => <svg {...icon}><path d="M4 10h9l9-7h4v6h27v7H34l4 11h-8l-6-11H13L4 21zm49-2h8v9h-8zM8 12h12v2H8z" /></svg>;
+const Carbine = (): ReactElement => <svg {...icon}><path d="M4 7h20l7 3h22v7H30l-7-3H10l-5 7H2V9zM53 11h9v3h-9zM14 14h7l3 13h-8zM31 17h7l-2 8h-7z" /></svg>;
+const Rifle = (): ReactElement => <svg {...icon}><path d="M2 9h10l9-6h6v5h27v8H32l-4 11h-8l3-11H13L2 21zm52 2h9v3h-9zM36 16h8l4 11h-9zM29 5h18v2H29z" /></svg>;
+const Lmg = (): ReactElement => <svg {...icon}><path d="M2 8h12l8-5h7v4h27v9H32l-4 11h-8l3-11H13L2 20zm54 3h7v4h-7zM34 15h15v12H34zM28 3h21v3H28z" /></svg>;
+const Shotgun = (): ReactElement => <svg {...icon}><path d="M2 10h15l8-6h7v5h30v4H34v6h-9l-5 8h-9l7-11H2zM31 15h31v3H31zM37 13h12v7H37z" /></svg>;
+const AutoShotgun = (): ReactElement => <svg {...icon}><path d="M2 8h17l8-5h8v4h27v5H36v7H26l-5 8h-9l7-11H2zm34 6h26v3H36zM38 4h17v3H38zM30 18h7l3 9h-8z" /></svg>;
+const Dmr = (): ReactElement => <svg {...icon}><path d="M2 10h14l9-6h7v5h30v4H37l-6 6h-9l-7 8H5l10-12H2zm25-8h22v4H27zm15 13h8l3 12h-9z" /></svg>;
+const Sniper = (): ReactElement => <svg {...icon}><path d="M1 11h16l9-5h36v4H35v6H24l-8 11H5l10-13H1zm24-9h25v4H25zm22 1h7v2h-7zM39 16h7l3 11h-8zM52 14h2l4 9h-3z" /></svg>;
+const Launcher = (): ReactElement => <svg {...icon}><path d="M4 6h47l8 4v9l-8 3H4zM51 8h11v12H51zM16 21h9l-4 6H12zm18 0h7v6h-7zM8 3h21v3H8z" /></svg>;
+const Clippers = (): ReactElement => <svg {...icon}><path d="M19 8h27v19H19zM15 3h35v7H15zM16 1h4v5h4V1h4v5h4V1h4v5h4V1h4v5h4V1h4v8H12V6h4zM25 13h15v3H25z" /></svg>;
 
 const Frag = (): ReactElement => <svg {...icon}><path d="M18 6h13l4 5-3 11H17l-4-11zm4-5h8v5h-8zm8 1h9v3h-9z" /></svg>;
 const Molotov = (): ReactElement => <svg {...icon}><path d="M20 2h9v6l5 6v8H14v-8l6-6zm11 0 8 3-5 5z" /></svg>;

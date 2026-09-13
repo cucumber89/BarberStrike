@@ -264,8 +264,8 @@ button { font-family: inherit; }
 /* THE LAYOUT RULE (see Shop.tsx): the menu fits one screen at 1280x720 with nothing cut off.
    Three fixed rows — head, body, foot — so the wallet and CLOSE can never leave the screen the way
    they did when the whole card was one tall scroll. Only the BODY may ever scroll, and at every
-   supported resolution it does not need to: the tallest aisle is 8 rows of 38 px = 328 px against
-   roughly 520 px of body at 720p. */
+   supported desktop resolution it does not need to: the ten-row primary aisle uses at most 447 px
+   against roughly 520 px of body at 720p. Narrow windows switch to two columns and may scroll. */
 .shop-card { width: min(1400px, 96vw); height: min(94vh, 880px); overflow: hidden;
   background: var(--bg); border: 1px solid var(--line); padding: 16px 22px;
   display: flex; flex-direction: column; gap: 10px; }
@@ -284,15 +284,15 @@ button { font-family: inherit; }
 .shop-aisle-label { font-family: var(--font-display); font-size: 17px; letter-spacing: 0.2em; }
 .shop-hint { font-family: var(--font-ui); font-size: 10px; letter-spacing: 0.08em; color: var(--tx-3); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* One item = one 38 px row: shortcut, glyph, name over stats, price, state, button. */
+/* One item = one compact row: shortcut, large silhouette, name over stats, price, state, button. */
 /* Row height follows the viewport so browser zoom (which SHRINKS the CSS viewport rather than
    scaling the page) cannot push the last aisle past the bottom. 30 px is the floor: below that the
    38 px shortcut/price/button row stops being comfortably clickable. MEASURED at 1024x576 — what
-   1280x720 reports at 125 % zoom — the tallest aisle is then 291 px against 389 px of body. */
+   1280x720 reports at 125 % zoom — the body remains scrollable if the larger art needs it. */
 /* FLEX, not grid: a row has five children or seven depending on whether the item is carried and
    sellable, and a fixed column template silently wrapped the extra ones onto a second line that
    the fixed height then clipped over the row below. */
-.shop-row { display: flex; align-items: center; gap: 7px; height: clamp(30px, 5.3vh, 38px);
+.shop-row { display: flex; align-items: center; gap: 7px; height: clamp(34px, 5.7vh, 42px);
   padding: 0 7px; background: var(--bg-2); border: 1px solid var(--line); overflow: hidden; }
 .shop-row.carried { border-color: var(--brass); }
 .shop-row.locked { opacity: .72; }
@@ -300,7 +300,7 @@ button { font-family: inherit; }
 .shop-key { font-family: var(--font-mono); font-size: 10px; color: var(--tx-3); letter-spacing: .04em; }
 .shop-row.aisle-armed .shop-key { color: var(--brass); }
 .shop-key i { font-style: normal; opacity: .5; margin: 0 1px; }
-.shop-row-art { box-sizing: border-box; flex: 0 0 30px; width: 30px; height: 24px; padding-right: 5px; border-right: 1px solid var(--line); color: var(--brass); display: flex; align-items: center; justify-content: center; }
+.shop-row-art { box-sizing: border-box; flex: 0 0 58px; width: 58px; height: 32px; padding-right: 7px; border-right: 1px solid var(--line); color: var(--brass); display: flex; align-items: center; justify-content: center; }
 .shop-row-art svg { width: 100%; height: 100%; overflow: visible; transform-origin: center; transition: transform 100ms ease-out; }
 .shop-row:hover .shop-row-art svg, .shop-row.aisle-armed .shop-row-art svg { transform: scale(1.08); }
 .shop-row.locked .shop-row-art { color: var(--tx-3); }
@@ -333,9 +333,8 @@ button { font-family: inherit; }
    the LAST resort, not the first. */
 /* Below three comfortable columns the refund figure goes before the button does: a clipped
    "SELL $1," helps nobody, and the amount is still on the button's tooltip and in the price cell. */
-@media (max-width: 1150px) { .shop-sell-amount { display: none; } .shop-row-main { min-width: 60px; } }
-@media (max-width: 900px) { .shop-body { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 640px) { .shop-body { grid-template-columns: 1fr; } .shop-keyhelp { display: none; } }
+@media (max-width: 1150px) { .shop-body { grid-template-columns: 1fr 1fr; } .shop-sell-amount { display: none; } .shop-row-main { min-width: 60px; } }
+@media (max-width: 700px) { .shop-body { grid-template-columns: 1fr; } .shop-keyhelp { display: none; } }
 /* When the screen is short, the stats line is the first thing to go: a truncated "DMG 33 · RPM…"
    helps nobody, while the name, the price and the button all still have to be readable. The full
    text stays on the row's tooltip. */

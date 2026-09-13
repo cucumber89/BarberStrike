@@ -111,7 +111,7 @@ export function Shop({ h, api, now }: Props) {
     // `verdict` closes over the wallet, which changes on every purchase — rebinding is the point.
   });
 
-  /** One row. `cat`/`pos` render the two-key shortcut; `art` is a 26 px glyph, not a card. */
+  /** One row. `cat`/`pos` render the two-key shortcut; `art` is a large scan silhouette. */
   const row = (
     key: string, cat: CatId, pos: number, art: React.ReactNode, name: React.ReactNode,
     price: number, stats: React.ReactNode, blurb: string,
