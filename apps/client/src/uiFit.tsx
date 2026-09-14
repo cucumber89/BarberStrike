@@ -8,6 +8,16 @@
  */
 import { createRoot } from "react-dom/client";
 import { MatchPhase, type ShopItemId } from "@frankibarber/shared";
+// The same cascade as the game (main.tsx): the fonts and the cinematic layer change metrics and
+// colours, and a fit measured without them was a fit of a different page.
+import "@fontsource/bebas-neue";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/500.css";
+import "./ui/styles.css";
+import "./ui/cinematic.css";
 import { Shop } from "./ui/Shop";
 import { PlanPanel } from "./ui/PlanPanel";
 import { PLANS, planOffer } from "@frankibarber/shared";

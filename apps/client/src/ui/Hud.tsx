@@ -434,7 +434,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           <div className={`wallet-money ${h.money >= 8000 ? "rich" : ""}`} data-testid="money">{money(h.money)}</div>
           {h.alive && !h.shopOpen && h.buyWindowLeft > 0 && (
             <div className={`wallet-prompt ${h.nearStation ? "station" : ""} ${windowSecs !== null && windowSecs <= 5 ? "urgent" : ""}`} data-testid="buy-prompt">
-              <kbd>B</kbd><span>BUY EQUIPMENT</span><strong data-testid="buy-countdown">{windowSecs !== null ? `${windowSecs}s` : h.nearStation ? "OPEN" : "WARM-UP"}</strong>
+              <kbd>B</kbd><span>SKLEP</span><strong data-testid="buy-countdown">{windowSecs !== null ? `${windowSecs}s` : h.nearStation ? "OTWARTY" : "ROZGRZEWKA"}</strong>
             </div>
           )}
         </div>
@@ -444,7 +444,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           <div key={t.key} className={`money-toast ${t.delta < 0 ? "neg" : ""}`}>{t.delta > 0 ? "+" : ""}{money(t.delta)}<span className="why">{REASON_SHORT[t.reason] ?? t.reason.toUpperCase()}</span></div>
         ))}
       </div>
-      {shopHint && <div className="shop-closed-hint" data-testid="shop-closed">{noShop ? `NO SHOP IN ${MODES[h.mode].name} · KILLS HAND OUT THE GUNS` : "SHOP CLOSED · REACH A $ BUY COUNTER"}</div>}
+      {shopHint && <div className="shop-closed-hint" data-testid="shop-closed">{noShop ? `W TRYBIE ${MODES[h.mode].name} NIE MA SKLEPU · BROŃ DAJĄ ZABÓJSTWA` : "SKLEP ZAMKNIĘTY · PODEJDŹ DO LADY $"}</div>}
 
       {/* Bottom-right: weapon + ammo, grenade slots above */}
       {h.connected && (

@@ -333,6 +333,8 @@ export interface ShopResult {
   ok: boolean;
   item: string;
   reason?: string;
+  /** True when the answer is to a SELL: the client's result line says "sold", not "bought". */
+  sold?: boolean;
 }
 
 export interface SpawnEvent {

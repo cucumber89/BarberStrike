@@ -47,8 +47,8 @@ export const PERK_ARMED_MS = 1e9;
 export interface ArmorDef { id: ArmorId; name: string; price: number; armor: number; blurb: string }
 
 export const ARMOR: Record<ArmorId, ArmorDef> = {
-  light: { id: "light", name: "Light plate", price: 650, armor: 50, blurb: "Absorbs half of every hit until 50 points are gone. Lost on death." },
-  heavy: { id: "heavy", name: "Heavy plate", price: 1000, armor: 100, blurb: "Absorbs half of every hit until 100 points are gone. Lost on death." },
+  light: { id: "light", name: "Lekka płyta", price: 650, armor: 50, blurb: "Absorbs half of every hit until 50 points are gone. Lost on death." },
+  heavy: { id: "heavy", name: "Ciężka płyta", price: 1000, armor: 100, blurb: "Absorbs half of every hit until 100 points are gone. Lost on death." },
 };
 export const ARMOR_ORDER: ArmorId[] = ["light", "heavy"];
 export const isArmorId = (v: unknown): v is ArmorId => typeof v === "string" && v in ARMOR;

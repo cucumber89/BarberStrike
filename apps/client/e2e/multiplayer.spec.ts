@@ -348,16 +348,27 @@ test.describe("two clients", () => {
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeVisible();
     await expect.poll(async () => (await hud(a)).shopOpen).toBe(true);
+    // The shop is four aisle tabs; the grenade aisle is tab 3 (also the "3" key).
+    await a.getByTestId("shop-tab-3").click();
     await a.getByTestId("buy-frag").click();
     await expect.poll(async () => (await hud(a)).lethal, { timeout: 3000 }).toBe("frag");
     await expect.poll(async () => (await hud(a)).money, { timeout: 3000 }).toBe(1700);
-    await expect(a.getByTestId("shop-result")).toContainText("Bought Frag");
+    await expect(a.getByTestId("shop-result")).toContainText("Kupiono: Frag");
     // A second flash goes in the tactical slot; the shop refuses what cannot be afforded (DMR $2900).
     await a.getByTestId("buy-flash").click();
     await expect.poll(async () => (await hud(a)).tactical, { timeout: 3000 }).toBe("flash");
-    // Every aisle is on one screen now, so the DMR card is right there — and refused, because
-    // $2900 is more than what is left after the frag and the flash.
+    // The DMR is refused, because $2900 is more than what is left after the frag and the flash —
+    // and the row says by how much, from the same rule the server runs.
+    await a.getByTestId("shop-tab-1").click();
     await expect(a.getByTestId("buy-dmr")).toBeDisabled();
+    await expect(a.getByTestId("why-dmr")).toContainText("Brakuje $1,400");
+    // The tenth primary is reachable by key: "1" arms the aisle, "0" is the launcher. Too poor, so
+    // nothing is bought — but the arming is visible and the key is accepted.
+    await a.keyboard.press("Digit1");
+    await expect(a.getByTestId("shop-result")).toContainText("numer przedmiotu");
+    await a.keyboard.press("Digit0");
+    await expect(a.getByTestId("shop-result")).not.toContainText("numer przedmiotu");
+    await expect.poll(async () => (await hud(a)).money).toBe(1500);
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeHidden();
     await expect.poll(async () => (await hud(a)).shopOpen).toBe(false);
@@ -443,11 +454,12 @@ test.describe("two clients", () => {
     // Shop reflects the running perk and the worn plate; the sniper is out of reach at $250.
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeVisible();
-    await expect(a.getByTestId("shop-sniper")).toContainText("SCOPE");
+    await expect(a.getByTestId("shop-sniper")).toContainText("LUNETA");
     await expect(a.getByTestId("buy-sniper")).toBeDisabled();
-    // No tab to switch to: the one-screen shop has the equipment aisle up beside the guns.
-    await expect(a.getByTestId("shop-flask")).toContainText("RUNNING");
-    await expect(a.getByTestId("shop-light")).toContainText("WORN");
+    // The equipment aisle shows the running perk and the worn plate.
+    await a.getByTestId("shop-tab-4").click();
+    await expect(a.getByTestId("shop-flask")).toContainText("działa jeszcze");
+    await expect(a.getByTestId("shop-light")).toContainText("nosisz");
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeHidden();
     await fakeLock(a);
