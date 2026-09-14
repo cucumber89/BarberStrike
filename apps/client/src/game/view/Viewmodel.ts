@@ -14,6 +14,7 @@ import { beveledBox } from "./geometry";
 import { centre, sizeOf } from "./weaponFit";
 import { handParts, type HandSide } from "./handSpec";
 import { feelOf, swayScaleOf } from "../combat/weaponFeel";
+import { bump, reloadFrame, smooth, type ReloadFrame } from "../combat/reloadTimeline";
 
 /** How fast each action travels (1/s): the whole cycle lasts `1 / k` seconds and peaks halfway. */
 const ACTION_SPEED_K: Record<string, number> = { slide: 30, pump: 10, bolt: 8 };
@@ -37,135 +38,28 @@ type Pose = "idle" | "sprint" | "ads";
 
 interface Sway { x: number; y: number; vx: number; vy: number }
 
-/** Pure reload choreography (0..1 progress → offsets), unit-tested in Viewmodel.test.ts. */
-export interface ReloadFrame {
-  /** Gun body offset/rotation (camera-local metres / radians). */
-  y: number; rx: number; rz: number; x: number;
-  /** Magazine drop (0 = seated, 1 = fully out) for detachable mags. */
-  mag: number;
-  /** Action part travel (0 = forward/closed, 1 = fully back/open). */
-  action: number;
-  /** Left hand: 0 = on the handguard, 1 = down at the mag / shell pouch. */
-  handL: number;
-}
-
-const smooth = (t: number) => t * t * (3 - 2 * t);
-const bump = (t: number, a: number, b: number) => (t <= a || t >= b ? 0 : Math.sin(((t - a) / (b - a)) * Math.PI));
-const ramp = (t: number, a: number, b: number) => Math.max(0, Math.min(1, (t - a) / (b - a)));
+/** Re-exported: the choreography lives in `combat/reloadTimeline.ts` now, next to its audio cues. */
+export { reloadFrame, type ReloadFrame } from "../combat/reloadTimeline";
 
 /**
- * Per-weapon reload timelines. Each is a function of normalised progress, so a weapon's
- * `reloadMs` stretches the same choreography; the shapes were tuned so the loud beats (mag out,
- * mag seat, bolt/slide/pump) line up with the audio module's reload cues.
- *
- * Staging (art review, three rounds): the hip pose sits 26 cm under the lens at 36 cm depth, so a
- * reload that LOWERS the gun and drops the mag straight down pushes the mag and the left hand out
- * of the bottom of a 16:9 frame — the mid-frame read as "the idle pose, tilted". Every timeline now
- * LIFTS the gun (`y` +0.03…+0.06) and pulls it toward the screen centre (`x` negative) while the
- * mag is out, with a strong negative cant (`rz`): in camera space +X is right and the gun is held
- * right of the eye, so a negative roll turns the underside — magwell, loading gate, the revolver's
- * swung-out cylinder — toward the lens and sends the dropped mag sideways across the frame instead
- * of down out of it. `handL` peaks are held at 0.55…0.7 so the reach stays a visible reach (the
- * hand travels 12 cm down and up to 28 cm toward the lens per unit). Only amplitudes and directions
- * changed: every t-range below (mag out/in, action cycles, seat slams) is what the audio cues on.
+ * Exponential approach in REAL time: the fraction of the remaining distance covered in `dt` seconds
+ * at rate `k`. `Math.min(1, dt * k)`, which this replaces everywhere in the pose loop, covered 47 % of
+ * the distance per frame at 30 fps and 10 % at 144 fps for the same `k` — a time constant of 52 ms
+ * on one screen and 68 ms on the other, so the sights came up and the gun settled at different
+ * speeds on different machines. This is the same curve on any framerate.
  */
-export function reloadFrame(weapon: WeaponId, t: number, shells = 6): ReloadFrame {
-  const f: ReloadFrame = { y: 0, rx: 0, rz: 0, x: 0, mag: 0, action: 0, handL: 0 };
-  switch (weapon) {
-    case "pistol": {
-      // Bring the gun up and in, cant it so the magwell faces the eye, mag drops across the
-      // frame, new mag slams, slide is released at the end.
-      const tilt = bump(t, 0.05, 0.9);
-      f.y = 0.05 * tilt; f.rx = 0.2 * tilt; f.rz = -1.0 * tilt; f.x = -0.06 * tilt;
-      f.mag = t < 0.15 ? 0 : t < 0.35 ? smooth(ramp(t, 0.15, 0.35)) : t < 0.55 ? 1 : 1 - smooth(ramp(t, 0.55, 0.75));
-      f.action = t < 0.8 ? 1 : 1 - smooth(ramp(t, 0.8, 0.9)); // slide locked back until the release
-      f.handL = 0.55 * bump(t, 0.1, 0.85);
-      break;
-    }
-    case "smg":
-    case "machinepistol":
-    case "carbine":
-    case "rifle": {
-      // Lift and cant the gun over, rock the mag out sideways, seat the new one, tug the charging handle.
-      const tilt = bump(t, 0.05, 0.92);
-      f.y = 0.05 * tilt; f.rx = 0.22 * tilt; f.rz = -0.85 * tilt; f.x = -0.06 * tilt;
-      f.mag = t < 0.12 ? 0 : t < 0.38 ? smooth(ramp(t, 0.12, 0.38)) : t < 0.52 ? 1 : 1 - smooth(ramp(t, 0.52, 0.78));
-      const seat = bump(t, 0.72, 0.82);
-      f.y -= 0.02 * seat; // the slam
-      f.action = bump(t, 0.84, 0.98);
-      f.handL = t < 0.84 ? 0.7 * bump(t, 0.08, 0.84) : bump(t, 0.84, 0.98) * 0.45;
-      break;
-    }
-    case "shotgun":
-    case "autoshotgun": {
-      // Shell by shell: the gun comes up and rolls so the loading gate on the underside faces the
-      // eye, the hand reaches to it once per shell; the hand pumps once at the end.
-      const roll = bump(t, 0.04, 0.9);
-      f.y = 0.04 * roll; f.rx = 0.15 * roll; f.rz = -0.8 * roll; f.x = -0.05 * roll;
-      const per = 0.82 / shells;
-      const i = Math.min(shells - 1, Math.floor(ramp(t, 0.06, 0.88) * shells));
-      const local = (t - 0.06 - i * per) / per;
-      f.handL = t < 0.06 || t > 0.88 ? 0 : 0.3 + 0.35 * Math.sin(Math.max(0, Math.min(1, local)) * Math.PI);
-      f.y -= 0.012 * bump(local, 0.4, 0.7);
-      f.action = bump(t, 0.9, 1.0);
-      break;
-    }
-    case "dmr":
-    case "sniper": {
-      // Mag swap with the gun raised and canted, then the bolt: back (chamber) and forward.
-      const tilt = bump(t, 0.05, 0.9);
-      f.y = 0.05 * tilt; f.rx = 0.22 * tilt; f.rz = -0.85 * tilt; f.x = -0.06 * tilt;
-      f.mag = t < 0.1 ? 0 : t < 0.35 ? smooth(ramp(t, 0.1, 0.35)) : t < 0.48 ? 1 : 1 - smooth(ramp(t, 0.48, 0.7));
-      f.action = t < 0.74 ? 0 : t < 0.84 ? smooth(ramp(t, 0.74, 0.84)) : 1 - smooth(ramp(t, 0.84, 0.96));
-      f.handL = t < 0.72 ? 0.7 * bump(t, 0.06, 0.72) : bump(t, 0.72, 0.98) * 0.5;
-      break;
-    }
-    case "revolver": {
-      // Swing out, dump the brass, feed one by one, snap shut. The gun comes up and rolls hard so
-      // the cylinder side (the left) turns up toward the eye.
-      const roll = bump(t, 0.04, 0.92);
-      f.y = 0.05 * roll; f.rx = 0.25 * roll; f.rz = -1.1 * roll; f.x = -0.06 * roll;
-      const per = 0.5 / shells;
-      const i = Math.min(shells - 1, Math.floor(ramp(t, 0.3, 0.8) * shells));
-      const local = (t - 0.3 - i * per) / per;
-      f.handL = t < 0.12 ? 0 : t < 0.3 ? 0.45 * smooth(ramp(t, 0.12, 0.3)) : t < 0.8 ? 0.45 + 0.3 * Math.sin(Math.max(0, Math.min(1, local)) * Math.PI) : 0.45 * (1 - smooth(ramp(t, 0.8, 0.95)));
-      f.y -= 0.01 * bump(t, 0.9, 0.98); // the snap shut
-      break;
-    }
-    case "smg2": {
-      // Like the SMG but faster hands: mag out early, in by the middle, a quick charge.
-      const tilt = bump(t, 0.04, 0.9);
-      f.y = 0.05 * tilt; f.rx = 0.22 * tilt; f.rz = -0.9 * tilt; f.x = -0.06 * tilt;
-      f.mag = t < 0.08 ? 0 : t < 0.3 ? smooth(ramp(t, 0.08, 0.3)) : t < 0.42 ? 1 : 1 - smooth(ramp(t, 0.42, 0.66));
-      f.y -= 0.02 * bump(t, 0.62, 0.72);
-      f.action = bump(t, 0.78, 0.94);
-      f.handL = t < 0.78 ? 0.7 * bump(t, 0.06, 0.78) : bump(t, 0.78, 0.94) * 0.45;
-      break;
-    }
-    case "lmg": {
-      // Feed cover up, belt box off, new box on, belt laid in, cover slammed, charge. Lifted and
-      // rolled so the box side and the open cover both face the eye.
-      const tilt = bump(t, 0.03, 0.95);
-      f.y = 0.04 * tilt; f.rx = 0.3 * tilt; f.rz = -0.6 * tilt; f.x = -0.06 * tilt;
-      f.action = t < 0.08 ? 0 : t < 0.18 ? smooth(ramp(t, 0.08, 0.18)) : t < 0.74 ? 1 : 1 - smooth(ramp(t, 0.74, 0.82));
-      f.mag = t < 0.18 ? 0 : t < 0.36 ? smooth(ramp(t, 0.18, 0.36)) : t < 0.5 ? 1 : 1 - smooth(ramp(t, 0.5, 0.68));
-      f.y -= 0.02 * bump(t, 0.78, 0.84);
-      f.handL = t < 0.86 ? 0.7 * bump(t, 0.05, 0.86) : bump(t, 0.86, 0.98) * 0.45;
-      break;
-    }
-    case "launcher": {
-      // Break open (the pump node tips the barrel), shell out, shell in, snap shut — raised and
-      // canted so the open breech is in view.
-      const tilt = bump(t, 0.05, 0.9);
-      f.y = 0.04 * tilt; f.rx = 0.15 * tilt; f.rz = -0.8 * tilt; f.x = -0.05 * tilt;
-      f.action = t < 0.1 ? 0 : t < 0.25 ? smooth(ramp(t, 0.1, 0.25)) : t < 0.7 ? 1 : 1 - smooth(ramp(t, 0.7, 0.85));
-      f.handL = 0.6 * bump(t, 0.2, 0.8);
-      f.y -= 0.015 * bump(t, 0.84, 0.92);
-      break;
-    }
-    case "clippers": break; // nothing to reload
-  }
-  return f;
+export const damp = (k: number, dt: number): number => 1 - Math.exp(-k * dt);
+
+/**
+ * Viewmodel kick per shot from the weapon's recoil step (radians): push back along the barrel,
+ * pitch up, and the yaw "snap" jitter. Linear in the recoil so the roster keeps its order, clamped
+ * so the SR-50 lands where the old "heavy" bucket did (80 mm up, 60 mm back) and a 6 mrad MP-11
+ * still visibly moves. The sidearm gets a touch more push-back than its recoil says: a pistol's
+ * slide is the whole show, and it needs a little room to read.
+ */
+export function kickFor(recoilUp: number, sidearm = false): { back: number; up: number; snap: number } {
+  const t = Math.max(0, Math.min(1, (recoilUp - 0.006) / (0.09 - 0.006)));
+  return { back: (sidearm ? 0.03 : 0.02) + 0.04 * t, up: 0.024 + 0.056 * t, snap: 0.018 + 0.032 * t };
 }
 
 /**
@@ -233,6 +127,14 @@ export class Viewmodel {
   private empty = false;       // pistol-type slides lock back on an empty mag
   private inspectT = -1;       // -1 idle, 0..1 inspect progress
   private kickZ = 0;           // muzzle "snap" (yaw) per shot
+  /** What the running reload is actually doing: rounds going in, and whether the chamber was empty. */
+  private reloadShells = 6;
+  private reloadEmpty = true;
+  /**
+   * The player's head-bob setting (0..1), applied to the gun's walk bob, landing dip and jump lift
+   * as well as to the camera's — one slider means one thing. Set by the view module from settings.
+   */
+  bobScale = 1;
 
   /** Builds tiny first-person grenade models (matching the world ones in silhouette). */
   private buildGrenades(): void {
@@ -472,23 +374,31 @@ export class Viewmodel {
     const w = WEAPONS[this.current];
     this.inspectT = -1;
     if (w.kind === "melee") { this.swingT = 1; return; }
-    const heavy = w.id === "shotgun" || w.id === "autoshotgun" || w.id === "dmr" || w.id === "sniper" || w.id === "launcher" || w.id === "revolver";
-    this.kickZ += (Math.random() - 0.5) * (heavy ? 0.05 : 0.02);
-    this.kickBack = Math.min(0.09, this.kickBack + (heavy ? 0.06 : w.id === "pistol" ? 0.03 : 0.02));
-    this.kickUp = Math.min(0.12, this.kickUp + (heavy ? 0.08 : 0.035));
+    // The gun's kick is sized from the weapon's own recoil step, so the hand and the view agree:
+    // a 13 mrad AR-31 shove is a third of a 90 mrad SR-50 slam in both. Before this the whole
+    // roster was two buckets ("heavy" / not), which put the carbine's 26 mrad hop on the same
+    // 35 mm lift as the P9's. The VZ-9 keeps its shipped constants: its row is out of scope.
+    const kick = w.id === "smg2" ? { back: 0.02, up: 0.035, snap: 0.02 } : kickFor(w.recoilUp, w.id === "pistol");
+    this.kickZ += (Math.random() - 0.5) * kick.snap;
+    this.kickBack = Math.min(0.09, this.kickBack + kick.back);
+    this.kickUp = Math.min(0.12, this.kickUp + kick.up);
     this.kickRoll = Math.min(0.08, this.kickRoll + (Math.random() - 0.5) * 0.04);
     this.actionCycle = 1;
   }
 
-  onReload(): void { this.reloadT = 0; this.reloadMs = WEAPONS[this.current].reloadMs; this.inspectT = -1; }
+  /** A reload begins: `shells` rounds are going in, `empty` says whether the chamber was empty. */
+  onReload(shells = WEAPONS[this.current].magazine, empty = true): void {
+    this.reloadT = 0; this.reloadMs = WEAPONS[this.current].reloadMs; this.inspectT = -1;
+    this.reloadShells = Math.max(1, shells); this.reloadEmpty = empty;
+  }
   onReloadEnd(): void {
     this.reloadT = -1;
     const model = this.models.get(this.current)!;
     if (model.magazine) model.magazine.position.y = this.magazineHomes.get(this.current) ?? 0;
     if (model.action) model.action.position.set(0, 0, 0);
   }
-  onLanded(impactSpeed: number): void { this.landDip = Math.min(0.06, 0.02 + impactSpeed * 0.004); }
-  onJump(): void { this.jumpLift = 0.03; }
+  onLanded(impactSpeed: number): void { this.landDip = Math.min(0.06, 0.02 + impactSpeed * 0.004) * this.bobScale; }
+  onJump(): void { this.jumpLift = 0.03 * this.bobScale; }
 
   update(dtMs: number): void {
     const dt = dtMs / 1000;
@@ -500,7 +410,10 @@ export class Viewmodel {
     const speed = Math.hypot(b.vx, b.vz);
     const sprinting = local.isSprinting();
     const ads = local.aimBlend;
-    const pose: Pose = ads > 0.5 ? "ads" : sprinting ? "sprint" : "idle";
+    // Priority while several things want the gun: a reload keeps it up in the hands whatever the
+    // legs are doing (the server keeps reloading through a sprint; the hands should show it),
+    // aiming wins over sprinting (the sim has already cancelled the sprint on the Aim bit).
+    const pose: Pose = ads > 0.5 ? "ads" : sprinting && this.reloadT < 0 ? "sprint" : "idle";
 
     // ---- target pose (camera-local: +X right, +Y up, +Z forward)
     // Hip: low and to the right (CoD-style) so the sights never sit on the HUD crosshair —
@@ -509,10 +422,13 @@ export class Viewmodel {
     const longGun = model.length > 0.6;
     if (longGun) { tx = 0.22; ty = -0.24; tz = 0.34; }
     // Sprint: the gun swings across the chest, muzzle up and inward (CoD-style), lower than the hip.
-    if (pose === "sprint") { tx += 0.02; ty -= 0.09; tz -= 0.07; trx = 0.5; try_ = -0.8; trz = 0.45; }
+    // MEASURED (feel-cycle.mjs, 960x540, 90° FOV): with ty −0.35 / tz 0.27 the sprinting gun was out
+    // of the bottom of the frame — one grey corner of the receiver was all that showed, so the
+    // "can't shoot" tell was invisible. Held higher and a little further out it stays in view.
+    if (pose === "sprint") { tx += 0.01; ty -= 0.045; tz -= 0.03; trx = 0.42; try_ = -0.75; trz = 0.42; }
     // Tactical sprint (drop 4): on top of the sprint pose the gun comes up and in, muzzle high —
     // the "can't shoot right now" tell, the same silhouette remote characters show.
-    this.tacBlend += ((local.isTacSprinting() ? 1 : 0) - this.tacBlend) * Math.min(1, dt * 8);
+    this.tacBlend += ((local.isTacSprinting() && this.reloadT < 0 ? 1 : 0) - this.tacBlend) * damp(8, dt);
     const tb = this.tacBlend * (1 - ads);
     tx -= 0.05 * tb; ty += 0.02 * tb; tz -= 0.09 * tb; trx += 0.45 * tb; try_ -= 0.3 * tb; trz += 0.35 * tb;
     // Lean (drop 4): the camera rolls with the lean; the gun counter-rolls a little and slides so it
@@ -520,7 +436,7 @@ export class Viewmodel {
     const ln = local.lean * (1 - ads * 0.7);
     tx -= 0.025 * ln; trz -= 0.16 * ln;
     // Crouch: the elbows come in, the gun sits a touch higher and closer.
-    this.crouchBlend += ((b.crouching ? 1 : 0) - this.crouchBlend) * Math.min(1, dt * 10);
+    this.crouchBlend += ((b.crouching ? 1 : 0) - this.crouchBlend) * damp(10, dt);
     const cb = this.crouchBlend * (1 - ads);
     tx -= 0.02 * cb; ty += 0.025 * cb; tz -= 0.03 * cb; trz += 0.05 * cb;
     // Wall push: a muzzle inside a wall reads as a bug; pull the gun in and tilt it up as the wall gets close.
@@ -537,12 +453,12 @@ export class Viewmodel {
       const wallish = wallHit.hit && Math.abs(wallHit.ny) < 0.5;
       if (wallish) wallTarget = Math.min(1, Math.max(0, 1 - (wallHit.t - 0.25) / (reach - 0.25)));
     }
-    this.wallPush += (wallTarget - this.wallPush) * Math.min(1, dt * 9);
+    this.wallPush += (wallTarget - this.wallPush) * damp(9, dt);
     const wp = this.wallPush * (this.grenadeKind ? 0 : 1);
     ty -= 0.16 * wp; tz -= 0.14 * wp; tx -= 0.03 * wp; trx += 0.75 * wp; trz += 0.2 * wp;
     // Vertical inertia: the gun lags the body in the air (falling lifts it, a jump pushes it down).
     const vyTarget = Math.max(-0.035, Math.min(0.035, -b.vy * 0.005)) * (b.grounded ? 0 : 1);
-    this.vyLag += (vyTarget - this.vyLag) * Math.min(1, dt * 7);
+    this.vyLag += (vyTarget - this.vyLag) * damp(7, dt);
     // ADS transition bump: a small roll and dip as the sights come up / go down.
     if ((ads > 0.5) !== (this.adsPrev > 0.5)) this.adsKick = ads > 0.5 ? 1 : -0.7;
     this.adsPrev = ads;
@@ -569,15 +485,24 @@ export class Viewmodel {
     // hand. The MG-4 lags the view at 1.6, the VZ-9 tracks it at 0.5 — and on its bipod the MG-4
     // stops wallowing entirely (B1), which is the reward for having gone prone-ish with it.
     const swayScale = (1 - ads * 0.8) * 0.6 * swayScaleOf(feelOf(w.id), local.bipod);
-    this.sway.vx += (-dyaw * 1.6 - this.sway.x * 40) * dt * 12 * swayScale;
-    this.sway.vy += (dpitch * 1.2 - this.sway.y * 40) * dt * 12 * swayScale;
-    this.sway.vx *= Math.exp(-dt * 8); this.sway.vy *= Math.exp(-dt * 8);
-    this.sway.x += this.sway.vx * dt; this.sway.y += this.sway.vy * dt;
+    // The impulse is per RADIAN of view turn, not per radian-frame: the old `dyaw * dt` gave a
+    // 30 fps client 4.8× the sway of a 144 fps one for the same flick (dyaw ∝ dt, so the product
+    // went with dt²). 0.32 / 0.24 are the old gains at 60 fps, which is where they were tuned.
+    this.sway.vx += -dyaw * 0.32 * swayScale;
+    this.sway.vy += dpitch * 0.24 * swayScale;
+    // The spring itself is integrated in 4 ms substeps: at 30 fps one Euler step of a 17 rad/s
+    // spring overshoots and the peak of the same flick came out 30 % different from 144 fps.
+    const sw = this.sway;
+    for (let rem = dt; rem > 0; rem -= 0.004) {
+      const h = Math.min(rem, 0.004), d = Math.exp(-8 * h);
+      sw.vx = (sw.vx - sw.x * 480 * h * swayScale) * d; sw.vy = (sw.vy - sw.y * 480 * h * swayScale) * d;
+      sw.x += sw.vx * h; sw.y += sw.vy * h;
+    }
     this.sway.x = Math.max(-0.05, Math.min(0.05, this.sway.x));
     this.sway.y = Math.max(-0.04, Math.min(0.04, this.sway.y));
 
     // ---- bob (sprint = bigger figure-of-eight)
-    const bobAmt = b.grounded && speed > 0.4 ? Math.min(1, speed / 5) * (1 - ads * 0.85) : 0;
+    const bobAmt = b.grounded && speed > 0.4 ? Math.min(1, speed / 5) * (1 - ads * 0.85) * this.bobScale : 0;
     this.bobPhase += dt * (sprinting ? 12.5 : b.crouching ? 6.5 : 9) * (bobAmt > 0 ? 1 : 0);
     const bobScale = sprinting ? 1.8 : 1;
     const bobX = Math.sin(this.bobPhase) * 0.011 * bobAmt * bobScale;
@@ -614,7 +539,7 @@ export class Viewmodel {
     let rf: ReloadFrame | null = null;
     if (this.reloadT >= 0) {
       this.reloadT = Math.min(1, this.reloadT + dtMs / this.reloadMs);
-      rf = reloadFrame(this.current, this.reloadT, w.magazine);
+      rf = reloadFrame(this.current, this.reloadT, this.reloadShells, this.reloadEmpty);
       if (model.magazine) model.magazine.position.y = (this.magazineHomes.get(this.current) ?? 0) - 0.16 * rf.mag;
       if (this.reloadT >= 1) this.reloadT = -1;
     }
@@ -628,7 +553,7 @@ export class Viewmodel {
       this.actionCycle = Math.max(0, this.actionCycle - dt * speedK);
       actionTarget = Math.sin(this.actionCycle * Math.PI);
     }
-    this.actionPos += (actionTarget - this.actionPos) * Math.min(1, dt * 40);
+    this.actionPos += (actionTarget - this.actionPos) * damp(40, dt);
     if (model.action) {
       const kind = model.actionKind;
       if (kind === "slide") model.action.position.z = -0.035 * this.actionPos;
@@ -656,7 +581,7 @@ export class Viewmodel {
     }
     if (this.recoverT < 1) this.recoverT = Math.min(1, this.recoverT + dtMs / THROW_RECOVER_MS);
     const gunDown = Math.max(gBlendTarget, 1 - smooth(this.recoverT));
-    this.grenadeBlend += (gunDown - this.grenadeBlend) * Math.min(1, dt * 16);
+    this.grenadeBlend += (gunDown - this.grenadeBlend) * damp(16, dt);
     const gb = this.grenadeBlend;
     if (this.grenadeKind !== null || this.grenadeNode.isEnabled()) {
       // Hand path: raised (idle/cook) → back over the shoulder → forward and open.
@@ -684,14 +609,22 @@ export class Viewmodel {
     if (scopedHide !== this.scopeHidden) { this.scopeHidden = scopedHide; if (this.visible) this.root.setEnabled(!scopedHide); }
 
     // ---- compose
-    const k = Math.min(1, dt * 14);
-    const px = tx + this.sway.x + bobX + equipX + gunX + swX + inX + (rf?.x ?? 0) + (Math.random() - 0.5) * 0.0004;
+    // Aimed, the sights have to stay where the bullet goes. The shot leaves along the camera axis
+    // (recoil included — `LocalPlayer.addRecoil` turns the whole view), so any ROTATION the gun
+    // takes on its own in ADS turns the front sight off the axis the round is on: the old kick
+    // rotated the gun up by `kickUp` on top of the camera's own climb, and the sight post wandered
+    // off the crosshair on every shot. The push-back along the barrel stays (that is the shove the
+    // eye expects); the pitch / roll / yaw kicks and the sway's rotational share are scaled out as
+    // the sights come up, and the VIEW carries the recoil alone.
+    const aimed = 1 - ads * 0.85;
+    const k = damp(14, dt);
+    const px = tx + this.sway.x + bobX + equipX + gunX + swX + inX + (rf?.x ?? 0) + (Math.random() - 0.5) * 0.0004 * aimed;
     const py = ty + this.sway.y + bobY + this.breathe + equipY + gunY + swY + inY + this.vyLag - 0.012 * this.adsKick + (rf?.y ?? 0) - this.landDip + this.jumpLift;
     const pz = tz - this.kickBack - 0.05 * gb + swZ;
     this.pos.x += (px - this.pos.x) * k; this.pos.y += (py - this.pos.y) * k; this.pos.z += (pz - this.pos.z) * k;
-    const rx = trx - this.kickUp + equipRx + gunRx + swRx + inRx + (rf?.rx ?? 0) + this.sway.y * 1.5 - this.vyLag * 2;
-    const ry = try_ + this.sway.x * 1.2 + inRy + this.kickZ;
-    const rz = trz + this.kickRoll + equipRz + gunRz + swRz + inRz + (rf?.rz ?? 0) - this.sway.x * 0.6 + bobRoll + 0.07 * this.adsKick;
+    const rx = trx - this.kickUp * aimed + equipRx + gunRx + swRx + inRx + (rf?.rx ?? 0) + this.sway.y * 1.5 * aimed - this.vyLag * 2 * aimed;
+    const ry = try_ + this.sway.x * 1.2 * aimed + inRy + this.kickZ * aimed;
+    const rz = trz + this.kickRoll * aimed + equipRz + gunRz + swRz + inRz + (rf?.rz ?? 0) - this.sway.x * 0.6 * aimed + bobRoll * aimed + 0.07 * this.adsKick;
     this.rot.x += (rx - this.rot.x) * k; this.rot.y += (ry - this.rot.y) * k; this.rot.z += (rz - this.rot.z) * k;
     this.root.position.copyFrom(this.pos);
     this.root.rotation.copyFrom(this.rot);

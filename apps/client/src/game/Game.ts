@@ -191,7 +191,7 @@ export class Game {
     this.weapons.renderDelay = INTERP_DELAY_MS;
     this.weapons.onShot = (s) => this.events.emit("localShot", { weapon: s.weapon, origin: s.origin, dir: s.dir });
     this.weapons.onDryFire = () => this.events.emit("dryFire", { weapon: this.weapons.weapon });
-    this.weapons.onReload = (weapon) => this.events.emit("reloadStart", { weapon });
+    this.weapons.onReload = (weapon, shells, empty) => this.events.emit("reloadStart", { weapon, shells, empty });
     this.weapons.onReloadEnd = (weapon) => this.events.emit("reloadEnd", { weapon });
     this.weapons.onEquip = (weapon) => this.events.emit("weaponEquip", { weapon });
     this.weapons.beforeFire = () => this.flushInputs(performance.now());

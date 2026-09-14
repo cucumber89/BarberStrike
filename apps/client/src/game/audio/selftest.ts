@@ -120,7 +120,7 @@ export async function runSelfTest(engine: AudioEngine, ctx: GameContext | null, 
       step(`event:localShot:${w}`, () => ev.emit("localShot", { weapon: w, origin: pos(), dir: [0, 0, 1] }));
       step(`event:remoteShot:${w}`, () => ev.emit("remoteShot", { player: remote, event: { id: remote?.id ?? "x", weapon: w, o: [pos()[0] + 6, pos()[1], pos()[2] + 3], e: [[0, 1, 30]], k: [0] } }));
       step(`event:weaponEquip:${w}`, () => ev.emit("weaponEquip", { weapon: w }));
-      step(`event:reloadStart:${w}`, () => ev.emit("reloadStart", { weapon: w }));
+      step(`event:reloadStart:${w}`, () => ev.emit("reloadStart", { weapon: w, shells: WEAPONS[w].magazine, empty: true }));
       step(`event:reloadEnd:${w}`, () => ev.emit("reloadEnd", { weapon: w }));
       step(`event:dryFire:${w}`, () => ev.emit("dryFire", { weapon: w }));
     }

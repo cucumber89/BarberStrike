@@ -46,12 +46,18 @@ export class WeaponController {
   private shotIndex = 0;
   private lastSprintAt = -Infinity;
   private previousWeapon: WeaponId | null = null;
+  /**
+   * R pressed while the draw was still running. Dropping it made the gun feel stuck: the natural
+   * "swap, reload" rhythm needed a second press timed after a raise the player cannot see the end
+   * of. The request is held and sent the moment the equip gate opens; a further switch clears it.
+   */
+  private reloadQueued = false;
   private recoilTmp: [number, number] = [0, 0];
   onShot: ((s: ShotFired) => void) | null = null;
   /** Called right before a Fire message goes out (the game flushes queued inputs so seq is known server-side). */
   beforeFire: (() => void) | null = null;
   onDryFire: (() => void) | null = null;
-  onReload: ((weapon: WeaponId) => void) | null = null;
+  onReload: ((weapon: WeaponId, shells: number, empty: boolean) => void) | null = null;
   onReloadEnd: ((weapon: WeaponId) => void) | null = null;
   onEquip: ((weapon: WeaponId) => void) | null = null;
 
@@ -68,7 +74,7 @@ export class WeaponController {
         this.weapon = p.weapon;
         this.player.weapon = this.weapon;
         this.player.clearWeaponState(); // the old gun's action and bipod dwell do not carry over
-        this.reloading = false; this.spread = 0; this.shotIndex = 0;
+        this.setReloading(false); this.reloadQueued = false; this.spread = 0; this.shotIndex = 0;
         this.equipEndsAt = performance.now() + WEAPONS[this.weapon].equipMs;
         this.onEquip?.(this.weapon);
       }
@@ -76,7 +82,7 @@ export class WeaponController {
     this.ammo = p.ammo;
     this.reserve = p.reserve;
     // Server finished (or cancelled) a reload we thought was still running.
-    if (!p.reloading && this.reloading && performance.now() > this.reloadEndsAt - 150) this.reloading = false;
+    if (!p.reloading && this.reloading && performance.now() > this.reloadEndsAt - 150) this.setReloading(false);
   }
 
   /** The wallet view the slot mapping needs (owned list only). */
@@ -99,7 +105,8 @@ export class WeaponController {
     this.shotIndex = 0;
     this.player.weapon = id;
     this.player.clearWeaponState();
-    this.reloading = false;
+    this.setReloading(false);
+    this.reloadQueued = false;
     this.spread = 0;
     this.equipEndsAt = now + WEAPONS[id].equipMs;
     this.localEquipAt = now;
@@ -125,11 +132,20 @@ export class WeaponController {
 
   requestReload(now: number): void {
     const w = WEAPONS[this.weapon];
-    if (!usesAmmo(w) || !this.player.alive || this.reloading || this.ammo >= w.magazine || this.reserve <= 0 || now < this.equipEndsAt) return;
-    this.reloading = true;
+    if (!usesAmmo(w) || !this.player.alive || this.reloading || this.ammo >= w.magazine || this.reserve <= 0) return;
+    if (now < this.equipEndsAt) { this.reloadQueued = true; return; }
+    this.reloadQueued = false;
+    this.setReloading(true);
     this.reloadEndsAt = now + w.reloadMs;
     this.conn.send(C2S.Reload);
-    this.onReload?.(this.weapon);
+    // What the hands will actually do: how many rounds go in, and whether there is a round chambered.
+    this.onReload?.(this.weapon, Math.min(w.magazine - this.ammo, this.reserve), this.ammo === 0);
+  }
+
+  /** One writer for the flag the player object mirrors (the camera drops its aim while it is set). */
+  private setReloading(v: boolean): void {
+    this.reloading = v;
+    this.player.reloading = v;
   }
 
   /**
@@ -143,7 +159,8 @@ export class WeaponController {
    * completed while the corpse was on the floor, because that branch sits above the alive check.
    */
   cancel(): void {
-    this.reloading = false;
+    this.setReloading(false);
+    this.reloadQueued = false;
     this.reloadEndsAt = 0;
     this.spread = 0;
     this.triggerHeld = false;
@@ -168,9 +185,10 @@ export class WeaponController {
     if (this.reloading && now >= this.reloadEndsAt) {
       const take = Math.min(w.magazine - this.ammo, this.reserve);
       this.ammo += take; this.reserve -= take;
-      this.reloading = false;
+      this.setReloading(false);
       this.onReloadEnd?.(this.weapon);
     }
+    if (this.reloadQueued && now >= this.equipEndsAt) this.requestReload(now);
     if (this.player.isSprinting()) this.lastSprintAt = now;
     const wantFire = fireHeld && (w.automatic || !this.triggerHeld);
     this.triggerHeld = fireHeld;
