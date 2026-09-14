@@ -9,6 +9,7 @@ import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { WeaponId } from "@frankibarber/shared";
+import { nightEnvironment } from "./nightEnv";
 import { beveledBox } from "./geometry";
 import { supportHandHome, type PartBox } from "./weaponFit";
 
@@ -59,12 +60,19 @@ export interface WeaponMaterials extends Record<MatKey, PBRMaterial> {
 }
 
 export function createWeaponMaterials(scene: Scene): WeaponMaterials {
+  // The night sky, the lit street and a few lamps, for the metals to reflect (see nightEnv.ts):
+  // without it a PBR metal is lit by nothing but the lights that reach it, and a rifle in ADS was
+  // one flat grey block. Per material, so the map's own materials are untouched.
+  const env = nightEnvironment(scene);
   const mk = (name: string, hex: string, metallic: number, roughness: number, emissive?: string): PBRMaterial => {
     const m = new PBRMaterial(name, scene);
     m.albedoColor = Color3.FromHexString(hex).toLinearSpace();
     m.metallic = metallic; m.roughness = roughness;
     if (emissive) m.emissiveColor = Color3.FromHexString(emissive).scale(0.5);
-    m.maxSimultaneousLights = 4; m.useGLTFLightFalloff = true; m.freeze();
+    if (env) { m.reflectionTexture = env; m.environmentIntensity = 0.7; }
+    // Six, not four: the first-person light rig adds two lights to the gun in the hands, and the
+    // practical nearest the player should still reach it.
+    m.maxSimultaneousLights = 6; m.useGLTFLightFalloff = true; m.freeze();
     return m;
   };
   const mats = {

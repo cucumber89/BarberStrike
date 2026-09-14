@@ -15,6 +15,8 @@ import { centre, sizeOf } from "./weaponFit";
 import { handParts, type HandSide } from "./handSpec";
 import { feelOf, swayScaleOf } from "../combat/weaponFeel";
 import { bump, reloadFrame, smooth, type ReloadFrame } from "../combat/reloadTimeline";
+import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
+import { nightEnvironment } from "./nightEnv";
 
 /** How fast each action travels (1/s): the whole cycle lasts `1 / k` seconds and peaks halfway. */
 const ACTION_SPEED_K: Record<string, number> = { slide: 30, pump: 10, bolt: 8 };
@@ -83,6 +85,15 @@ export class Viewmodel {
   private upgraded = new Set<WeaponId>();
   private mats: WeaponMaterials;
   private handMat: PBRMaterial;
+  /**
+   * The first-person light rig: a key from over the player's left shoulder and a cool rim from
+   * ahead, on the gun and the hands ONLY (`includedOnlyMeshes`). The map's practicals still reach
+   * the gun where they reach the player; this is the constant fill every first-person game gives
+   * its viewmodel so the mechanism reads in a dark alley — the gun in the hands is the one object
+   * that is never allowed to be a silhouette. Parented to the camera, so the key stays over the
+   * shoulder whichever way the player looks.
+   */
+  private rig: DirectionalLight[] = [];
   private current: WeaponId;
   private pos = new Vector3(0, 0, 0);
   private rot = new Vector3(0, 0, 0);
@@ -152,6 +163,7 @@ export class Viewmodel {
       for (const p of parts) {
         p.mesh.material = p.mat; p.mesh.parent = root; p.mesh.position.set(p.x ?? 0, p.y ?? 0, p.z ?? 0);
         p.mesh.renderingGroupId = VIEWMODEL_GROUP; p.mesh.isPickable = false; p.mesh.receiveShadows = false;
+        this.lightByRig(p.mesh);
       }
       root.setEnabled(false);
       this.grenadeModels.set(kind, root);
@@ -225,9 +237,12 @@ export class Viewmodel {
     this.handMat.albedoColor = new Color3(0.2, 0.16, 0.13);
     this.handMat.emissiveColor = new Color3(0.012, 0.013, 0.016);
     this.handMat.roughness = 0.8; this.handMat.metallic = 0;
-    this.handMat.maxSimultaneousLights = 4;
+    const env = nightEnvironment(scene);
+    if (env) { this.handMat.reflectionTexture = env; this.handMat.environmentIntensity = 0.6; }
+    this.handMat.maxSimultaneousLights = 6;
     this.handMat.useGLTFLightFalloff = true;
     this.handMat.freeze();
+    this.buildRig();
     this.current = local.weapon;
     for (const id of WEAPON_ORDER) this.buildWeapon(id);
     this.buildHands();
@@ -236,10 +251,32 @@ export class Viewmodel {
     scene.setRenderingAutoClearDepthStencil(VIEWMODEL_GROUP, true, true, false);
   }
 
+  private buildRig(): void {
+    const mk = (name: string, dir: Vector3, color: Color3, intensity: number): DirectionalLight => {
+      const l = new DirectionalLight(name, dir.normalize(), this.scene);
+      l.parent = this.camera;
+      l.diffuse = color; l.specular = color;
+      l.intensity = intensity;
+      l.renderPriority = 95;                 // between the ambient (100) and the moon (90): always on the gun
+      l.includedOnlyMeshes = [];             // nothing until a viewmodel mesh is registered
+      l.shadowEnabled = false;
+      return l;
+    };
+    this.rig = [
+      mk("vm_key", new Vector3(0.45, -0.55, 0.7), new Color3(1.0, 0.94, 0.86), 0.55),
+      mk("vm_rim", new Vector3(-0.35, -0.15, -0.92), new Color3(0.55, 0.65, 0.85), 0.35),
+    ];
+  }
+
+  /** Every mesh of the first-person layer is lit by the rig; nothing else in the scene is. */
+  private lightByRig(m: import("@babylonjs/core/Meshes/mesh").Mesh): void {
+    for (const l of this.rig) l.includedOnlyMeshes.push(m);
+  }
+
   private buildWeapon(id: WeaponId): void {
     const model = buildWeaponModel(id, this.mats, this.scene, `vm_${id}`);
     model.root.parent = this.gunPivot;
-    forEachMesh(model, (m) => { m.renderingGroupId = VIEWMODEL_GROUP; m.receiveShadows = false; m.isPickable = false; });
+    forEachMesh(model, (m) => { m.renderingGroupId = VIEWMODEL_GROUP; m.receiveShadows = false; m.isPickable = false; this.lightByRig(m); });
     model.root.setEnabled(false);
     this.models.set(id, model);
     this.magazineHomes.set(id, model.magazine?.position.y ?? 0);
@@ -284,7 +321,7 @@ export class Viewmodel {
     if (!model || this.disposed) { model?.root.dispose(false, false); return; }
     const old = this.models.get(id);
     model.root.parent = this.gunPivot;
-    forEachMesh(model, (m) => { m.renderingGroupId = VIEWMODEL_GROUP; m.receiveShadows = false; m.isPickable = false; });
+    forEachMesh(model, (m) => { m.renderingGroupId = VIEWMODEL_GROUP; m.receiveShadows = false; m.isPickable = false; this.lightByRig(m); });
     model.root.setEnabled(false);
     this.models.set(id, model);
     this.magazineHomes.set(id, model.magazine?.position.y ?? 0);
@@ -313,6 +350,7 @@ export class Viewmodel {
         mesh.material = this.handMat;
         mesh.renderingGroupId = VIEWMODEL_GROUP;
         mesh.isPickable = false;
+        this.lightByRig(mesh);
         if (part.joint) {
           // The joint node sits AT the wrist and carries the rotation; the mesh hangs off it by the
           // offset from the wrist to its centre, so its near end stays on the palm at any angle.
@@ -635,6 +673,7 @@ export class Viewmodel {
   dispose(): void {
     this.disposed = true;
     this.skinBinding.clear();
+    for (const l of this.rig) l.dispose();
     this.root.dispose(false, false);
     this.grenadeNode.dispose(false, true);
     this.mats.dispose();

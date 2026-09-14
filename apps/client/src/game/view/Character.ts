@@ -13,6 +13,7 @@ import { BLADE, GUN_OFFSET, GUN_SCALE, HOLD } from "./characterHold";
 import { TEAM_KITS } from "./teamKit";
 import { buildWeaponModel, createWeaponMaterials, forEachMesh, type WeaponMaterials, type WeaponModel } from "./weaponMeshes";
 import { beveledBox } from "./geometry";
+import { nightEnvironment } from "./nightEnv";
 
 /**
  * Procedural articulated third-person character. No external assets: a jointed figure with a
@@ -115,11 +116,15 @@ function teamMats(scene: Scene, team: Team, outfit: string = DEFAULT_OUTFIT): Sh
   const key = `${team}|${def.id}`;
   let m = byKey.get(key);
   if (m) return m;
+  // The night environment (nightEnv.ts) as a soft sky / street fill and a glint on the goggles:
+  // a body under no practical used to be a near-black cut-out; now it is a dark body with a shape.
+  const env = nightEnvironment(scene);
   const mk = (name: string, hex: string, rough: number, metal = 0, emissive?: string) => {
     const mat = new PBRMaterial(`${name}_t${team}_${def.id}`, scene);
     mat.albedoColor = Color3.FromHexString(hex).toLinearSpace();
     mat.roughness = rough; mat.metallic = metal;
     if (emissive) mat.emissiveColor = Color3.FromHexString(emissive).scale(0.6);
+    if (env) { mat.reflectionTexture = env; mat.environmentIntensity = 0.5; }
     mat.maxSimultaneousLights = 4;
     mat.useGLTFLightFalloff = true; // same range-limited falloff as the map
     mat.freeze();
