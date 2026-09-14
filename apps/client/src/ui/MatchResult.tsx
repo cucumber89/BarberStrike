@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { BADGES, HAIRCUTS, MODES, worstHaircut, type GameMode } from "@frankibarber/shared";
 import type { HudState } from "../game/store";
-import type { MatchReward } from "../game/progression/profile";
+import { CRATE_CHALLENGES, type MatchReward, type Profile } from "../game/progression/profile";
 import { Razor, Scoreboard } from "./Scoreboard";
 import { OUTCOME_TITLE, keyStats, matchOutcome, matchWhy, roundEnd, scoreLine, topReward } from "./resultText";
 
@@ -59,6 +59,7 @@ export function MatchResult({ h, now, onLeave }: Props) {
                 </div>
               )}
               {h.reward ? <Reward reward={h.reward} /> : outcome === "over" ? <p className="result-note">Oglądasz — bez nagród za ten mecz.</p> : null}
+              {h.reward && <NextGoal profile={h.profile} />}
               {/* Drop E: the match award. It names somebody ELSE as often as it names you, which is the
                   point — it is the thing the table talks about afterwards, not a reward you collect. */}
               {worst && (
@@ -129,6 +130,34 @@ function Reward({ reward }: { reward: MatchReward }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The one nearest cosmetic goal: the daily crate challenge closest to done, with its progress.
+ * A player who just read their XP should also see the next reason to press play — one, not a
+ * list, and only a real one: a challenge already claimed today is not a goal.
+ */
+export function nextGoal(profile: Profile): { label: string; have: number; need: number } | null {
+  let best: { label: string; have: number; need: number } | null = null;
+  for (const t of CRATE_CHALLENGES) {
+    if (profile.challengeClaims.includes(t.id)) continue;
+    const have = Math.min(t.target, Math.max(0, profile.life[t.stat] - profile.challengeBase[t.stat]));
+    const left = t.target - have;
+    if (!best || left < best.need - best.have) best = { label: t.label, have, need: t.target };
+  }
+  return best;
+}
+
+function NextGoal({ profile }: { profile: Profile }) {
+  const g = nextGoal(profile);
+  if (!g) return null;
+  return (
+    <div className="result-goal" data-testid="result-goal">
+      <span className="result-goal-label">NAJBLIŻSZY CEL · skrzynka</span>
+      <span className="result-goal-text">{g.label} <b>{g.have} / {g.need}</b></span>
+      <div className="result-goal-bar"><i style={{ "--v": g.have / g.need } as React.CSSProperties} /></div>
     </div>
   );
 }

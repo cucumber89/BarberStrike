@@ -830,3 +830,20 @@ td.sb-shaved.none { opacity: 0.4; }
 .viewer-help { color: #8fa0ad; font-size: 11px; line-height: 1.7; margin: 18px 0 12px; }
 .viewer-help b { color: #cfd8e0; }
 .viewer-leave { width: 100%; padding: 9px; }
+
+/* The mode's goal, one sentence: under the countdown / warm-up, on the pause card, on the loading
+   screen. Same sentence in all three (`MODES[mode].objective`), so nobody meets a rule for the
+   first time on the result screen. */
+.center-sub.objective { top: 96px; display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: min(760px, 90vw); text-align: center; letter-spacing: 0.04em; }
+.center-sub.objective b { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.22em; color: var(--brass); font-weight: normal; }
+.center-sub.objective span { font-size: 15px; color: var(--tx); line-height: 1.35; text-shadow: 0 1px 4px rgba(0,0,0,.9); }
+.pause-objective { margin: 0 0 6px; font-size: 13px; color: var(--tx-2); text-align: center; line-height: 1.4; }
+.pause-objective b { color: var(--brass); font-weight: normal; letter-spacing: 0.1em; }
+.loading-objective { margin: 6px 0 0; font-size: 14px; color: var(--tx); line-height: 1.4; text-align: center; }
+.loading-objective b { color: var(--brass); font-weight: normal; letter-spacing: 0.1em; }
+.result-goal { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border: 1px solid var(--line); background: var(--bg-2); }
+.result-goal-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em; color: var(--tx-3); }
+.result-goal-text { font-size: 14px; color: var(--tx); }
+.result-goal-text b { color: var(--brass); font-weight: normal; font-family: var(--font-mono); }
+.result-goal-bar { height: 4px; background: rgba(255,255,255,.1); }
+.result-goal-bar i { display: block; height: 100%; width: 100%; background: var(--brass); transform-origin: left; transform: scaleX(var(--v, 0)); }

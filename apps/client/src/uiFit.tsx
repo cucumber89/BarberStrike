@@ -21,7 +21,7 @@ import "./ui/cinematic.css";
 import { Shop } from "./ui/Shop";
 import { PlanPanel } from "./ui/PlanPanel";
 import { MatchResult, RoundBreak } from "./ui/MatchResult";
-import type { MatchReward } from "./game/progression/profile";
+import { emptyProfile, type MatchReward } from "./game/progression/profile";
 import { PLANS, planOffer } from "@frankibarber/shared";
 import type { HudState, ScoreRow } from "./game/store";
 
@@ -76,7 +76,7 @@ const reward: MatchReward = {
   earned: ["first-blood", "hs-25", "kills-100"], haircuts: ["irokez"], title: "CZELADNIK",
 };
 const resultCase = q.get("case") ?? "win";
-const resultBase = { ...state, mode: "tdm", phase: MatchPhase.Ended, phaseEndsAt: 112000, serverNow: 100000, myId: "me", myTeam: 0, players: players(12), reward, scoreA: 40, scoreB: 33, winner: 0, winnerId: "", winnerName: "", bomb: null } as unknown as HudState;
+const resultBase = { ...state, mode: "tdm", profile: emptyProfile(), phase: MatchPhase.Ended, phaseEndsAt: 112000, serverNow: 100000, myId: "me", myTeam: 0, players: players(12), reward, scoreA: 40, scoreB: 33, winner: 0, winnerId: "", winnerName: "", bomb: null } as unknown as HudState;
 const resultState: HudState = resultCase === "loss" ? { ...resultBase, winner: 1, scoreA: 31, scoreB: 40, reward: { ...reward, levelsGained: 0, earned: [], haircuts: [], lines: reward.lines.slice(0, 3), total: 680 } }
   : resultCase === "draw" ? { ...resultBase, winner: -1, scoreA: 22, scoreB: 22 }
   : resultCase === "ffa" ? { ...resultBase, mode: "ffa", winnerId: "me", winnerName: "TY_SAM", players: players(8, false) }

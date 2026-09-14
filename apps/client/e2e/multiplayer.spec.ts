@@ -143,7 +143,7 @@ test.describe("two clients", () => {
       await a.keyboard.down("KeyT");
       await expect.poll(async () => (await hud(a)).bomb?.stage, { timeout: 10000 }).toBe("planted");
       await a.keyboard.up("KeyT");
-      await expect(a.getByTestId("bomb-hud")).toContainText("BOMB ARMED AT A");
+      await expect(a.getByTestId("bomb-hud")).toContainText("ŁADUNEK NA A");
       await teleport(b, -34.2);
       await expect.poll(async () => Math.abs((await pos(b)).x + 34.2)).toBeLessThan(0.2);
       await b.keyboard.down("KeyT");
@@ -503,7 +503,7 @@ test.describe("two clients", () => {
       await p.getByTestId("input-name").fill(name);
       await p.getByTestId("input-room").fill(room);
       await p.getByTestId("mode-dom").click();
-      await expect(p.getByTestId("mode-blurb")).toContainText("Hold A / B / C");
+      await expect(p.getByTestId("mode-blurb")).toContainText("Trzymaj A / B / C");
       await p.getByTestId("btn-quickplay").click();
       await p.getByTestId("enter-game").click({ timeout: 60000 });
     await expect(p.getByTestId("hud")).toBeVisible({ timeout: 30_000 });
@@ -525,7 +525,7 @@ test.describe("two clients", () => {
     const flagA = await a.evaluate(() => window.__fb.game.mapDefinition.flags[0]);
     await a.evaluate(([x, y, z]) => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x, y, z }), [flagA.x, flagA.y, flagA.z]);
     await expect.poll(async () => (await hud(a)).inFlag, { timeout: 8000 }).toBe(0);
-    await expect(a.getByTestId("capture")).toContainText("CAPTURING A", { timeout: 8000 });
+    await expect(a.getByTestId("capture")).toContainText("PRZEJMUJESZ A", { timeout: 8000 });
     const teamA = (await hud(a)).myTeam;
     await expect.poll(async () => (await hud(a)).flags[0].capTeam, { timeout: 8000 }).toBe(teamA);
     // Capture progress and the score tick both pause during a preparation window (`stepFlags` runs
