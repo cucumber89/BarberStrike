@@ -131,11 +131,16 @@ await A.waitForTimeout(1500);
 console.log("hud A", JSON.stringify(await hud(A).then((h) => ({ weapon: h.weapon, ammo: h.ammo, lethal: h.lethal, lethalCount: h.lethalCount, owned: h.owned, phase: h.phase }))));
 
 const across = () => A.evaluate(([bx, bz]) => { const lp = window.__fb.game.localPlayer; const b = lp.body; lp.yaw = Math.atan2(bx - b.x, bz - b.z) + Math.PI / 2; lp.pitch = 0; }, [b0.x, b0.z]);
+// A close look at the body first: A squares up to B (the hold, the hands on the gun, the face).
+await step("face", async () => { await A.waitForTimeout(800); await frames(A, 3); await shot("face"); });
 await across();
 await step("idle", async () => { await A.waitForTimeout(1500); await frames(A, 4); await shot("idle"); });
 await step("walk", async () => { await keys(A, ["KeyW"]); await A.waitForTimeout(1200); await frames(A, 3); await shot("walk"); await A.waitForTimeout(600); });
 await step("sprint", async () => { await keys(A, ["ShiftLeft"]); await A.waitForTimeout(1200); await frames(A, 3); await shot("sprint"); await A.waitForTimeout(400); });
 await step("stop", async () => { await keys(A, [], ["KeyW", "ShiftLeft"]); await A.waitForTimeout(250); await frames(A, 2); await shot("stop_early"); await A.waitForTimeout(700); await shot("stop_settled"); });
+// The walk took A down the street: bring A back in front of B for the close-up steps.
+await A.evaluate(([x, y, z]) => window.__fb.game.conn.send("dev:teleport", { x, y, z }), [a0.x, a0.y, a0.z]);
+await A.waitForTimeout(700);
 await lookAt(A, b0.x, b0.z, b0.y + 1.3);
 await A.evaluate(() => { window.__fb.game.localPlayer.yaw += 0.6; });   // 35° off B: the burst must not kill the observer
 await A.waitForTimeout(400);
