@@ -1,8 +1,13 @@
 // HUD state screenshots with mocked store values (scoreboard, death, result) — dev servers running.
+// Output under e2e/out/hud/shots (was a hard-coded scratch path of one long-gone session).
 import { chromium } from "@playwright/test";
-const OUT = "/tmp/claude-0/-home-user-sidequest/1d2f80ee-f8c5-5282-b5fc-eb567dff361c/scratchpad/shots";
+import { mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+const OUT = resolve(dirname(fileURLToPath(import.meta.url)), "../out/hud/shots");
+mkdirSync(OUT, { recursive: true });
 const LOW = JSON.stringify({ graphics: { preset: "low", renderer: "webgl2", renderScale: 0.6, shadows: "off", postProcessing: false, effects: 0.3, antialiasing: false } });
-const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader","--ignore-gpu-blocklist"] });
+const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || "/opt/pw-browsers/chromium", args: ["--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader","--ignore-gpu-blocklist"] });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
 await ctx.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), LOW);
 const page = await ctx.newPage();
@@ -27,7 +32,7 @@ await page.keyboard.up("Tab");
 await page.evaluate(() => window.__fb.hud.set({ alive: false, health: 0, killerName: "TAPER_KING", killerWeapon: "dmr", respawnAt: performance.now() + 2600 }));
 await page.waitForTimeout(400);
 await page.screenshot({ path: `${OUT}/31-death.png` });
-await page.evaluate(() => window.__fb.hud.set({ alive: true, health: 100, phase: "ended", winner: 0, phaseEndsAt: window.__fb.hud.get().serverNow + 9000 }));
+await page.evaluate(() => window.__fb.hud.set({ alive: true, health: 100, phase: "ended", winner: 0, scoreA: 40, scoreB: 31, phaseEndsAt: window.__fb.hud.get().serverNow + 9000 }));
 await page.waitForTimeout(400);
 await page.screenshot({ path: `${OUT}/32-result.png` });
 console.log("ok");

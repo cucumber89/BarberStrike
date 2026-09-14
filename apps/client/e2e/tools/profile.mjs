@@ -5,7 +5,7 @@
 import { chromium } from "@playwright/test";
 const PRESET = process.env.PRESET || "medium";
 const SET = JSON.stringify({ graphics: { preset: PRESET, renderer: "webgl2", renderScale: 1, shadows: PRESET === "low" ? "off" : PRESET === "ultra" ? "high" : "medium", postProcessing: PRESET !== "low", effects: 0.7, antialiasing: PRESET !== "low" } });
-const b = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
+const b = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || "/opt/pw-browsers/chromium", args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
 const ctx = await b.newContext({ viewport: { width: 960, height: 540 } });
 await ctx.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), SET);
 const p = await ctx.newPage();
