@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { BADGES, BUILDS, DEFAULT_BUILD, DEFAULT_HAIRCUT, DEFAULT_OUTFIT, DROPPABLE_OUTFITS, HAIRCUTS, XP, decodeBuild, decodeOutfit, decodeSkins, levelFor, xpToNext, type MatchStats } from "@frankibarber/shared";
-import { skinById } from "@frankibarber/skins";
+import { catalog, skinById } from "@frankibarber/skins";
 import { applyMatch, emptyProfile, loadProfile, ownedCuts, ownedFits, saveProfile, equipBuild, equipHaircut, equipOutfit, equippedBuild, equippedHaircut, equippedOutfit, ensureStarterSkins, equipSkin, equippedSkins, refreshDailyCrates, openCrate } from "./profile";
 
 const match = (over: Partial<MatchStats> = {}): MatchStats => ({
@@ -309,5 +309,22 @@ describe("what a crate rolls", () => {
       tiers[rarity] = (tiers[rarity] ?? 0) + 1;
     }
     expect(tiers.pospolity ?? 0).toBeGreaterThan(tiers.zloty ?? 0);
+  });
+});
+
+describe("crates draw from the whole finish catalogue", () => {
+  memoryStorage();
+  it("hands out new-collection skins, never an unknown id, and never a duplicate while any remain", () => {
+    saveProfile({ ...emptyProfile(), crates: 400, crateDay: "2026-09-14" });
+    const seen = new Set<string>(), collections = new Set<string>();
+    for (let i = 0; i < 400; i++) {
+      const rolled = openCrate(1_800_000_000_000 + i * 977); if (!rolled) break;
+      if (rolled.prize.kind !== "skin") continue;
+      const def = skinById(rolled.prize.id); expect(def, rolled.prize.id).toBeDefined();
+      if (seen.size < catalog.length) expect(seen.has(rolled.prize.id), `duplicate ${rolled.prize.id}`).toBe(false);
+      seen.add(rolled.prize.id); collections.add(def!.collection);
+    }
+    expect(seen.size).toBe(catalog.length);
+    for (const c of ["barber", "osiedle", "monopol", "zielony", "masa", "pogodzinach", "zlota"]) expect(collections.has(c), c).toBe(true);
   });
 });

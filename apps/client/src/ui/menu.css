@@ -350,7 +350,16 @@
 .armoury-current b { margin-top: 2px; font: 22px var(--font-display); letter-spacing: .08em; font-weight: normal; }
 .armoury-current > span { padding: 5px 8px; border: 1px solid rgba(217, 164, 65, .5); color: var(--brass); font: 9px var(--font-mono); letter-spacing: .12em; }
 .armoury-skin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-content: start; padding: 10px; }
-.skin-card { position: relative; display: grid; grid-template-rows: 64px auto auto; min-height: 105px; padding: 0 0 8px; overflow: hidden; text-align: left; color: var(--tx-2); background: var(--bg-3); border: 1px solid var(--line); cursor: pointer; }
+.skin-card { position: relative; display: grid; grid-template-rows: 78px auto auto; min-height: 118px; padding: 0 0 8px; overflow: hidden; text-align: left; color: var(--tx-2); background: var(--bg-3); border: 1px solid var(--line); cursor: pointer; }
+.skin-card .skin-art { display: block; width: 100%; height: 78px; object-fit: cover; margin-bottom: 8px; background: #0b0f14; }
+.skin-card.locked .skin-art { filter: saturate(.55) brightness(.75); }
+.skin-card.locked::before { content: "🔒"; position: absolute; top: 5px; right: 6px; z-index: 1; font-size: 12px; opacity: .85; }
+.skin-card.peek { border-color: var(--tx-3); }
+.skin-card.epicki small { color: #bd75ff; } .skin-card.legendarny small { color: #ff65aa; } .skin-card.zloty small { color: #ffd04b; }
+.skin-collection { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; padding: 4px 2px 0; border-top: 1px solid var(--line); font: 11px var(--font-display); letter-spacing: .14em; color: var(--brass); }
+.skin-collection small { font: 9px var(--font-mono); color: var(--tx-3); }
+.reel-track .skin-drop { display: block; width: 100%; height: 76px; object-fit: cover; }
+.crate-prize-art { display: block; width: min(640px, 80vw); height: auto; justify-self: center; border: 1px solid #76602f; box-shadow: 0 12px 40px #000a; }
 .skin-card:hover, .skin-card.on { color: var(--tx); border-color: var(--brass); transform: translateY(-1px); }
 .skin-card.on::after { content: "✓"; position: absolute; top: 5px; right: 6px; width: 20px; height: 20px; display: grid; place-items: center; background: var(--brass); color: #111; font-weight: bold; }
 .skin-swatch { display: block; width: 100%; height: 64px; margin-bottom: 8px; background-size: 90px 90px !important; }

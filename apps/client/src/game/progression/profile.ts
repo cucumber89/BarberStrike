@@ -322,8 +322,9 @@ export function openCrate(now = Date.now()): { profile: Profile; prize: CratePri
 export function ensureStarterSkins(now = Date.now()): Profile {
   const profile = loadProfile();
   const owned = new Set(profile.skins.map((instance) => instance.skin));
-  const starter = new Set(["warsztat", "stalowka", "talk", "slupek-frankiego", "szlaczek-babci", "osy"]);
-  const missing = catalog.filter((skin) => starter.has(skin.id) && !owned.has(skin.id));
+  // Granted in this order whatever the catalogue's own order is, so an old profile and a new one agree.
+  const starter = ["warsztat", "stalowka", "talk", "slupek-frankiego", "szlaczek-babci", "osy"];
+  const missing = starter.map((id) => skinById(id)).filter((skin): skin is NonNullable<typeof skin> => !!skin && !owned.has(skin.id));
   if (!missing.length) return profile;
   const next = {
     ...profile,

@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import { DROPPABLE_OUTFITS, HAIRCUTS, outfitDef, type HaircutDef, type HaircutStyle, type OutfitDef } from "@frankibarber/shared";
-import { catalog, skinById, type Rarity, type SkinDef } from "@frankibarber/skins";
+import { catalog, collectionName, skinById, type Rarity, type SkinDef } from "@frankibarber/skins";
 import {
   CRATE_CHALLENGES,
   CRATE_ODDS,
@@ -11,6 +11,7 @@ import {
 } from "../game/progression/profile";
 import { uiSound } from "../game/audio";
 import { HaircutArt } from "./HaircutArt";
+import { SkinArt } from "./SkinArt";
 
 /**
  * The crate: what is in it, what the odds are, and what you just got.
@@ -30,6 +31,7 @@ type ReelItem = {
   rarity: Rarity;
   swatch: string;
   haircut?: HaircutStyle;
+  skin?: SkinDef;
 };
 
 const rarityLabel: Record<Rarity, string> = {
@@ -43,15 +45,6 @@ const rarityLabel: Record<Rarity, string> = {
 const kindLabel: Record<PrizeKind, string> = { skin: "SKIN BRONI", haircut: "FRYZURA", outfit: "STRÓJ" };
 const kindHeading: Record<PrizeKind, string> = { skin: "NOWY SKIN BRONI", haircut: "NOWA FRYZURA", outfit: "NOWY STRÓJ" };
 
-function skinSwatch(skin: SkinDef): string {
-  const colors = String(skin.params.colors ?? skin.params.color ?? "#65717a").split(",");
-  if (skin.generator === "stripes") {
-    const stops = colors.map((color, index) => `${color} ${index * 18}px ${(index + 1) * 18}px`).join(",");
-    return `repeating-linear-gradient(${skin.params.angle ?? 45}deg, ${stops})`;
-  }
-  return `linear-gradient(135deg, ${colors[0]}, #101419)`;
-}
-
 /** An outfit's card reads as the outfit: its own shirt over its own vest, with the trim as a band. */
 function outfitSwatch(outfit: OutfitDef): string {
   const p = outfit.palette;
@@ -59,8 +52,9 @@ function outfitSwatch(outfit: OutfitDef): string {
   return `linear-gradient(160deg, ${p.cloth} 42%, ${p.vest} 42%, ${p.vest} 78%, ${p.trim} 78%)`;
 }
 
+/** A skin card in the reel carries the skin's real art, painted once and cached by `SkinArt`. */
 function skinItem(skin: SkinDef): ReelItem {
-  return { id: skin.id, kind: "skin", name: skin.name, rarity: skin.rarity, swatch: skinSwatch(skin) };
+  return { id: skin.id, kind: "skin", name: skin.name, rarity: skin.rarity, swatch: String(skin.params.colors ?? "#65717a").split(",")[0], skin };
 }
 
 function outfitItem(outfit: OutfitDef): ReelItem {
@@ -180,7 +174,9 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
                   <div key={`${item.id}-${index}`} className={item.rarity} data-winning={index === 27 ? "true" : undefined}>
                     {item.kind === "haircut" && item.haircut
                       ? <HaircutArt style={item.haircut} className="haircut-drop" />
-                      : <span style={{ "--swatch": item.swatch } as CSSProperties} />}
+                      : item.skin
+                        ? <SkinArt skin={item.skin} width={260} focus="receiver" className="skin-drop" />
+                        : <span style={{ "--swatch": item.swatch } as CSSProperties} />}
                     <b>{item.name}</b><small>{rarityLabel[item.rarity]}</small>
                   </div>
                 ))}
@@ -188,7 +184,8 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
             </div>
             {phase === "won" && result && (
               <div className={`crate-reveal ${prizeItem(result).rarity}`} data-testid="crate-prize">
-                <span>{kindLabel[result.kind]} · {rarityLabel[prizeItem(result).rarity]}</span>
+                {result.kind === "skin" && prizeItem(result).skin && <SkinArt skin={prizeItem(result).skin!} width={640} focus="body" className="crate-prize-art" alt="Grafika wylosowanego skina" />}
+                <span>{kindLabel[result.kind]} · {rarityLabel[prizeItem(result).rarity]}{result.kind === "skin" && prizeItem(result).skin ? ` · ${collectionName(prizeItem(result).skin!.collection)}` : ""}</span>
                 <b>{prizeItem(result).name}</b>
                 {result.kind === "outfit" && <em data-testid="crate-prize-blurb">{outfitDef(result.id).blurb}</em>}
                 <button onClick={() => setPhase("closed")}>GOTOWE</button>

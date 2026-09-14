@@ -1,7 +1,8 @@
 import { Scene } from "@babylonjs/core/scene";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
-import { boxProjectUvs } from "./skinUv";
+import { sideProjectUvs } from "./skinUv";
+import { buildFrame, PAINTABLE_MATS, type FrameBox, type SkinFrame } from "@frankibarber/skins";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
@@ -617,7 +618,7 @@ const SPECS: Record<WeaponId, Spec> = {
   },
 };
 
-function buildParts(name: string, parts: Part[], mats: WeaponMaterials, scene: Scene, parent: TransformNode): Mesh[] {
+function buildParts(name: string, parts: Part[], mats: WeaponMaterials, scene: Scene, parent: TransformNode, frame: SkinFrame): Mesh[] {
   const byMat = new Map<MatKey, Mesh[]>();
   for (const p of parts) {
     let m: Mesh;
@@ -642,7 +643,7 @@ function buildParts(name: string, parts: Part[], mats: WeaponMaterials, scene: S
     for (let i = 0; i < positions.length; i += 3) {
       positions[i] += parent.position.x; positions[i + 1] += parent.position.y; positions[i + 2] += parent.position.z;
     }
-    merged.setVerticesData(VertexBuffer.UVKind, boxProjectUvs(positions, merged.getVerticesData(VertexBuffer.NormalKind)!), false);
+    merged.setVerticesData(VertexBuffer.UVKind, sideProjectUvs(positions, merged.getVerticesData(VertexBuffer.NormalKind)!, frame), false);
     merged.name = `${name}_${mat}`;
     merged.material = mats[mat];
     merged.isPickable = false;
@@ -654,8 +655,9 @@ function buildParts(name: string, parts: Part[], mats: WeaponMaterials, scene: S
 
 export function buildWeaponModel(id: WeaponId, mats: WeaponMaterials, scene: Scene, name = `wpn_${id}`): WeaponModel {
   const spec = SPECS[id];
+  const frame = weaponFrame(id);
   const root = new TransformNode(name, scene);
-  const meshes = buildParts(name, spec.parts, mats, scene, root);
+  const meshes = buildParts(name, spec.parts, mats, scene, root, frame);
   const muzzle = new TransformNode(`${name}_muzzle`, scene);
   muzzle.position.set(...spec.muzzle);
   muzzle.parent = root;
@@ -670,13 +672,13 @@ export function buildWeaponModel(id: WeaponId, mats: WeaponMaterials, scene: Sce
     magazine = new TransformNode(`${name}_mag`, scene);
     magazine.position.set(...spec.magazinePos);
     magazine.parent = root;
-    meshes.push(...buildParts(`${name}_mag`, spec.magazine, mats, scene, magazine));
+    meshes.push(...buildParts(`${name}_mag`, spec.magazine, mats, scene, magazine, frame));
   }
   let action: TransformNode | null = null;
   if (spec.action) {
     action = new TransformNode(`${name}_action`, scene);
     action.parent = root;
-    meshes.push(...buildParts(`${name}_action`, spec.action.parts, mats, scene, action));
+    meshes.push(...buildParts(`${name}_action`, spec.action.parts, mats, scene, action, frame));
   }
   const meshesByMat = new Map<MatKey, Mesh[]>();
   for (const mesh of meshes) {
@@ -763,6 +765,30 @@ export function proceduralParts(id: WeaponId): ProceduralParts {
     support: supportHandHome(spec.length, [...parts, ...magazine].map((p) => p.box)),
     actionKind: spec.action?.kind ?? "none", hasMagazine: spec.magazine !== null,
   };
+}
+
+/**
+ * Weapons whose receiver IS steel. Keeping steel factory-finished there would leave a skin with
+ * nothing but a grip to paint, so on these two the steel takes the pattern like gunmetal does;
+ * their sights are brass and stay untouched.
+ */
+export const PAINTED_STEEL: ReadonlySet<WeaponId> = new Set<WeaponId>(["revolver", "shotgun"]);
+const frames = new Map<WeaponId, SkinFrame>();
+/**
+ * Where a weapon sits on its skin texture: the side-elevation layout the skin generator paints into
+ * and the UV projection reads from. Built once per weapon from the same part bounds `check:weapons`
+ * judges, so the receiver a skin puts its hero on IS `parts[0]`.
+ */
+export function weaponFrame(id: WeaponId): SkinFrame {
+  let frame = frames.get(id);
+  if (!frame) {
+    const p = proceduralParts(id);
+    const box = (n: NamedBox, magazine: boolean): FrameBox => ({ min: n.box.min, max: n.box.max, mat: n.name.slice(n.name.indexOf(":") + 1) as MatKey, magazine });
+    const paintable = PAINTED_STEEL.has(id) ? new Set<MatKey>([...PAINTABLE_MATS, "steel"]) : PAINTABLE_MATS;
+    frame = buildFrame(id, [...p.parts.map(n => box(n, false)), ...p.magazine.map(n => box(n, true))], paintable);
+    frames.set(id, frame);
+  }
+  return frame;
 }
 
 export function forEachMesh(model: WeaponModel, fn: (m: Mesh) => void): void {
