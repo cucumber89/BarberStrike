@@ -155,21 +155,26 @@ button { font-family: inherit; }
 .prep-sub { margin-top: 10px; font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.28em; color: var(--tx-2); white-space: nowrap; }
 
 /* Match summary (2.0): what the match paid, on the result screen. */
-.summary { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(220px, 1fr); gap: 18px 28px; margin: 18px 0 4px; text-align: left; }
-.summary-lines { display: flex; flex-direction: column; gap: 4px; font-family: var(--font-mono); font-size: 13px; }
+.summary { display: flex; flex-direction: column; gap: 10px; margin: 0; text-align: left; }
+.summary-total { font-family: var(--font-display); font-size: 24px; color: var(--brass); font-weight: normal; margin-left: auto; }
+.summary-headline { font-size: 14px; color: var(--brass); letter-spacing: 0.04em; }
+.summary-toggle { align-self: flex-start; background: transparent; border: 1px solid var(--line); color: var(--tx-2); font-family: var(--font-display); font-size: 13px; letter-spacing: 0.14em; padding: 6px 10px; cursor: pointer; }
+.summary-toggle:hover { color: var(--tx); border-color: var(--tx-3); }
+.summary-detail { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(220px, 1fr); gap: 12px 28px; }
+.summary-lines { display: flex; flex-direction: column; gap: 4px; font-family: var(--font-mono); font-size: 13px; min-width: 0; }
 .summary-line { display: flex; justify-content: space-between; gap: 16px; color: var(--tx-2); }
 .summary-line b { color: var(--tx); font-weight: normal; }
 .summary-line.total { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); color: var(--tx); }
 .summary-line.total b { color: var(--brass); }
 .summary-level { display: flex; flex-direction: column; justify-content: center; gap: 8px; }
 .summary-rank { display: flex; align-items: baseline; gap: 10px; }
-.summary-lvl { font-family: var(--font-display); font-size: 40px; line-height: 1; color: var(--tx); }
+.summary-lvl { font-family: var(--font-display); font-size: 44px; line-height: 1; color: var(--tx); }
 .summary-title { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.22em; color: var(--brass); }
 .summary-up { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em; color: var(--gold, var(--brass)); border: 1px solid currentColor; padding: 2px 6px; }
 .summary-bar { height: 6px; background: rgba(255,255,255,.12); overflow: hidden; }
 .summary-bar-fill { height: 100%; width: 100%; background: var(--brass); transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform .6s ease-out; }
-.summary-xp { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; color: var(--tx-2); }
-.summary-badges { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; }
+.summary-xp { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--tx-2); }
+.summary-badges { display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; }
 .summary-badge { border: 1px solid var(--brass); padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; }
 .summary-badge b { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.18em; color: var(--brass); font-weight: normal; }
 .summary-badge span { font-size: 11px; color: var(--tx-2); }
@@ -186,18 +191,54 @@ button { font-family: inherit; }
 .bomb-progress { height: 5px; background: #ffffff25; }
 .bomb-progress i { display: block; height: 100%; width: 100%; background: #e5ae52; transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform .1s linear; }
 
-.result { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: rgba(6,6,8,.78); pointer-events: auto; }
-.result-title { font-family: var(--font-display); font-size: 96px; letter-spacing: 0.2em; line-height: 1; }
-.result-title.victory { color: var(--brass); } .result-title.defeat { color: var(--tx-2); } .result-title.draw { color: var(--tx); }
-.result-score { font-family: var(--font-mono); font-size: 18px; color: var(--tx-2); }
-.result-foot { font-size: 12px; letter-spacing: 0.2em; color: var(--tx-2); margin-top: 10px; }
-.result-foot .link { margin: 0; font-size: 13px; color: var(--brass); pointer-events: auto; }
+/* Match end. A card with a fixed top (verdict, score, why), fixed tabs, a scrolling body and a
+   fixed footer, so the verdict and LEAVE are on screen whatever the body holds: twelve players
+   with long nicks, two level-ups, three badges. `e2e/tools/ui-fit.mjs` measures the cases. */
+.result { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(6,6,8,.82); pointer-events: auto; }
+.result-card { width: min(920px, 94vw); max-height: min(92vh, 860px); display: flex; flex-direction: column; box-sizing: border-box;
+  background: var(--bg); border: 1px solid var(--line); border-top: 2px solid var(--brass); padding: 18px 26px 14px; gap: 10px;
+  animation: result-in 220ms ease-out; }
+@keyframes result-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.result-top { flex: 0 0 auto; text-align: center; display: flex; flex-direction: column; gap: 4px; }
+.result-title { font-family: var(--font-display); font-size: 72px; letter-spacing: 0.18em; line-height: 1; }
+.result-title.win { color: var(--brass); } .result-title.loss { color: var(--tx-2); } .result-title.draw { color: var(--tx); } .result-title.over { color: var(--tx-2); }
+.result-score { font-family: var(--font-mono); font-size: 20px; color: var(--tx); }
+.result-score b { color: var(--brass); font-weight: normal; }
+.result-why { font-size: 15px; color: var(--tx-2); }
+.result-tabs { flex: 0 0 auto; display: flex; gap: 6px; border-bottom: 1px solid var(--line); }
+.result-tabs button { background: transparent; border: 1px solid transparent; border-bottom: none; color: var(--tx-3); font-family: var(--font-display); font-size: 16px; letter-spacing: 0.16em; padding: 8px 14px; cursor: pointer; }
+.result-tabs button.on { color: var(--brass); border-color: var(--line); border-bottom: 1px solid var(--bg); margin-bottom: -1px; }
+.result-tabs kbd { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0; padding: 1px 4px; border: 1px solid var(--line); color: var(--tx-3); margin-left: 6px; }
+.result-body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 4px 2px; }
+.result-body .scoreboard { background: transparent; border: none; padding: 0; flex-wrap: wrap; }
+.result-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.result-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 8px; background: var(--bg-2); border: 1px solid var(--line); }
+.result-stat b { font-family: var(--font-display); font-size: 36px; line-height: 1; font-weight: normal; color: var(--tx); }
+.result-stat span { font-size: 13px; letter-spacing: 0.1em; color: var(--tx-2); text-transform: uppercase; }
+.result-note { margin: 0; font-size: 14px; color: var(--tx-2); text-align: center; }
+.result-foot { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 16px; border-top: 1px solid var(--line); padding-top: 10px; }
+.result-next { font-size: 14px; color: var(--tx-2); letter-spacing: 0.04em; }
+.result-next b { color: var(--brass); font-family: var(--font-mono); font-weight: normal; }
+.result-foot .menu-btn { margin: 0; width: auto; min-width: 200px; }
+/* Between rounds. */
+.round-end { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); text-align: center; padding: 16px 36px; min-width: 360px;
+  background: rgba(10,10,12,.86); border: 1px solid var(--line); border-top: 2px solid var(--tx-2); animation: result-in 200ms ease-out; }
+.round-end.mine { border-top-color: var(--brass); } .round-end.theirs { border-top-color: var(--red); }
+.round-end-title { font-family: var(--font-display); font-size: 44px; letter-spacing: 0.16em; line-height: 1; color: var(--tx); }
+.round-end.mine .round-end-title { color: var(--brass); }
+.round-end-why { margin-top: 6px; font-size: 15px; color: var(--tx-2); }
+.round-end-score { margin-top: 8px; font-family: var(--font-mono); font-size: 18px; color: var(--tx-2); }
+.round-end-score b { color: var(--tx); font-weight: normal; }
+.round-end-next { margin-top: 6px; font-size: 13px; letter-spacing: 0.16em; color: var(--brass); }
+@media (max-height: 640px) { .result-card { padding: 12px 20px 10px; gap: 6px; } .result-title { font-size: 56px; } .result-stat b { font-size: 30px; } }
+@media (max-width: 760px) { .result-title { font-size: 48px; } .result-stats { grid-template-columns: 1fr 1fr 1fr; } .result-foot { flex-direction: column; align-items: stretch; } }
+@media (prefers-reduced-motion: reduce) { .result-card, .round-end { animation: none; } .summary-bar-fill { transition: none; } }
 
 .scoreboard-wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 .scoreboard { display: flex; gap: 16px; background: rgba(10,10,12,.86); padding: 18px; border: 1px solid var(--line); }
 .sb-team { border-collapse: collapse; min-width: 300px; }
 .sb-team th { font-family: var(--font-display); letter-spacing: 0.2em; font-size: 14px; color: var(--tx-2); padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--line); }
-.sb-team th.sb-name, .sb-team td.sb-name { text-align: left; }
+.sb-team th.sb-name, .sb-team td.sb-name { text-align: left; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sb-team.t0 th.sb-name { color: var(--team0); } .sb-team.t1 th.sb-name { color: var(--team1); }
 .sb-team td { padding: 6px 10px; text-align: right; font-family: var(--font-mono); font-size: 13px; }
 .sb-team tr.me td { color: var(--brass); }
@@ -478,7 +519,7 @@ button { font-family: inherit; }
 .minimap .compass { border: 1px solid var(--line); }
 
 .sb-team td.sb-money { color: #7dd68a; }
-.sb-bot { display: inline-block; margin-left: 6px; padding: 0 4px; border: 1px solid var(--line); font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; color: var(--tx-2); vertical-align: middle; }
+.sb-bot { display: inline-block; margin-left: 6px; padding: 0 4px; border: 1px solid var(--line); font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: var(--tx-2); vertical-align: middle; }
 
 /* Credits (drop 6b): the CC-BY attribution has to be visible in the built game, not only in the repo. */
 .credits { display: grid; gap: 6px; margin-top: 2px; }

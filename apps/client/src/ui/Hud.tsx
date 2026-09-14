@@ -1,16 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { boysClass, BOMB, DUEL, GAME_VERSION, GRENADES, GUN_GAME, HAIRCUTS, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, PLAYER, TEAM_NAMES, WEAPONS, BADGES, killerName, ladderDone, ladderWeapon, parseHaircut, perkActive, worstHaircut, type GameMode, type WeaponId } from "@frankibarber/shared";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { boysClass, BOMB, DUEL, GAME_VERSION, GRENADES, GUN_GAME, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, PLAYER, TEAM_NAMES, WEAPONS, killerName, ladderDone, ladderWeapon, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import { pelletRing } from "../game/combat/weaponFeel";
 import { TeamPicker } from "./TeamPicker";
 import { PlanPanel } from "./PlanPanel";
 import { Hints } from "./Hints";
-import type { MatchReward } from "../game/progression/profile";
 import type { Settings } from "../settings";
 import { SettingsPanel } from "./SettingsPanel";
 import { Shop, type ShopApi } from "./Shop";
 import { Chat, type ChatApi } from "./Chat";
 import { Minimap } from "./Minimap";
+import { HeadShot, Razor, Scoreboard } from "./Scoreboard";
+import { MatchResult, RoundBreak } from "./MatchResult";
+import { OSTRZYZENI_SIDES, roundReasonText } from "./resultText";
 import type { RadarSnapshot } from "../game/Game";
 
 interface Props {
@@ -45,56 +47,6 @@ const fmtTime = (ms: number): string => {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 };
 
-/**
- * What the match paid: the XP lines, the level bar and any badge earned.
- *
- * The lines are the point. A bare "+1 400" tells a player nothing; "8 kills, 3 head shots, a win"
- * tells them what the game rewards, which is the only job a cosmetic progression has.
- */
-function MatchSummary({ reward, worst }: { reward: MatchReward; worst: ReturnType<typeof worstHaircut> }): React.ReactElement {
-  const { after, before, levelsGained } = reward;
-  const pct = Math.max(0, Math.min(100, Math.round((after.into / Math.max(1, after.need)) * 100)));
-  const badges = reward.earned.map((id) => BADGES.find((b) => b.id === id)).filter(Boolean);
-  const cuts = reward.haircuts.map((id) => HAIRCUTS.find((h) => h.id === id)).filter(Boolean) as { id: string; name: string }[];
-  return (
-    <div className="summary" data-testid="summary">
-      <div className="summary-lines">
-        {reward.lines.map((l) => (
-          <div className="summary-line" key={l.label}><span>{l.label}</span><b>+{l.xp}</b></div>
-        ))}
-        <div className="summary-line total"><span>RAZEM</span><b data-testid="summary-total">+{reward.total} XP</b></div>
-      </div>
-      <div className="summary-level">
-        <div className="summary-rank">
-          <span className="summary-lvl" data-testid="summary-level">{after.level}</span>
-          <span className="summary-title">{reward.title}</span>
-          {levelsGained > 0 && <span className="summary-up" data-testid="summary-levelup">AWANS {levelsGained > 1 ? `×${levelsGained}` : ""}</span>}
-        </div>
-        <div className="summary-bar"><div className="summary-bar-fill" style={{ "--v": pct / 100 } as React.CSSProperties} /></div>
-        <div className="summary-xp">{after.into} / {after.need} XP{before.level !== after.level ? "" : ""}</div>
-      </div>
-      {/* Drop E: the match award. It names somebody ELSE as often as it names you, which is the
-          point — it is the thing the table talks about afterwards, not a reward you collect. */}
-      {worst && (
-        <div className="summary-award" data-testid="summary-worst-haircut">
-          <Razor className="award-icon" />
-          <div>
-            <b>NAJGORSZA FRYZURA</b>
-            <span>{worst.name} — {worst.look.name}, ogolony {worst.shaves}×</span>
-          </div>
-        </div>
-      )}
-      {(badges.length > 0 || cuts.length > 0) && (
-        <div className="summary-badges" data-testid="summary-badges">
-          {badges.map((b) => b && <div className="summary-badge" key={b.id}><b>{b.name}</b><span>{b.blurb}</span></div>)}
-          {/* Drop E: a haircut unlocked by this match reads as a badge, because that is what it is. */}
-          {cuts.map((c) => <div className="summary-badge cut" key={c.id} data-testid="summary-haircut"><b>{c.name}</b><span>Nowa fryzura</span></div>)}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** Re-renders on a timer so countdowns tick without the game loop pushing state. */
 function useClock(intervalMs: number): number {
   const [t, setT] = useState(() => performance.now());
@@ -107,16 +59,20 @@ function useClock(intervalMs: number): number {
 
 const money = (n: number) => `$${n.toLocaleString("en-US")}`;
 
-/**
- * Drop D: Ostrzyżeni's sides, in the team slots. The shared `TEAM_NAMES` are the shop's two chairs
- * (FADE / TAPER) and mean nothing here — this mode's sides are "the spared" and "the shaved", and
- * a player changes sides mid-round, which is the whole point.
- */
-const OSTRZYZENI_SIDES = ["OCALENI", "OSTRZYŻENI"] as const;
 const REASON_SHORT: Record<string, string> = { kill: "KILL", headshot: "HEAD SHOT", assist: "ASSIST", buy: "", sell: "SOLD", reset: "" };
 
 export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, onChooseTeam, onVotePlan, shop, chat, radar, dormant = false }: Props) {
   const h = useHud();
+  const ended = h.phase === MatchPhase.Ended;
+  // The break after a round is the FIRST Prep window after Playing; the buy window that follows
+  // is a second Prep with a new deadline. Remembering the break's deadline is what tells them apart.
+  const prevPhase = useRef(h.phase);
+  const [breakEndsAt, setBreakEndsAt] = useState(0);
+  useEffect(() => {
+    if (prevPhase.current === MatchPhase.Playing && h.phase === MatchPhase.Prep) setBreakEndsAt(h.phaseEndsAt);
+    prevPhase.current = h.phase;
+  }, [h.phase, h.phaseEndsAt]);
+  const inBreak = h.phase === MatchPhase.Prep && breakEndsAt !== 0 && breakEndsAt === h.phaseEndsAt;
   // The flash overlay and cook ring need a smooth clock; everything else is fine at 4 Hz.
   const fast = h.flashUntil > performance.now() || h.cookingKind !== "";
   const now = useClock(fast ? 33 : 250);
@@ -197,7 +153,6 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   const spreadRing = pelletRing(h.weapon as WeaponId) ? Math.round(h.crosshairSpread * 900) : null;
   const protectedNow = h.alive && h.spawnProtectedUntil > h.serverNow;
   const reloadMs = w.reloadMs;
-  const winnerTeam = h.winner === -1 ? "DRAW" : h.winner === h.myTeam ? "VICTORY" : "DEFEAT";
   // Flash: full white, then a fade whose length scales with the strength (the last third is a haze).
   const flashLeft = h.flashUntil - now;
   const flashTotal = Math.max(1, h.flashUntil - h.flashAt);
@@ -244,9 +199,6 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       : here.owner === h.myTeam ? `HOLDING ${here.id}` : `ENEMY FLAG ${here.id}`
     : "";
   const noticeAge = h.flagNotice ? now - h.flagNotice.at : Infinity;
-  const winnerFfa = h.winnerId === "" ? "DRAW" : h.winnerId === h.myId ? "VICTORY" : "DEFEAT";
-  // Drop D: the result names a side or a player by the mode's `winner`, not by whether it has teams.
-  const teamWinner = MODES[h.mode].winner === "team";
 
   return (
     <div className={`hud ${lowHealth ? "low-health" : ""} ${dormant ? "dormant" : ""}`} data-testid="hud" aria-hidden={dormant || undefined}>
@@ -254,7 +206,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {h.bomb && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && <div className={`bomb-hud ${h.bomb.stage === "planted" ? "armed" : ""}`} data-testid="bomb-hud">
         <b>ROUND {h.bomb.round} / 12 · {h.bomb.attackTeam === h.myTeam ? "ATTACK" : "DEFEND"} · FIRST TO 7</b>
         <span>{h.bomb.stage === "buy" ? `${h.bomb.round === 7 ? "SIDES SWITCHED · " : ""}B TO BUY · START IN ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
-          : h.phase === MatchPhase.Prep ? `${h.bomb.result} · NEXT ROUND ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
+          : h.phase === MatchPhase.Prep ? `${roundReasonText(h.bomb.result)} · NASTĘPNA RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
           : h.bomb.stage === "planted" ? `BOMB ARMED AT ${h.bomb.site} · ${h.bomb.attackTeam === h.myTeam ? "GUARD THE CHARGE" : "HOLD T TO DEFUSE"}`
           : h.bomb.carrier === h.myId ? "YOU HAVE THE BOMB · HOLD T AT A / B TO PLANT"
           : h.bomb.attackTeam !== h.myTeam ? "PROTECT SITES A / B"
@@ -325,7 +277,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
 
 
       {/* Top: score + timer (team modes) or me vs the leader (FFA, drop 4) */}
-      <div className="top-bar" data-mode={h.mode}>
+      {!ended && <div className="top-bar" data-mode={h.mode}>
         {teams
           ? <div className={`team-score t0 ${h.myTeam === 0 ? "mine" : ""}`}><span className="tname">{sideNames[0]}</span><span className="tscore" data-testid="score-a">{h.scoreA}</span></div>
           : gunGame
@@ -342,7 +294,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           : gunGame
             ? <div className={`ffa-score ${ladderLeading ? "" : "lead"}`}><span className="tscore" data-testid="score-b">{leader ? rungLabel(leaderRung) : "–"}</span><span className="tname">{leader?.name ?? "NOBODY"}</span></div>
             : <div className={`ffa-score ${leading ? "" : "lead"}`}><span className="tscore" data-testid="score-b">{leader?.kills ?? 0}</span><span className="tname">{leader?.name ?? "NOBODY"}</span></div>}
-      </div>
+      </div>}
       {/* Domination (drop 4): A / B / C with owner colour, capture bar, contested pulse */}
       {(h.mode === "dom" || h.mode === "boys") && h.flags.length > 0 && (
         <div className="flags" data-testid="flags">
@@ -354,7 +306,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           ))}
         </div>
       )}
-      {h.flagNotice && noticeAge < 2600 && (
+      {h.flagNotice && noticeAge < 2600 && !ended && (
         <div className={`flag-notice t${h.flagNotice.team}`} data-testid="flag-notice" style={{ opacity: Math.min(1, (2600 - noticeAge) / 500) }}>{h.flagNotice.text}</div>
       )}
       {h.alive && here && (
@@ -373,7 +325,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
 
       {/* Kill feed */}
       <ul className="killfeed" data-testid="killfeed">
-        {h.killFeed.map((k) => (
+        {!ended && h.killFeed.map((k) => (
           <li key={k.key} className={k.victim === h.myId ? "me-victim" : k.killer === h.myId ? "me-killer" : ""}>
             <span className={`kf-name ${teams ? `t${k.killerTeam}` : "ffa"}`}>
               {k.killer === k.victim ? "" : k.killerName}
@@ -428,7 +380,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       )}
 
       {/* Wallet + buy prompt (drop 2) */}
-      {h.connected && !noShop && (
+      {h.connected && !noShop && !ended && (
         <div className="wallet" data-testid="wallet">
           {h.mode === "boys" && <div className="wallet-role">{boysClass(h.boysClass).name} · B: class / shop{h.nextClass !== h.boysClass ? ` · Next: ${boysClass(h.nextClass).name}` : ""}</div>}
           <div className={`wallet-money ${h.money >= 8000 ? "rich" : ""}`} data-testid="money">{money(h.money)}</div>
@@ -440,14 +392,14 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
         </div>
       )}
       <div className="money-toasts" aria-live="polite">
-        {toasts.map((t) => (
+        {!ended && toasts.map((t) => (
           <div key={t.key} className={`money-toast ${t.delta < 0 ? "neg" : ""}`}>{t.delta > 0 ? "+" : ""}{money(t.delta)}<span className="why">{REASON_SHORT[t.reason] ?? t.reason.toUpperCase()}</span></div>
         ))}
       </div>
-      {shopHint && <div className="shop-closed-hint" data-testid="shop-closed">{noShop ? `W TRYBIE ${MODES[h.mode].name} NIE MA SKLEPU · BROŃ DAJĄ ZABÓJSTWA` : "SKLEP ZAMKNIĘTY · PODEJDŹ DO LADY $"}</div>}
+      {shopHint && !ended && <div className="shop-closed-hint" data-testid="shop-closed">{noShop ? `W TRYBIE ${MODES[h.mode].name} NIE MA SKLEPU · BROŃ DAJĄ ZABÓJSTWA` : "SKLEP ZAMKNIĘTY · PODEJDŹ DO LADY $"}</div>}
 
       {/* Bottom-right: weapon + ammo, grenade slots above */}
-      {h.connected && (
+      {h.connected && !ended && (
         <div className="gear" data-testid="gear">
           <div className={`gear-slot ${h.lethal ? "" : "empty"} ${h.cookingKind && GRENADES[h.cookingKind].slot === "lethal" ? "cooking" : ""}`} data-testid="slot-lethal">
             <span className="key">G</span><span>{h.lethal ? GRENADES[h.lethal].name.toUpperCase() : "LETHAL"}</span><span className="count">{h.lethal ? h.lethalCount : "–"}</span>
@@ -457,11 +409,11 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           </div>
         </div>
       )}
-      <div className="ammo" data-testid="ammo">
+      {!ended && <div className="ammo" data-testid="ammo">
         <div className="weapon-name">{w.name}<span className="slot">{w.slot}</span></div>
         <div className={`ammo-num ${h.ammo === 0 && w.kind !== "melee" ? "empty" : ""}`}>{w.kind === "melee" ? <span className="mag">∞</span> : h.reloading ? <span className="reloading">RELOADING</span> : <><span className="mag">{h.ammo}</span><span className="sep">/</span><span className="res">{h.reserve}</span></>}</div>
         {h.reloading && <div className="reload-bar"><div className="reload-fill" key={h.weapon + String(h.reloading)} style={{ animationDuration: `${reloadMs}ms` }} /></div>}
-      </div>
+      </div>}
 
       {h.reconnecting && <div className="reconnect" data-testid="reconnecting">CONNECTION LOST · RECONNECTING…</div>}
 
@@ -489,20 +441,11 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
         </div>
       )}
 
+      {/* Between rounds: who took it and why, from the round's real signals */}
+      {inBreak && !h.shopOpen && <RoundBreak h={h} />}
+
       {/* Match end */}
-      {h.phase === MatchPhase.Ended && (
-        <div className="result" data-testid="result">
-          <div className={`result-title ${(teamWinner ? winnerTeam : winnerFfa).toLowerCase()}`}>{teamWinner ? winnerTeam : winnerFfa}</div>
-          <div className="result-score">
-            {teamWinner ? <>{sideNames[0]} {h.scoreA} — {h.scoreB} {sideNames[1]}</>
-              : <>{infection && <span className="result-rounds">{sideNames[0]} {h.scoreA} — {h.scoreB} {sideNames[1]} · </span>}
-                {h.winnerName ? <><b>{h.winnerName}</b> TAKES THE NIGHT</> : "NOBODY TAKES THE NIGHT"}</>}
-          </div>
-          {h.reward && <MatchSummary reward={h.reward} worst={worstHaircut(h.players)} />}
-          <Scoreboard rows={h.players} myId={h.myId} mode={h.mode} />
-          <div className="result-foot">Next match in {Math.max(0, Math.ceil(timeLeft / 1000))}s · <button className="link" onClick={onLeave}>LEAVE</button></div>
-        </div>
-      )}
+      {ended && <MatchResult h={h} now={now} onLeave={onLeave} />}
 
       {/* Scoreboard (Tab) */}
       {scoreboard && h.phase !== MatchPhase.Ended && (
@@ -512,10 +455,10 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {/* First-run hints: one short line, once each, never blocking (2.4) */}
       {/* NOT while dormant: a hint is shown once ever and then remembered, so letting the timer
           run behind an invisible HUD would burn them all before the player saw one. */}
-      {!paused && !dormant && <Hints h={h} />}
+      {!paused && !dormant && !ended && <Hints h={h} />}
 
       {/* Living arena: the round's plan vote, or what is in force (2.4) */}
-      {!h.shopOpen && <PlanPanel h={h} onVote={onVotePlan} />}
+      {!h.shopOpen && !ended && <PlanPanel h={h} onVote={onVotePlan} />}
 
       {/* Buy menu (B) */}
       {h.shopOpen && h.phase !== MatchPhase.Ended && <Shop h={h} api={shop} now={now} />}
@@ -562,93 +505,3 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   );
 }
 
-/**
- * A straight razor, drawn rather than spelled.
- *
- * There is no icon system in this UI — the kill feed is text and the only glyphs anywhere are perk
- * emoji — so this is a local SVG in `currentColor` rather than a new dependency or an emoji whose
- * shape is the operating system's opinion. It inherits the feed's colour, so a shave on your own
- * head is red and one you dealt is not, without a second rule.
- */
-function Razor({ className, title }: { className?: string; title?: string }): React.ReactElement {
-  return (
-    <svg className={className} viewBox="0 0 24 12" width="18" height="9" aria-hidden={title ? undefined : true} role={title ? "img" : undefined} focusable="false">
-      {title && <title>{title}</title>}
-      {/* Blade: a long flat wedge with a ground edge along the bottom. */}
-      <path d="M1 3.2 L13.6 3.2 L15.2 5.4 L13.6 7.6 L1 7.6 Z" fill="currentColor" opacity="0.95" />
-      <path d="M1 6.9 L13.9 6.9 L13.2 7.6 L1 7.6 Z" fill="#000" opacity="0.35" />
-      {/* Pivot and handle, folded open behind the blade. */}
-      <circle cx="16.1" cy="5.4" r="1.15" fill="currentColor" />
-      <rect x="17" y="4.35" width="6.2" height="2.1" rx="1.05" fill="currentColor" opacity="0.75" />
-    </svg>
-  );
-}
-
-/**
- * A head in profile with the shot through it — the kill feed's headshot mark.
- *
- * It replaces a `\u2726` four-pointed star appended to the weapon's name, which said "headshot" only
- * to somebody who already knew. Drawn like `Razor`: local inline SVG in `currentColor`, so it takes
- * the feed row's colour (red on your own death, brass on your own kill) with no extra rule, and no
- * emoji whose shape is the operating system's opinion.
- */
-function HeadShot({ className, title }: { className?: string; title?: string }): React.ReactElement {
-  return (
-    <svg className={className} viewBox="0 0 20 16" width="16" height="13" aria-hidden={title ? undefined : true} role={title ? "img" : undefined} focusable="false">
-      {title && <title>{title}</title>}
-      {/* The shot comes in from the left and STOPS at the skull — drawn first and kept clear of it,
-          because an arrow laid over the head reads as a bite out of it rather than a bullet. */}
-      <path d="M0.8 5.6 L4.2 5.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity="0.85" />
-      <path d="M5.0 3.9 L7.4 5.6 L5.0 7.3 Z" fill="currentColor" />
-      {/* Skull and jaw in profile, facing right, clear of the arrow's tip. */}
-      <path d="M11.2 2.1 C14.4 1.2 17.9 3 18.1 6.1 C18.2 7.6 17.4 8.6 17.4 9.6 L17.4 11.2 L14.0 11.2 L14.0 13.4 L11.4 13.4 C10.2 13.4 9.5 12.7 9.5 11.6 L9.5 9.3 C8.7 8.4 8.3 7.3 8.4 6.1 C8.6 4.2 9.6 2.6 11.2 2.1 Z" fill="currentColor" opacity="0.95" />
-      {/* Eye socket, so it reads as a head rather than a blob at 13 px. */}
-      <circle cx="15.3" cy="6.3" r="1.35" fill="#000" opacity="0.55" />
-    </svg>
-  );
-}
-
-/** One scoreboard row (drop 5): K / D / A / shaves / $ / score / ping, a BOT tag, a dash for a bot's ping. */
-function ScoreTr({ r, myId }: { r: ReturnType<typeof useHud>["players"][number]; myId: string }) {
-  const shaves = parseHaircut(r.haircut).shaves;
-  return (
-    <tr className={r.id === myId ? "me" : r.connected ? "" : "dc"} data-testid="sb-row" data-bot={r.bot ? "1" : "0"}>
-      <td className="sb-name">{r.name}{r.boysClass && <span className="sb-bot">{boysClass(r.boysClass).name}</span>}{r.bot && <span className="sb-bot">BOT</span>}</td>
-      <td>{r.kills}</td><td>{r.deaths}</td><td>{r.assists}</td>
-      {/* Drop E: how many times this head has been done. A dot rather than a 0, so the column reads
-          as "who got done" at a glance instead of as a wall of zeroes. */}
-      <td className={`sb-shaved ${shaves > 0 ? "" : "none"}`} data-testid="sb-shaved">{shaves > 0 ? shaves : "·"}</td>
-      <td className="sb-money">{r.money}</td><td>{r.score}</td><td>{r.bot ? "–" : r.ping}</td>
-    </tr>
-  );
-}
-
-function Scoreboard({ rows, myId, mode }: { rows: ReturnType<typeof useHud>["players"]; myId: string; mode: GameMode }) {
-  if (!MODES[mode].teams) {
-    // FFA (drop 4): one table, most kills first. Gun Game (drop D): highest rung first, the score column is the rung.
-    const gun = mode === "gungame";
-    const sorted = [...rows].sort((a, b) => (gun ? b.score - a.score || b.kills - a.kills : b.kills - a.kills || a.deaths - b.deaths));
-    return (
-      <div className="scoreboard">
-        <table className="sb-team ffa">
-          <thead><tr><th className="sb-name">{MODES[mode].name}</th><th>K</th><th>D</th><th>A</th><th className="sb-shaved"><Razor title="OGOLONY" /></th><th>$</th><th>{gun ? "RUNG" : "SCORE"}</th><th>PING</th></tr></thead>
-          <tbody>
-            {sorted.map((r) => <ScoreTr key={r.id} r={r} myId={myId} />)}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-  return (
-    <div className="scoreboard">
-      {[0, 1].map((team) => (
-        <table key={team} className={`sb-team t${team}`}>
-          <thead><tr><th className="sb-name">{(mode === "ostrzyzeni" ? OSTRZYZENI_SIDES : TEAM_NAMES)[team]}</th><th>K</th><th>D</th><th>A</th><th className="sb-shaved"><Razor title="OGOLONY" /></th><th>$</th><th>SCORE</th><th>PING</th></tr></thead>
-          <tbody>
-            {rows.filter((r) => r.team === team).map((r) => <ScoreTr key={r.id} r={r} myId={myId} />)}
-          </tbody>
-        </table>
-      ))}
-    </div>
-  );
-}

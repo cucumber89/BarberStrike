@@ -117,6 +117,56 @@ for (const size of SIZES) {
   rows.push({ size: size.name, ok, faults, smallest: +smallest.toFixed(1), smallestOn, items });
   await page.close();
 }
+// The match-end screen: every case the brief lists, at 720p and at 720p @ 125 %. The verdict, the
+// score line and the footer's LEAVE must be on screen; the body may scroll inside the card.
+const RESULT_CASES = ["win", "loss", "draw", "ffa", "spectator", "noreward", "ostrzyzeni"];
+for (const size of [SIZES[0], SIZES[4]]) {
+  for (const c of RESULT_CASES) {
+    const page = await browser.newPage({ viewport: { width: size.width, height: size.height } });
+    await page.goto(`${BASE}/ui-fit.html?panel=result&case=${c}`, { waitUntil: "networkidle" });
+    await page.waitForSelector(".result-card");
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(300);
+    const faults = [];
+    for (const tab of ["summary", "table"]) {
+      await page.locator(`[data-testid="result-tab-${tab}"]`).click();
+      if (tab === "summary") { const t = page.locator('[data-testid="summary-toggle"]'); if (await t.count()) await t.click(); }
+      await page.waitForTimeout(80);
+      const m = await page.evaluate(() => {
+        const vw = innerWidth, vh = innerHeight, f = [];
+        const inView = (el, what) => { const r = el.getBoundingClientRect(); if (r.top < -0.5 || r.bottom > vh + 0.5 || r.left < -0.5 || r.right > vw + 0.5 || r.height === 0) f.push(`${what} off screen`); };
+        const q = (s) => document.querySelector(s);
+        inView(q(".result-title"), "title"); inView(q(".result-score"), "score"); inView(q(".result-why"), "why"); inView(q('[data-testid="result-leave"]'), "LEAVE"); inView(q('[data-testid="result-countdown"]'), "countdown");
+        const card = q(".result-card");
+        if (card.scrollWidth > card.clientWidth + 1) f.push("card scrolls sideways");
+        if (document.documentElement.scrollWidth > vw + 1) f.push("page scrolls sideways");
+        const px = (el) => parseFloat(getComputedStyle(el).fontSize);
+        if (px(q(".result-title")) < 40) f.push(`title ${px(q(".result-title"))} px`);
+        for (const el of card.querySelectorAll("*")) {
+          if (!el.textContent?.trim() || el.children.length) continue;
+          const cs = getComputedStyle(el); if (cs.display === "none") continue;
+          if (parseFloat(cs.fontSize) < 10) f.push(`${el.className || el.tagName} ${cs.fontSize}`);
+        }
+        for (const n of document.querySelectorAll("td.sb-name")) if (n.scrollWidth > n.clientWidth + 1 && getComputedStyle(n).textOverflow !== "ellipsis") f.push("nick overflows without ellipsis");
+        return f;
+      });
+      faults.push(...m.map((x) => `${tab}: ${x}`));
+      await page.screenshot({ path: `${OUT}/result-${c}-${size.name}-${tab}.png` });
+    }
+    const ok = faults.length === 0;
+    if (!ok) bad++;
+    rows.push({ size: `result ${c} @ ${size.name}`, ok, faults, smallest: 0, smallestOn: "-", items: 0 });
+    await page.close();
+  }
+}
+{
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  await page.goto(`${BASE}/ui-fit.html?panel=round`, { waitUntil: "networkidle" });
+  await page.waitForSelector(".round-end");
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: `${OUT}/round-end.png` });
+  await page.close();
+}
 // The living arena's vote panel, at the smallest supported size.
 {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });

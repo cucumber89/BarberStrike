@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { GUN_GAME } from "@frankibarber/shared";
 const GRENADES_FRAG_FUSE = 3200; // GRENADES.frag.fuseMs — the e2e file does not import shared
 
 /**
@@ -149,6 +150,13 @@ test.describe("two clients", () => {
       await expect.poll(async () => (await hud(b)).bomb?.result, { timeout: 15000 }).toBe("BOMB DEFUSED");
       await b.keyboard.up("KeyT");
       expect((await hud(b)).scoreB).toBe(1);
+      // The break after the round names the side and the real reason on both screens, in Polish,
+      // from the same `result` string; the defender sees it as their round, the attacker does not.
+      await expect(b.getByTestId("round-end")).toContainText("RUNDA DLA TAPER");
+      await expect(b.getByTestId("round-end")).toContainText("Ładunek rozbrojony");
+      await expect(b.getByTestId("round-end")).toHaveClass(/mine/);
+      await expect(a.getByTestId("round-end")).toHaveClass(/theirs/);
+      await b.screenshot({ path: "e2e/out/m/round-end-bomb.png" });
       await expect.poll(async () => (await hud(b)).bomb?.round, { timeout: 10000 }).toBe(2);
       expect((await hud(b)).bomb?.attackTeam).toBe(0);
       expect((await hud(b)).bomb?.stage).toBe("buy");
@@ -774,7 +782,8 @@ test.describe("two clients", () => {
    */
   test("gun game: two clients, the whole ladder to the end", async ({ browser }) => {
     test.setTimeout(900_000);
-    const LADDER = ["pistol", "revolver", "smg", "smg2", "shotgun", "rifle", "lmg", "dmr", "sniper", "launcher", "clippers"];
+    // The ladder as the game defines it, not a copy: the copy fell behind when three guns were added.
+    const LADDER = GUN_GAME.ladder;
     const room = `${ROOM}-gg`;
     const ca = await browser.newContext(ctxOpts);
     const cb = await browser.newContext(ctxOpts);
@@ -842,11 +851,15 @@ test.describe("two clients", () => {
 
       // The clippers kill finished the ladder: the match ends and the result names A.
       await expect.poll(async () => (await hud(a)).phase, { timeout: 20_000 }).toBe("ended");
-      await expect(a.getByTestId("ladder")).toHaveText(`${LADDER.length}/${LADDER.length}`);
-      await expect(a.getByTestId("ladder-gun")).toContainText("LADDER DONE");
       expect((await hud(a)).winnerName).toBe("LADDER");
       expect((await hud(b)).winnerName).toBe("LADDER");
+      // The result screen replaces the top bar: A reads a win and the reason (the whole ladder),
+      // B reads a loss — from their own seats, and the same reason.
       await expect(a.getByTestId("result")).toBeVisible();
+      await expect(a.getByTestId("result-title")).toHaveText("ZWYCIĘSTWO");
+      await expect(b.getByTestId("result-title")).toHaveText("PORAŻKA");
+      await expect(a.getByTestId("result-why")).toContainText(`drabinkę ${LADDER.length} broni`);
+      await expect(a.getByTestId("result-stats")).toContainText(`${LADDER.length} / ${LADDER.length}`);
       await a.screenshot({ path: "e2e/out/d/gungame/result.png" });
       // Still no economy, after eleven kills.
       expect((await hud(a)).money).toBe(0);
