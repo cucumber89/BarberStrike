@@ -2,7 +2,7 @@
 // SAME session (server keeps the player for RECONNECT_GRACE_S) and keep playing.
 import { chromium } from "@playwright/test";
 const LOW = JSON.stringify({ graphics: { preset: "low", renderer: "webgl2", renderScale: 0.5, shadows: "off", postProcessing: false, effects: 0.3, antialiasing: false } });
-const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader","--ignore-gpu-blocklist"] });
+const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || "/opt/pw-browsers/chromium", args: ["--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader","--ignore-gpu-blocklist"] });
 const room = "reconnect-" + Date.now();
 async function mk(name) {
   const ctx = await browser.newContext({ viewport: { width: 640, height: 360 } });

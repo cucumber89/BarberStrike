@@ -75,7 +75,7 @@ describe("shop", () => {
     expect(lastShop(a)).toMatchObject({ ok: false, reason: "unknown" });
     h.send(a, C2S.Sell, { item: "pistol" });
     await h.tick();
-    expect(lastShop(a)).toEqual({ ok: false, item: "pistol", reason: "pistol" });
+    expect(lastShop(a)).toEqual({ ok: false, item: "pistol", reason: "pistol", sold: true });
   });
 
   it("the buy window reopens at a buy station", async () => {

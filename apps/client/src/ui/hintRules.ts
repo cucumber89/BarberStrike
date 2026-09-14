@@ -23,13 +23,13 @@ export interface HintDef {
 }
 
 export const HINTS: readonly HintDef[] = [
-  { id: "move", text: "WASD to move · mouse to look · left click to fire", ms: 7000 },
-  { id: "buy", text: "Press B to open the buy menu — then two numbers to buy, or click", ms: 8000 },
-  { id: "pause", text: "ESC pauses and opens the menu. Your side and settings are in there.", ms: 7000 },
-  { id: "objective", text: "Carry the charge to site A or B and hold your objective key to plant", ms: 8000 },
-  { id: "defuse", text: "The charge is planted — get to it and hold your objective key to defuse", ms: 8000 },
-  { id: "plan", text: "Your team is choosing how the map changes this round — F1 or F2", ms: 8000 },
-  { id: "team", text: "Outnumbered? ESC → your side. Your money and gear come with you.", ms: 8000 },
+  { id: "move", text: "WASD — ruch · mysz — rozglądanie · lewy przycisk — strzał", ms: 7000 },
+  { id: "buy", text: "B otwiera sklep — potem dwie cyfry (dział, pozycja) albo kliknij", ms: 8000 },
+  { id: "pause", text: "ESC to pauza i menu: tam zmienisz stronę i ustawienia.", ms: 7000 },
+  { id: "objective", text: "Zanieś ładunek na A lub B i przytrzymaj T, żeby go podłożyć", ms: 8000 },
+  { id: "defuse", text: "Ładunek podłożony — dobiegnij i przytrzymaj T, żeby go rozbroić", ms: 8000 },
+  { id: "plan", text: "Twoja drużyna wybiera zmianę mapy na tę rundę — F1 albo F2", ms: 8000 },
+  { id: "team", text: "Za dużo was? ESC → zmiana strony. Kasa i sprzęt idą z tobą.", ms: 8000 },
 ];
 
 const byId = new Map(HINTS.map((h) => [h.id, h]));

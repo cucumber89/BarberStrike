@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { GUN_GAME } from "@frankibarber/shared";
 const GRENADES_FRAG_FUSE = 3200; // GRENADES.frag.fuseMs — the e2e file does not import shared
 
 /**
@@ -142,13 +143,20 @@ test.describe("two clients", () => {
       await a.keyboard.down("KeyT");
       await expect.poll(async () => (await hud(a)).bomb?.stage, { timeout: 10000 }).toBe("planted");
       await a.keyboard.up("KeyT");
-      await expect(a.getByTestId("bomb-hud")).toContainText("BOMB ARMED AT A");
+      await expect(a.getByTestId("bomb-hud")).toContainText("ŁADUNEK NA A");
       await teleport(b, -34.2);
       await expect.poll(async () => Math.abs((await pos(b)).x + 34.2)).toBeLessThan(0.2);
       await b.keyboard.down("KeyT");
       await expect.poll(async () => (await hud(b)).bomb?.result, { timeout: 15000 }).toBe("BOMB DEFUSED");
       await b.keyboard.up("KeyT");
       expect((await hud(b)).scoreB).toBe(1);
+      // The break after the round names the side and the real reason on both screens, in Polish,
+      // from the same `result` string; the defender sees it as their round, the attacker does not.
+      await expect(b.getByTestId("round-end")).toContainText("RUNDA DLA TAPER");
+      await expect(b.getByTestId("round-end")).toContainText("Ładunek rozbrojony");
+      await expect(b.getByTestId("round-end")).toHaveClass(/mine/);
+      await expect(a.getByTestId("round-end")).toHaveClass(/theirs/);
+      await b.screenshot({ path: "e2e/out/m/round-end-bomb.png" });
       await expect.poll(async () => (await hud(b)).bomb?.round, { timeout: 10000 }).toBe(2);
       expect((await hud(b)).bomb?.attackTeam).toBe(0);
       expect((await hud(b)).bomb?.stage).toBe("buy");
@@ -348,16 +356,27 @@ test.describe("two clients", () => {
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeVisible();
     await expect.poll(async () => (await hud(a)).shopOpen).toBe(true);
+    // The shop is four aisle tabs; the grenade aisle is tab 3 (also the "3" key).
+    await a.getByTestId("shop-tab-3").click();
     await a.getByTestId("buy-frag").click();
     await expect.poll(async () => (await hud(a)).lethal, { timeout: 3000 }).toBe("frag");
     await expect.poll(async () => (await hud(a)).money, { timeout: 3000 }).toBe(1700);
-    await expect(a.getByTestId("shop-result")).toContainText("Bought Frag");
+    await expect(a.getByTestId("shop-result")).toContainText("Kupiono: Frag");
     // A second flash goes in the tactical slot; the shop refuses what cannot be afforded (DMR $2900).
     await a.getByTestId("buy-flash").click();
     await expect.poll(async () => (await hud(a)).tactical, { timeout: 3000 }).toBe("flash");
-    // Every aisle is on one screen now, so the DMR card is right there — and refused, because
-    // $2900 is more than what is left after the frag and the flash.
+    // The DMR is refused, because $2900 is more than what is left after the frag and the flash —
+    // and the row says by how much, from the same rule the server runs.
+    await a.getByTestId("shop-tab-1").click();
     await expect(a.getByTestId("buy-dmr")).toBeDisabled();
+    await expect(a.getByTestId("why-dmr")).toContainText("Brakuje $1,400");
+    // The tenth primary is reachable by key: "1" arms the aisle, "0" is the launcher. Too poor, so
+    // nothing is bought — but the arming is visible and the key is accepted.
+    await a.keyboard.press("Digit1");
+    await expect(a.getByTestId("shop-result")).toContainText("numer przedmiotu");
+    await a.keyboard.press("Digit0");
+    await expect(a.getByTestId("shop-result")).not.toContainText("numer przedmiotu");
+    await expect.poll(async () => (await hud(a)).money).toBe(1500);
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeHidden();
     await expect.poll(async () => (await hud(a)).shopOpen).toBe(false);
@@ -443,11 +462,12 @@ test.describe("two clients", () => {
     // Shop reflects the running perk and the worn plate; the sniper is out of reach at $250.
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeVisible();
-    await expect(a.getByTestId("shop-sniper")).toContainText("SCOPE");
+    await expect(a.getByTestId("shop-sniper")).toContainText("LUNETA");
     await expect(a.getByTestId("buy-sniper")).toBeDisabled();
-    // No tab to switch to: the one-screen shop has the equipment aisle up beside the guns.
-    await expect(a.getByTestId("shop-flask")).toContainText("RUNNING");
-    await expect(a.getByTestId("shop-light")).toContainText("WORN");
+    // The equipment aisle shows the running perk and the worn plate.
+    await a.getByTestId("shop-tab-4").click();
+    await expect(a.getByTestId("shop-flask")).toContainText("działa jeszcze");
+    await expect(a.getByTestId("shop-light")).toContainText("nosisz");
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeHidden();
     await fakeLock(a);
@@ -483,7 +503,7 @@ test.describe("two clients", () => {
       await p.getByTestId("input-name").fill(name);
       await p.getByTestId("input-room").fill(room);
       await p.getByTestId("mode-dom").click();
-      await expect(p.getByTestId("mode-blurb")).toContainText("Hold A / B / C");
+      await expect(p.getByTestId("mode-blurb")).toContainText("Trzymaj A / B / C");
       await p.getByTestId("btn-quickplay").click();
       await p.getByTestId("enter-game").click({ timeout: 60000 });
     await expect(p.getByTestId("hud")).toBeVisible({ timeout: 30_000 });
@@ -505,7 +525,7 @@ test.describe("two clients", () => {
     const flagA = await a.evaluate(() => window.__fb.game.mapDefinition.flags[0]);
     await a.evaluate(([x, y, z]) => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x, y, z }), [flagA.x, flagA.y, flagA.z]);
     await expect.poll(async () => (await hud(a)).inFlag, { timeout: 8000 }).toBe(0);
-    await expect(a.getByTestId("capture")).toContainText("CAPTURING A", { timeout: 8000 });
+    await expect(a.getByTestId("capture")).toContainText("PRZEJMUJESZ A", { timeout: 8000 });
     const teamA = (await hud(a)).myTeam;
     await expect.poll(async () => (await hud(a)).flags[0].capTeam, { timeout: 8000 }).toBe(teamA);
     // Capture progress and the score tick both pause during a preparation window (`stepFlags` runs
@@ -762,7 +782,8 @@ test.describe("two clients", () => {
    */
   test("gun game: two clients, the whole ladder to the end", async ({ browser }) => {
     test.setTimeout(900_000);
-    const LADDER = ["pistol", "revolver", "smg", "smg2", "shotgun", "rifle", "lmg", "dmr", "sniper", "launcher", "clippers"];
+    // The ladder as the game defines it, not a copy: the copy fell behind when three guns were added.
+    const LADDER = GUN_GAME.ladder;
     const room = `${ROOM}-gg`;
     const ca = await browser.newContext(ctxOpts);
     const cb = await browser.newContext(ctxOpts);
@@ -830,11 +851,15 @@ test.describe("two clients", () => {
 
       // The clippers kill finished the ladder: the match ends and the result names A.
       await expect.poll(async () => (await hud(a)).phase, { timeout: 20_000 }).toBe("ended");
-      await expect(a.getByTestId("ladder")).toHaveText(`${LADDER.length}/${LADDER.length}`);
-      await expect(a.getByTestId("ladder-gun")).toContainText("LADDER DONE");
       expect((await hud(a)).winnerName).toBe("LADDER");
       expect((await hud(b)).winnerName).toBe("LADDER");
+      // The result screen replaces the top bar: A reads a win and the reason (the whole ladder),
+      // B reads a loss — from their own seats, and the same reason.
       await expect(a.getByTestId("result")).toBeVisible();
+      await expect(a.getByTestId("result-title")).toHaveText("ZWYCIĘSTWO");
+      await expect(b.getByTestId("result-title")).toHaveText("PORAŻKA");
+      await expect(a.getByTestId("result-why")).toContainText(`drabinkę ${LADDER.length} broni`);
+      await expect(a.getByTestId("result-stats")).toContainText(`${LADDER.length} / ${LADDER.length}`);
       await a.screenshot({ path: "e2e/out/d/gungame/result.png" });
       // Still no economy, after eleven kills.
       expect((await hud(a)).money).toBe(0);

@@ -1960,12 +1960,12 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (sell) {
       if (!isWeaponId(item)) { client.send(S2C.Shop, { ok: false, item, reason: "unknown" } satisfies ShopResult); return; }
       const v = applySell(w, item, ctx);
-      if (!v.ok) { client.send(S2C.Shop, { ok: false, item, reason: v.reason } satisfies ShopResult); return; }
+      if (!v.ok) { client.send(S2C.Shop, { ok: false, item, reason: v.reason, sold: true } satisfies ShopResult); return; }
       const before = p.money;
       this.writeWallet(p, w);
       if (p.weapon === item) { p.weapon = secondaryOf(w); p.reloading = false; s.equipEndsAt = this.now() + WEAPONS[p.weapon as WeaponId].equipMs; this.syncAmmo(p, s); }
       this.clientOf(p.id)?.send(S2C.Money, { delta: p.money - before, reason: "sell", total: p.money } satisfies MoneyEvent);
-      client.send(S2C.Shop, { ok: true, item } satisfies ShopResult);
+      client.send(S2C.Shop, { ok: true, item, sold: true } satisfies ShopResult);
       return;
     }
     const v = this.buyItem(p, s, item);

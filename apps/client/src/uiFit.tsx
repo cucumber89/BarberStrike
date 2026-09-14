@@ -8,10 +8,22 @@
  */
 import { createRoot } from "react-dom/client";
 import { MatchPhase, type ShopItemId } from "@frankibarber/shared";
+// The same cascade as the game (main.tsx): the fonts and the cinematic layer change metrics and
+// colours, and a fit measured without them was a fit of a different page.
+import "@fontsource/bebas-neue";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/500.css";
+import "./ui/styles.css";
+import "./ui/cinematic.css";
 import { Shop } from "./ui/Shop";
 import { PlanPanel } from "./ui/PlanPanel";
+import { MatchResult, RoundBreak } from "./ui/MatchResult";
+import { emptyProfile, type MatchReward } from "./game/progression/profile";
 import { PLANS, planOffer } from "@frankibarber/shared";
-import type { HudState } from "./game/store";
+import type { HudState, ScoreRow } from "./game/store";
 
 /** A wallet mid-match: enough for some of the list and not enough for the rest, which is the
  *  interesting case — every row state (buyable, carried, too poor, blocked) is on screen at once. */
@@ -48,11 +60,42 @@ const planState = {
   planId: 0,
 } as unknown as HudState;
 
+/**
+ * `?panel=result&case=<name>` renders the match-end screen with synthetic data for the cases the
+ * brief lists: a win with everything (two level-ups, badges, a haircut, twelve players with long
+ * nicks), a loss, a draw, an FFA win, a watcher with no row, and a match that paid no reward.
+ */
+const longNick = (i: number) => (i % 3 === 0 ? `BardzoDługiNickGraczaNumer${i}_XXL` : i % 3 === 1 ? `P${i}` : `Gracz_${i}`);
+const players = (n: number, teams = true): ScoreRow[] => Array.from({ length: n }, (_, i) => ({
+  id: i === 0 ? "me" : `p${i}`, name: i === 0 ? "TY_SAM" : longNick(i), team: (teams ? i % 2 : 0) as 0 | 1, connected: i !== 5, bot: i > 8,
+  kills: 20 - i, deaths: 4 + i, assists: (i * 3) % 7, score: 300 - i * 17, ping: 20 + i * 9, alive: true, shaved: i === 3, haircut: i === 3 ? "irokez:2" : "", money: 1000,
+}));
+const reward: MatchReward = {
+  lines: [{ label: "Zabójstwa ×20", xp: 400 }, { label: "Trafienia w głowę ×6", xp: 180 }, { label: "Asysty ×5", xp: 100 }, { label: "Przejęcia ×3", xp: 150 }, { label: "Rozegrany mecz", xp: 100 }, { label: "Wygrana", xp: 250 }],
+  total: 1180, before: { level: 3, into: 40, need: 600, total: 1240 }, after: { level: 5, into: 220, need: 900, total: 2420 }, levelsGained: 2,
+  earned: ["first-blood", "hs-25", "kills-100"], haircuts: ["irokez"], title: "CZELADNIK",
+};
+const resultCase = q.get("case") ?? "win";
+const resultBase = { ...state, mode: "tdm", profile: emptyProfile(), phase: MatchPhase.Ended, phaseEndsAt: 112000, serverNow: 100000, myId: "me", myTeam: 0, players: players(12), reward, scoreA: 40, scoreB: 33, winner: 0, winnerId: "", winnerName: "", bomb: null } as unknown as HudState;
+const resultState: HudState = resultCase === "loss" ? { ...resultBase, winner: 1, scoreA: 31, scoreB: 40, reward: { ...reward, levelsGained: 0, earned: [], haircuts: [], lines: reward.lines.slice(0, 3), total: 680 } }
+  : resultCase === "draw" ? { ...resultBase, winner: -1, scoreA: 22, scoreB: 22 }
+  : resultCase === "ffa" ? { ...resultBase, mode: "ffa", winnerId: "me", winnerName: "TY_SAM", players: players(8, false) }
+  : resultCase === "spectator" ? { ...resultBase, myId: "watcher", reward: null }
+  : resultCase === "noreward" ? { ...resultBase, reward: null }
+  : resultCase === "ostrzyzeni" ? { ...resultBase, mode: "ostrzyzeni", winnerId: "p1", winnerName: "P1", scoreA: 3, scoreB: 2 }
+  : resultBase;
+const roundState = { ...resultBase, mode: "bomb", phase: MatchPhase.Prep, roundWinner: -1, scoreA: 3, scoreB: 2,
+  bomb: { attackTeam: 1, stage: "resolved", endsAt: 0, roundEndsAt: 0, x: 0, y: 0, z: 0, result: "BOMB DEFUSED", round: 5 } } as unknown as HudState;
+
 createRoot(document.getElementById("root")!).render(
   <div className="app" style={{ background: "#0b0b0d" }}>
     {which === "plan"
       ? <PlanPanel h={planState} onVote={(id) => console.log("vote", id)} />
-      : <Shop h={shopState} api={api as never} now={100000} />}
+      : which === "result"
+        ? <div className="hud"><MatchResult h={resultState} now={100000} onLeave={() => console.log("leave")} /></div>
+        : which === "round"
+          ? <div className="hud"><RoundBreak h={roundState} /></div>
+          : <Shop h={shopState} api={api as never} now={100000} />}
   </div>,
 );
 void PLANS;

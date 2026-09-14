@@ -24,18 +24,31 @@ export interface ModeDef {
    * finished the ladder; Ostrzyżeni has sides but everyone changes side, so it names the top score.
    */
   winner: "team" | "player";
+  /**
+   * The goal and the win condition in ONE sentence a first-time player reads on the loading
+   * screen, in the countdown and on the pause card. `blurb` is the mode card's longer pitch.
+   */
+  objective: string;
 }
 
 /** Drop 4 + Drop D: the modes. FFA scores personal kills; Domination scores held flags. */
 export const MODES: Record<GameMode, ModeDef> = {
-  tdm: { id: "tdm", name: "TEAM DEATHMATCH", short: "TDM", blurb: `FADE vs TAPER · first to ${MATCH.scoreLimit} kills`, teams: true, scoreLimit: MATCH.scoreLimit, shop: "all", winner: "team" },
-  boys: { id: "boys", name: "THE BOYS", short: "BOYS", blurb: "5 classes · capture A / B / C · first to 100 points · B to buy / change class", teams: true, scoreLimit: DOM.scoreLimit, shop: "all", winner: "team" },
-  ffa: { id: "ffa", name: "FREE FOR ALL", short: "FFA", blurb: "Everyone for themselves · first to 30 kills", teams: false, scoreLimit: 30, shop: "all", winner: "player" },
-  dom: { id: "dom", name: "DOMINATION", short: "DOM", blurb: `Hold A / B / C · first to ${DOM.scoreLimit} points`, teams: true, scoreLimit: DOM.scoreLimit, shop: "all", winner: "team" },
-  bomb: { id: "bomb", name: "BOMB PLANT", short: "BOMB", blurb: "Tactical rounds · B to buy · T to plant / defuse · first to 7 · sides swap after 6", teams: true, scoreLimit: BOMB.wins, shop: "all", winner: "team" },
-  gungame: { id: "gungame", name: "GUN GAME", short: "GUN", blurb: "Everyone for themselves · every kill hands you the next gun · a clippers kill shaves a rung off the victim · first through all 14 wins", teams: false, scoreLimit: 14, shop: "none", winner: "player" },
-  ostrzyzeni: { id: "ostrzyzeni", name: "OSTRZYŻENI", short: "OSTRZ", blurb: "One shaved barber with clippers hunts the rest · a clippers kill shaves you onto their side · survive the clock", teams: true, scoreLimit: 5, shop: "survivors", winner: "player" },
-  duel: { id: "duel", name: "1 v 1", short: "DUEL", blurb: "Two players · B to buy in the 4 s freeze · a round is one life or 60 s · sides swap every 3 rounds · first to 6", teams: true, scoreLimit: 6, shop: "all", winner: "team" },
+  tdm: { id: "tdm", name: "TEAM DEATHMATCH", short: "TDM", blurb: `FADE kontra TAPER · pierwsza drużyna do ${MATCH.scoreLimit} zabójstw`, teams: true, scoreLimit: MATCH.scoreLimit, shop: "all", winner: "team",
+    objective: `Eliminuj przeciwników: wygrywa drużyna, która pierwsza zdobędzie ${MATCH.scoreLimit} zabójstw albo prowadzi po czasie.` },
+  boys: { id: "boys", name: "THE BOYS", short: "BOYS", blurb: "5 ról · przejmuj A / B / C · pierwsza drużyna do 100 punktów · B: sklep i zmiana roli", teams: true, scoreLimit: DOM.scoreLimit, shop: "all", winner: "team",
+    objective: `Trzymaj punkty A / B / C jako jedna z pięciu ról: wygrywa drużyna, która pierwsza zbierze ${DOM.scoreLimit} punktów.` },
+  ffa: { id: "ffa", name: "FREE FOR ALL", short: "FFA", blurb: "Każdy na siebie · pierwszy do 30 zabójstw", teams: false, scoreLimit: 30, shop: "all", winner: "player",
+    objective: "Każdy na siebie: wygrywa, kto pierwszy zdobędzie 30 zabójstw albo ma ich najwięcej po czasie." },
+  dom: { id: "dom", name: "DOMINATION", short: "DOM", blurb: `Trzymaj A / B / C · pierwsza drużyna do ${DOM.scoreLimit} punktów`, teams: true, scoreLimit: DOM.scoreLimit, shop: "all", winner: "team",
+    objective: `Stój na flagach A / B / C, żeby je trzymać: wygrywa drużyna, która pierwsza zbierze ${DOM.scoreLimit} punktów.` },
+  bomb: { id: "bomb", name: "BOMB PLANT", short: "BOMB", blurb: "Rundy taktyczne · B: sklep · T: podłóż / rozbrój · pierwsza do 7 rund · zmiana stron po 6", teams: true, scoreLimit: BOMB.wins, shop: "all", winner: "team",
+    objective: `Atak podkłada ładunek na A lub B, obrona go rozbraja albo eliminuje atak: pierwsza drużyna z ${BOMB.wins} wygranymi rundami.` },
+  gungame: { id: "gungame", name: "GUN GAME", short: "GUN", blurb: "Każdy na siebie · każde zabójstwo daje następną broń · zabójstwo maszynką cofa ofiarę o szczebel · pierwszy przez wszystkie 14 wygrywa", teams: false, scoreLimit: 14, shop: "none", winner: "player",
+    objective: "Każde zabójstwo daje ci następną broń z drabinki: wygrywa, kto pierwszy zaliczy wszystkie 14 szczebli." },
+  ostrzyzeni: { id: "ostrzyzeni", name: "OSTRZYŻENI", short: "OSTRZ", blurb: "Jeden ostrzyżony z maszynką poluje na resztę · ogolenie przenosi cię na jego stronę · przetrwaj do końca czasu", teams: true, scoreLimit: 5, shop: "survivors", winner: "player",
+    objective: "Przetrwaj rundę nieostrzyżony albo, jako ostrzyżony, ogol wszystkich maszynką: po 5 rundach wygrywa najwięcej punktów." },
+  duel: { id: "duel", name: "1 v 1", short: "DUEL", blurb: "Dwóch graczy · B: sklep w 4 s zamrożenia · runda to jedno życie albo 60 s · zmiana stron co 3 rundy · pierwszy do 6", teams: true, scoreLimit: 6, shop: "all", winner: "team",
+    objective: "Jedno życie na rundę, 60 sekund: wygrywa, kto pierwszy weźmie 6 rund." },
 };
 
 export const MODE_ORDER: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni", "duel"];

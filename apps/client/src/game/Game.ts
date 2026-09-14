@@ -350,6 +350,9 @@ export class Game {
       hud.set({
         phase: e.phase, winner: e.winner, winnerId: e.winnerId ?? "", winnerName: e.winnerName ?? "",
         ...(typeof e.endsAt === "number" ? { phaseEndsAt: e.endsAt } : {}),
+        // A Prep event after a round carries that round's winner; the state sync would overwrite
+        // `winner` with the match's a moment later, so the round card reads this field instead.
+        ...(e.phase === MatchPhase.Prep ? { roundWinner: e.winner } : {}),
       });
       // Both edges of the freeze are decided by the shared clock (`frozenAt`), so the phase and its
       // deadline must arrive TOGETHER: taking the new phase while still holding the previous

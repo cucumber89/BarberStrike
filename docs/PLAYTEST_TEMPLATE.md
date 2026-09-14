@@ -50,3 +50,20 @@ it and what they were doing. Screenshots go to `apps/client/e2e/out/playtest/<da
 - **Ship this build to friends again?** (yes / no / with the one change above)
 - **Which drop next, and why:** (E shave, F roles, G map, H accounts — the plan's order is a
   recommendation, this line can overrule it)
+
+## Pięć zadań dla nowego testera (brief 2026-09-14)
+
+Daj testerowi TYLKO te zdania, bez pokazywania klawiszy. Mierz stoperem od wypowiedzenia zadania
+do jego wykonania; notuj każdą pomyłkę (zły klawisz, złe okno, pytanie "gdzie to jest?").
+Cel projektowy: zakup bez instrukcji, odczyt wyniku w 2 s. To NIE jest badanie użytkowników —
+jedna osoba, jedna sesja, zapisz i tyle.
+
+| # | Zadanie (powiedz dokładnie tak) | Czas [s] | Pomyłki | Uwagi |
+|---|---|---|---|---|
+| 1 | „Wejdź do meczu w trybie, który ci się podoba.” | | | |
+| 2 | „Kup coś, czym chcesz walczyć.” | | | |
+| 3 | „Powiedz mi, jak wygrywa się ten mecz.” (bez patrzenia na ekran pauzy — potem z nim) | | | |
+| 4 | Po meczu: „Wygrałeś czy przegrałeś? Dlaczego? Ile masz XP?” — mierz do odpowiedzi | | | |
+| 5 | „Zagraj następny mecz.” | | | |
+
+- **Testerzy w tej sesji:** (nicki; jeśli nikogo nie było, wpisz „brak testerów” — to też wynik)

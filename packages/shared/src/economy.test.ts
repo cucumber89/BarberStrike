@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ECONOMY, WEAPON_PRICES, applyBuy, applySell, buyWindowLeft, buyWindowOpen, canBuy, freshWallet, killReward, takeGrenade, weaponForSlot, type BuyContext } from "./economy";
+import { ECONOMY, WEAPON_PRICES, applyBuy, applySell, buyShortfall, buyWindowLeft, buyWindowOpen, canBuy, freshWallet, killReward, takeGrenade, weaponForSlot, type BuyContext } from "./economy";
 import { MatchPhase } from "./types";
 
 const open = (over: Partial<BuyContext> = {}): BuyContext => ({ now: 5000, spawnedAt: 0, phase: MatchPhase.Playing, alive: true, nearStation: false, ...over });
@@ -63,6 +63,21 @@ describe("buying weapons", () => {
     expect(canBuy(w, "dmr", open())).toEqual({ ok: false, reason: "money" });
     expect(canBuy(w, "smg", closed())).toEqual({ ok: false, reason: "closed" });
     expect(canBuy(w, "pistol", open())).toEqual({ ok: false, reason: "owned" });
+  });
+
+  it("names the shortfall after the refund of the gun being replaced, and 0 for any other refusal", () => {
+    const w = freshWallet(); // $2000, pistol only
+    expect(buyShortfall(w, "dmr", open())).toBe(WEAPON_PRICES.dmr - ECONOMY.startMoney); // 900
+    expect(buyShortfall(w, "smg", open())).toBe(0);                 // affordable
+    expect(buyShortfall(w, "smg", closed())).toBe(0);               // refused for another reason
+    expect(buyShortfall(w, "pistol", open())).toBe(0);
+    // Swapping the SMG for the sniper: the refund counts towards the price.
+    expect(applyBuy(w, "smg", open()).ok).toBe(true);               // $800 left
+    const refund = Math.round(WEAPON_PRICES.smg * ECONOMY.sellRatio); // 840
+    expect(buyShortfall(w, "sniper", open())).toBe(WEAPON_PRICES.sniper - refund - 800); // 1760
+    // A grenade has nothing to refund.
+    w.money = 100;
+    expect(buyShortfall(w, "frag", open())).toBe(200);
   });
 
   it("replacing the primary refunds 70 % of the old one (only one primary is carried)", () => {
