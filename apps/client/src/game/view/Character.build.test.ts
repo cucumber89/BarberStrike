@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine";
 import { Scene } from "@babylonjs/core/scene";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
@@ -8,6 +8,12 @@ import {
   buildRig, encodeHaircut, headZoneStart, profileDistance, widthProfile,
 } from "@frankibarber/shared";
 import { Character, type CharacterInput } from "./Character";
+
+// Every case here builds dozens of full characters on a NullEngine (four builds × the whole haircut
+// catalogue in one test). That is 2.5–4 s on a quiet machine and past vitest's 5 s default on a
+// shared CI runner, where it has timed out on one run and passed on the next for the same commit.
+// A hang would still be caught: nothing in this file legitimately takes half a minute.
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * The other half of `shared/builds.test.ts`.
