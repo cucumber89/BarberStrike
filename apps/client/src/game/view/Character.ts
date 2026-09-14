@@ -4,15 +4,16 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Quaternion, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import {
   DEFAULT_BUILD, DEFAULT_OUTFIT, PLAYER, WEAPONS, buildRig, hashString, haircutLook, hidesHair, outfitDef, outfitParts,
   type BuildRig, type HaircutStyle, type OutfitDef, type OutfitRole, type Team, type WeaponId,
 } from "@frankibarber/shared";
-import { HOLD } from "./characterHold";
+import { BLADE, GUN_OFFSET, GUN_SCALE, HOLD } from "./characterHold";
 import { TEAM_KITS } from "./teamKit";
 import { buildWeaponModel, createWeaponMaterials, forEachMesh, type WeaponMaterials, type WeaponModel } from "./weaponMeshes";
 import { beveledBox } from "./geometry";
+import { nightEnvironment } from "./nightEnv";
 
 /**
  * Procedural articulated third-person character. No external assets: a jointed figure with a
@@ -65,6 +66,8 @@ export interface CharacterInput {
   weapon: WeaponId;
   /** Direction of travel relative to facing (rad). 0 = forward. */
   moveDir: number;
+  /** Vertical speed (m/s, + = up) while airborne: rising tucks the legs, falling reaches for the ground. */
+  vy?: number;
   /** A barber perk is running (drop 3): the hat band glows so others can read the buff. */
   perked?: boolean;
   /** Drop 4: lean (-1..1) tilts the torso and head sideways; tac raises the gun across the chest. */
@@ -91,6 +94,8 @@ export interface Pose {
   hipsY: number; torsoX: number; torsoY: number; headX: number; headY: number;
   legR: number; legL: number; shinR: number; shinL: number;
   armR: number; armL: number; rootZ: number; rootX: number;
+  /** Yaw of the hips and legs relative to the aim (rad): the feet lag a turn, then catch up. */
+  lowerYaw: number;
 }
 
 interface SharedMats { skin: PBRMaterial; cloth: PBRMaterial; vest: PBRMaterial; accent: PBRMaterial; trim: PBRMaterial; boots: PBRMaterial; stubble: PBRMaterial; razorburn: PBRMaterial; hair: PBRMaterial; bleach: PBRMaterial; weapons: WeaponMaterials }
@@ -111,11 +116,15 @@ function teamMats(scene: Scene, team: Team, outfit: string = DEFAULT_OUTFIT): Sh
   const key = `${team}|${def.id}`;
   let m = byKey.get(key);
   if (m) return m;
+  // The night environment (nightEnv.ts) as a soft sky / street fill and a glint on the goggles:
+  // a body under no practical used to be a near-black cut-out; now it is a dark body with a shape.
+  const env = nightEnvironment(scene);
   const mk = (name: string, hex: string, rough: number, metal = 0, emissive?: string) => {
     const mat = new PBRMaterial(`${name}_t${team}_${def.id}`, scene);
     mat.albedoColor = Color3.FromHexString(hex).toLinearSpace();
     mat.roughness = rough; mat.metallic = metal;
     if (emissive) mat.emissiveColor = Color3.FromHexString(emissive).scale(0.6);
+    if (env) { mat.reflectionTexture = env; mat.environmentIntensity = 0.5; }
     mat.maxSimultaneousLights = 4;
     mat.useGLTFLightFalloff = true; // same range-limited falloff as the map
     mat.freeze();
@@ -174,6 +183,124 @@ function stripeOffsets(outer: number, width: number, count: number): number[] {
 }
 
 const DEATH_MS = 900;
+
+/** Real-time exponential approach: the fraction of the remaining distance covered in `dt` s at rate `k`. */
+const damp = (k: number, dt: number): number => 1 - Math.exp(-k * dt);
+const wrap = (a: number): number => { let x = a % (Math.PI * 2); if (x > Math.PI) x -= Math.PI * 2; if (x < -Math.PI) x += Math.PI * 2; return x; };
+/** Where along the fore-end the third-person support hand holds, as a fraction of the measured support point. */
+export const TP_SUPPORT = 0.65;
+/** How far the torso turns over planted feet before the legs step round (rad). */
+const TURN_STEP = 0.7;
+
+/** Elbow directions in torso space: down, out to the side and back. */
+const POLE_R = new Vector3(0.1, -1, -0.45).normalize();
+const POLE_L = new Vector3(-0.1, -1, -0.45).normalize();
+const ikTarget = new Vector3();
+const ikTmpQ = new Quaternion();
+const ikTmpV = new Vector3();
+
+/** A point in the held weapon's root space (metres) → torso space, through `gunHand` and the model's fixed offset/scale. */
+function weaponToTorso(gunHand: TransformNode, x: number, y: number, z: number, out: Vector3): Vector3 {
+  out.set(GUN_OFFSET[0] + x * GUN_SCALE, GUN_OFFSET[1] + y * GUN_SCALE, GUN_OFFSET[2] + z * GUN_SCALE);
+  const r = gunHand.rotation;
+  Quaternion.FromEulerAnglesToRef(r.x, r.y, r.z, ikTmpQ);
+  out.applyRotationQuaternionInPlace(ikTmpQ);
+  return out.addInPlace(gunHand.position);
+}
+
+/** Writes an Euler pose into a node that is driven by quaternion (the arms, since the IK). */
+function setEuler(node: TransformNode, x: number, y: number, z: number): void {
+  node.rotationQuaternion ??= new Quaternion();
+  Quaternion.FromEulerAnglesToRef(x, y, z, node.rotationQuaternion);
+}
+
+/** Pitch of a quaternion-driven node, for `pose()` and the tests that read it. */
+function eulerX(node: TransformNode): number {
+  return node.rotationQuaternion ? node.rotationQuaternion.toEulerAngles().x : node.rotation.x;
+}
+
+/**
+ * Two-bone arm IK in torso space, blended with an authored Euler pose.
+ *
+ * The upper arm hangs along −Y from the shoulder node, the forearm along −Y from the elbow node and
+ * the hand's centre sits at (0, handY, 0.02) in the forearm. Given a target for the hand's centre:
+ * the law of cosines gives the elbow bend, the pole vector picks the plane the elbow lies in, and
+ * the shoulder quaternion is built so the elbow hinge is its local X — which is what the forearm
+ * then rotates about. Everything is scratch-allocated once; nothing is created per frame.
+ */
+class ArmIk {
+  private qUpper = new Quaternion();
+  private qFore = new Quaternion();
+  private qEuler = new Quaternion();
+  private a = new Vector3();
+  private f = new Vector3();
+  private e = new Vector3();
+  private toT = new Vector3();
+  private pp = new Vector3();
+  private x1 = new Vector3();
+  private n = new Vector3();
+  private inv = new Quaternion();
+
+  solve(upper: TransformNode, fore: TransformNode, R: BuildRig, target: Vector3, pole: Vector3, eRx: number, eRy: number, eFx: number, weight: number): void {
+    upper.rotationQuaternion ??= new Quaternion();
+    fore.rotationQuaternion ??= new Quaternion();
+    if (weight <= 0.001) {
+      Quaternion.FromEulerAnglesToRef(eRx, eRy, 0, upper.rotationQuaternion);
+      Quaternion.FromEulerAnglesToRef(eFx, 0, 0, fore.rotationQuaternion);
+      return;
+    }
+    const L1 = R.upperH;
+    const eyH = R.handY, eyZ = 0.02;
+    const L2 = Math.hypot(eyH, eyZ);
+    // Shoulder → target, clamped to the reach (a little short of a straight arm: an elbow that
+    // locks straight reads as a stick).
+    this.toT.copyFrom(target).subtractInPlace(upper.position);
+    const d = Math.max(0.05, Math.min(L1 + L2 - 0.005, this.toT.length()));
+    this.toT.normalize();
+    const cosA = Math.max(-1, Math.min(1, (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d)));
+    const alpha = Math.acos(cosA);
+    // Elbow plane: rotate the shoulder→target line toward the pole by alpha.
+    this.toT.scaleToRef(Vector3.Dot(pole, this.toT), this.x1); // x1 is free until the twist below
+    this.pp.copyFrom(pole).subtractInPlace(this.x1);
+    if (this.pp.lengthSquared() < 1e-6) this.pp.set(0, -1, 0);
+    this.pp.normalize();
+    this.pp.scaleInPlace(Math.sin(alpha));
+    this.a.copyFrom(this.toT).scaleInPlace(Math.cos(alpha)).addInPlace(this.pp);
+    // Elbow position and forearm direction (hand centre → target).
+    this.a.scaleToRef(L1, this.e);
+    this.e.addInPlace(upper.position);
+    this.f.copyFrom(target).subtractInPlace(this.e).normalize();
+    // Upper arm: −Y → a, then twist about a so local X is the hinge normal (a × f).
+    Quaternion.FromUnitVectorsToRef(DOWN, this.a, this.qUpper);
+    Vector3.CrossToRef(this.a, this.f, this.n);
+    if (this.n.lengthSquared() < 1e-6) this.n.set(1, 0, 0); else this.n.normalize();
+    this.x1.set(1, 0, 0).applyRotationQuaternionInPlace(this.qUpper);
+    Vector3.CrossToRef(this.x1, this.n, this.pp);
+    const twist = Math.atan2(Vector3.Dot(this.pp, this.a), Vector3.Dot(this.x1, this.n));
+    Quaternion.RotationAxisToRef(this.a, twist, this.inv);
+    // Into a scratch, not in place: Babylon's multiplyToRef reads its operands while writing the result.
+    this.inv.multiplyToRef(this.qUpper, this.qEuler);
+    this.qUpper.copyFrom(this.qEuler);
+    // Forearm, in the upper arm's frame: the hand vector (0, handY, 0.02) has to point along f.
+    this.qUpper.conjugateToRef(this.inv);
+    ikTmpV.copyFrom(this.f).applyRotationQuaternionInPlace(this.inv);
+    const restAngle = Math.atan2(-eyZ, -eyH); // where the hand vector sits before any bend
+    const phi = Math.atan2(-ikTmpV.z, -ikTmpV.y) - restAngle;
+    Quaternion.RotationAxisToRef(X_AXIS, phi, this.qFore);
+    // Blend toward the authored pose where the arm leaves the gun.
+    if (weight < 0.999) {
+      Quaternion.FromEulerAnglesToRef(eRx, eRy, 0, this.qEuler);
+      Quaternion.SlerpToRef(this.qEuler, this.qUpper, weight, upper.rotationQuaternion);
+      Quaternion.FromEulerAnglesToRef(eFx, 0, 0, this.qEuler);
+      Quaternion.SlerpToRef(this.qEuler, this.qFore, weight, fore.rotationQuaternion);
+    } else {
+      upper.rotationQuaternion.copyFrom(this.qUpper);
+      fore.rotationQuaternion.copyFrom(this.qFore);
+    }
+  }
+}
+const DOWN = new Vector3(0, -1, 0);
+const X_AXIS = new Vector3(1, 0, 0);
 
 // ------------------------------------------------------------------ Drop E: the hair
 //
@@ -398,6 +525,16 @@ export class Character {
   private flinchX = 0;        // local-space direction of the hit (+X right, +Z front)
   private flinchZ = 0;
   private flinchAmt = 0;
+  /**
+   * Lower body yaw relative to the aim. Standing still the feet stay planted while the torso turns,
+   * up to `TURN_STEP`, then the legs step round to catch up; moving, they turn part-way toward the
+   * direction of travel so a strafe reads as a strafe instead of a crab with legs pumping forward.
+   */
+  private lowerYaw = 0;
+  private turning = false;
+  private turnDip = 0;
+  private ikR = new ArmIk();
+  private ikL = new ArmIk();
   private perkBand: Mesh;
   /** Drop D: the cap (and its visor) hide when shaved; the bare, stubbled skull shows instead. */
   private capParts: Mesh[] = [];
@@ -662,6 +799,7 @@ export class Character {
     this.root.rotation.x = 0; this.root.rotation.z = 0;
     this.hips.position.y = this.rig.hipY; this.hips.rotation.set(0, 0, 0);
     this.flinchT = 0; this.landSquash = 0; this.airTime = 0;
+    this.lowerYaw = 0; this.turning = false; this.turnDip = 0;
   }
 
   /** Current joint angles (for tests and the animation tool). */
@@ -670,7 +808,8 @@ export class Character {
       hipsY: this.hips.rotation.y, torsoX: this.torso.rotation.x, torsoY: this.torso.rotation.y,
       headX: this.head.rotation.x, headY: this.head.rotation.y,
       legR: this.legR.rotation.x, legL: this.legL.rotation.x, shinR: this.shinR.rotation.x, shinL: this.shinL.rotation.x,
-      armR: this.armR.rotation.x, armL: this.armL.rotation.x, rootZ: this.root.rotation.z, rootX: this.root.rotation.x,
+      armR: eulerX(this.armR), armL: eulerX(this.armL), rootZ: this.root.rotation.z, rootX: this.root.rotation.x,
+      lowerYaw: this.lowerYaw,
     };
   }
 
@@ -735,19 +874,21 @@ export class Character {
       this.torso.rotation.x = 0.35 * buckle + 0.25 * ef;
       this.torso.rotation.y = this.deathSpin * 0.25 * ef;
       this.head.rotation.x = 0.5 * buckle - 0.2 * ef;
-      this.armR.rotation.x = -0.9 + 0.8 * ef; this.armL.rotation.x = -1.0 + 1.5 * ef;
-      this.armR.rotation.y = -0.2 - 0.5 * ef; this.armL.rotation.y = 0.5 + 0.4 * ef;
+      setEuler(this.armR, -0.9 + 0.8 * ef, -0.2 - 0.5 * ef, 0); setEuler(this.armL, -1.0 + 1.5 * ef, 0.5 + 0.4 * ef, 0);
+      setEuler(this.forearmR, this.forearmR.rotation.x, 0, 0); setEuler(this.forearmL, this.forearmL.rotation.x, 0, 0);
       this.legR.rotation.x = 1.1 * buckle - 0.5 * ef; this.legL.rotation.x = 0.9 * buckle - 0.1 * ef;
       this.shinR.rotation.x = 1.6 * buckle - 0.9 * ef; this.shinL.rotation.x = 1.4 * buckle - 0.6 * ef;
       this.gunHand.rotation.x = 0.8 * ef;
       return;
     }
 
-    const k = Math.min(1, dt * 10);
+    // Every blend approaches its target exponentially in real time, so a body reads the same at
+    // 30 and 144 fps (the per-frame fraction it replaced settled 30 % faster on the slow screen).
+    const k = damp(10, dt);
     this.blendCrouch += ((inp.crouch ? 1 : 0) - this.blendCrouch) * k;
     this.blendLean += ((inp.lean ?? 0) - this.blendLean) * k;
     this.blendTac += ((inp.tac ? 1 : 0) - this.blendTac) * k;
-    this.blendSlide += ((inp.slide ? 1 : 0) - this.blendSlide) * Math.min(1, dt * 14);
+    this.blendSlide += ((inp.slide ? 1 : 0) - this.blendSlide) * damp(14, dt);
     const leanB = this.blendLean, tacB = this.blendTac;
     const wasAir = this.blendAir > 0.5;
     this.blendAir += ((inp.grounded ? 0 : 1) - this.blendAir) * k;
@@ -772,7 +913,31 @@ export class Character {
     if (dyaw > Math.PI) dyaw -= Math.PI * 2; if (dyaw < -Math.PI) dyaw += Math.PI * 2;
     this.lastYaw = this.root.rotation.y;
     const yawRate = dt > 0 ? dyaw / dt : 0;
-    this.turnLean += (Math.max(-0.14, Math.min(0.14, -yawRate * 0.05)) - this.turnLean) * Math.min(1, dt * 8);
+    this.turnLean += (Math.max(-0.14, Math.min(0.14, -yawRate * 0.05)) - this.turnLean) * damp(8, dt);
+
+    // ---- lower body: the feet do not turn with the mouse.
+    const moving = inp.grounded && inp.speed > 0.3;
+    if (moving) {
+      // Legs turn part-way toward the travel direction; walking backwards keeps them facing forward
+      // (the stride reverses below instead of the body turning round).
+      let md = wrap(inp.moveDir);
+      if (Math.abs(md) > Math.PI / 2) md = md - Math.sign(md) * Math.PI;
+      const target = Math.max(-TURN_STEP, Math.min(TURN_STEP, md * 0.5));
+      this.lowerYaw += (target - this.lowerYaw) * damp(8, dt);
+      this.turning = false;
+    } else {
+      // Planted: the torso turns over the feet. Past the step threshold the legs swing round.
+      this.lowerYaw = wrap(this.lowerYaw - dyaw);
+      if (Math.abs(this.lowerYaw) > TURN_STEP) { this.turning = true; this.turnDip = 1; }
+      if (this.turning) {
+        this.lowerYaw *= Math.exp(-9 * dt);
+        if (Math.abs(this.lowerYaw) < 0.04) { this.lowerYaw = 0; this.turning = false; }
+      }
+      this.lowerYaw = Math.max(-1.2, Math.min(1.2, this.lowerYaw));
+    }
+    this.turnDip *= Math.exp(-8 * dt);
+    // Airborne: rising tucks the legs, falling reaches for the ground and leans into the landing.
+    const rise = Math.max(-1, Math.min(1, (inp.vy ?? 0) / 5)) * this.blendAir;
 
     // Locomotion cycle: stride frequency from speed.
     const freq = inp.crouch ? 5.5 : 4.4 + inp.speed * 0.7;
@@ -791,20 +956,26 @@ export class Character {
     // TYCZKA 1.436 m), because a short build then dipped less. Flat offsets hold it to 11 mm. Equal
     // displacement is equal exposure, which is the thing a crouch must not sell.
     const bounce = Math.abs(c) * 0.03 * run;
-    this.hips.position.y = R.hipY - 0.38 * cr + bounce - 0.05 * this.blendAir - 0.16 * this.landSquash + 0.006 * shift;
+    this.hips.position.y = R.hipY - 0.38 * cr + bounce - 0.05 * this.blendAir - 0.16 * this.landSquash + 0.006 * shift - 0.03 * this.turnDip;
     const strafe = Math.sin(inp.moveDir);
     this.root.rotation.z = -strafe * 0.08 * run + this.turnLean * (0.4 + 0.6 * run) + 0.02 * shift * (1 - run);
     this.root.rotation.x = 0;
-    this.hips.rotation.y = s * 0.12 * run;
+    this.hips.rotation.y = s * 0.12 * run + this.lowerYaw;
+    // The stride runs along the direction the HIPS face: `fwd` is how much of the travel is along
+    // it (negative walking backwards, so the swing reverses), `side` how much is across it (the
+    // legs scissor sideways instead of pumping forward while the body slides).
+    const rel = wrap(inp.moveDir - this.lowerYaw);
+    const fwd = moving ? Math.cos(rel) : 1, side = moving ? Math.sin(rel) : 0;
     this.hips.rotation.z = -0.03 * shift * (1 - run);
     // Torso: lean with speed/crouch/pitch, twist against the hips, flinch snaps it away from the hit.
     this.torso.rotation.x = 0.12 * run + 0.35 * cr + inp.pitch * 0.5 + 0.18 * sprint + 0.1 * this.landSquash + 0.012 * breathe
       + fl * (0.35 * this.flinchZ);
-    this.torso.rotation.y = -this.hips.rotation.y * 0.6 + fl * 0.3 * this.flinchX;
+    // The torso faces the aim: it takes back the whole lower-body yaw and 60 % of the hip sway.
+    this.torso.rotation.y = -(s * 0.12 * run) * 0.6 - this.lowerYaw + fl * 0.3 * this.flinchX;
     // Lean (drop 4): the torso tips sideways (negative Z = towards +X = the character's right) and the
     // hips shift a little the other way, so the feet stay planted and the head moves ~0.45 m.
     this.torso.rotation.z = -fl * 0.25 * this.flinchX - 0.42 * leanB;
-    this.torso.rotation.x += 0.12 * tacB - 0.5 * sl;   // sliding: the torso lies back
+    this.torso.rotation.x += 0.12 * tacB - 0.5 * sl - 0.12 * Math.min(0, rise);   // sliding: the torso lies back
     this.hips.position.x = -0.05 * leanB;
     this.head.rotation.x = inp.pitch * 0.45 - 0.2 * cr + fl * 0.5 * this.flinchZ + 0.3 * sl;
     this.head.rotation.y = fl * 0.55 * this.flinchX;
@@ -812,10 +983,13 @@ export class Character {
     // Legs: alternating swing; airborne = tucked; landing = knees bend.
     const swing = 0.75 * run * (1 + 0.5 * sprint);
     // Sliding: the right leg shoots out straight ahead, the left folds under, the torso lies back.
-    this.legR.rotation.x = s * swing - 0.9 * cr + 0.5 * this.blendAir - 0.4 * this.landSquash - 0.55 * sl;
-    this.legL.rotation.x = -s * swing - 0.9 * cr - 0.2 * this.blendAir - 0.4 * this.landSquash + 0.25 * sl;
-    this.shinR.rotation.x = Math.max(0, -c) * 1.1 * run + 1.0 * cr + 0.6 * this.blendAir + 0.8 * this.landSquash - 0.95 * sl;
-    this.shinL.rotation.x = Math.max(0, c) * 1.1 * run + 1.0 * cr + 0.9 * this.blendAir + 0.8 * this.landSquash + 0.5 * sl;
+    // In the air: tucked while rising (+rise), reaching down for the ground while falling (−rise).
+    this.legR.rotation.x = s * swing * fwd - 0.9 * cr + (0.5 + 0.25 * rise) * this.blendAir - 0.4 * this.landSquash - 0.55 * sl;
+    this.legL.rotation.x = -s * swing * fwd - 0.9 * cr + (-0.2 + 0.25 * rise) * this.blendAir - 0.4 * this.landSquash + 0.25 * sl;
+    this.legR.rotation.z = s * swing * 0.45 * side;
+    this.legL.rotation.z = s * swing * 0.45 * side;
+    this.shinR.rotation.x = Math.max(0, -c) * 1.1 * run * Math.abs(fwd) + 1.0 * cr + (0.6 + 0.3 * rise) * this.blendAir + 0.8 * this.landSquash - 0.95 * sl;
+    this.shinL.rotation.x = Math.max(0, c) * 1.1 * run * Math.abs(fwd) + 1.0 * cr + (0.9 + 0.3 * rise) * this.blendAir + 0.8 * this.landSquash + 0.5 * sl;
     // Arms: weapon held two-handed; counter-swing with the stride; kick on fire; reload = left hand down; flinch tightens.
     const aim = inp.pitch;
     const idleSway = Math.sin(this.time * 1.3) * 0.02;
@@ -824,31 +998,67 @@ export class Character {
     // Per-slot holds (look pass): a sidearm is held one-handed at arm's length, the clippers low and
     // forward with a big right-arm swing on use, long guns two-handed as before.
     const slot = WEAPONS[this.currentWeapon].slot;
-    const oneHand = slot === 2 ? 1 : 0, melee = slot === 3 ? 1 : 0;
+    const oneHand = slot === 2 ? 1 : 0, melee = slot === 3 ? 1 : 0, twoHand = slot === 1 ? 1 : 0;
     const swingR = melee * this.kick;
     // Tactical sprint: the gun comes up across the chest, muzzle high — readable from across the map.
     // Low-ready (art pass): the receiver sits beside the torso's right edge at chest height, a hair
     // nose-down; the bore must stay within 5° of facing (hand-pose oracle), so the tilt is small.
     this.gunHand.rotation.x = HOLD.pitch + aim * 0.5 - this.kick * 0.12 + 0.45 * sprint + 0.55 * tacB + armSwing * 0.5 + fl * 0.2 + 0.6 * throwing + 0.25 * melee - 0.9 * swingR;
-    this.gunHand.rotation.y = HOLD.yaw + armSwing * 0.3 - 0.3 * throwing + 0.12 * oneHand - 0.4 * swingR;
+    // Long guns: the bladed stance (`BLADE`) — the torso turns toward the gun below, the gun turns
+    // back by the same angle here, so the bore stays on the aim and the fore-end crosses the chest.
+    this.gunHand.rotation.y = HOLD.yaw - BLADE.twist * twoHand + armSwing * 0.3 - 0.3 * throwing + 0.12 * oneHand - 0.4 * swingR;
     this.gunHand.rotation.z = -0.35 * swingR;
-    this.gunHand.position.z = HOLD.z - this.kick * 0.05 - 0.08 * throwing + 0.05 * oneHand + 0.08 * swingR;
-    this.gunHand.position.x = HOLD.x + 0.04 * oneHand + 0.02 * melee;
-    this.gunHand.position.y = HOLD.y + 0.02 * oneHand - 0.08 * melee;
-    // Right arm: upper arm hangs by the ribs (elbow just behind the shoulder line), forearm folded
-    // up to the grip. Throw: the arm goes back over the shoulder, then whips forward past horizontal.
-    this.armR.rotation.x = 0.1 - aim * 0.25 - this.kick * 0.2 + idleSway + 0.35 * sprint - 0.35 * tacB + armSwing + fl * 0.25 - 1.6 * thr + 0.9 * thrSwing
-      - 0.25 * oneHand + 0.35 * melee - 0.9 * swingR;
-    this.armR.rotation.y = -0.8 - 0.3 * thr + 0.15 * oneHand - 0.5 * swingR;
-    this.forearmR.rotation.x = -2.0 + this.kick * 0.15 + 0.2 * sprint - 1.2 * thr + 0.3 * thrSwing + 0.3 * oneHand - 0.2 * melee - 0.5 * swingR;
-    this.torso.rotation.y += -0.25 * thr + 0.2 * thrSwing - 0.3 * swingR;
+    this.gunHand.position.z = HOLD.z + BLADE.forward * twoHand - this.kick * 0.05 - 0.08 * throwing + 0.05 * oneHand + 0.08 * swingR;
+    this.gunHand.position.x = HOLD.x - BLADE.inward * twoHand + 0.04 * oneHand + 0.02 * melee;
+    this.gunHand.position.y = HOLD.y + 0.01 * twoHand + 0.02 * oneHand - 0.08 * melee;
+    // The gun bobs and pumps a touch with the stride, so the hands riding it read as arms moving.
+    this.gunHand.position.y += 0.35 * bounce;
+    this.gunHand.position.z += 0.4 * armSwing;
+    this.torso.rotation.y += BLADE.twist * twoHand - 0.25 * thr + 0.2 * thrSwing - 0.3 * swingR;
     this.torso.rotation.x += 0.15 * thrSwing + 0.1 * swingR;
     const rl = Math.sin(this.reloadPhase * Math.PI);
-    // Left arm: on the handguard for long guns; hanging half-bent for a sidearm; guarding for the clippers.
     const off = Math.max(oneHand, melee);
-    this.armL.rotation.x = (-1.0 - aim * 0.25 + idleSway + 1.0 * rl + 0.2 * sprint + armSwing * 0.8 + fl * 0.25) * (1 - off) + (-0.45 + idleSway + 1.0 * rl - 0.3 * melee) * off;
-    this.armL.rotation.y = (0.85 - 0.5 * rl) * (1 - off) + 0.15 * off;
-    this.forearmL.rotation.x = (-0.55 + 0.6 * rl + 0.2 * sprint) * (1 - off) + (-0.9 + 0.6 * rl) * off;
+
+    // ---- arms. The AUTHORED pose (what the art reviews signed off) is still computed for every
+    // frame, and it drives the throw, the clippers swing and the free hand of a sidearm. On top of
+    // it a two-bone IK puts the hands ON the gun: the right on the grip, the left on the fore-end
+    // (or down at the magazine through a reload), for every weapon, every aim pitch and every build
+    // — the authored angles only ever reached the gun approximately, and a hand off its grip is the
+    // first thing a player sees on another body. The IK's weight fades out for the throw and the
+    // swing, where the arm leaves the gun on purpose.
+    const aRx = 0.1 - aim * 0.25 - this.kick * 0.2 + idleSway + 0.35 * sprint - 0.35 * tacB + armSwing + fl * 0.25 - 1.6 * thr + 0.9 * thrSwing
+      - 0.25 * oneHand + 0.35 * melee - 0.9 * swingR;
+    const aRy = -0.8 - 0.3 * thr + 0.15 * oneHand - 0.5 * swingR;
+    const fRx = -2.0 + this.kick * 0.15 + 0.2 * sprint - 1.2 * thr + 0.3 * thrSwing + 0.3 * oneHand - 0.2 * melee - 0.5 * swingR;
+    const aLx = (-1.0 - aim * 0.25 + idleSway + 1.0 * rl + 0.2 * sprint + armSwing * 0.8 + fl * 0.25) * (1 - off) + (-0.45 + idleSway + 1.0 * rl - 0.3 * melee) * off;
+    const aLy = (0.85 - 0.5 * rl) * (1 - off) + 0.15 * off;
+    const fLx = (-0.55 + 0.6 * rl + 0.2 * sprint) * (1 - off) + (-0.9 + 0.6 * rl) * off;
+    const model = this.weapons.get(this.currentWeapon)!;
+    // Targets in torso space: the grip is the weapon frame's origin (`weaponMeshes`: "origin at the
+    // grip/trigger"), a hair below and behind it where the palm wraps; the support hand sits at
+    // the measured `support` point, and slides down to the magazine while reloading.
+    const ikWeightR = (1 - throwing) * (1 - swingR);
+    const ikWeightL = (1 - off) * (1 - throwing);
+    weaponToTorso(this.gunHand, 0.012, -0.045, -0.02, ikTarget);
+    this.ikR.solve(this.armR, this.forearmR, R, ikTarget, POLE_R, aRx, aRy, fRx, ikWeightR);
+    // The third-person support hand holds closer to the receiver than the viewmodel's measured
+    // point (`TP_SUPPORT` of the way out): the body's arm is shorter than the reach the first-person
+    // hands are drawn with, and the fore-end near the magwell is still the fore-end.
+    const sx = model.support[0], sy = model.support[1];
+    const magY = model.magazine ? model.magazine.position.y - 0.06 : sy - 0.1;
+    // Where along the fore-end the hand can actually close: from `TP_SUPPORT` of the measured
+    // point back toward the receiver until it is inside the arm's reach (a shorter body holds
+    // closer, the way a shorter shooter does). Four halvings put it within a centimetre.
+    const reach = R.upperH + Math.hypot(R.handY, 0.02) - 0.006;
+    let lo = 0.25, hi = TP_SUPPORT, frac = TP_SUPPORT;
+    for (let i = 0; i < 5; i++) {
+      weaponToTorso(this.gunHand, sx, sy, model.support[2] * frac, ikTarget);
+      if (Vector3.Distance(ikTarget, this.armL.position) <= reach) { lo = frac; if (i === 0) break; } else hi = frac;
+      frac = (lo + hi) / 2;
+    }
+    const sz = model.support[2] * lo;
+    weaponToTorso(this.gunHand, sx + (rl > 0 ? (-0.01 - sx) * rl : 0), sy + (magY - sy) * rl, sz + ((model.magazine?.position.z ?? sz) - sz) * rl, ikTarget);
+    this.ikL.solve(this.armL, this.forearmL, R, ikTarget, POLE_L, aLx, aLy, fLx, ikWeightL);
   }
 
   setEnabled(v: boolean): void { this.root.setEnabled(v); }

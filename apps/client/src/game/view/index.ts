@@ -24,6 +24,7 @@ export const installView: GameModule = (ctx) => {
   const viewmodel = new Viewmodel(ctx.scene, ctx.camera, ctx.local);
   for (const [weapon, skin] of Object.entries(loadProfile().equip)) void viewmodel.applySkin(weapon as WeaponId, skin);
   viewmodel.setWorld(ctx.world);
+  viewmodel.bobScale = ctx.settings.gameplay.headBob;
   // Drop 6b: upgrade to the imported guns in the background. Deliberately not awaited — the
   // procedural weapons are already up, and a slow or missing file must not delay the first frame.
   if (ctx.weaponModels) void viewmodel.useModels(ctx.weaponModels);
@@ -186,13 +187,13 @@ export const installView: GameModule = (ctx) => {
     // an SR-50 hull drops out of the pistol you swapped to a third of a second later.
     ctx.events.on("weaponEquip", (e) => { ejectAt = 0; viewmodel.setWeapon(e.weapon); }),
     ctx.events.on("weaponInspect", () => viewmodel.inspect()),
-    ctx.events.on("reloadStart", () => viewmodel.onReload()),
+    ctx.events.on("reloadStart", (e) => viewmodel.onReload(e.shells, e.empty)),
     ctx.events.on("reloadEnd", () => viewmodel.onReloadEnd()),
     ctx.events.on("landed", (e) => viewmodel.onLanded(e.impactSpeed)),
     ctx.events.on("jump", () => viewmodel.onJump()),
     ctx.events.on("localDeath", () => { ejectAt = 0; viewmodel.cancelGrenade(); viewmodel.setVisible(false); }),
     ctx.events.on("localSpawn", () => { viewmodel.setVisible(true); viewmodel.cancelGrenade(); viewmodel.setWeapon(ctx.weapons.weapon); }),
-    ctx.events.on("settings", () => { effects.setDensity(density()); grenades.setDensity(density()); }),
+    ctx.events.on("settings", () => { effects.setDensity(density()); grenades.setDensity(density()); viewmodel.bobScale = ctx.settings.gameplay.headBob; }),
     // ---- drop 2: grenades
     ctx.events.on("grenadePrime", (e) => viewmodel.primeGrenade(e.kind)),
     ctx.events.on("grenadeThrow", () => viewmodel.throwGrenade()),

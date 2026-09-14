@@ -68,6 +68,13 @@ export class LocalPlayer {
   pitch = 0;
   alive = false;
   weapon: WeaponId = "pistol";
+  /**
+   * Mirrored from the weapon controller. A reload owns the hands: the sights cannot come up while
+   * it runs, the way the sim already cancels a sprint on the Aim bit — so aiming through a reload
+   * used to lay the magazine choreography over the ADS pose, mag dropping in front of the eye.
+   * Firing is refused by both sides during a reload, so nothing about the shot cone moves.
+   */
+  reloading = false;
   private seq = 0;
   private prevButtons = 0;
   private pending: PendingInput[] = [];
@@ -344,7 +351,7 @@ export class LocalPlayer {
     // and the aim returns by itself if the button is still held. This is the sniper's rhythm — the
     // shot, the lost picture, the hunt back to the target — not a penalty bolted on top of it.
     const boltOut = performance.now() < this.actionUntil;
-    const adsTarget = this.alive && this.isAiming() && !boltOut ? 1 : 0;
+    const adsTarget = this.alive && this.isAiming() && !boltOut && !this.reloading ? 1 : 0;
     // LINEAR, not a lerp towards the target. The lerp this replaces moved by a fraction of the
     // REMAINING distance each frame, so the sights took about 2.3 x `adsMs` to come up and took
     // LONGER on a slow machine than a fast one: `weapon-signature.mjs` measured 255 ms for the
@@ -354,16 +361,19 @@ export class LocalPlayer {
     const adsStep = dtMs / Math.max(16, wdef.adsMs);
     this.adsBlend = adsTarget > this.adsBlend ? Math.min(adsTarget, this.adsBlend + adsStep) : Math.max(adsTarget, this.adsBlend - adsStep);
     // Tactical sprint (drop 4): a wider FOV sells the extra speed.
-    this.tacBlend += ((this.alive && this.wasTac ? 1 : 0) - this.tacBlend) * Math.min(1, dt * 6);
+    // Every blend below approaches its target exponentially in REAL time (`1 - exp(-k dt)`), not by a
+    // fraction per frame: `min(1, dt * k)` gave a 30 fps client a faster lean and eye-height settle
+    // than a 144 fps one, and the linear decays (`1 - dt * 9`) finished at different times too.
+    this.tacBlend += ((this.alive && this.wasTac ? 1 : 0) - this.tacBlend) * (1 - Math.exp(-6 * dt));
     // Slide: a quick FOV push on the way in, eased out on the way up — the same numbers the move
     // shipped with before it was deleted.
     const slidingNow = this.alive && b.slide > 0;
-    this.slideBlend += ((slidingNow ? 1 : 0) - this.slideBlend) * Math.min(1, dt * (slidingNow ? 14 : 6));
+    this.slideBlend += ((slidingNow ? 1 : 0) - this.slideBlend) * (1 - Math.exp(-(slidingNow ? 14 : 6) * dt));
     this.camera.fov = (this.settings.fov * Math.PI / 180) * (1 - this.adsBlend * (1 - wdef.adsZoom)) * (1 + 0.07 * this.tacBlend + 0.06 * this.slideBlend);
     // Lean (drop 4): the eye slides sideways as far as the wall allows, the view rolls with it.
     const leanWant = this.alive ? leanOf(this.lastButtons, b.crouching) : 0;
     const leanTarget = leanWant === 0 ? 0 : leanWant * leanClearance(this.world, b, this.yaw, leanWant);
-    this.leanBlend += (leanTarget - this.leanBlend) * Math.min(1, dt * 12);
+    this.leanBlend += (leanTarget - this.leanBlend) * (1 - Math.exp(-12 * dt));
     if (Math.abs(this.leanBlend) < 0.002) this.leanBlend = 0;
     // Scope sway + breath hold (drop 3). The sway is part of the aim so shots land where the reticle is.
     // The style and the drift come from the feel table now (matrix D-B2): the SR-50 looks down a
@@ -379,16 +389,17 @@ export class LocalPlayer {
       const amp = SCOPE.sway * feel.scopeDrift * (holding ? SCOPE.heldScale : nowMs < this.windedUntil ? SCOPE.windedScale : 1);
       const targetYaw = (Math.sin(t * 0.9) + 0.4 * Math.sin(t * 2.3)) * amp;
       const targetPitch = (Math.cos(t * 1.3) + 0.4 * Math.sin(t * 3.1)) * amp * 0.8;
-      this.swayYaw += (targetYaw - this.swayYaw) * Math.min(1, dt * 6);
-      this.swayPitch += (targetPitch - this.swayPitch) * Math.min(1, dt * 6);
-    } else { this.swayYaw *= Math.max(0, 1 - dt * 10); this.swayPitch *= Math.max(0, 1 - dt * 10); }
+      this.swayYaw += (targetYaw - this.swayYaw) * (1 - Math.exp(-6 * dt));
+      this.swayPitch += (targetPitch - this.swayPitch) * (1 - Math.exp(-6 * dt));
+    } else { const k = Math.exp(-10 * dt); this.swayYaw *= k; this.swayPitch *= k; }
     // Crouch eye blending.
     const targetEye = eyeHeight(b);
-    this.eyeBlend += (targetEye - this.eyeBlend) * Math.min(1, dt * 14);
-    // Landing dip.
-    if (b.grounded && !this.wasGrounded) this.landDip = Math.min(0.12, Math.abs(b.vy) * 0.008 + 0.04);
+    this.eyeBlend += (targetEye - this.eyeBlend) * (1 - Math.exp(-14 * dt));
+    // Landing dip, on the head-bob slider like the rest of the camera's own motion (subtle and
+    // adjustable: at 0 the eye lands dead flat).
+    if (b.grounded && !this.wasGrounded) this.landDip = Math.min(0.12, Math.abs(b.vy) * 0.008 + 0.04) * this.settings.bobScale;
     this.wasGrounded = b.grounded;
-    this.landDip *= Math.max(0, 1 - dt * 9);
+    this.landDip *= Math.exp(-9 * dt);
     // Head bob: tied to horizontal speed, scaled by user setting.
     const speed = Math.hypot(b.vx, b.vz);
     const bobAmt = b.grounded && speed > 0.5 ? this.settings.bobScale : 0;
@@ -401,7 +412,7 @@ export class LocalPlayer {
       const t = performance.now() * 0.03 + this.shakeSeed;
       shakePitch = Math.sin(t * 1.7) * this.shake;
       shakeRoll = Math.sin(t * 2.3 + 1.1) * this.shake * 0.8;
-      this.shake *= Math.max(0, 1 - dt * 12);
+      this.shake *= Math.exp(-12 * dt);
     } else this.shake = 0;
     // Walk off whatever a correction owed the eye. Exponential in real time, so the catch-up takes
     // the same 80 ms at 30 fps as at 144, and it is dropped once it is under a millimetre.

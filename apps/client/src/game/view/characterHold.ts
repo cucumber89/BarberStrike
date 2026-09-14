@@ -37,12 +37,24 @@ export interface HoldPose {
  * `gunHand` block in `Character.update` — the test compares against those constants.
  */
 export function holdPose(slot: 1 | 2 | 3): HoldPose {
-  const oneHand = slot === 2 ? 1 : 0, melee = slot === 3 ? 1 : 0;
+  const oneHand = slot === 2 ? 1 : 0, melee = slot === 3 ? 1 : 0, twoHand = slot === 1 ? 1 : 0;
   return {
-    position: [HOLD.x + 0.04 * oneHand + 0.02 * melee, HOLD.y + 0.02 * oneHand - 0.08 * melee, HOLD.z + 0.05 * oneHand + 0.08 * melee],
-    rotation: [HOLD.pitch + 0.25 * melee, HOLD.yaw + 0.12 * oneHand, 0],
+    position: [HOLD.x - BLADE.inward * twoHand + 0.04 * oneHand + 0.02 * melee, HOLD.y + 0.01 * twoHand + 0.02 * oneHand - 0.08 * melee, HOLD.z + BLADE.forward * twoHand + 0.05 * oneHand + 0.08 * melee],
+    rotation: [HOLD.pitch + 0.25 * melee, HOLD.yaw - BLADE.twist * twoHand + 0.12 * oneHand, 0],
   };
 }
+
+/**
+ * The bladed stance for a long gun (gameplay-polish pass). The support hand could not reach the
+ * fore-end from the old square hold: with the grip 0.335 m right of the chest and the fore-end
+ * half a metre ahead of it, the left hand was 0.17–0.24 m short on every long gun (measured by the
+ * arm IK), which is the "hands off the gun" the reviews kept naming. A shooter blades the body
+ * instead: the torso turns `twist` toward the gun and the gun turns back by the same angle in torso
+ * space, so the bore still points where the player looks (hand-pose oracle: within 5°) while the
+ * fore-end swings across in front of the chest, into the left hand's reach. The grip also comes
+ * `inward` toward the chest — the stock now runs back beside the right arm rather than through it.
+ */
+export const BLADE = { twist: 0.5, inward: 0.045, forward: 0.05 } as const;
 
 /**
  * The hold, in one place so `Character.update` and the clearance test cannot drift apart.
@@ -66,10 +78,8 @@ const rotate = (p: [number, number, number], pitch: number, yaw: number): [numbe
   return [p[0] * cy + z1 * sy, y1, -p[0] * sy + z1 * cy];
 };
 
-/** The gun's axis-aligned box in TORSO space, for the given weapon at rest. */
-export function gunBoxInTorso(id: WeaponId, slot: 1 | 2 | 3, pose = holdPose(slot)): PartBox {
-  const pp = proceduralParts(id);
-  const local = unionBox([...pp.parts, ...pp.magazine].map((p) => p.box));
+/** One local box, posed: its eight corners through the hold, then an axis-aligned box round them. */
+function posedBox(local: PartBox, pose: HoldPose): PartBox {
   const min: [number, number, number] = [Infinity, Infinity, Infinity];
   const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
   for (const cx of [local.min[0], local.max[0]]) {
@@ -86,6 +96,30 @@ export function gunBoxInTorso(id: WeaponId, slot: 1 | 2 | 3, pose = holdPose(slo
     }
   }
   return { min, max };
+}
+
+/** The gun's axis-aligned box in TORSO space, for the given weapon at rest. */
+export function gunBoxInTorso(id: WeaponId, slot: 1 | 2 | 3, pose = holdPose(slot)): PartBox {
+  const pp = proceduralParts(id);
+  return posedBox(unionBox([...pp.parts, ...pp.magazine].map((p) => p.box)), pose);
+}
+
+/**
+ * The gun as `n` slices along its length, each posed on its own. One axis-aligned box round a gun
+ * held at a yaw (the bladed long-gun stance, `BLADE`) is the diagonal's bounding box, most of which
+ * is air: a rifle at 0.38 rad "overlapped" the vest by 270 mm while no part of it was inside. The
+ * slices follow the gun; the clash test takes the worst of them.
+ */
+export function gunSlicesInTorso(id: WeaponId, slot: 1 | 2 | 3, pose = holdPose(slot), n = 16): PartBox[] {
+  const pp = proceduralParts(id);
+  const local = unionBox([...pp.parts, ...pp.magazine].map((p) => p.box));
+  const out: PartBox[] = [];
+  const step = (local.max[2] - local.min[2]) / n;
+  for (let i = 0; i < n; i++) {
+    const z0 = local.min[2] + i * step, z1 = z0 + step;
+    out.push(posedBox({ min: [local.min[0], local.min[1], z0], max: [local.max[0], local.max[1], z1] }, pose));
+  }
+  return out;
 }
 
 /** Overlap of two boxes per axis; every component > 0 means they intersect. */

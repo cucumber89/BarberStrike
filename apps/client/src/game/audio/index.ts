@@ -15,6 +15,7 @@ import type { GameContext, GameModule } from "../context";
 import { loadSettings, type Settings } from "../../settings";
 import { AudioEngine, Priority } from "./engine";
 import { feelOf } from "../combat/weaponFeel";
+import { reloadCues } from "../combat/reloadTimeline";
 import { Ambience } from "./ambience";
 import { Music } from "./music";
 import { RemoteAudio } from "./remotes";
@@ -123,7 +124,9 @@ export const installAudio: GameModule = (ctx) => {
     else remotes.shot(e.player, e.event.weapon, e.event.o);
   });
   on("dryFire", () => play(sfx.dryFire, Priority.reload, 0.8));
-  on("reloadStart", (e) => { reloadVoice?.stop(); reloadVoice = play(sfx.reload(e.weapon, WEAPONS[e.weapon].reloadMs), Priority.reload, 0.85); });
+  // The cues are read off the same choreography the hands follow (`reloadCues`), for THIS reload:
+  // a two-shell top-up sounds like two shells, a tactical reload has no charging handle in it.
+  on("reloadStart", (e) => { reloadVoice?.stop(); reloadVoice = play(sfx.reload(e.weapon, WEAPONS[e.weapon].reloadMs, reloadCues(e.weapon, e.shells, e.empty)), Priority.reload, 0.85); });
   on("reloadEnd", () => { reloadVoice = null; });
   on("weaponEquip", (e) => { reloadVoice?.stop(); reloadVoice = null; play(sfx.equip(WEAPONS[e.weapon].equipMs), Priority.reload, 0.7); setHum(e.weapon); });
   on("footstep", (e) => play(sfx.footstep(e.sprint, e.crouch), Priority.movement, 0.55));

@@ -27,7 +27,8 @@ export interface GameEventMap {
   remoteLeave: { id: string };
   /** Local weapon changed (starts equip animation). */
   weaponEquip: { weapon: WeaponId };
-  reloadStart: { weapon: WeaponId };
+  /** `shells`: rounds actually going in; `empty`: the chamber was empty (the action must be worked). */
+  reloadStart: { weapon: WeaponId; shells: number; empty: boolean };
   reloadEnd: { weapon: WeaponId };
   dryFire: { weapon: WeaponId };
   /** Local movement feel events. */

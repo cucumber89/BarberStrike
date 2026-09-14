@@ -55,6 +55,10 @@ Troubleshooting:
   ```
 - Unit tests: `pnpm test` (shared movement/collision/hitscan + **map validity** (walk grid, spawn LOS, prop
   placement) + server room/match logic + client animation/reload/dynamic-scale on Babylon's NullEngine).
+- Feel tools (dev servers running, server with `FB_DEV_TOOLS=1`): `node apps/client/e2e/tools/feel-cycle.mjs`
+  drives two real clients through idle → walk → sprint → ADS → fire → reload → switch → grenade → death →
+  respawn and captures both views with per-step frame stats; `node apps/client/e2e/tools/cycle-leaks.mjs`
+  loops menu → match → armoury → menu and records heap / texture counts per cycle. See `docs/GAMEPLAY_POLISH.md`.
 - Asset tools: `node apps/client/e2e/tools/gltf-info.mjs <file.glb>` reads a model straight from disk
   (node names, animation clips, bones, bounding boxes) — no browser, no dev server. With the dev servers
   running, `node e2e/tools/assets-check.mjs` reports what the RUNNING game imported and what it costs,

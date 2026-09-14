@@ -141,7 +141,9 @@ describe("the drawn body of every build fills the same envelope", () => {
     // slightly wider arc: MEASURED 0.4154 m (TYCZKA) to 0.4337 m (BYK), an 18 mm spread on a sleeve
     // edge. It is bounded here and it is the only extent that is not equal to the millimetre. It
     // changes nothing about registration — the AABB is 0.35 m for all of them either way.
-    expect(spread(widths), `widths: ${widths.map((v) => v.toFixed(4)).join(", ")}`).toBeLessThan(0.025);
+    // Since the arm IK (gameplay-polish pass) the elbows fold to reach the gun, and a longer arm folds
+    // a touch wider: MEASURED 0.3877 m (TYCZKA) to 0.4132 m (BYK), 25.5 mm. Still cosmetic only.
+    expect(spread(widths), `widths: ${widths.map((v) => v.toFixed(4)).join(", ")}`).toBeLessThan(0.03);
   });
 
   it("puts every build's head in the band the server scores as a headshot", () => {

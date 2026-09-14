@@ -9,7 +9,7 @@ interface Snapshot {
   x: number; y: number; z: number;
   yaw: number; pitch: number;
   crouch: boolean; alive: boolean;
-  vx: number; vz: number; grounded: boolean;
+  vx: number; vy: number; vz: number; grounded: boolean;
   reloading: boolean; weapon: WeaponId;
   /** Latest perk end time (server ms) — any active perk lights the hat band. */
   perkUntil: number;
@@ -75,7 +75,7 @@ export class RemotePlayer {
   readonly character: CharacterLike;
   /** Interpolated state exposed to VFX/audio (muzzle position etc). */
   x = 0; y = 0; z = 0; yaw = 0; pitch = 0; crouch = false; speed = 0; grounded = true;
-  vx = 0; vz = 0; reloading = false; weapon: WeaponId = "pistol";
+  vx = 0; vy = 0; vz = 0; reloading = false; weapon: WeaponId = "pistol";
   lean = 0; tac = false;
   /**
    * Sliding, reconstructed rather than replicated. `slideSeenUntil` arms on the entry burst and runs
@@ -86,7 +86,7 @@ export class RemotePlayer {
   private slidingUntil = 0;
   private wasAlive = true;
   private skinsValue = "";
-  private input = { speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol" as WeaponId, moveDir: 0, perked: false, lean: 0, tac: false, slide: false, shaved: false, haircut: "" };
+  private input = { speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol" as WeaponId, moveDir: 0, vy: 0, perked: false, lean: 0, tac: false, slide: false, shaved: false, haircut: "" };
 
   /**
    * `displayTeam` (drop 4) is the side this player is DRAWN as: in FFA everyone is on team 0 for
@@ -126,7 +126,7 @@ export class RemotePlayer {
 
   private fill(s: Snapshot, p: NetPlayer, t: number): void {
     s.t = t; s.x = p.x; s.y = p.y; s.z = p.z; s.yaw = dequantAngle(p.yaw); s.pitch = dequantAngle(p.pitch);
-    s.crouch = p.crouch; s.alive = p.alive; s.vx = dequantVel(p.vx); s.vz = dequantVel(p.vz); s.grounded = p.grounded;
+    s.crouch = p.crouch; s.alive = p.alive; s.vx = dequantVel(p.vx); s.vy = dequantVel(p.vy ?? 0); s.vz = dequantVel(p.vz); s.grounded = p.grounded;
     s.reloading = p.reloading; s.weapon = p.weapon as WeaponId;
     let until = 0;
     for (const id of PERK_ORDER) { const u = p.perks?.get(id) ?? 0; if (u > until) until = u; }
@@ -171,6 +171,9 @@ export class RemotePlayer {
     this.x = lerp(a.x, b.x, f); this.y = lerp(a.y, b.y, f); this.z = lerp(a.z, b.z, f);
     this.yaw = lerpAngle(a.yaw, b.yaw, f); this.pitch = lerp(a.pitch, b.pitch, f);
     this.vx = lerp(a.vx, b.vx, f); this.vz = lerp(a.vz, b.vz, f);
+    // Presentation only (the body's rise / fall pose): never used to move the body, which is what
+    // the "vertical velocity is not extrapolated" rule below is about.
+    this.vy = lerp(a.vy, b.vy, f);
     // Past the newest snapshot: carry on at the last velocity, fading it out (see EXTRAPOLATE_MS).
     if (ahead > 0 && ahead <= EXTRAPOLATE_MAX_GAP_MS && b.alive && (b.vx !== 0 || b.vz !== 0)) {
       const w = Math.min(ahead, EXTRAPOLATE_MS) / 1000;
@@ -203,7 +206,7 @@ export class RemotePlayer {
     inp.speed = this.speed; inp.grounded = this.grounded; inp.crouch = this.crouch; inp.pitch = this.pitch;
     inp.alive = this.alive; inp.reloading = this.reloading; inp.weapon = this.weapon;
     inp.perked = b.perkUntil > renderT;
-    inp.lean = this.lean; inp.tac = this.tac; inp.slide = this.sliding;
+    inp.lean = this.lean; inp.tac = this.tac; inp.slide = this.sliding; inp.vy = this.vy;
     inp.shaved = b.shaved;
     inp.haircut = b.haircut;
     // Direction of travel relative to facing (for the strafe lean).

@@ -5,6 +5,7 @@
  * sound peaks between roughly -12 and -1 dBFS before the buses (the self-test asserts this).
  */
 import type { GrenadeId, WeaponId } from "@frankibarber/shared";
+import type { ReloadCue } from "../combat/reloadTimeline";
 import { env, filter, gain, glide, noise, osc, pan, saturator, send, vary, type Graph } from "./synth";
 
 export type SoundFn = (g: Graph) => number;
@@ -332,27 +333,56 @@ export function weaponAction(weapon: WeaponId, actionMs: number): SoundFn {
   };
 }
 
-/** Mag out → mag in → bolt, spread across the weapon's reload time. */
-export function reload(weapon: WeaponId, reloadMs: number): SoundFn {
+/**
+ * The reload, cued from the choreography: every sound below sits on a beat `reloadCues` read off
+ * the same frames the viewmodel poses from, so the seat THUD lands where the magazine lands and
+ * the shells click as often as shells go in. `reloadMs` scales the beats into seconds. Without
+ * cues (a caller that has none) the shape falls back to the generic magazine rhythm.
+ */
+export function reload(weapon: WeaponId, reloadMs: number, cues?: readonly ReloadCue[]): SoundFn {
   return (g) => {
     const R = reloadMs / 1000;
-    const heavy = weapon === "shotgun" || weapon === "dmr";
+    const heavy = weapon === "shotgun" || weapon === "autoshotgun" || weapon === "dmr" || weapon === "sniper" || weapon === "lmg" || weapon === "launcher";
     const t = g.t;
-    // Release latch + mag sliding out.
-    click(g, t + R * 0.10, heavy ? 1500 : 2100, 0.30);
-    swish(g, t + R * 0.13, 1400, 500, 0.12, 0.10);
-    if (weapon === "shotgun") {
-      // Shells fed one at a time.
-      for (let i = 0; i < 4; i++) { click(g, t + R * (0.28 + i * 0.13), 1300 + i * 60, 0.22, 0.010); thud(g, t + R * (0.28 + i * 0.13) + 0.01, 180, 0.12, 0.04); }
-    } else {
-      swish(g, t + R * 0.50, 500, 1600, 0.10, 0.08);
-      thud(g, t + R * 0.60, heavy ? 130 : 170, 0.30, 0.05);
-      click(g, t + R * 0.62, heavy ? 1700 : 2300, 0.28);
+    const list = cues && cues.length ? cues : [
+      { t: 0.10, kind: "magOut" }, { t: 0.50, kind: "magIn" }, { t: 0.60, kind: "seat" }, { t: 0.84, kind: "actionBack" }, { t: 0.91, kind: "actionForward" },
+    ] as ReloadCue[];
+    for (const c of list) {
+      const at = t + R * c.t;
+      switch (c.kind) {
+        case "magOut":        // the release latch, then the mag sliding out of the well
+          click(g, at, heavy ? 1500 : 2100, 0.30);
+          swish(g, at + 0.03, 1400, 500, 0.12, 0.10);
+          break;
+        case "magIn":         // the fresh mag going up into the well
+          swish(g, at, 500, 1600, 0.10, 0.08);
+          break;
+        case "seat":          // the slam home
+          thud(g, at, heavy ? 130 : 170, 0.30, 0.05);
+          click(g, at + 0.02, heavy ? 1700 : 2300, 0.28);
+          break;
+        case "actionBack":    // slide / bolt / charging handle pulled
+          click(g, at, 2600, 0.34, 0.014);
+          swish(g, at + 0.02, 1100, 400, 0.09, 0.08);
+          break;
+        case "actionForward": // …and let go home
+          click(g, at, 1900, 0.30, 0.012);
+          thud(g, at, 220, 0.10, 0.03);
+          break;
+        case "shell":         // one shell pushed past the gate / into the cylinder
+          click(g, at, 1300, 0.22, 0.010);
+          thud(g, at + 0.01, 180, 0.12, 0.04);
+          break;
+        case "open":          // cylinder swung out, cover lifted, breech broken
+          click(g, at, 1800, 0.26, 0.012);
+          swish(g, at + 0.02, 900, 1800, 0.10, 0.08);
+          break;
+        case "close":         // …and snapped shut
+          click(g, at, 1600, 0.30, 0.014);
+          thud(g, at + 0.01, 160, 0.18, 0.05);
+          break;
+      }
     }
-    // Bolt / slide: two clicks, the second lower.
-    click(g, t + R * 0.84, 2600, 0.34, 0.014);
-    click(g, t + R * 0.84 + 0.07, 1900, 0.30, 0.012);
-    thud(g, t + R * 0.84 + 0.07, 220, 0.10, 0.03);
     return R + 0.2;
   };
 }

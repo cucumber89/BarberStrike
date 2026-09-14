@@ -108,10 +108,14 @@ describe("nothing an outfit adds escapes the body", () => {
   });
 
   it("leaves the skull, and therefore the headshot, exactly where it was", () => {
+    // Against the BARE body in the same pose (same name, so the same idle-sway phase): the sway
+    // rocks the crown by a few millimetres on any body, and that rock is not the outfit's doing.
+    const bare = (() => { const { c, s } = wear(DEFAULT_OUTFIT); const y = extents(c, (n) => n.startsWith("skull")).maxY; c.dispose(); s.dispose(); return y; })();
+    expect(bare).toBeCloseTo(BODY_ENVELOPE.crownY, 1);
     for (const o of OUTFITS) {
       const { c, s } = wear(o.id);
       const skull = extents(c, (n) => n.startsWith("skull"));
-      expect(skull.maxY, o.id).toBeCloseTo(BODY_ENVELOPE.crownY, 2);
+      expect(skull.maxY, o.id).toBeCloseTo(bare, 3);
       c.dispose(); s.dispose();
     }
   });

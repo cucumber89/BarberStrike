@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { WEAPONS, WEAPON_ORDER, type WeaponId } from "@frankibarber/shared";
-import { gunBoxInTorso, holdPose, overlap, vestPenetration, HOLD, VEST } from "./characterHold";
+import { gunBoxInTorso, gunSlicesInTorso, holdPose, overlap, vestPenetration, BLADE, HOLD, VEST } from "./characterHold";
 
 /**
  * Drop A: the third-person gun is a held object, not a decal on the chest.
@@ -15,7 +15,8 @@ const slotOf = (id: WeaponId): 1 | 2 | 3 => WEAPONS[id].slot as 1 | 2 | 3;
 
 describe("third-person hold: the gun does not pass through the body", () => {
   it.each(WEAPON_ORDER)("%s clears the vest", (id) => {
-    const box = gunBoxInTorso(id, slotOf(id));
+    // Worst slice along the gun's length: a yawed gun's single bounding box is mostly air.
+    const box = gunSlicesInTorso(id, slotOf(id)).reduce((worst, s) => (vestPenetration(s) > vestPenetration(worst) ? s : worst));
     const pen = vestPenetration(box);
     const o = overlap(box, VEST);
     expect(pen, `${id}: ${(pen * 1000).toFixed(0)} mm inside the vest (overlap x/y/z ${o.map((v) => (v * 1000).toFixed(0)).join("/")} mm); gun box x ${box.min[0].toFixed(3)}…${box.max[0].toFixed(3)}, z ${box.min[2].toFixed(3)}…${box.max[2].toFixed(3)}`).toBe(0);
@@ -45,8 +46,8 @@ describe("third-person hold: the gun does not pass through the body", () => {
 describe("holdPose", () => {
   it("mirrors the constants Character.update writes", () => {
     const long = holdPose(1);
-    expect(long.position).toEqual([HOLD.x, HOLD.y, HOLD.z]);
-    expect(long.rotation).toEqual([HOLD.pitch, HOLD.yaw, 0]);
+    expect(long.position).toEqual([HOLD.x - BLADE.inward, HOLD.y + 0.01, HOLD.z + BLADE.forward]);
+    expect(long.rotation).toEqual([HOLD.pitch, HOLD.yaw - BLADE.twist, 0]);
     // A sidearm sits a little further out and forward; the clippers lower and further forward still.
     expect(holdPose(2).position[0]).toBeGreaterThan(long.position[0]);
     expect(holdPose(3).position[1]).toBeLessThan(long.position[1]);
