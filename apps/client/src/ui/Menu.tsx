@@ -37,7 +37,7 @@ const touchOnly = (): boolean =>
   typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(pointer: fine)").matches;
 
 /** How the mode reads on its card, in two words: who is on your side, and what ends the match. */
-const modeTag = (m: GameMode): string => `${MODES[m].teams ? "TEAMS" : "SOLO"} · TO ${MODES[m].scoreLimit}`;
+const modeTag = (m: GameMode): string => `${MODES[m].teams ? "DRUŻYNY" : "SOLO"} · DO ${MODES[m].scoreLimit}`;
 
 /** The map's real footprint, from its own bounds — a picker that says "34 × 18 m" says something. */
 const mapSize = (id: string): string => {

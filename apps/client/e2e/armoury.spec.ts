@@ -21,7 +21,12 @@ test("the main menu exposes the six launch skins and remembers an equipped finis
 
   await page.getByTestId("armoury-haircuts").click();
   await expect(page.getByTestId("armoury-haircut-cap")).toHaveClass(/\bon\b/);
-  await expect(page.getByTestId("armoury-haircut-slickback")).toBeDisabled();
+  // A locked haircut is a PREVIEW button since the crate simplification (2026-09-13), not a dead
+  // control: it opens the preview and says where the cut comes from. The spec used to expect it
+  // disabled, which was the old behaviour.
+  await expect(page.getByTestId("armoury-haircut-slickback")).toHaveClass(/\blocked\b/);
+  await expect(page.getByTestId("armoury-haircut-slickback")).toBeEnabled();
+  await expect(page.getByTestId("armoury-haircut-slickback")).toHaveAttribute("title", /skrzynki/);
   await page.screenshot({ path: info.outputPath("haircuts.png"), fullPage: true });
 
   // POSTAĆ: the body picker. Unlike the haircuts nothing here is locked — builds are not earned
@@ -58,7 +63,8 @@ test("the main menu exposes the six launch skins and remembers an equipped finis
 
   await page.screenshot({ path: info.outputPath("armoury.png"), fullPage: true });
   await page.getByTestId("armoury-crates").click();
-  await expect(page.getByTestId("crate-count")).toHaveText("1");
+  // The counter carries a "MASZ" label inside the same element since the crate simplification (09-13).
+  await expect(page.getByTestId("crate-count")).toHaveText(/^MASZ1$/);
   await page.getByTestId("crate-open").click();
   await expect(page.getByTestId("crate-opening")).toBeVisible();
   await page.screenshot({ path: info.outputPath("crate-rolling.png"), fullPage: true });
@@ -69,7 +75,7 @@ test("the main menu exposes the six launch skins and remembers an equipped finis
     page.locator('[data-winning="true"]').boundingBox(),
   ]);
   expect(Math.abs((marker?.x ?? 0) - ((winning?.x ?? 0) + (winning?.width ?? 0) / 2))).toBeLessThan(2);
-  await expect(page.getByTestId("crate-count")).toHaveText("0");
+  await expect(page.getByTestId("crate-count")).toHaveText(/^MASZ0$/);
   await page.waitForTimeout(500);
   await page.screenshot({ path: info.outputPath("crate-prize.png"), fullPage: true });
 

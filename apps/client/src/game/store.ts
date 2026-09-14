@@ -65,6 +65,12 @@ export interface HudState {
   scoreA: number;
   scoreB: number;
   winner: Team | -1;
+  /**
+   * Who took the LAST ROUND (Bomb, 1 v 1, Ostrzyżeni), from the Prep MatchEvent. Kept apart from
+   * `winner`, which the 10 Hz state sync overwrites with the match's (still -1) winner a moment
+   * after the event, so the round card had nothing to name.
+   */
+  roundWinner: Team | -1;
   players: ScoreRow[];
   /** Last answer to a team-change request (2.4): what the server decided, and when it was said. */
   teamResult: (TeamResult & { at: number }) | null;
@@ -156,7 +162,7 @@ export const initialHud: HudState = {
   connected: false, myId: "", myTeam: 0,
   health: 100, alive: false, respawnAt: 0, killerName: "", killerWeapon: null,
   weapon: "pistol", ammo: 0, reserve: 0, reloading: false,
-  phase: MatchPhase.Waiting, phaseEndsAt: 0, matchEndsAt: 0, scoreA: 0, scoreB: 0, winner: -1,
+  phase: MatchPhase.Waiting, phaseEndsAt: 0, matchEndsAt: 0, scoreA: 0, scoreB: 0, winner: -1, roundWinner: -1,
   reward: null, profile: emptyProfile(),
   players: [], killFeed: [], teamResult: null, plan: null, planId: 0,
   hitAt: 0, hitKill: false, hitHead: false, damageAt: 0, damageAngle: 0,

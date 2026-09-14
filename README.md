@@ -69,9 +69,16 @@ Troubleshooting:
 - Measurement tools (dev servers running): `pnpm profile` (draw calls / meshes / lights per view),
   `pnpm shots` (13 map views), `pnpm anim` (per-weapon idle / shot / reload stills).
 - UI fit (client dev server only — both stub what they need): `node apps/client/e2e/tools/ui-fit.mjs`
-  checks the buy menu fits one screen, `node apps/client/e2e/tools/menu-fit.mjs` checks the menu and
-  the server browser do, at five viewports including browser zoom. Both fail with a non-zero exit
-  and write a table plus screenshots under `apps/client/e2e/out/`.
+  opens every aisle tab of the buy menu at eight viewports (three resolutions plus 110 / 125 / 150 %
+  zoom) and fails on a scroll, a control off screen, a truncated name or reason, or type under its
+  floors (names 16 px, role lines 13 px, anything 10 px); it also drives seven match-end cases and
+  the round card. `node apps/client/e2e/tools/menu-fit.mjs` checks the menu and the server browser.
+  Both fail with a non-zero exit and write a table plus screenshots under `apps/client/e2e/out/`.
+- Leaks and recovery (both servers running): `node apps/client/e2e/tools/cycles.mjs --n 10` joins
+  and leaves ten matches and reports scene resource counts and the heap after each leave;
+  `node apps/client/e2e/tools/context-loss.mjs` forces a WebGL context loss mid-match and checks
+  that frames resume after the restore. SwiftShader in this container proves leaks and recovery,
+  not frame rate.
 - Diagnostic scripts in `apps/client/e2e/tools/` (dev servers running): `reconnect.mjs` (simulated network drop →
   session resume), `audio-selftest.mjs` (renders every sound offline + live voice cap), `shots.mjs` / `faceoff.mjs` /
   `shot1.mjs` (screenshots of the map, characters and HUD in headless Chromium).

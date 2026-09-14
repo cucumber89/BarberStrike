@@ -53,14 +53,13 @@ test("clean entry, deferred spawn, visible buy timer and shop categories", async
   await page.screenshot({ path: info.outputPath("hud.png") });
   await page.evaluate(() => window.__fb.game.setShopOpen(true));
   await expect(page.getByTestId("shop-countdown")).toContainText(/\d+s/);
-  // The one-screen shop: every aisle is on screen at once, so a grenade and a gun are both
-  // reachable without a click. (This used to click GRENADES and CLASSES tabs, which the
-  // one-screen layout replaced with aisle headings and a role strip.)
-  for (const aisle of ["PRIMARY", "SIDEARM", "GRENADES", "EQUIPMENT"]) {
-    await expect(page.getByText(aisle, { exact: true })).toBeVisible();
-  }
-  await expect(page.getByTestId("shop-smoke")).toBeVisible();
+  // Four aisle tabs on the rail, each also a digit key; the guns are the first tab, the grenades
+  // the third. Every tab has to be reachable by click as well as by key.
+  for (const t of [1, 2, 3, 4]) await expect(page.getByTestId(`shop-tab-${t}`)).toBeVisible();
   await expect(page.getByTestId("shop-smg")).toBeVisible();
+  await page.getByTestId("shop-tab-3").click();
+  await expect(page.getByTestId("shop-smoke")).toBeVisible();
+  await page.getByTestId("shop-tab-1").click();
   await page.screenshot({ path: info.outputPath("shop.png") });
   await expect(page.getByTestId("boys-picker")).toBeVisible();
   expect(errors).toEqual([]);

@@ -730,6 +730,28 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
 
 ## Deferred (things noticed, deliberately not done)
 
+- **Drop M: `armoury.spec.ts` fails at the crate reel marker** — `.reel-window > i` sits 63.8 px
+  from the centre of the `[data-winning="true"]` cell on SwiftShader (expected < 2). Crates.tsx was
+  not touched by this drop and the same assertion is on `main`; it is either a real reel regression
+  from the 09-13 / 09-14 crate and skin commits or a timing artefact of the software renderer. Not
+  weakened, not skipped; needs a look at `Crates.tsx`'s reel maths on a real GPU. The spec's two
+  other stale expectations (locked haircut disabled, bare crate count) were corrected here.
+- **Drop M (gameplay polish): `maxLightsPerMesh` is now 57 on every profiled view** (`pnpm profile`,
+  2026-09-14; the Drop J note measured 45). Every mesh lists every light in the district, materials
+  cap at 4–6, so which lights actually shade a wall is list order. Look problem, fix is per-light
+  `includedOnlyMeshes` in the map data — not touched, out of this brief's scope.
+- **Drop M: Low, Medium and High issue the same draw calls** (352 / 350 / 351 on the street view).
+  Low drops shadows (451 casters → none) and 14 shader variants and nothing else. On a GPU that is
+  draw-call bound Low will not help; whether such a GPU is in the audience is unmeasured (no real GPU
+  here). A Low that merges more or culls more is a MapBuilder change with a real-GPU measurement.
+- **Drop M: no input-latency / RTT / framerate matrix was measured.** The brief's 30/60/144 fps ×
+  50/100/150 ms RTT grid needs either a real display or a harness that steps the render loop and
+  a WebSocket proxy that delays frames; neither exists and neither fits a UI drop. The unit tests
+  that stand in (`inputDt`, `prediction`, `RemotePlayer`, server `Framerate`) are green and untouched.
+- **Drop M: the Boys role names (Scout, Assault, Heavy, Medic, Marksman) and their blurbs are still
+  English**, as are the menu's mode cards' subtitles other than the blurb. The shop, HUD, result,
+  loading and pause screens are Polish; the menu proper was not in this brief's file list.
+
 - **Drop J: prediction runs per rendered frame, so above ~240 fps a client outruns the room.** The
   server consumes at most 4 inputs per tick (240/s) and a client emits one per frame, so a 300 Hz
   display queues faster than the room drains and the queue's oldest entries are discarded — a lost

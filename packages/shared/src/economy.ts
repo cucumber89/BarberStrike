@@ -168,6 +168,23 @@ export function canBuy(w: Wallet, item: ShopItemId, ctx: BuyContext): BuyVerdict
   return { ok: true, cost: price, refund: 0 };
 }
 
+/**
+ * How much money is missing for `item`, after the refund of whatever it replaces: 0 when the
+ * purchase is affordable or refused for another reason. The shop prints this instead of a bare
+ * "too poor", because "brakuje $300" is something a player can act on and "too poor" is not.
+ */
+export function buyShortfall(w: Wallet, item: ShopItemId, ctx: BuyContext): number {
+  const v = canBuy(w, item, ctx);
+  if (v.ok || v.reason !== "money") return 0;
+  const price = itemPrice(item);
+  let refund = 0;
+  if (isWeaponId(item)) {
+    const current = WEAPONS[item].slot === 1 ? primaryOf(w) : secondaryOf(w);
+    refund = current && !(ctx.boysClass && current === boysClass(ctx.boysClass).starter) ? Math.round(WEAPON_PRICES[current] * ECONOMY.sellRatio) : 0;
+  }
+  return Math.max(0, price - refund - w.money);
+}
+
 /** Applies a purchase (call after canBuy). Returns the verdict for convenience. */
 export function applyBuy(w: Wallet, item: ShopItemId, ctx: BuyContext): BuyVerdict {
   const v = canBuy(w, item, ctx);
