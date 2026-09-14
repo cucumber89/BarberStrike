@@ -2,15 +2,10 @@
 
 exports[`skin recipe contract > pins exact operation streams for three seeds per generator 1`] = `
 {
-  "solid": [
-    2094591131,
-    81674194,
-    466219573,
-  ],
-  "stripes": [
-    1602995416,
-    538694113,
-    336864072,
+  "layered": [
+    1569572124,
+    4093465990,
+    281356556,
   ],
 }
 `;

@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from "react";
 import { BUILDS, DROPPABLE_OUTFITS, buildDef, outfitDef, HAIRCUTS, WEAPONS, WEAPON_ORDER, type WeaponId } from "@frankibarber/shared";
-import { catalog, fitsWeapon, type SkinDef } from "@frankibarber/skins";
+import { catalog, COLLECTIONS, collectionName, fitsWeapon, type SkinDef } from "@frankibarber/skins";
 import { ensureStarterSkins, equipBuild, equipHaircut, equipOutfit, equipSkin, ownedCuts } from "../game/progression/profile";
 import { uiSound } from "../game/audio";
 import { SkinPreview } from "./SkinPreview";
+import { SkinArt } from "./SkinArt";
 import { CharacterPreview } from "./CharacterPreview";
 import { Crates } from "./Crates";
 import { HaircutArt } from "./HaircutArt";
@@ -11,12 +12,6 @@ import { HaircutArt } from "./HaircutArt";
 const rarityLabel: Record<SkinDef["rarity"], string> = {
   pospolity: "POSPOLITY", rzadki: "RZADKI", epicki: "EPICKI", legendarny: "LEGENDARNY", zloty: "ZŁOTY",
 };
-
-function swatch(skin: SkinDef): string {
-  const colors = String(skin.params.colors ?? skin.params.color ?? "#65717a").split(",");
-  if (skin.generator === "stripes") return `repeating-linear-gradient(${skin.params.angle ?? 45}deg, ${colors.map((color, i) => `${color} ${i * 18}px ${(i + 1) * 18}px`).join(",")})`;
-  return `linear-gradient(135deg, ${colors[0]}, #101419)`;
-}
 
 export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: string) => void; onBuild?: (id: string) => void; onOutfit?: (id: string) => void }) {
   const initial = useMemo(() => ensureStarterSkins(), []);
@@ -30,7 +25,11 @@ export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: str
   const [outfit, setOutfit] = useState(initial.outfit);
   const [fits, setFits] = useState(() => new Set(initial.fits));
   const [preview, setPreview] = useState(initial.equip.rifle ?? catalog.find((skin) => fitsWeapon(skin, "rifle"))?.id ?? "");
-  const skins = catalog.filter((skin) => fitsWeapon(skin, weapon) && owned.has(skin.id));
+  // Every finish that fits the gun is on the wall, owned or not: a locked skin can be looked at on
+  // the model, it just cannot be worn. That is what makes a crate worth opening.
+  const skins = catalog.filter((skin) => fitsWeapon(skin, weapon));
+  const ownedHere = skins.filter((skin) => owned.has(skin.id)).length;
+  const previewSkin = catalog.find((skin) => skin.id === preview);
   const ownedHaircutIds = new Set(ownedCuts().map((item) => item.id));
 
   // Hair is judged on a head, not beside a gun: all three character pickers share the body stage.
@@ -41,6 +40,7 @@ export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: str
     uiSound("hover");
   };
   const chooseSkin = (id: string) => {
+    if (id && !owned.has(id)) { setPreview(id); uiSound("hover"); return; } // Look, don't wear.
     const equipped = equipSkin(weapon, id);
     setEquip((current) => {
       const next = { ...current }; if (equipped) next[weapon] = equipped; else delete next[weapon]; return next;
@@ -95,8 +95,8 @@ export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: str
             ? section === "haircuts"
               ? <div><small>FRYZURA</small><b>{HAIRCUTS.find((item) => item.id === hairPreview)?.name}</b></div>
               : <div><small>{buildDef(build).name}</small><b>{outfitDef(outfit).name}</b></div>
-            : <div><small>{WEAPONS[weapon].name}</small><b>{preview ? catalog.find((skin) => skin.id === preview)?.name : "Fabryczny"}</b></div>}
-          <span>{section === "haircuts" ? hairPreview === haircut ? "ZAŁOŻONA" : "PODGLĄD" : onBody ? "ZAŁOŻONE" : equip[weapon] === preview ? "ZAŁOŻONY" : "PODGLĄD"}</span>
+            : <div><small>{WEAPONS[weapon].name}{previewSkin ? ` · ${collectionName(previewSkin.collection)} · ${rarityLabel[previewSkin.rarity]}` : ""}</small><b>{previewSkin ? previewSkin.name : "Fabryczny"}</b></div>}
+          <span>{section === "haircuts" ? hairPreview === haircut ? "ZAŁOŻONA" : "PODGLĄD" : onBody ? "ZAŁOŻONE" : equip[weapon] === preview ? "ZAŁOŻONY" : preview && !owned.has(preview) ? "ZE SKRZYNKI" : "PODGLĄD"}</span>
         </div>
       </div>
 
@@ -110,16 +110,30 @@ export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: str
         </div>
         {section === "skins" && (
           <>
-            <div className="armoury-heading"><span>03</span><div><b>SKINY</b><small>Posiadane · {skins.length}</small></div></div>
+            <div className="armoury-heading"><span>03</span><div><b>SKINY</b><small>Posiadane · {ownedHere}/{skins.length}</small></div></div>
             <div className="armoury-skin-grid">
               <button type="button" className={!equip[weapon] ? "skin-card on" : "skin-card"} onClick={() => chooseSkin("")} data-testid="skin-factory">
                 <i className="skin-swatch factory" /><b>Fabryczny</b><small>ORYGINALNY</small>
               </button>
-              {skins.map((skin) => (
-                <button type="button" key={skin.id} className={equip[weapon] === skin.id ? `skin-card ${skin.rarity} on` : `skin-card ${skin.rarity}`} onClick={() => chooseSkin(skin.id)} data-testid={`skin-${skin.id}`}>
-                  <i className="skin-swatch" style={{ background: swatch(skin) }} /><b>{skin.name}</b><small>{rarityLabel[skin.rarity]}</small>
-                </button>
-              ))}
+              {COLLECTIONS.map((collection) => {
+                const inCollection = skins.filter((skin) => skin.collection === collection.id);
+                if (!inCollection.length) return null;
+                return (
+                  <React.Fragment key={collection.id}>
+                    <div className="skin-collection" data-testid={`skin-collection-${collection.id}`}><b>{collection.name}</b><small>{inCollection.filter((skin) => owned.has(skin.id)).length}/{inCollection.length}</small></div>
+                    {inCollection.map((skin) => {
+                      const has = owned.has(skin.id);
+                      const state = equip[weapon] === skin.id ? "on" : preview === skin.id ? "peek" : "";
+                      return (
+                        <button type="button" key={skin.id} className={`skin-card ${skin.rarity} ${state} ${has ? "" : "locked"}`} onClick={() => chooseSkin(skin.id)} data-testid={`skin-${skin.id}`} title={has ? "Załóż skin" : "Podejrzyj skin ze skrzynki"}>
+                          <SkinArt skin={skin} weapon={weapon} width={300} focus="receiver" className="skin-art" />
+                          <b>{skin.name}</b><small>{rarityLabel[skin.rarity]}{has ? "" : " · ZE SKRZYNKI"}</small>
+                        </button>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              })}
             </div>
           </>
         )}
@@ -199,7 +213,7 @@ export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: str
         )}
         {section === "haircuts" && <p className="armoury-note">Kliknij każdą fryzurę, żeby zobaczyć ją na postaci. Zablokowane modele wypadają ze Skrzynki Dzielnicy.</p>}
         {(section === "body" || section === "outfits") && <p className="armoury-note">Sylwetka i strój nie ruszają hitboxa, wzrostu ani strefy głowy — zmienia się wygląd, nie trafienia. Barwy drużyny zostają na piersi i na opasce, cokolwiek nosisz.</p>}
-        {!onBody && section !== "crates" && <p className="armoury-note">Wybór zapisuje się od razu i pojawi się w następnym meczu.</p>}
+        {!onBody && section !== "crates" && <p className="armoury-note">Wybór zapisuje się od razu i pojawi się w następnym meczu. Zablokowane skiny możesz obejrzeć na broni — wypadają ze Skrzynki Dzielnicy.</p>}
       </aside>
     </section>
   );

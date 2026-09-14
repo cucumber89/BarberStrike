@@ -1,69 +1,80 @@
-# Drop C: first six finishes (slices 1–4)
+# Skiny broni: warstwowe tekstury proceduralne
 
-This branch stops at the owner's six-skin art gate. It contains two generators, a procedural-weapon
-runtime, profile ownership/equip, one replicated string and a development preview. Crates, quests,
-the full Armoury, the remaining generators and Skin Studio are not implemented here.
+Skiny są kosmetyczne. Nie zmieniają geometrii, celowników, anchorów, animacji ani statystyk broni;
+serwer ich nie zna poza jednym zdezynfekowanym polem kosmetycznym (`packages/shared/src/skinsField.ts`).
 
-## Add a recipe
+## Katalog
 
-Edit `packages/skins/src/catalog.ts`. IDs are stable kebab-case; player-facing text is Polish.
-Each recipe stores generator, uint32 seed, scalar params, rarity, weapon compatibility and blurb.
-Keep names at most 22 characters and blurbs at most 64. Palettes use comma-separated colour strings
-because params are scalar JSON values. No image assets belong in the catalogue.
+`packages/skins/src/catalog.ts` zawiera 59 przepisów w ośmiu kolekcjach (`COLLECTIONS`): Zakład,
+Barber Underground, Nocna Zmiana, Monopolowy, Zielony Salon, Masa, Po Godzinach (18+, `nsfw`) i
+Złota Półka. Każdy przepis ma stabilne ID w kebab-case (zapisane kolekcje graczy odwołują się do nich;
+19 pierwotnych ID jest pilnowanych testem), nazwę do 22 znaków, opis do 64, rzadkość, kolekcję,
+listę broni (`"all"` albo jawną tablicę) i skalarne `params`. Żadnych bitmap w repozytorium.
 
-`renderSkin` draws in a 256-unit design space, scaled to the destination resolution. It layers finish,
-pattern, wear and grain. Generators receive only `SkinCanvas` and a seeded RNG; no DOM, clock or
-`Math.random`. Register new generators in `GENERATORS`. The current generators are solid and stripes.
-The `helix` catalogue hint is not a separate cylindrical UV projection: the runtime uses box projection.
+Wszystkie przepisy używają jednego generatora `layered`. Parametry to warstwy:
 
-Golden snapshots pin drawing-operation hashes for three seeds per generator. Browser rasterizers
-can differ at pixel level; cross-browser pixel identity is not asserted. Do not update a golden hash
-without reviewing and recording the intentional visual change.
+| warstwa | params |
+| --- | --- |
+| materiał bazowy | `base` (lacquer, steel, polymer, wood, chrome, carbon, concrete, gold, cloth, paper, neon), `colors` = `baza,tusz,akcent,jasny,dodatkowy`, `partTint` |
+| wzór pomocniczy | `pattern` (stripes, chevron, hazard, camo, hex, checker, dots, flames, waves, bricks, plaid, leopard, zebra, circuit, helix, folk, rays, grid, splatter, scales), `patternOn` (stock, front, grip, mag, receiver, all), `patternColors`, `patternScale`, `patternAngle`, `patternAlpha` |
+| ilustracja główna | `hero` (nazwa z `MOTIFS`), `heroScale`, `heroDz/Dy/Rot`, `heroSide`, `heroGlow`, `heroLabel`, `panel`, `drips`, `dripColor` |
+| napisy | `receiverLegend` (duży napis obok ilustracji), `stockText`, `frontText`, `magText`, `receiverText`, `stencil`, `textColor`, `textStroke`, `italic`, `glowText` |
+| części | `stockMotif`, `frontMotif`, `magMotif`, `gripMotif` (+ `Scale`, `Dz`, `Dy`, `Rot`) |
+| naklejki i znaki | `stickers` (`motyw` albo `!SŁOWO`), `serial`, `noSerial`, `accentBand`; znak kolekcji zawsze |
+| zużycie | `wear` (fabryczna patyna dodawana do `wear` egzemplarza), `grain`, `edges` |
+| emisja | `glow` (kolor) włącza drugą, emisyjną teksturę o połowie rozdzielczości |
 
-## Runtime contract
+Biblioteka motywów (`motifs.ts`) to ok. 70 ilustracji rysowanych w przestrzeni jednostkowej
+(czaszka z pompadourem, brzytwa, nożyczki, słupek, blok, klatka, tag, butelka, kieliszek, kapsel,
+liść, dym, oko, grzybek, hantel, strzykawka, usta, podwiązka, korona, filigran, laur itd.). Naklejki,
+tabliczki z numerem seryjnym, legendy i znaki kolekcji są w `decals.ts`, materiały w `materials.ts`,
+wzory w `patterns.ts`, rysy/odpryski/brud w `wear.ts`.
 
-The game uses `weaponMeshes.ts`, not imported glTF weapons. UVs are box-projected in weapon-root
-space at 0.32 m/tile. Magazine coordinates include their rest position. `meshesByMat` maps each
-material to an array because moving assemblies repeat material keys; retain every entry when swapping.
+## Ramka broni i UV
 
-`SkinRegistry.forScene(scene)` shares a refcounted cache. Jobs are serialized outside rendering,
-50 ms apart. Only the visible weapon holds a lease. Restore its factory materials BEFORE releasing
-that lease. Never dispose a model's shared materials with its geometry. The LRU target is 12 sets;
-it may exceed this while every set is referenced, and evicts idle sets as leases are released.
+Tekstura jest **rzutem bocznym broni**, nie kaflem. `buildFrame` (`frame.ts`) buduje z AABB części
+proceduralnego modelu (`proceduralParts`) ramkę `SkinFrame`: zakres `z` mapowany na `u`, dwa pasy w
+`v` dla prawej (górna połowa) i lewej (dolna połowa) burty, oraz strefy: `receiver` (= `parts[0]`,
+albo największa malowana płaszczyzna, gdy odbiornik jest stalowy), `magazine`, `stock`, `front`,
+`grip` (największa pojedyncza płaszczyzna w regionie, nie suma). `frameUv` odwzorowuje każdą ścianę
+do pasa burty, którą dotyka; nic się nie powtarza. Klient używa `sideProjectUvs` w
+`weaponMeshes.buildParts` i tej samej ramki w `SkinRegistry` (`weaponFrame(id)`).
 
-Each skin set shares one 1024² albedo texture. Lens, steel and brass retain factory materials; steel
-and brass include sight blades. Metal housings/notches still belong to the painted metal group and
-require the owner ADS review. No weapon geometry, hitboxes or combat numbers change.
+Rozmiar tekstury dobiera ramka (1024², 2048×1024 albo 1024×512, ≤ 8 MB), ok. 1500–3000 px/m.
+Pistolety i SMG dostają 1024², karabiny 2048×1024. Tekstura emisyjna ma połowę wymiarów.
 
-`bs_profile_v1` retains its key and defaults new fields independently. Unknown recipes are filtered
-without erasing progression. Equip requires ownership; empty equip means factory finish. The join
-option is pure and accepts a skin string parameter. The server sanitizes at most 11 entries/400 chars.
-RemotePlayer detects changes at receipt of network state and applies them through Character.
-Menu equip is carried by the next join; there is no new in-match equip message.
+Napisy są rysowane przez `Brush.text`, który odwraca transformację y-up i lustrzy tekst na lewej
+burcie, więc czytają się poprawnie z obu stron. Ilustracje kierunkowe zachowują zwrot świata.
 
-The instance wear field is preserved, but this tranche equips recipe IDs, not duplicate instances.
-Per-instance wear replication must be settled before crates ship. Bots are not assigned skins yet.
+## Runtime
 
-## Reproduce the review
+`SkinRegistry.forScene(scene)` maluje jeden zestaw na `(broń, skin, wear)`: `DynamicTexture`
+albedo (+ opcjonalnie emisyjna), klonowane materiały dla ról `pattern`; `steel`, `rubber`, `brass`,
+`lens` zostają fabryczne (wyjątek: rewolwer i strzelba mają stalowy odbiornik, więc tam stal przyjmuje
+wzór; celowniki są mosiężne). Zadania są szeregowane co 50 ms poza pętlą renderowania; nic nie jest
+malowane co klatkę. LRU trzyma do 10 zestawów, nigdy nie zwalnia zestawu z aktywną dzierżawą.
+`SkinBinding` przywraca fabryczne materiały przed zwolnieniem dzierżawy. Metaliczność jest umiarkowana,
+bo sceny nie mają tekstury środowiska: chrom i złoto żyją w samym malowaniu.
 
-Run `pnpm install`, then `pnpm dev`. The development preview is
-`http://localhost:5174/e2e/tools/skin-review.html`; it is outside the production entry graph.
+Miniatury kart, rolki skrzynki i nagrody (`SkinArt.tsx`) rysują ten sam przepis na płótnie 2D
+(prawa burta, kadr `receiver` albo `body`), raz na klucz, z leniwym malowaniem poza ekranem.
 
-- `node apps/client/e2e/tools/skin-batch.mjs`: catalogue textures and contact sheet.
-- `node apps/client/e2e/tools/skin-preview.mjs`: six model views, sniper/shotgun stripes, 10 mount cycles.
-- `node apps/client/e2e/tools/skin-shots.mjs`: two real game clients, profile → join → remote material
-  assertion, six pistol idle/ADS views and camera-posed remote views. This tool seeds a test profile;
-  it does not grant skins to ordinary players. Full five-skin × four-weapon acceptance remains later work.
+## Szafa i skrzynki
 
-Outputs are gitignored under `apps/client/e2e/out/skins/`. Install the matching browser with
-`pnpm --filter @frankibarber/client exec playwright install chromium`; `PW_CHANNEL` can select an
-installed Chromium channel. Unit checks: `pnpm typecheck`, `pnpm test --maxWorkers=4`.
+Szafa pokazuje wszystkie skiny pasujące do broni pogrupowane kolekcjami; zablokowane można obejrzeć
+na modelu, założyć tylko posiadane. Pula Skrzynki Dzielnicy to cały `catalog` bez duplikatów, dopóki
+coś zostało do wylosowania. Najrzadsze nagrody: `zloty` — Korona Frankiego i Złota Brzytwa.
 
-Independent review: the flat Warsztat swatch was initially rejected as muddy. On the actual model,
-the reviewer accepted all six directions for owner review, keeping Warsztat as the weakest design.
-No glaring seam was visible on the shown sniper/shotgun sides. This is not full gameplay art acceptance.
+## Przegląd i testy
 
-The in-game reviewer confirmed six distinct pistol ADS skins with an unobstructed post/notch opening.
-There is no factory reference in that set, so unchanged sight contrast is not proven. The 3 m/12 m
-observer shots are too small/front-facing to judge patterns and were rejected as art evidence.
-The two-client assertion independently verifies the actual replicated field and remote materials.
+`pnpm dev`, potem `http://localhost:5174/e2e/tools/skin-review.html`: karty wg kolekcji, widoki
+(prawa, lewa, zbliżenia, przód, tył, góra), suwak zużycia i podgląd całej tekstury obu burt.
+`node apps/client/e2e/tools/skin-review-shots.mjs --weapons rifle,pistol --views close,close-left`
+robi zrzuty do `apps/client/e2e/out/skins/` (`--sheet 1` dla arkuszy kolekcji); używa wbudowanego
+Chromium z `PW_CHROMIUM` albo `/opt/pw-browsers/chromium`.
+
+Testy: `packages/skins/src/skins.test.ts` (rejestracja, unikalne ID, broń i rzadkość, warstwy
+graficzne w każdym skinie, brak skinów jednokolorowych i różniących się tylko kolorem, złożoność
+legendarnych, pass emisyjny, ramka i lustrzenie napisów, złote hashe strumienia operacji),
+`apps/client/src/game/view/skin*.test.ts` (UV burt, ramki wszystkich broni, cache i zwalnianie),
+`profile.test.ts` (stare ID, pula skrzynki bez duplikatów, nowe kolekcje).
