@@ -630,11 +630,11 @@ button:focus-visible { outline:2px solid #f4cf8e; outline-offset:3px; }
 /* ---------- First-run hints (2.4) ---------- */
 /* Bottom-centre, above the ammo block, out of the crosshair's way. `pointer-events: none` is not
    decoration: a hint must never eat the click that was meant for the game. */
-.hint { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); pointer-events: none;
+.hint { position: absolute; left: 50%; bottom: 176px; transform: translateX(-50%); pointer-events: none;
   background: rgba(11,11,13,.88); border-left: 2px solid var(--brass); padding: 7px 14px;
   font-size: 13px; letter-spacing: 0.02em; color: var(--tx); white-space: nowrap; max-width: 92vw;
   overflow: hidden; text-overflow: ellipsis; animation: slide-in 200ms ease-out; }
-@media (max-width: 700px) { .hint { font-size: 12px; bottom: 96px; } }
+@media (max-width: 700px) { .hint { font-size: 12px; bottom: 160px; } }
 
 .wallet-role { color:#edc078; font-size:12px; padding:5px 8px; border-radius:5px; background:#10151edb; max-width:300px; }
 

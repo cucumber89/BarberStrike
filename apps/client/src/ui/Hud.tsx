@@ -386,7 +386,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           <div className={`wallet-money ${h.money >= 8000 ? "rich" : ""}`} data-testid="money">{money(h.money)}</div>
           {h.alive && !h.shopOpen && h.buyWindowLeft > 0 && (
             <div className={`wallet-prompt ${h.nearStation ? "station" : ""} ${windowSecs !== null && windowSecs <= 5 ? "urgent" : ""}`} data-testid="buy-prompt">
-              <kbd>B</kbd><span>SKLEP</span><strong data-testid="buy-countdown">{windowSecs !== null ? `${windowSecs}s` : h.nearStation ? "OTWARTY" : "ROZGRZEWKA"}</strong>
+              <kbd>B</kbd><span>SKLEP</span><strong data-testid="buy-countdown">{windowSecs !== null ? `${windowSecs}s` : "OTWARTY"}</strong>
             </div>
           )}
         </div>
