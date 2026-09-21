@@ -562,7 +562,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       return;
     }
     // The player cap, now that `maxClients` also has to let watchers in.
-    if (this.state.players.size - this.botCount >= this.playerSlots) throw new Error("room full");
+    if (this.humanCount() >= this.playerSlots) throw new Error("room full");
     const name = sanitizeName(options?.name) ?? `PLAYER${Math.floor(Math.random() * 900 + 100)}`;
     const p = new PlayerState();
     p.id = client.sessionId;
@@ -605,9 +605,18 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private publishCount(): void {
     void this.setMetadata({
       room: this.state.roomName, mode: this.mode, name: this.state.roomName, map: this.map.id,
-      bots: this.botCount, players: this.state.players.size, slots: this.playerSlots,
+      bots: this.botCount, players: this.humanCount(), slots: this.playerSlots,
     });
   }
+
+  /**
+   * People in the seats. `state.players` holds the bots too, and `slots` is the HUMAN seats (the
+   * bots already took theirs off the twelve), so the two only compare when the bots are left out
+   * of the count: with them in, a host alone with six bots published 7/6, the room browser read
+   * that as FULL and greyed out JOIN, and nobody could get into a match that had five free seats.
+   * `/rooms` and `/health` print this number; `onJoin` gates on it.
+   */
+  private humanCount(): number { return this.state.players.size - this.botCount; }
 
   /**
    * The side a joiner (human or bot) lands on. Team modes balance the two sides; FFA and Gun Game

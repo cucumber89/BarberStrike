@@ -57,6 +57,22 @@ describe("watching a match without playing it", () => {
     expect(meta.slots).toBe(MAX_PLAYERS);
   });
 
+  it("does not count the bots as the people in the seats", async () => {
+    // A host alone with six bots was published as 7/6: `players` counted the bots while `slots`
+    // had already given them their seats, so the browser said FULL and greyed out JOIN on a match
+    // with five free seats. The count the browser compares against `slots` is the humans.
+    h = await RoomHarness.create({ room: "bots-room", mode: "tdm", bots: 6 });
+    await h.join("Host");
+    // `setMetadata` REPLACES the object, so read it fresh after every join.
+    const meta = () => (h.room as unknown as { metadata: { players: number; slots: number; bots: number } }).metadata;
+    expect(meta().bots).toBe(6);
+    expect(meta().slots).toBe(MAX_PLAYERS - 6);
+    expect(meta().players, "one human, six bots").toBe(1);
+    expect(meta().players < meta().slots, "the browser must show a free seat").toBe(true);
+    await h.join("Guest");
+    expect(meta().players).toBe(2);
+  });
+
   it("cannot move the match by sending anything", async () => {
     h = await RoomHarness.create({ room: "mute", mode: "tdm" });
     await h.join("Alpha");
