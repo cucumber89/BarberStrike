@@ -234,15 +234,15 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                 <nav className="mm-nav">
                   <button className="mm-nav-btn primary" onClick={() => setPanel("lobby")} data-testid="btn-play">
                     <i className="mm-nav-no">01</i><span className="mm-nav-art"><NAV_ART.play /></span>
-                    <b>PLAY</b><em>Pick a mode, pick a match</em><span className="mm-nav-go">▸</span>
+                    <b>GRAJ</b><em>Wybierz tryb i mecz</em><span className="mm-nav-go">▸</span>
                   </button>
                   <button className="mm-nav-btn" onClick={() => setPanel("settings")} data-testid="btn-settings">
                     <i className="mm-nav-no">02</i><span className="mm-nav-art"><NAV_ART.settings /></span>
-                    <b>SETTINGS</b><em>Crosshair, graphics, audio, keys</em><span className="mm-nav-go">▸</span>
+                    <b>USTAWIENIA</b><em>Celownik, obraz, dźwięk, klawisze</em><span className="mm-nav-go">▸</span>
                   </button>
                   <button className="mm-nav-btn" onClick={() => setPanel("controls")} data-testid="btn-controls">
                     <i className="mm-nav-no">03</i><span className="mm-nav-art"><NAV_ART.controls /></span>
-                    <b>CONTROLS</b><em>Every key on one card</em><span className="mm-nav-go">▸</span>
+                    <b>STEROWANIE</b><em>Wszystkie klawisze na jednej karcie</em><span className="mm-nav-go">▸</span>
                   </button>
                   <button className="mm-nav-btn" onClick={() => setPanel("armoury")} data-testid="btn-armoury">
                     <i className="mm-nav-no">04</i><span className="mm-nav-art"><NAV_ART.armoury /></span>
@@ -284,8 +284,8 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
       {panel !== "main" && (
         <div className="mm-shell">
           <header className="mm-bar">
-            <button className="mm-back" onClick={() => setPanel("main")} data-testid="btn-back">◂ BACK</button>
-            <div className="mm-bar-brand"><b>BARBERSTRIKE</b><span>{panel === "lobby" ? "LOBBY" : panel === "settings" ? "SETTINGS" : panel === "armoury" ? "SZAFA" : "CONTROLS"}</span></div>
+            <button className="mm-back" onClick={() => setPanel("main")} data-testid="btn-back">◂ WSTECZ</button>
+            <div className="mm-bar-brand"><b>BARBERSTRIKE</b><span>{panel === "lobby" ? "LOBBY" : panel === "settings" ? "USTAWIENIA" : panel === "armoury" ? "SZAFA" : "STEROWANIE"}</span></div>
             {panel === "lobby" ? status : <span className="mm-version">v{GAME_VERSION}</span>}
           </header>
 

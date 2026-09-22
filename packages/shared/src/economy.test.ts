@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ECONOMY, WEAPON_PRICES, applyBuy, applySell, buyShortfall, buyWindowLeft, buyWindowOpen, canBuy, freshWallet, killReward, takeGrenade, weaponForSlot, type BuyContext } from "./economy";
-import { MatchPhase } from "./types";
+import { ECONOMY, WEAPON_PRICES, applyBuy, applySell, buyShortfall, buyWindowLeft, buyWindowOpen, canBuy, freshWallet, killReward, modeAllowsItem, takeGrenade, weaponForSlot, type BuyContext } from "./economy";
+import { MatchPhase, type GameMode } from "./types";
 
 const open = (over: Partial<BuyContext> = {}): BuyContext => ({ now: 5000, spawnedAt: 0, phase: MatchPhase.Playing, alive: true, nearStation: false, ...over });
 const closed = (): BuyContext => open({ now: 50_000 });
@@ -139,5 +139,37 @@ describe("rewards", () => {
   it("pays kills, more for head shots", () => {
     expect(killReward(false)).toBe(ECONOMY.killReward);
     expect(killReward(true)).toBe(ECONOMY.killReward + ECONOMY.headshotBonus);
+  });
+});
+
+/**
+ * What a mode STOCKS, as opposed to when its shop is open. One rule for both ends: the buy menu
+ * draws the shelf from it and the server sells from it, so a crafted message cannot buy what the
+ * buttons do not offer.
+ */
+describe("the shelf a mode stocks", () => {
+  const ctx = (mode: GameMode) => ({ now: 1000, spawnedAt: 0, phase: MatchPhase.Waiting, alive: true, nearStation: true, mode });
+  it("keeps regeneration, resistance and the launcher out of Bomb and the 1 v 1", () => {
+    for (const mode of ["bomb", "duel"] as const) {
+      expect(modeAllowsItem(mode, "roids"), `${mode} regen`).toBe(false);
+      expect(modeAllowsItem(mode, "flask"), `${mode} resist`).toBe(false);
+      expect(modeAllowsItem(mode, "launcher"), `${mode} launcher`).toBe(false);
+      // The things a duel IS made of stay on the shelf.
+      for (const id of ["rifle", "sniper", "heavy", "light", "frag", "flash"] as const) {
+        expect(modeAllowsItem(mode, id), `${mode} ${id}`).toBe(true);
+      }
+      // And the refusal reaches the buyer as its own reason, not as "closed".
+      expect(canBuy({ ...freshWallet(), money: 9000 }, "roids", ctx(mode))).toEqual({ ok: false, reason: "mode" });
+      expect(canBuy({ ...freshWallet(), money: 9000 }, "launcher", ctx(mode))).toEqual({ ok: false, reason: "mode" });
+    }
+  });
+
+  it("leaves every other mode its whole catalogue", () => {
+    for (const mode of ["tdm", "ffa", "dom", "boys", "ostrzyzeni"] as const) {
+      expect(modeAllowsItem(mode, "roids"), mode).toBe(true);
+      expect(modeAllowsItem(mode, "launcher"), mode).toBe(true);
+    }
+    // A caller with no mode at all (older call sites, tools) is not gated by this rule.
+    expect(modeAllowsItem(undefined, "roids")).toBe(true);
   });
 });

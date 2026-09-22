@@ -126,6 +126,12 @@
 .mm-bar-brand b { font-family: var(--font-display); font-size: 22px; letter-spacing: .18em; font-weight: normal; }
 .mm-bar-brand span { font-family: var(--font-mono); font-size: 11px; letter-spacing: .24em; color: var(--brass); }
 .mm-content { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px 0 22px; }
+/* THE PAGE SCROLLS, AND IT HAS TO LOOK LIKE IT DOES. The scrollbar here is an 8 px sliver on a
+   dark background; on a short screen a settings tab simply ended mid-row and a player read that as
+   "that is all there is". The fade is the standard affordance for "more below", and it is drawn on
+   the shell rather than the scroller so it does not scroll away with the content. */
+.mm-shell::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 44px;
+  background: linear-gradient(rgba(8,8,10,0), rgba(8,8,10,.92)); pointer-events: none; z-index: 2; }
 
 /* ------------------------------------------------------------------------- shared furniture */
 
@@ -313,8 +319,14 @@
 .mm-card { width: min(900px, 100%); margin: 0 auto; padding: 18px 22px 22px; background: rgba(14, 14, 18, .86); border: 1px solid var(--line); border-top: 2px solid rgba(217, 164, 65, .5); }
 /* Sliders and toggles read badly stretched across 900 px; the key grid wants the width. */
 .mm-card.panel { max-width: 720px; }
-/* The shell scrolls now, so the panel does not need its own 60vh window (the pause card still does). */
-.mm-card .settings { max-height: none; overflow: visible; padding-right: 0; }
+/* In the menu the SHELL scrolls, so the panel gets no 60 vh window of its own and the body grows
+   to its full height — a controls table behind an inner scrollbar inside an outer one is how a
+   player loses their place. The tab rail stays with the content for the same reason.
+   MEASURED FAULT this replaces: `.set-body { overflow: visible }` plus a height-capped card meant
+   the list was CLIPPED with no scrollbar and no hint that anything followed. */
+.mm-card .settings { max-height: none; }
+.mm-card .set-body { overflow: visible; padding-right: 0; }
+.mm-card.panel { max-height: none; }
 .keys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px 26px; align-content: start; }
 .keys-col { min-width: 0; }
 .keys-col .lb-h { font-size: 16px; margin-bottom: 6px; }

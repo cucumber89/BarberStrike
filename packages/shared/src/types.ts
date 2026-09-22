@@ -325,7 +325,11 @@ export interface FlashedEvent {
 
 export interface MoneyEvent {
   delta: number;
-  reason: "kill" | "headshot" | "assist" | "buy" | "sell" | "reset" | "capture";
+  /**
+   * `round` and `loss` are the 1 v 1's end-of-round payments (Counter-Strike's round award and its
+   * loss ladder); everything else is paid as it happens.
+   */
+  reason: "kill" | "headshot" | "assist" | "buy" | "sell" | "reset" | "capture" | "round" | "loss";
   total: number;
 }
 

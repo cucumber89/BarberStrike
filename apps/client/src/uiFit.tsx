@@ -45,7 +45,13 @@ const which = q.get("panel");
  * measured too rather than assumed to still fit.
  */
 const mode = q.get("mode") ?? "tdm";
-const shopState = mode === "boys"
+/** `?mode=duel` is the 1 v 1's shop: pistol-round money, the CS freeze counting down. */
+const duelState = ({
+  ...state, mode: "duel", bomb: { attackTeam: 0, stage: "buy", endsAt: 0, roundEndsAt: 0, x: 0, y: 0, z: 0, result: "" },
+  money: 800, owned: ["pistol"], lethal: "", lethalCount: 0, tactical: "", tacticalCount: 0, armor: 0,
+  nearStation: false, buyWindowLeft: 15000,
+} as unknown as HudState);
+const shopState = mode === "duel" ? duelState : mode === "boys"
   ? ({
       ...state, mode: "boys", bomb: null, nearStation: true, boysClass: 2, nextClass: 2,
       players: [0, 1, 2, 3, 4].map((i) => ({ id: `p${i}`, name: `P${i}`, team: 0, connected: true, bot: false, boysClass: (i % 5) + 1, kills: 0, deaths: 0, score: 0, ping: 20, alive: true, assists: 0, money: 0 })),
@@ -85,6 +91,9 @@ const resultState: HudState = resultCase === "loss" ? { ...resultBase, winner: 1
   : resultCase === "ostrzyzeni" ? { ...resultBase, mode: "ostrzyzeni", winnerId: "p1", winnerName: "P1", scoreA: 3, scoreB: 2 }
   : resultBase;
 const roundState = { ...resultBase, mode: "bomb", phase: MatchPhase.Prep, roundWinner: -1, scoreA: 3, scoreB: 2,
+  // `roundResult` is what the card reads (the bomb block is only mirrored in Bomb); it carries the
+  // same string the server writes, which is why the 1 v 1 gets a round card at all now.
+  roundResult: "BOMB DEFUSED",
   bomb: { attackTeam: 1, stage: "resolved", endsAt: 0, roundEndsAt: 0, x: 0, y: 0, z: 0, result: "BOMB DEFUSED", round: 5 } } as unknown as HudState;
 
 createRoot(document.getElementById("root")!).render(

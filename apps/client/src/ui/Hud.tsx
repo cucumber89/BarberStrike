@@ -59,7 +59,7 @@ function useClock(intervalMs: number): number {
 
 const money = (n: number) => `$${n.toLocaleString("en-US")}`;
 
-const REASON_SHORT: Record<string, string> = { kill: "ZABÓJSTWO", headshot: "W GŁOWĘ", assist: "ASYSTA", buy: "", sell: "SPRZEDAŻ", reset: "" };
+const REASON_SHORT: Record<string, string> = { kill: "ZABÓJSTWO", headshot: "W GŁOWĘ", assist: "ASYSTA", buy: "", sell: "SPRZEDAŻ", reset: "", round: "WYGRANA RUNDA", loss: "BONUS ZA PRZEGRANĄ" };
 
 export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, onChooseTeam, onVotePlan, shop, chat, radar, dormant = false }: Props) {
   const h = useHud();
@@ -223,14 +223,31 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
             : "PRZEŻYJ — nie daj się ostrzyc"}</span>
         </div>
       )}
-      {duel && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && (
-        <div className="bomb-hud duel" data-testid="duel-line">
-          <b>RUNDA {h.round + 1} · {TEAM_NAMES[h.myTeam]} {h.myTeam === 0 ? h.scoreA : h.scoreB} : {h.myTeam === 0 ? h.scoreB : h.scoreA} · DO {DUEL.wins} · {fmtTime(timeLeft)}</b>
-          <span>{h.phase === MatchPhase.Prep
-            ? (h.alive ? `${h.round > 0 && h.round % DUEL.halfRounds === 0 ? "ZMIANA STRON · " : ""}B: SKLEP · RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s` : `NASTĘPNA RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`)
-            : "JEDNO ŻYCIE · po czasie wygrywa więcej zdrowia"}</span>
-        </div>
-      )}
+      {/* The 1 v 1's line. Two different Preps run through here — the fifteen-second FREEZE you buy
+          in, and the three-second BREAK after a round — and they used to print the same words
+          ("B: SKLEP · RUNDA ZA 3s") while the shop was shut in one of them. What tells them apart
+          is the buy window itself, which the HUD already knows: `buyWindowLeft`. */}
+      {duel && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && (() => {
+        const secs = Math.max(0, Math.ceil(timeLeft / 1000));
+        const buying = h.buyWindowLeft > 0 && h.alive;
+        const buySecs = h.buyWindowLeft === Infinity ? null : Math.max(0, Math.ceil(h.buyWindowLeft / 1000));
+        const mine = h.myTeam === 0 ? h.scoreA : h.scoreB, theirs = h.myTeam === 0 ? h.scoreB : h.scoreA;
+        const matchPoint = Math.max(mine, theirs) === DUEL.wins - 1;
+        const swapping = h.round > 0 && h.round % DUEL.halfRounds === 0;
+        return (
+          <div className="bomb-hud duel" data-testid="duel-line">
+            <b>RUNDA {h.round + 1} · {TEAM_NAMES[h.myTeam]} {mine} : {theirs} · DO {DUEL.wins}{matchPoint ? (mine > theirs ? " · MECZBOL" : " · BRONISZ MECZBOLU") : ""} · {fmtTime(timeLeft)}</b>
+            <span>{h.phase === MatchPhase.Prep
+              ? buying
+                ? `${swapping ? "ZMIANA STRON · " : ""}ZAMROŻENIE · B: SKLEP · START ZA ${secs}s`
+                : `${h.roundResult ? `${roundReasonText(h.roundResult)} · ` : ""}NASTĘPNA RUNDA ZA ${secs}s`
+              : buying
+                // CS's buy time runs past the freeze; say so, or nobody uses it.
+                ? `SKLEP OTWARTY JESZCZE ${buySecs}s · B, ŻEBY DOKUPIĆ`
+                : "JEDNO ŻYCIE · po czasie wygrywa więcej zdrowia"}</span>
+          </div>
+        );
+      })()}
       {/* Damage vignette / direction */}
       {dmgAge < 600 && <div className="damage-dir" style={{ transform: `rotate(${h.damageAngle}rad)`, opacity: 1 - dmgAge / 600 }} />}
 

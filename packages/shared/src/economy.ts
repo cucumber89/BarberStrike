@@ -83,6 +83,38 @@ export interface BuyContext {
   mode?: GameMode;
   /** Drop D: the buyer is on the shaved side (Ostrzyżeni), whose whole loadout is the clippers. */
   shaved?: boolean;
+  /**
+   * When a ROUND mode's own buy window shuts (server time), for the countdown the HUD prints.
+   *
+   * It is not `releaseAt`, and the difference is the whole reason it exists: `releaseAt` is when
+   * the player can MOVE again, which is what a timed perk must wait for, while this is when the
+   * shop shuts — and since the 1 v 1 keeps buying open for a few seconds after the freeze (CS's
+   * `mp_buytime` running past `mp_freezetime`), the two are no longer the same moment.
+   */
+  windowEndsAt?: number;
+}
+
+/**
+ * WHAT A MODE PUTS ON ITS SHELF — one rule, read by the buy menu that draws the shelf AND by the
+ * server that sells from it.
+ *
+ * It used to be a client-side filter only (`shopCatalog`), which meant the rules were true of the
+ * BUTTONS and not of the shop: a crafted message bought a perk in Bomb, where the mode is supposed
+ * to have none. Now both ends ask the same function.
+ *
+ * The 1 v 1 is the strict one, and deliberately: it is Counter-Strike's mode, and Counter-Strike
+ * has no health regeneration, no damage-resistance flask and no rocket launcher. A duel is two
+ * players, the guns, the grenades and the plate — anything that heals you or explodes a room is
+ * not a duel, it is a different game wearing one. Bomb already refused perks for the same reason.
+ */
+export function modeAllowsItem(mode: GameMode | undefined, item: ShopItemId): boolean {
+  if (mode === undefined) return true;
+  // Whether the shop OPENS at all is a different question, and `buyWindowOpen` already answers it
+  // (a mode with no economy refuses everything with "closed"). This one is only about the shelf.
+  const strict = mode === "bomb" || mode === "duel";
+  if (isPerkId(item)) return !strict;
+  if (item === "launcher") return !strict;
+  return true;
 }
 
 /**
@@ -113,12 +145,12 @@ export function buyWindowOpen(ctx: BuyContext): boolean {
 /** Ms of buy window left after a spawn (0 when closed; Infinity in warm-up / at a station). */
 export function buyWindowLeft(ctx: BuyContext): number {
   if (!ctx.alive || shopless(ctx)) return 0;
-  if (ctx.bombBuying !== undefined && ctx.phase !== MatchPhase.Waiting && ctx.phase !== MatchPhase.Countdown) return ctx.bombBuying ? Math.max(0, (ctx.releaseAt ?? ctx.now) - ctx.now) : 0;
+  if (ctx.bombBuying !== undefined && ctx.phase !== MatchPhase.Waiting && ctx.phase !== MatchPhase.Countdown) return ctx.bombBuying ? Math.max(0, (ctx.windowEndsAt ?? ctx.releaseAt ?? ctx.now) - ctx.now) : 0;
   if (ctx.phase === MatchPhase.Waiting || ctx.phase === MatchPhase.Countdown || ctx.phase === MatchPhase.Prep || ctx.nearStation) return Infinity;
   return Math.max(0, ECONOMY.buyWindowMs - (ctx.now - ctx.spawnedAt));
 }
 
-export type BuyVerdict = { ok: true; cost: number; refund: number } | { ok: false; reason: "closed" | "money" | "owned" | "full" | "slot" };
+export type BuyVerdict = { ok: true; cost: number; refund: number } | { ok: false; reason: "closed" | "money" | "owned" | "full" | "slot" | "mode" };
 
 export const primaryOf = (w: Wallet): WeaponId | null => w.owned.find((id) => WEAPONS[id].slot === 1) ?? null;
 /** The sidearm actually carried: a bought revolver, otherwise the free pistol. */
@@ -136,6 +168,7 @@ export const carries = (w: Wallet, id: WeaponId): boolean => carriedWeapons(w).i
 /** Checks a purchase without applying it. `refund` = money back for the weapon being replaced. */
 export function canBuy(w: Wallet, item: ShopItemId, ctx: BuyContext): BuyVerdict {
   if (ctx.boysClass && !boysAllows(ctx.boysClass, item)) return { ok: false, reason: "closed" };
+  if (!modeAllowsItem(ctx.mode, item)) return { ok: false, reason: "mode" };
   if (!buyWindowOpen(ctx)) return { ok: false, reason: "closed" };
   const price = itemPrice(item);
   if (isWeaponId(item)) {

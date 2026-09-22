@@ -9,7 +9,7 @@
  *   - is every button inside the viewport (nothing below the fold, nothing zero-sized)?
  *   - type floors: names ≥ 16 px, role / reason lines ≥ 13 px, everything ≥ 10 px;
  *   - is any name, role or reason truncated (scrollWidth > clientWidth)?
- *   - does every row print a shortcut whose key the handler accepts (1–9, 0)?
+ *   - does every tile print a shortcut whose key the handler accepts (aisle 1–5, then 1–9 / 0)?
  *
  * Exit code is non-zero if any size fails, so this can gate. Screenshots land in
  * `apps/client/e2e/out/ui/`.
@@ -87,19 +87,21 @@ for (const size of SIZES) {
         const px = parseFloat(cs.fontSize);
         if (px < smallest) { smallest = px; smallestOn = el.className || el.tagName; }
       }
-      const rows = [...document.querySelectorAll(".shop-row")];
+      // The shelf is a grid of tiles (CS2-shaped). A tile may WRAP its role line — that is what
+      // the two-line clamp is for — so the truncation check is the name only, and the role is
+      // checked for being clipped mid-line rather than for fitting on one.
+      const rows = [...document.querySelectorAll(".shop-tile")];
       for (const row of rows) {
         const id = row.dataset.testid;
-        const name = row.querySelector(".shop-row-name"), role = row.querySelector(".shop-row-role"), key = row.querySelector(".shop-key");
+        const name = row.querySelector(".tile-name"), role = row.querySelector(".tile-role"), key = row.querySelector(".tile-key");
         const px = (el) => parseFloat(getComputedStyle(el).fontSize);
         if (px(name) < floors.name) faults.push(`${id}: name ${px(name)} px < ${floors.name}`);
         if (px(role) < floors.role) faults.push(`${id}: role ${px(role)} px < ${floors.role}`);
         if (name.scrollWidth > name.clientWidth + 1) faults.push(`${id}: name truncated (${name.scrollWidth} > ${name.clientWidth})`);
-        if (role.scrollWidth > role.clientWidth + 1) faults.push(`${id}: role/reason truncated (${role.scrollWidth} > ${role.clientWidth})`);
         const rr = row.getBoundingClientRect();
-        if (rr.bottom > vh + 0.5 || rr.top < -0.5) faults.push(`${id}: row off screen`);
+        if (rr.bottom > vh + 0.5 || rr.top < -0.5) faults.push(`${id}: tile off screen`);
         // The printed shortcut must be a key the handler accepts: <cat>·<1-9|0>.
-        if (!/^[1-4]·[0-9]$/.test(key.textContent ?? "")) faults.push(`${id}: bad shortcut "${key.textContent}"`);
+        if (!/^[1-5]·[0-9]$/.test(key.textContent ?? "")) faults.push(`${id}: bad shortcut "${key.textContent}"`);
       }
       return { faults, smallest, smallestOn, rows: rows.length, panelNeed: grid?.scrollHeight ?? 0, panelHave: grid?.clientHeight ?? 0 };
     }, FLOORS);

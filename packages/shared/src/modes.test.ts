@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { DUEL, GUN_GAME, MODES, MODE_ORDER, OSTRZYZENI, convertsOnKill, isOpenMode, modeCapacity, openPlayerCap, duelRoundWinner, duelSpawnSide, infectionRoundWinner, ladderAfterKill, ladderDone, ladderRung, ladderWeapon, pickFirstShaved } from "./modes";
+import { DUEL, GUN_GAME, MODES, MODE_ORDER, OSTRZYZENI, convertsOnKill, isOpenMode, modeCapacity, openPlayerCap,
+  duelHalfStart, duelKillReward, duelLossBonus, duelPurseAfter, duelStartMoney, freshDuelPurse, duelRoundWinner, duelSpawnSide, infectionRoundWinner, ladderAfterKill, ladderDone, ladderRung, ladderWeapon, pickFirstShaved } from "./modes";
 import { GAME_MODES, isGameMode } from "./types";
 import { MAX_PLAYERS, OPEN_MAX_PLAYERS, OPEN_PLAYER_CAP_MAX } from "./constants";
 import { WEAPONS, WEAPON_ORDER } from "./weapons";
+import { ARMOR } from "./perks";
 import { WEAPON_PRICES } from "./economy";
 
 describe("Drop D modes are in every list the lobby and the matchmaker read", () => {
@@ -52,8 +54,20 @@ describe("1 v 1 (GÓRA tournament pass)", () => {
     expect(duelRoundWinner([P(0, true, 60), P(1, true, 60, false)], t, t)).toBeNull();
   });
 
-  it("gives every gun on the roster a price under the round money", () => {
-    for (const w of WEAPON_ORDER) expect(WEAPON_PRICES[w]).toBeLessThan(DUEL.roundMoney);
+  /**
+   * The floor is a GAMEPLAY promise, so it is pinned against the price list rather than against
+   * itself: whatever a round has done to you, you can still walk out with a real primary and a
+   * plate. It deliberately does NOT reach the rifle (2600) or the sniper (3400) — those stay
+   * something a won round buys, or the economy would have nothing left to be about.
+   */
+  it("keeps a floored duellist in a real gun and a plate, and the best guns out of reach", () => {
+    const floor = DUEL.economy.floor;
+    expect(WEAPON_PRICES.carbine, "a floored round still buys a proper primary").toBeLessThanOrEqual(floor);
+    expect(WEAPON_PRICES.smg + ARMOR.heavy.price, "or a lighter gun and the heavy plate").toBeLessThanOrEqual(floor);
+    expect(WEAPON_PRICES.rifle, "the rifle is earned, not floored into your hand").toBeGreaterThan(floor);
+    // The pistol round is the pistol round: the free sidearm and an upgrade, nothing more.
+    expect(WEAPON_PRICES.revolver).toBeLessThanOrEqual(DUEL.economy.start);
+    for (const w of WEAPON_ORDER) expect(WEAPON_PRICES[w], `${w} is reachable in a won round`).toBeLessThan(DUEL.economy.win + floor);
   });
 });
 
@@ -167,5 +181,74 @@ describe("room capacity", () => {
     for (const m of GAME_MODES) expect(modeCapacity(m)).toBeGreaterThanOrEqual(m === "duel" ? 2 : MAX_PLAYERS);
     expect(OPEN_MAX_PLAYERS).toBeGreaterThan(MAX_PLAYERS);
     expect(OPEN_PLAYER_CAP_MAX).toBeGreaterThanOrEqual(OPEN_MAX_PLAYERS);
+  });
+});
+
+/**
+ * The 1 v 1's economy: Counter-Strike's, with the floor the owner asked for.
+ *
+ * Every number here is a CS number (start $800, round $3250, the $1400→$3400 ladder, the kill
+ * table) except `floor`, which is the one deliberate departure and is tested as such: it is what
+ * a duellist ACTUALLY starts a round with, and the pistol round is exempt from it.
+ */
+describe("the duel economy", () => {
+  it("pays the round award, climbs the loss ladder, and stops at its top", () => {
+    const e = DUEL.economy;
+    let purse = freshDuelPurse();
+    expect(purse.money).toBe(e.start);
+
+    // Three losses in a row: each pays one rung further up the ladder.
+    purse = duelPurseAfter({ money: 0, losses: 0 }, "loss");
+    expect(purse).toEqual({ money: e.lossBase, losses: 1 });
+    purse = duelPurseAfter(purse, "loss");
+    expect(purse.money).toBe(e.lossBase + (e.lossBase + e.lossStep));
+    expect(purse.losses).toBe(2);
+    // The ladder stops climbing at lossMax however long the run gets.
+    expect(duelLossBonus(0)).toBe(e.lossBase);
+    expect(duelLossBonus(99)).toBe(e.lossMax);
+
+    // A win pays the round award and clears the streak.
+    const won = duelPurseAfter({ money: 1000, losses: 3 }, "win");
+    expect(won).toEqual({ money: 1000 + e.win, losses: 0 });
+
+    // A drawn round (a trade, or the clock with even health) pays the first rung and punishes
+    // nobody's next round: neither player lost it.
+    const drawn = duelPurseAfter({ money: 500, losses: 2 }, "draw");
+    expect(drawn).toEqual({ money: 500 + e.lossBase, losses: 2 });
+
+    // Nobody carries more than the cap.
+    expect(duelPurseAfter({ money: e.max, losses: 0 }, "win").money).toBe(e.max);
+  });
+
+  it("starts a half on pistol money and every other round on at least the floor", () => {
+    const e = DUEL.economy;
+    // Rounds 1, 4, 7… are the pistol rounds — the swap rounds, and the ones the floor skips.
+    expect(duelHalfStart(1)).toBe(true);
+    expect(duelHalfStart(DUEL.halfRounds + 1)).toBe(true);
+    for (let r = 2; r <= DUEL.halfRounds; r++) expect(duelHalfStart(r), `round ${r}`).toBe(false);
+
+    expect(duelStartMoney({ money: 12000, losses: 0 }, 1), "a pistol round is a pistol round").toBe(e.start);
+    expect(duelStartMoney({ money: 200, losses: 2 }, 2), "the floor catches a broke duellist").toBe(e.floor);
+    expect(duelStartMoney({ money: 7400, losses: 0 }, 2), "and leaves a rich one alone").toBe(7400);
+    expect(duelStartMoney({ money: 99999, losses: 0 }, 2)).toBe(e.max);
+  });
+
+  it("pays a kill by the weapon that made it, CS's table", () => {
+    expect(duelKillReward("clippers"), "the knife award, and this game's knife is a pair of clippers").toBe(1500);
+    expect(duelKillReward("shotgun")).toBe(900);
+    expect(duelKillReward("autoshotgun")).toBe(900);
+    expect(duelKillReward("smg")).toBe(600);
+    expect(duelKillReward("machinepistol")).toBe(600);
+    expect(duelKillReward("sniper"), "the AWP tax").toBe(100);
+    expect(duelKillReward("rifle"), "the flat award").toBe(300);
+    expect(duelKillReward("pistol")).toBe(300);
+    expect(duelKillReward("something else entirely")).toBe(300);
+  });
+
+  it("gives the buy window CS's shape: the freeze, and a tail past it", () => {
+    expect(DUEL.prepMs, "mp_freezetime").toBe(15000);
+    expect(DUEL.prepMs + DUEL.buyTailMs, "mp_buytime, counted from the start of the round").toBe(20000);
+    // The freeze cannot be longer than the round it prepares for.
+    expect(DUEL.prepMs).toBeLessThan(DUEL.roundMs);
   });
 });

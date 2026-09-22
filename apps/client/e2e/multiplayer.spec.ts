@@ -356,8 +356,8 @@ test.describe("two clients", () => {
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeVisible();
     await expect.poll(async () => (await hud(a)).shopOpen).toBe(true);
-    // The shop is four aisle tabs; the grenade aisle is tab 3 (also the "3" key).
-    await a.getByTestId("shop-tab-3").click();
+    // The shop is CS2's five aisle tabs; grenades are the last one, tab 5 (also the "5" key).
+    await a.getByTestId("shop-tab-5").click();
     await a.getByTestId("buy-frag").click();
     await expect.poll(async () => (await hud(a)).lethal, { timeout: 3000 }).toBe("frag");
     await expect.poll(async () => (await hud(a)).money, { timeout: 3000 }).toBe(1700);
@@ -367,15 +367,15 @@ test.describe("two clients", () => {
     await expect.poll(async () => (await hud(a)).tactical, { timeout: 3000 }).toBe("flash");
     // The DMR is refused, because $2900 is more than what is left after the frag and the flash —
     // and the row says by how much, from the same rule the server runs.
-    await a.getByTestId("shop-tab-1").click();
+    await a.getByTestId("shop-tab-3").click();
     await expect(a.getByTestId("buy-dmr")).toBeDisabled();
     await expect(a.getByTestId("why-dmr")).toContainText("Brakuje $1,400");
-    // The tenth primary is reachable by key: "1" arms the aisle, "0" is the launcher. Too poor, so
-    // nothing is bought — but the arming is visible and the key is accepted.
-    await a.keyboard.press("Digit1");
-    await expect(a.getByTestId("shop-result")).toContainText("numer przedmiotu");
-    await a.keyboard.press("Digit0");
-    await expect(a.getByTestId("shop-result")).not.toContainText("numer przedmiotu");
+    // The keys: "3" arms the rifle aisle, and a position key in it is accepted. Too poor to buy
+    // anything, so nothing is bought — but the arming is visible and the key is taken.
+    await a.keyboard.press("Digit3");
+    await expect(a.getByTestId("shop-result")).toContainText("numer z kafelka");
+    await a.keyboard.press("Digit6");
+    await expect(a.getByTestId("shop-result")).not.toContainText("numer z kafelka");
     await expect.poll(async () => (await hud(a)).money).toBe(1500);
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeHidden();
@@ -462,6 +462,8 @@ test.describe("two clients", () => {
     // Shop reflects the running perk and the worn plate; the sniper is out of reach at $250.
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeVisible();
+    // The sniper lives in the rifle aisle (CS2's third); the shop opens on the pistols.
+    await a.getByTestId("shop-tab-3").click();
     await expect(a.getByTestId("shop-sniper")).toContainText("LUNETA");
     await expect(a.getByTestId("buy-sniper")).toBeDisabled();
     // The equipment aisle shows the running perk and the worn plate.

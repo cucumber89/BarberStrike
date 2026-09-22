@@ -8,7 +8,7 @@ import {
   BOMB, sitesOf, bombAttackTeam, bombSpawnSide, resetBomb, stepBomb, type BombPlayer,
   createBody, quantAngle, quantVel, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
   makeRayHit, mulberry32, pickSpawn, sanitizeName, simulateBody, spreadDirection, traceBullet, unpackInput,
-  ECONOMY, GRENADES, THROW_INTERVAL_MS, FIRE_DPS, applyBuy, applySell, buyWindowOpen, giveGrenade, takeGrenade, killReward, weaponForSlot,
+  ECONOMY, GRENADES, THROW_INTERVAL_MS, FIRE_DPS, applyBuy, applySell, buyWindowOpen, giveGrenade, takeGrenade, killReward, weaponForSlot, modeAllowsItem,
   primaryOf, isShopItemId, isGrenadeId, createProjectile, stepProjectile, explosionDamage, flashStrength, flashMs, eyeOf,
   rayBox, targetBox, freshWallet, secondaryOf, sprintActive, usesAmmo, isBackstab, MELEE, PERK_EFFECT, PERK_ORDER, noPerks, perkActive,
   perkSpeedScale, splitDamage, isPerkId, isArmorId,
@@ -16,7 +16,8 @@ import {
   CHAT, MARK, MAX_BOTS, BOT_NAMES, botId, isBotLevel,
   GUN_GAME, MELEE_WEAPON, ladderAfterKill, ladderDone, ladderWeapon,
   OSTRZYZENI, PERK_ARMED_MS, convertsOnKill, infectionRoundWinner, pickFirstShaved,
-  DUEL, duelRoundWinner, duelSpawnSide,
+  DUEL, duelRoundWinner, duelSpawnSide, duelKillReward, duelPurseAfter, duelStartMoney, duelHalfStart, freshDuelPurse,
+  type DuelPurse, type DuelRoundResult,
   isOpenMode, modeCapacity, openPlayerCap,
   DEFAULT_HAIRCUT, HAIRCUTS, encodeHaircut, isHaircutId, isShave, resetShaves, shaveOnce,
   type BodyState, type CollisionWorld, type DamagedEvent, type FireMessage, type HitEvent, type InputTuple, type KillEvent,
@@ -126,6 +127,11 @@ class Session {
   // ---- drop D: Gun Game. The rung is private; it is replicated as `PlayerState.score` (in this
   // mode the score IS the rung), so the HUD and the scoreboard need no new field.
   rung = 0;
+  // ---- 1 v 1: Counter-Strike's economy. The wallet is already replicated (`PlayerState.money`);
+  // the loss streak the ladder climbs on, and whether this player walked out of the last round
+  // alive (in CS a survivor keeps their gun and a casualty loses it), are the room's own business.
+  purse: DuelPurse = freshDuelPurse();
+  survivedRound = false;
   // ---- drop 5: chat / mark rate limits; the brain for a bot session.
   lastChatAt = -Infinity;
   lastMarkAt = -Infinity;
@@ -250,6 +256,11 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
    */
   private get duel(): boolean { return this.mode === "duel"; }
   private duelStage: "buy" | "break" = "buy";
+  /**
+   * Server time the round's buy window shuts — the freeze plus `DUEL.buyTailMs`, which is CS's
+   * `mp_buytime` running past `mp_freezetime`. 0 outside a live round.
+   */
+  private duelBuyEndsAt = 0;
   /**
    * How long a casualty waits. Gun Game has its own short timer (a party mode: no waves, no shop to
    * spend the wait in) and no perks, so the fade never applies there. A shaved chaser (infection)
@@ -1042,8 +1053,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       ...(helpers.length ? { assists: helpers.slice(0, 3).map(h => h.name) } : {}),
     };
     this.broadcast(S2C.Kill, ev);
-    // Economy: the killer is paid, and so is everyone who helped.
-    this.pay(attacker, killReward(headshot), headshot ? "headshot" : "kill");
+    // Economy: the killer is paid, and so is everyone who helped. The 1 v 1 pays Counter-Strike's
+    // table instead — by the WEAPON, so the clippers are worth five rifles and the sniper almost
+    // nothing; a head shot there is its own reward and pays no bonus, as in CS.
+    this.pay(attacker, this.duel ? duelKillReward(weapon) : killReward(headshot), headshot ? "headshot" : "kill");
     for (const helper of helpers) {
       this.pay(helper, ECONOMY.assistReward, "assist");
       if (counts) { helper.assists += 1; if (!this.ladder) helper.score += 50; }
@@ -1386,9 +1399,20 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   // ---------------------------------------------------------------- 1 v 1 (GÓRA tournament pass)
 
-  /** A round: fresh wallets with the round money, both players on their side's start, a 4 s freeze to buy. */
+  /**
+   * A round of the duel, Counter-Strike's shape: a fifteen-second freeze to buy in, both players on
+   * their side's start, and the wallet each of them earned.
+   *
+   * What carries and what does not is the CS rule and the reason the economy is worth having: a
+   * player who WALKED OUT of the last round alive keeps the gun, the plate and the grenades they
+   * did not throw; a player who died lost all of it and starts from the free pistol. The first
+   * round of each half is the pistol round — both purses reset, both loadouts reset, nobody keeps
+   * anything across the swap.
+   */
   private beginDuelRound(): void {
     const st = this.state, now = this.now();
+    const round = st.bomb.round + 1; // 1-based: the round about to be played
+    const half = duelHalfStart(round);
     st.phase = MatchPhase.Prep;
     st.phaseEndsAt = now + DUEL.prepMs;
     this.duelStage = "buy";
@@ -1396,17 +1420,33 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.flushPendingTeams();
     for (const [id, p] of st.players) {
       if (!p.connected) continue;
-      this.writeWallet(p, { ...freshWallet(), money: DUEL.roundMoney });
+      const s = this.sessions.get(id);
+      if (s && half) s.purse = freshDuelPurse();
+      const purse = s?.purse ?? freshDuelPurse();
+      const money = duelStartMoney(purse, round);
+      if (s) s.purse = { ...purse, money };
+      // Kept or lost, then the money on top. `writeWallet` is the only way a wallet moves.
+      const keep = !half && (s?.survivedRound ?? false);
+      const wallet = keep ? { ...this.walletOf(p), money } : { ...freshWallet(), money };
+      this.writeWallet(p, wallet);
+      if (s) s.survivedRound = false;
       this.spawn(id);
       this.clientOf(id)?.send(S2C.Money, { delta: 0, reason: "reset", total: p.money } satisfies MoneyEvent);
     }
     this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Prep, winner: -1, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
   }
 
+  /**
+   * The freeze ends and the round is live — but the shop is not shut yet. CS counts `mp_buytime`
+   * from the start of the round, so buying runs `DUEL.buyTailMs` past the release; `duelBuyEndsAt`
+   * is that moment and `buyContext` is what reads it.
+   */
   private releaseDuelRound(): void {
     const st = this.state;
+    const now = this.now();
     st.phase = MatchPhase.Playing;
-    st.phaseEndsAt = this.now() + DUEL.roundMs;
+    st.phaseEndsAt = now + DUEL.roundMs;
+    this.duelBuyEndsAt = now + DUEL.buyTailMs;
     this.duelStage = "break";
     this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Playing, winner: -1, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
   }
@@ -1429,6 +1469,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     else if (result.winner === 1) st.scoreB++;
     st.bomb.round++;
     st.bomb.result = result.reason;
+    this.payDuelRound(result.winner);
     this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
     const decided = Math.max(st.scoreA, st.scoreB) >= DUEL.wins || (now >= st.matchEndsAt && st.scoreA !== st.scoreB);
     if (decided) { this.endMatch(); return; }
@@ -1436,6 +1477,28 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     st.phaseEndsAt = now + DUEL.breakMs;
     this.duelStage = "break";
     this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Prep, winner: result.winner, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
+  }
+
+  /**
+   * The round is over: pay both players and remember who is still standing.
+   *
+   * CS's two payments, and nothing else — the round award to the winner, the loss ladder to the
+   * loser (a drawn round pays both the ladder's first rung and climbs nobody's streak, since
+   * neither of them lost it). Kill money was already paid as the kills happened. `survivedRound`
+   * is read by the next `beginDuelRound`: in CS the player who lived keeps what they carried.
+   */
+  private payDuelRound(winner: Team | -1): void {
+    for (const [id, p] of this.state.players) {
+      const s = this.sessions.get(id);
+      if (!s) continue;
+      s.survivedRound = p.alive && p.connected;
+      if (!p.connected) continue;
+      const result: DuelRoundResult = winner === -1 ? "draw" : p.team === winner ? "win" : "loss";
+      s.purse = duelPurseAfter({ ...s.purse, money: p.money }, result);
+      const delta = s.purse.money - p.money;
+      p.money = s.purse.money;
+      if (delta !== 0) this.clientOf(id)?.send(S2C.Money, { delta, reason: result === "win" ? "round" : "loss", total: p.money } satisfies MoneyEvent);
+    }
   }
 
   // ---------------------------------------------------------------- Ostrzyżeni (drop D)
@@ -1958,12 +2021,22 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private buyContext(p: PlayerState, s: Session): BuyContext {
     return {
+      // The mode itself is part of the rules now (`modeAllowsItem`, `shopless`): the shelf a mode
+      // stocks is the same question on the client and here.
+      mode: this.mode,
+      shaved: p.shaved,
       boysClass: this.mode === "boys" ? p.boysClass : undefined,
       bombBuying: this.mode === "bomb" ? this.state.phase === MatchPhase.Prep && this.state.bomb.stage === "buy"
-        : this.duel ? this.state.phase === MatchPhase.Prep : undefined,
+        // The duel buys in the freeze AND for a few seconds after it, the way CS does: the window
+        // is `duelBuyEndsAt`, and during the freeze that is simply when the freeze ends.
+        : this.duel ? this.state.phase === MatchPhase.Prep ? this.duelStage === "buy" : this.now() < this.duelBuyEndsAt
+        : undefined,
       now: this.now(), spawnedAt: s.spawnedAt, phase: this.state.phase as MatchPhase, alive: p.alive,
       nearStation: this.nearStation(s.body),
       releaseAt: this.state.phase === MatchPhase.Prep ? this.state.phaseEndsAt : 0,
+      // What the HUD counts down. It is the freeze's end while frozen and the tail's end once the
+      // round is live; `releaseAt` stays what it was, because a perk must wait for the RELEASE.
+      windowEndsAt: this.duel ? (this.state.phase === MatchPhase.Prep ? this.state.phaseEndsAt : this.duelBuyEndsAt) : undefined,
     };
   }
 
@@ -1996,7 +2069,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (this.noShop) return { ok: false, item, reason: "no-shop" }; // drop D: bots included
     // Drop D: the shaved side has no economy — the clippers are the whole loadout.
     if (MODES[this.mode].shop === "survivors" && p.shaved) return { ok: false, item, reason: "shaved" };
-    if (this.mode === "bomb" && (isPerkId(item) || item === "launcher")) return { ok: false, item, reason: "closed" };
+    // What this mode stocks at all (shared with the buy menu that draws the shelf): Bomb and the
+    // 1 v 1 sell no perks and no launcher. It was written here as a `bomb` special case; the rule
+    // now lives in `modeAllowsItem` so the buttons and the server cannot disagree about it.
+    if (!modeAllowsItem(this.mode, item)) return { ok: false, item, reason: "mode" };
     const w = this.walletOf(p);
     const v = applyBuy(w, item, this.buyContext(p, s));
     if (!v.ok) return { ok: false, item, reason: v.reason };

@@ -47,7 +47,7 @@ export const MODES: Record<GameMode, ModeDef> = {
     objective: "Każde zabójstwo daje ci następną broń z drabinki: wygrywa, kto pierwszy zaliczy wszystkie 14 szczebli." },
   ostrzyzeni: { id: "ostrzyzeni", name: "OSTRZYŻENI", short: "OSTRZ", blurb: "Jeden ostrzyżony z maszynką poluje na resztę · ogolenie przenosi cię na jego stronę · przetrwaj do końca czasu", teams: true, scoreLimit: 5, shop: "survivors", winner: "player",
     objective: "Przetrwaj rundę nieostrzyżony albo, jako ostrzyżony, ogol wszystkich maszynką: po 5 rundach wygrywa najwięcej punktów." },
-  duel: { id: "duel", name: "1 v 1", short: "DUEL", blurb: "Dwóch graczy · B: sklep w 4 s zamrożenia · runda to jedno życie albo 60 s · zmiana stron co 3 rundy · pierwszy do 6", teams: true, scoreLimit: 6, shop: "all", winner: "team",
+  duel: { id: "duel", name: "1 v 1", short: "DUEL", blurb: "Dwóch graczy · zasady jak w CS: 15 s zamrożenia na zakupy (plus 5 s po starcie) · kasa i broń zostają, jeśli przeżyjesz · zmiana stron co 3 rundy · pierwszy do 6", teams: true, scoreLimit: 6, shop: "all", winner: "team",
     objective: "Jedno życie na rundę, 60 sekund: wygrywa, kto pierwszy weźmie 6 rund." },
 };
 
@@ -250,19 +250,128 @@ export function pickFirstShaved<T extends { connected: boolean }>(players: reado
  */
 export const DUEL = {
   players: 2,
-  /** The frozen buy window at the start of every round. */
-  prepMs: 4000,
+  /**
+   * The frozen buy window at the start of every round — Counter-Strike's `mp_freezetime`, and the
+   * same fifteen seconds it uses in competitive. It was 4 s, which is enough time to press three
+   * buttons if you already know which three; the owner asked for CS's, so this is CS's.
+   */
+  prepMs: 15000,
+  /**
+   * And CS's `mp_buytime` on top of it: the shop stays open for this long AFTER the round goes
+   * live, so 15 + 5 = the 20 s CS counts from the start of a round. It is why a CS player can
+   * still buy while walking out of spawn, and why forgetting armour is not an instant loss.
+   */
+  buyTailMs: 5000,
+  /**
+   * A cap on the fight, not a target: most duels are over in a fifth of it. CS's round is 1:55,
+   * which for two players on a roof is two players looking for each other; 60 s keeps the match
+   * moving and the clock rule (more health wins) rarely decides anything.
+   */
   roundMs: 60000,
   /** Result pause between rounds. */
   breakMs: 3000,
   wins: 6,
   /** Sides swap every this many rounds: 1–3 on the first set, 4–6 on the other, and so on. */
   halfRounds: 3,
-  /** Every round starts with this much and a clean wallet; nothing carries over. */
-  roundMoney: 6000,
   /** A cap on the whole match; at the cap a tie is played out, a lead ends it. */
   matchMs: 15 * 60000,
+  /**
+   * THE ECONOMY, Counter-Strike's shape with one change the owner asked for.
+   *
+   * CS's: you start a half with pistol money, you are paid for the round you won, for the rounds
+   * you lost (a ladder that climbs while you keep losing), and for each kill by the weapon that
+   * made it; what you carry you keep, what you died holding you lose, and the wallet is reset when
+   * the sides swap.
+   *
+   * The change: a `floor` under every round after the first of a half. In a five-player match a
+   * poor round is somebody else's problem to cover; in a duel it is three rounds of being shot at
+   * by a rifle while holding the free pistol, which is not a fight. The floor tops a purse up to
+   * a gun-and-armour buy, so the ladder still shapes the rich rounds (a won round plus leftovers
+   * buys everything) and stops shaping the desperate ones. The first round of each half is a REAL
+   * pistol round — it is exempt, or the mode would never have one.
+   */
+  economy: {
+    /** The pistol round: CS's $800, and the same first round of every half. */
+    start: 800,
+    /** Never more than this in hand, as in CS. */
+    max: 16000,
+    /** The owner's floor: any round but a half's first tops up to at least this. */
+    floor: 2500,
+    /** Paid for winning a round (CS's elimination award). */
+    win: 3250,
+    /** The loss ladder: first loss, each further one, and where it stops. */
+    lossBase: 1400,
+    lossStep: 500,
+    lossMax: 3400,
+  },
 } as const;
+
+/**
+ * What a kill pays, by the weapon that made it — CS's table, mapped onto this roster: the clippers
+ * are the knife, the shotguns are the shotguns, anything that fires like an SMG pays like one, the
+ * sniper pays almost nothing, and everything else is the flat rifle award.
+ *
+ * It is the one piece of the economy a player feels while shooting rather than while buying: a
+ * clippers kill in a duel is worth five rifle kills, which is exactly the joke the mode is built
+ * on (and this game's melee weapon is a pair of clippers, so the joke lands twice).
+ */
+export const DUEL_KILL_REWARD: Partial<Record<WeaponId, number>> = {
+  clippers: 1500,
+  shotgun: 900,
+  autoshotgun: 900,
+  smg: 600,
+  smg2: 600,
+  machinepistol: 600,
+  sniper: 100,
+};
+/** The flat award for everything not in the table (pistols, rifles, the launcher). */
+export const DUEL_KILL_REWARD_DEFAULT = 300;
+export const duelKillReward = (weapon: string): number =>
+  DUEL_KILL_REWARD[weapon as WeaponId] ?? DUEL_KILL_REWARD_DEFAULT;
+
+/** How a round ended FOR ONE PLAYER: they took it, they lost it, or nobody did (a trade or the clock). */
+export type DuelRoundResult = "win" | "loss" | "draw";
+
+/**
+ * A player's standing in the economy between rounds. Server-side only — money is already a
+ * replicated field, and a loss streak is two lines of bookkeeping that nobody needs to see.
+ */
+export interface DuelPurse {
+  money: number;
+  /** Rounds lost in a row, which is what the ladder climbs on. Reset by a win and by the swap. */
+  losses: number;
+}
+
+export const freshDuelPurse = (): DuelPurse => ({ money: DUEL.economy.start, losses: 0 });
+
+/** What the ladder pays after `losses` consecutive losses (0 = this is the first). */
+export const duelLossBonus = (losses: number): number =>
+  Math.min(DUEL.economy.lossMax, DUEL.economy.lossBase + DUEL.economy.lossStep * Math.max(0, losses));
+
+/**
+ * The purse after a round ended. A win pays the round award and clears the streak; a loss pays the
+ * ladder and climbs it; a draw (both dead, or the clock with even health) pays the first rung and
+ * leaves the streak alone — nobody won it, so nobody should be punished for the next one.
+ */
+export function duelPurseAfter(purse: DuelPurse, result: DuelRoundResult): DuelPurse {
+  const e = DUEL.economy;
+  if (result === "win") return { money: Math.min(e.max, purse.money + e.win), losses: 0 };
+  if (result === "draw") return { money: Math.min(e.max, purse.money + duelLossBonus(0)), losses: purse.losses };
+  return { money: Math.min(e.max, purse.money + duelLossBonus(purse.losses)), losses: purse.losses + 1 };
+}
+
+/** Is this round the first of a half — the pistol round, where the wallet and the sides both reset? */
+export const duelHalfStart = (round: number): boolean => (Math.max(1, round) - 1) % DUEL.halfRounds === 0;
+
+/**
+ * The money a player actually starts `round` with. A half's first round is the pistol round and
+ * gets exactly the start money; every other round is topped up to the floor if the match has been
+ * unkind. `round` is 1-based.
+ */
+export function duelStartMoney(purse: DuelPurse, round: number): number {
+  if (duelHalfStart(round)) return DUEL.economy.start;
+  return Math.min(DUEL.economy.max, Math.max(DUEL.economy.floor, purse.money));
+}
 
 /** The smallest view of a player the duel rule needs. */
 export interface DuelPlayer { team: number; alive: boolean; connected: boolean; health: number }

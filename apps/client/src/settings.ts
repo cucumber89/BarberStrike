@@ -10,10 +10,10 @@ export type QualityPreset = "low" | "medium" | "high" | "ultra";
  */
 export type QualityMode = "auto" | "low" | "medium" | "high" | "ultra";
 export const QUALITY_MODES: readonly { id: QualityMode; label: string; blurb: string }[] = [
-  { id: "auto", label: "AUTOMATIC", blurb: "Measures your machine and keeps the frame rate steady" },
-  { id: "low", label: "PERFORMANCE", blurb: "Frames first — no shadows, no post-processing" },
-  { id: "medium", label: "BALANCED", blurb: "Shadows and effects, full render scale" },
-  { id: "high", label: "QUALITY", blurb: "Sharp shadows and every effect" },
+  { id: "auto", label: "AUTOMATYCZNIE", blurb: "Mierzy twój komputer i pilnuje płynności" },
+  { id: "low", label: "PŁYNNOŚĆ", blurb: "Klatki przede wszystkim — bez cieni i efektów końcowych" },
+  { id: "medium", label: "RÓWNOWAGA", blurb: "Cienie i efekty, pełna rozdzielczość renderu" },
+  { id: "high", label: "JAKOŚĆ", blurb: "Ostre cienie i wszystkie efekty" },
 ];
 
 /**
@@ -30,23 +30,28 @@ export const QUALITY_MODES: readonly { id: QualityMode; label: string; blurb: st
  * #14 removed those actions. Fire / aim / the weapon digits / Tab / Enter / Esc stay fixed.
  */
 export type BindableAction = keyof KeyBindings;
+/**
+ * The rebindable actions, named in the game's own language. Every other word a player reads —
+ * the menu, the buy menu, the HUD, the kill feed — is Polish; a controls table in English was the
+ * one screen that asked them to switch languages to find out which key crouches.
+ */
 export const BINDABLE_ACTIONS: readonly { id: BindableAction; label: string }[] = [
-  { id: "forward", label: "Move forward" },
-  { id: "back", label: "Move back" },
-  { id: "left", label: "Strafe left" },
-  { id: "right", label: "Strafe right" },
-  { id: "jump", label: "Jump" },
-  { id: "sprint", label: "Sprint (double-tap: tactical sprint)" },
-  { id: "crouch", label: "Crouch" },
-  { id: "reload", label: "Reload" },
-  { id: "lastWeapon", label: "Last weapon" },
-  { id: "melee", label: "Clippers (melee)" },
-  { id: "lethal", label: "Lethal grenade (hold to cook)" },
-  { id: "tactical", label: "Tactical grenade" },
-  { id: "shop", label: "Buy menu" },
-  { id: "inspect", label: "Inspect weapon" },
-  { id: "leanLeft", label: "Lean left" },
-  { id: "leanRight", label: "Lean right" },
+  { id: "forward", label: "Do przodu" },
+  { id: "back", label: "Do tyłu" },
+  { id: "left", label: "W lewo" },
+  { id: "right", label: "W prawo" },
+  { id: "jump", label: "Skok" },
+  { id: "sprint", label: "Sprint (dwa razy: sprint taktyczny)" },
+  { id: "crouch", label: "Kucanie" },
+  { id: "reload", label: "Przeładowanie" },
+  { id: "lastWeapon", label: "Poprzednia broń" },
+  { id: "melee", label: "Maszynka (walka wręcz)" },
+  { id: "lethal", label: "Granat bojowy (przytrzymaj, by gotować)" },
+  { id: "tactical", label: "Granat taktyczny" },
+  { id: "shop", label: "Sklep" },
+  { id: "inspect", label: "Obejrzyj broń" },
+  { id: "leanLeft", label: "Wychylenie w lewo" },
+  { id: "leanRight", label: "Wychylenie w prawo" },
 ];
 
 /**
@@ -55,10 +60,10 @@ export const BINDABLE_ACTIONS: readonly { id: BindableAction; label: string }[] 
  */
 export type CrosshairStyle = "cross" | "cross-dot" | "dot" | "circle";
 export const CROSSHAIR_STYLES: readonly { id: CrosshairStyle; label: string }[] = [
-  { id: "cross", label: "CROSS" },
-  { id: "cross-dot", label: "CROSS + DOT" },
-  { id: "dot", label: "DOT" },
-  { id: "circle", label: "CIRCLE" },
+  { id: "cross", label: "KRZYŻYK" },
+  { id: "cross-dot", label: "KRZYŻYK + KROPKA" },
+  { id: "dot", label: "KROPKA" },
+  { id: "circle", label: "OKRĄG" },
 ];
 
 export interface Settings {

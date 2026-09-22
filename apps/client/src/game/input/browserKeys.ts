@@ -67,7 +67,7 @@ export const RISKY_MODIFIER_CODES: readonly string[] = ["ControlLeft", "ControlR
 export function modifierBindingWarning(code: string): string | null {
   if (!RISKY_MODIFIER_CODES.includes(code)) return null;
   const key = code.startsWith("Meta") ? "Cmd" : "Ctrl";
-  return `Holding ${key} while you move makes ${key}+W, ${key}+T and ${key}+N. Fullscreen on Chrome or Edge captures them; anywhere else the browser will ask before it closes the tab, but it can still be closed.`;
+  return `Trzymanie ${key} w ruchu daje ${key}+W, ${key}+T i ${key}+N. Na pełnym ekranie w Chrome i Edge gra je przechwyci; gdzie indziej przeglądarka zapyta przed zamknięciem karty — ale zamknąć ją nadal można.`;
 }
 
 /** True when the event came from somewhere a person is typing. */
