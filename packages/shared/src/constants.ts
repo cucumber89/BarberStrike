@@ -15,7 +15,41 @@ export const INTERP_DELAY_MS = 110;
 /** Server keeps this much positional history for lag-compensated hit tests. */
 export const LAG_COMP_MAX_MS = 350;
 
+/**
+ * Seats a room of the FIXED-ROSTER modes has, bots included: Bomb, Domination, The Boys, Gun Game,
+ * Ostrzyżeni. Those modes are built around a roster you can hold in your head (a site take, a flag
+ * rotation, one hunter), so twelve bodies is the design, not a limit of the engine.
+ */
 export const MAX_PLAYERS = 12;
+/**
+ * The OPEN LOBBY cap: how many HUMANS a deathmatch room admits (`OPEN_MODES` in `modes.ts`).
+ *
+ * Deathmatch has no roster shape to protect — it is the mode you drop a crowd into — so bots stop
+ * taking human seats there (a full house of `MAX_BOTS` sits on top of these) and the only ceiling
+ * left is what one room can simulate and send.
+ *
+ * Why 32 and not "no number at all": a room costs CPU per body and bandwidth per body PER SOCKET,
+ * so the wire bill grows as the square of the room, and both halves were MEASURED at exactly this
+ * cap rather than guessed.
+ *
+ *   tick   `tickCost.test.ts`: 32 humans + 8 bots = 40 bodies, mean **0.32 ms** of a 16.7 ms tick
+ *          (the full fixed-roster room of 12 measures 0.25 ms — the crowd is not what costs the
+ *          simulation; the eight bots' planning is, and there are still eight of them).
+ *   wire   `netBytes.test.ts`: **3.6 kB/s** per client at 40 bodies, against 3.3 kB/s at 10 —
+ *          a body that does not move costs nothing per tick. Eight moving bodies are ~0.4 kB/s
+ *          each, so a room where all 40 are running is ~16 kB/s per client and ~0.5 MB/s out of
+ *          the process; 64 humans would be ~4× that, and a 2-vCPU VPS is where this runs.
+ *
+ * Neither number is the one that will decide this in the end: only a playtest can price 32 people
+ * all sending input, and the CLIENT drawing 40 characters is its own budget. So this is "a crowd
+ * the server can serve", not a ceiling anybody has hit.
+ *
+ * A host who knows their machine can raise or lower it with `FB_MAX_PLAYERS` (see
+ * `openPlayerCap()`); `OPEN_PLAYER_CAP_MAX` is the hard ceiling that env var is clamped to.
+ */
+export const OPEN_MAX_PLAYERS = 32;
+/** The most `FB_MAX_PLAYERS` may ask for. Past this the wire cost stops being servable. */
+export const OPEN_PLAYER_CAP_MAX = 64;
 /**
  * Watchers a room admits on top of its players (`/viewer`). They hold a socket and receive state
  * patches, and that is the whole cost — no body, no simulation, no scoreboard row. Six is a

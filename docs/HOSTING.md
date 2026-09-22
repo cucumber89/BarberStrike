@@ -64,6 +64,27 @@ tunnel unless you have a reason not to.
 | `BS_CLIENT_DIR` | auto | Where the built client is, if it is not next to the server. |
 | `FB_DEV_TOOLS` | off | Dev-only room messages (`dev:teleport`, `dev:endmatch`). Never on a public server. |
 | `CORS_ORIGIN` | any | Comma-separated origins, for a deployment where the page lives elsewhere. |
+| `FB_MAX_PLAYERS` | 32 | Humans a **deathmatch** room admits (TDM / FFA), 2–64. Bots sit on top of it. |
+
+## How many people fit
+
+Two rules, because a room's size is its mode's:
+
+- **Deathmatch (TEAM DEATHMATCH, FREE FOR ALL)** is an open lobby: up to **8 bots** *and* up to
+  `FB_MAX_PLAYERS` humans (32 by default), i.e. 40 bodies in one room. The bots do not take a
+  human's seat.
+- **Every other mode** (Bomb, Domination, The Boys, Gun Game, Ostrzyżeni) seats **12 bodies** in
+  total, so each bot you ask for is one fewer seat for a person. A duel is its two seats.
+
+`GET /health` prints both: `maxPlayers` (12) and `openMaxPlayers` (whatever `FB_MAX_PLAYERS` is).
+The room browser shows each room against its own size.
+
+The default was measured, not guessed: at 32 humans + 8 bots one server tick costs 0.32 ms of its
+16.7 ms budget and a client's snapshot stream stays a few kB/s (`tickCost.test.ts`,
+`netBytes.test.ts`). Raising it past 64 is refused, and on a small VPS the honest limit is your
+upload, not the CPU: outbound traffic grows with the square of the room. Nobody has played a
+32-player match yet — if you host one, the numbers to watch are `/health`'s `tick.maxMs` and your
+players' frame rate, since drawing forty characters is the client's problem, not the server's.
 
 ## Checking it works
 

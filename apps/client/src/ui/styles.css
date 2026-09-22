@@ -235,7 +235,11 @@ button { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) { .result-card, .round-end { animation: none; } .summary-bar-fill { transition: none; } }
 
 .scoreboard-wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-.scoreboard { display: flex; gap: 16px; background: rgba(10,10,12,.86); padding: 18px; border: 1px solid var(--line); }
+/* An open-lobby deathmatch can hold forty bodies, so the board has to survive a roster that is
+   taller than the screen: it scrolls, and the column heads stay put while it does. At 6 v 6 —
+   every fixed-roster mode — nothing about this is visible. */
+.scoreboard { display: flex; gap: 16px; background: rgba(10,10,12,.86); padding: 18px; border: 1px solid var(--line); max-height: 82vh; overflow-y: auto; }
+.scoreboard .sb-team thead th { position: sticky; top: 0; z-index: 1; background: rgba(10,10,12,.96); }
 .sb-team { border-collapse: collapse; min-width: 300px; }
 .sb-team th { font-family: var(--font-display); letter-spacing: 0.2em; font-size: 14px; color: var(--tx-2); padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--line); }
 .sb-team th.sb-name, .sb-team td.sb-name { text-align: left; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

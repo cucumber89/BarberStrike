@@ -41,7 +41,10 @@ it("seats exactly two, refuses a third, and never fills a seat with a bot it was
 it("clamps a bot request to one, so a practice duel is one human and one bot", async () => {
   h = await RoomHarness.create({ room: "duel-bot", mode: "duel", map: "gora", bots: 5 });
   expect(h.room.metadata.bots).toBe(1);
-  expect(h.room.metadata.slots).toBe(1);
+  // One human seat and the bot in the other: `slots` is the room's BODIES, which is what the
+  // browser divides its (bot-inclusive) player count by, so a practice duel reads 1 / 2 empty and
+  // 2 / 2 once somebody is in it.
+  expect(h.room.metadata.slots).toBe(2);
   const a = await h.join("Alpha");
   await expect(h.join("Bravo")).rejects.toThrow(/room full/);
   await h.until(MatchPhase.Prep);

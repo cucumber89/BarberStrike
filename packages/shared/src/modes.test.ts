@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { DUEL, GUN_GAME, MODES, MODE_ORDER, OSTRZYZENI, convertsOnKill, duelRoundWinner, duelSpawnSide, infectionRoundWinner, ladderAfterKill, ladderDone, ladderRung, ladderWeapon, pickFirstShaved } from "./modes";
+import { DUEL, GUN_GAME, MODES, MODE_ORDER, OSTRZYZENI, convertsOnKill, isOpenMode, modeCapacity, openPlayerCap, duelRoundWinner, duelSpawnSide, infectionRoundWinner, ladderAfterKill, ladderDone, ladderRung, ladderWeapon, pickFirstShaved } from "./modes";
 import { GAME_MODES, isGameMode } from "./types";
+import { MAX_PLAYERS, OPEN_MAX_PLAYERS, OPEN_PLAYER_CAP_MAX } from "./constants";
 import { WEAPONS, WEAPON_ORDER } from "./weapons";
 import { WEAPON_PRICES } from "./economy";
 
@@ -125,5 +126,46 @@ describe("Ostrzyżeni conversion rule", () => {
     expect(pickFirstShaved(ps, () => 0.99)?.id).toBe("c");
     expect(pickFirstShaved([], () => 0)).toBeNull();
     expect(OSTRZYZENI.shavedTeam).not.toBe(OSTRZYZENI.survivorTeam);
+  });
+});
+
+/**
+ * How many people fit, per mode. One table, read by the room (seats and `maxClients`), by
+ * `/health` and by anything that wants to print a denominator, so the answer cannot differ
+ * between the server that enforces it and the screen that shows it.
+ */
+describe("room capacity", () => {
+  it("makes deathmatch an open lobby and leaves every other mode its roster", () => {
+    expect(isOpenMode("tdm"), "TEAM DEATHMATCH").toBe(true);
+    expect(isOpenMode("ffa"), "FREE FOR ALL").toBe(true);
+    for (const m of GAME_MODES) {
+      if (m === "tdm" || m === "ffa") continue;
+      expect(isOpenMode(m), `${m} keeps its roster`).toBe(false);
+      expect(modeCapacity(m)).toBe(m === "duel" ? DUEL.players : MAX_PLAYERS);
+    }
+    expect(modeCapacity("tdm")).toBe(OPEN_MAX_PLAYERS);
+    expect(modeCapacity("ffa")).toBe(OPEN_MAX_PLAYERS);
+  });
+
+  it("lets a host move the open cap, within what the build will serve", () => {
+    expect(openPlayerCap(undefined), "unset falls back to the measured default").toBe(OPEN_MAX_PLAYERS);
+    expect(openPlayerCap("")).toBe(OPEN_MAX_PLAYERS);
+    expect(openPlayerCap("not a number")).toBe(OPEN_MAX_PLAYERS);
+    expect(openPlayerCap("24")).toBe(24);
+    expect(openPlayerCap(40.4)).toBe(40);
+    // Clamped, never refused: a typo in an env var on somebody's VPS must not stop a room starting.
+    expect(openPlayerCap("0")).toBe(2);
+    expect(openPlayerCap("-9")).toBe(2);
+    expect(openPlayerCap("100000")).toBe(OPEN_PLAYER_CAP_MAX);
+    // And the cap only reaches the modes it is for.
+    expect(modeCapacity("tdm", openPlayerCap("24"))).toBe(24);
+    expect(modeCapacity("bomb", openPlayerCap("24"))).toBe(MAX_PLAYERS);
+    expect(modeCapacity("duel", openPlayerCap("24"))).toBe(DUEL.players);
+  });
+
+  it("holds at least the old room, so nothing this changes can make a room smaller", () => {
+    for (const m of GAME_MODES) expect(modeCapacity(m)).toBeGreaterThanOrEqual(m === "duel" ? 2 : MAX_PLAYERS);
+    expect(OPEN_MAX_PLAYERS).toBeGreaterThan(MAX_PLAYERS);
+    expect(OPEN_PLAYER_CAP_MAX).toBeGreaterThanOrEqual(OPEN_MAX_PLAYERS);
   });
 });

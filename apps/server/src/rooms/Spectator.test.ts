@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { C2S, MAX_PLAYERS, MAX_SPECTATORS, S2C } from "@frankibarber/shared";
+import { C2S, MAX_BOTS, MAX_PLAYERS, MAX_SPECTATORS, OPEN_MAX_PLAYERS, S2C } from "@frankibarber/shared";
 import { RoomHarness } from "./testHarness";
 
 /**
@@ -40,10 +40,17 @@ describe("watching a match without playing it", () => {
   });
 
   it("leaves the player seats alone and takes its own", async () => {
-    h = await RoomHarness.create({ room: "seats", mode: "tdm", bots: 2 });
+    // Fixed roster (Bomb): two bots spend two of the twelve seats, watchers ride on top of what is
+    // left. Deathmatch spends none of its cap on bots — same assertion, other mode, below.
+    h = await RoomHarness.create({ room: "seats", mode: "bomb", bots: 2 });
     const room = h.room as unknown as { maxClients: number; playerSlots: number };
     expect(room.playerSlots).toBe(MAX_PLAYERS - 2);
     expect(room.maxClients).toBe(MAX_PLAYERS - 2 + MAX_SPECTATORS);
+    await h.dispose();
+    h = await RoomHarness.create({ room: "seats-dm", mode: "tdm", bots: MAX_BOTS });
+    const open = h.room as unknown as { maxClients: number; playerSlots: number };
+    expect(open.playerSlots).toBe(OPEN_MAX_PLAYERS);
+    expect(open.maxClients).toBe(OPEN_MAX_PLAYERS + MAX_SPECTATORS);
   });
 
   it("does not make the room look full to somebody who wants to play", async () => {
@@ -54,7 +61,9 @@ describe("watching a match without playing it", () => {
     for (let i = 0; i < 4; i++) await h.join(`Widz${i}`, { spectator: true });
     const meta = (h.room as unknown as { metadata: { players: number; slots: number } }).metadata;
     expect(meta.players, "one player, four watchers").toBe(1);
-    expect(meta.slots).toBe(MAX_PLAYERS);
+    // `slots` is the denominator the browser prints, so it counts BODIES: here a deathmatch with
+    // no bots, which is the whole open-lobby cap.
+    expect(meta.slots).toBe(OPEN_MAX_PLAYERS);
   });
 
   it("cannot move the match by sending anything", async () => {

@@ -17,6 +17,7 @@ import {
   GUN_GAME, MELEE_WEAPON, ladderAfterKill, ladderDone, ladderWeapon,
   OSTRZYZENI, PERK_ARMED_MS, convertsOnKill, infectionRoundWinner, pickFirstShaved,
   DUEL, duelRoundWinner, duelSpawnSide,
+  isOpenMode, modeCapacity, openPlayerCap,
   DEFAULT_HAIRCUT, HAIRCUTS, encodeHaircut, isHaircutId, isShave, resetShaves, shaveOnce,
   type BodyState, type CollisionWorld, type DamagedEvent, type FireMessage, type HitEvent, type InputTuple, type KillEvent,
   type MapDef, type PlayerInput, type SpawnPoint, type ShotEvent, type SpawnEvent, type Target, type Team, type WeaponId, type WelcomeMessage,
@@ -285,14 +286,23 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if ((this.mode === "dom" || this.mode === "boys")) {
       for (const f of this.map.flags) { const fs = new FlagState(); fs.id = f.id; this.state.flags.push(fs); this.flagSims.push(neutralFlag()); }
     }
-    // Drop 5: bots requested at creation (clamped so humans always have room), with a difficulty.
+    // Drop 5: bots requested at creation, with a difficulty. How many the room can afford, and
+    // whether they cost a human a seat, is the mode's answer — see below.
     const wantBots = isFiniteNumber(options?.bots) ? Math.max(0, Math.min(MAX_BOTS, Math.round(options.bots))) : 0;
-    this.botCount = Math.min(wantBots, MAX_PLAYERS - 2);
-    // Bots take seats: 12 is the room, not the human count (task 6). Was 12 humans + bots.
-    // Bots take seats; SPECTATORS do not. Colyseus caps every client with one number, so the cap
-    // carries the watchers' headroom and `onJoin` enforces the player half of it — otherwise a
-    // room with six people watching would report itself full to the seventh who wanted to play.
-    this.playerSlots = MAX_PLAYERS - this.botCount;
+    // OPEN LOBBY (deathmatch: tdm / ffa). Bots are extra bodies, not seats, so a room can run the
+    // full house of MAX_BOTS and still let every human in up to the host's cap — asking for eight
+    // bots used to leave four human seats of the twelve, which is the opposite of what a crowd
+    // wants from deathmatch. Every other mode keeps the old rule, where twelve bodies IS the mode
+    // (a site take, a flag rotation, one hunter): there a bot occupies a seat and at least two are
+    // held open for humans.
+    const open = isOpenMode(this.mode);
+    const capacity = modeCapacity(this.mode, openPlayerCap(process.env.FB_MAX_PLAYERS));
+    this.botCount = open ? wantBots : Math.min(wantBots, MAX_PLAYERS - 2);
+    // Bots take seats (fixed roster) or do not (open lobby); SPECTATORS never do. Colyseus caps
+    // every client with one number, so that cap carries the watchers' headroom and `onJoin`
+    // enforces the player half of it — otherwise a room with six people watching would report
+    // itself full to the seventh who wanted to play.
+    this.playerSlots = open ? capacity : MAX_PLAYERS - this.botCount;
     // A duel is two seats and nothing fills an empty one: at most one bot, and only if asked for.
     if (this.duel) { this.botCount = Math.min(this.botCount, DUEL.players - 1); this.playerSlots = DUEL.players - this.botCount; }
     this.maxClients = this.playerSlots + MAX_SPECTATORS;
@@ -302,7 +312,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // `room`, `mode` and `map` must stay in metadata: the matchmaker filterBy(["room", "mode", "map"])
     // matches against them, and it is the ID that must be there — two rooms on different maps can
     // never be the same room, and a display name is not what a client filters on.
-    this.setMetadata({ room: this.state.roomName, mode: this.mode, name: this.state.roomName, map: this.map.id, bots: this.botCount, players: 0, slots: this.playerSlots });
+    this.setMetadata({ room: this.state.roomName, mode: this.mode, name: this.state.roomName, map: this.map.id, bots: this.botCount, players: 0, slots: this.roomSize() });
     this.patchRate = SNAPSHOT_MS;
     this.setTimestep((dt) => this.tick(dt), TICK_MS);
     this.onMessage(C2S.Chat, this.guarded((client, msg) => this.onChat(client, msg)));
@@ -605,9 +615,18 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private publishCount(): void {
     void this.setMetadata({
       room: this.state.roomName, mode: this.mode, name: this.state.roomName, map: this.map.id,
-      bots: this.botCount, players: this.state.players.size, slots: this.playerSlots,
+      bots: this.botCount, players: this.state.players.size, slots: this.roomSize(),
     });
   }
+
+  /**
+   * The denominator the room browser prints, and it has to be BODIES, because `players` above
+   * counts the bots. With the fixed roster it is `MAX_PLAYERS` however the seats are split; in an
+   * open lobby it is the human cap with the bots on top — a deathmatch room with eight bots and
+   * the cap full reads 40 / 40 and not 40 / 32. (It was `playerSlots` alone, which already printed
+   * a full twelve-body room with two bots as 12 / 10 and called it over-full.)
+   */
+  private roomSize(): number { return this.playerSlots + this.botCount; }
 
   /**
    * The side a joiner (human or bot) lands on. Team modes balance the two sides; FFA and Gun Game
