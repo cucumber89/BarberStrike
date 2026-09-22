@@ -64,11 +64,19 @@ function ScoreTr({ r, myId }: { r: ScoreRow; myId: string }) {
   );
 }
 
+/**
+ * Best first. The FFA table always did this; a team table used to print the roster in the order
+ * people joined, which reads fine at 6 v 6 and not at all once a deathmatch holds a crowd — the
+ * name you are looking for is your own, and it should be near the top or near the bottom, not
+ * somewhere in twenty rows of arrival order.
+ */
+const byKills = (a: ScoreRow, b: ScoreRow): number => b.kills - a.kills || a.deaths - b.deaths;
+
 export function Scoreboard({ rows, myId, mode }: { rows: readonly ScoreRow[]; myId: string; mode: GameMode }) {
   if (!MODES[mode].teams) {
     // FFA (drop 4): one table, most kills first. Gun Game (drop D): highest rung first, the score column is the rung.
     const gun = mode === "gungame";
-    const sorted = [...rows].sort((a, b) => (gun ? b.score - a.score || b.kills - a.kills : b.kills - a.kills || a.deaths - b.deaths));
+    const sorted = [...rows].sort((a, b) => (gun ? b.score - a.score || b.kills - a.kills : byKills(a, b)));
     return (
       <div className="scoreboard">
         <table className="sb-team ffa">
@@ -86,7 +94,7 @@ export function Scoreboard({ rows, myId, mode }: { rows: readonly ScoreRow[]; my
         <table key={team} className={`sb-team t${team}`}>
           <thead><tr><th className="sb-name">{(mode === "ostrzyzeni" ? OSTRZYZENI_SIDES : TEAM_NAMES)[team]}</th><th>K</th><th>D</th><th>A</th><th className="sb-shaved"><Razor title="OGOLONY" /></th><th>$</th><th>PKT</th><th>PING</th></tr></thead>
           <tbody>
-            {rows.filter((r) => r.team === team).map((r) => <ScoreTr key={r.id} r={r} myId={myId} />)}
+            {rows.filter((r) => r.team === team).sort(byKills).map((r) => <ScoreTr key={r.id} r={r} myId={myId} />)}
           </tbody>
         </table>
       ))}

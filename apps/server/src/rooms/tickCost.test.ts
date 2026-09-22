@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MAX_BOTS, OPEN_MAX_PLAYERS } from "@frankibarber/shared";
 import { RoomHarness } from "./testHarness";
 
 /**
@@ -50,13 +51,13 @@ describe("server tick cost", () => {
   }, 180000);
 
   /**
-   * The same budget for a FULL room. `MAX_PLAYERS` is 12 and `MAX_BOTS` is 8, so four humans plus
-   * eight bots is the busiest room the matchmaker will build with bots in it — and the case above
-   * (nine bodies) was only three quarters of it. Every per-tick cost that is quadratic in the player
-   * count shows up here and nowhere else.
+   * The same budget for a full FIXED-ROSTER room. `MAX_PLAYERS` is 12 and `MAX_BOTS` is 8, so four
+   * humans plus eight bots is the busiest such room the matchmaker will build with bots in it — and
+   * the case above (nine bodies) was only three quarters of it. Every per-tick cost that is
+   * quadratic in the player count shows up here and nowhere else.
    */
   it("holds the budget with a full house", async () => {
-    h = await RoomHarness.create({ room: "cost12", mode: "tdm", bots: 8, botLevel: "normal", seed: 11 });
+    h = await RoomHarness.create({ room: "cost12", mode: "bomb", bots: 8, botLevel: "normal", seed: 11 });
     for (let i = 0; i < 4; i++) await h.join(`HUMAN${i}`);
     await h.tick(60);
     const N = 600;
@@ -74,4 +75,36 @@ describe("server tick cost", () => {
     expect(total / N).toBeLessThan(4);
     expect(peak).toBeLessThan(1000);
   }, 180000);
+
+  /**
+   * And the same budget for the OPEN LOBBY, which is now the biggest room this server builds:
+   * deathmatch seats its bots on top of the humans, so `OPEN_MAX_PLAYERS` people and `MAX_BOTS`
+   * bots is the worst case the cap admits — more than three times the bodies the "full house"
+   * above has. This is the test that decides whether `OPEN_MAX_PLAYERS` is a number we can serve.
+   *
+   * The humans here stand still (the harness sends them no input), so what this measures is the
+   * per-body cost the room pays regardless — state, waves, the damage and spawn bookkeeping, and
+   * every loop that is quadratic in the roster — plus eight bots moving and shooting for real.
+   * A room of thirty-two ACTIVE players also pays for their inputs, which is the one thing only a
+   * playtest can price.
+   */
+  it("holds the budget with a full open lobby: the cap in bodies", async () => {
+    h = await RoomHarness.create({ room: "costOpen", mode: "tdm", bots: MAX_BOTS, botLevel: "normal", seed: 21 });
+    for (let i = 0; i < OPEN_MAX_PLAYERS; i++) await h.join(`HUMAN${i}`);
+    expect(h.state.players.size).toBe(OPEN_MAX_PLAYERS + MAX_BOTS);
+    await h.tick(60);
+    const N = 600;
+    let total = 0, peak = 0;
+    for (let i = 0; i < N; i++) {
+      const c0 = process.cpuUsage();
+      await h.tick(1);
+      const c = process.cpuUsage(c0);
+      const ms = (c.user + c.system) / 1000;
+      total += ms;
+      if (ms > peak) peak = ms;
+    }
+    console.log(`${MAX_BOTS} bots + ${OPEN_MAX_PLAYERS} humans (open lobby cap, ${h.state.players.size} bodies): mean ${(total / N).toFixed(3)} ms/tick, peak ${peak.toFixed(2)} ms (budget 16.7)`);
+    expect(total / N).toBeLessThan(8);
+    expect(peak).toBeLessThan(1000);
+  }, 300000);
 });

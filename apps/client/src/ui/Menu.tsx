@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BOYS_CLASSES, BOYS, BUILDS, OUTFITS, buildDef, outfitDef, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MODES, MODE_ORDER, isGameMode, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { BOYS_CLASSES, BOYS, BUILDS, OUTFITS, buildDef, outfitDef, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MAX_PLAYERS, MODES, MODE_ORDER, isGameMode, isOpenMode, type BotLevel, type GameMode } from "@frankibarber/shared";
 import { equippedBuild, equippedHaircut, equippedOutfit, ownedCuts } from "../game/progression/profile";
 import { copyText, inviteLink, isMapId, mapChoices, parseInvite } from "./invite";
 import { Connection, defaultServerUrl, type RoomListing } from "../game/net/Connection";
@@ -385,6 +385,17 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                         </button>
                       ))}
                     </div>
+                    {/* The seat rule, where the choice is made. In deathmatch the bots are extra
+                        bodies and the room still fills with people; everywhere else each bot is one
+                        of the twelve, and somebody who picks eight should know that before they do.
+                        No number for the open cap: it is the host's (`FB_MAX_PLAYERS`) and the room
+                        browser prints the real one. */}
+                    <small className="bots-seats" data-testid="bots-seats">
+                      {isOpenMode(gameMode)
+                        ? "Boty nie zajmują miejsc — w deathmatchu dołącza do nich cała ekipa."
+                        : gameMode === "duel" ? "Pojedynek to dwa miejsca: ty i bot albo ty i rywal."
+                        : `Ten tryb to ${MAX_PLAYERS} postaci razem — każdy bot to jedno miejsce mniej dla gracza.`}
+                    </small>
                   </div>
 
                   <div className="lb-block wide lobby-look" data-testid="haircut-picker">

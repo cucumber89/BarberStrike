@@ -1,4 +1,4 @@
-import { MATCH } from "./constants";
+import { MATCH, MAX_PLAYERS, OPEN_MAX_PLAYERS, OPEN_PLAYER_CAP_MAX } from "./constants";
 import { DOM } from "./dom";
 import { BOMB } from "./bomb";
 import type { GameMode, Team } from "./types";
@@ -52,6 +52,49 @@ export const MODES: Record<GameMode, ModeDef> = {
 };
 
 export const MODE_ORDER: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni", "duel"];
+
+
+// ---------------------------------------------------------------- how many people fit
+
+/**
+ * The OPEN LOBBY modes: deathmatch, team or solo.
+ *
+ * These two are the only modes with no roster shape to protect. TDM scores kills and FFA scores
+ * kills; nothing in either of them counts sides into a site take, a flag rotation or one hunter,
+ * so a crowd changes how loud it is and not how it works. Everything else keeps `MAX_PLAYERS`,
+ * where a twelfth body is already a design decision.
+ *
+ * Consequence, and the point of the whole table: in these modes BOTS DO NOT TAKE HUMAN SEATS. A
+ * room can hold a full house of `MAX_BOTS` and still admit every human the cap allows, which is
+ * what "8 bots plus everybody" means in practice.
+ */
+export const OPEN_MODES: ReadonlySet<GameMode> = new Set<GameMode>(["tdm", "ffa"]);
+
+/** Is this mode an open lobby (bots on top of humans) or a fixed roster (bots in the seats)? */
+export const isOpenMode = (mode: GameMode): boolean => OPEN_MODES.has(mode);
+
+/**
+ * How many HUMANS a room of this mode admits. `open` is the host's open-lobby cap — normally
+ * `openPlayerCap()`, which a host may move with `FB_MAX_PLAYERS`; a duel is always its two seats.
+ */
+export function modeCapacity(mode: GameMode, open: number = OPEN_MAX_PLAYERS): number {
+  if (mode === "duel") return DUEL.players;
+  return isOpenMode(mode) ? Math.max(2, Math.min(OPEN_PLAYER_CAP_MAX, Math.round(open))) : MAX_PLAYERS;
+}
+
+/**
+ * The open-lobby cap a host has chosen: `FB_MAX_PLAYERS` when it is a number this build will
+ * serve, the measured default otherwise. Clamped rather than refused, because a typo in an env var
+ * on somebody's VPS must not be the reason a room will not start.
+ */
+export function openPlayerCap(raw: string | number | undefined): number {
+  // An env var that is set to nothing is UNSET, not zero — `Number("")` is 0 and would otherwise
+  // clamp a host's room down to two seats for the sake of a stray `FB_MAX_PLAYERS=` in a unit file.
+  if (raw === undefined || (typeof raw === "string" && raw.trim() === "")) return OPEN_MAX_PLAYERS;
+  const n = typeof raw === "string" ? Number(raw) : raw;
+  if (!Number.isFinite(n)) return OPEN_MAX_PLAYERS;
+  return Math.max(2, Math.min(OPEN_PLAYER_CAP_MAX, Math.round(n)));
+}
 
 
 // ---------------------------------------------------------------- Gun Game (Drop D)

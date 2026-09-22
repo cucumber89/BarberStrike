@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
-import { GAME_VERSION, MAX_PLAYERS } from "@frankibarber/shared";
+import { GAME_VERSION, MAX_PLAYERS, modeCapacity, openPlayerCap } from "@frankibarber/shared";
 import { TdmRoom } from "./rooms/TdmRoom";
 import { clientDir, hostBanner, serveClient, spaFallback } from "./hosting";
 import { tickStats } from "./stats";
@@ -26,16 +26,21 @@ app.get("/health", async (_req, res) => {
   } catch { /* counts are informational */ }
   // `tick` (task 6): worst and mean simulation tick over the last minute, across rooms — the one
   // number that says whether the core the simulation runs on is keeping up. Watch it with curl.
-  res.json({ ok: true, game: "BARBERSTRIKE", version: GAME_VERSION, maxPlayers: MAX_PLAYERS, uptime: process.uptime(), players, rooms, tick: tickStats() });
+  // Two caps now, because a room's is its mode's: the fixed-roster modes seat twelve bodies, an
+  // open-lobby deathmatch seats `openMaxPlayers` humans with the bots on top (`FB_MAX_PLAYERS`).
+  const openMaxPlayers = modeCapacity("tdm", openPlayerCap(process.env.FB_MAX_PLAYERS));
+  res.json({ ok: true, game: "BARBERSTRIKE", version: GAME_VERSION, maxPlayers: MAX_PLAYERS, openMaxPlayers, uptime: process.uptime(), players, rooms, tick: tickStats() });
 });
 
 // Room browser for the lobby: public, unlocked TDM rooms with their metadata.
 app.get("/rooms", async (_req, res) => {
   try {
     const rooms = await matchMaker.query({ name: "tdm", locked: false, private: false });
-    // `clients` and `maxClients` are what the browser prints as "n / 12" and sorts on, so they
+    // `clients` and `maxClients` are what the browser prints as "n / N" and sorts on, so they
     // have to mean PLAYERS — six people watching must not make a room look full to a seventh who
-    // wants to play. `watching` carries the rest, for anyone who wants to show it.
+    // wants to play. `watching` carries the rest, for anyone who wants to show it. The denominator
+    // is the room's own (`slots`): twelve in a fixed-roster mode, the open cap plus its bots in a
+    // deathmatch, two in a duel.
     res.json(rooms.map((r) => {
       const players = r.metadata?.players ?? r.clients;
       return { roomId: r.roomId, clients: players, maxClients: r.metadata?.slots ?? r.maxClients, watching: Math.max(0, r.clients - players), metadata: r.metadata };
