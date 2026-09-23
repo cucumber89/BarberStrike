@@ -24,6 +24,10 @@ await page.getByTestId("btn-create").click();
 await page.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().loadStage === "ready", null, { timeout: 60000 });
 await page.getByTestId("enter-game").click({ timeout: 60000 });
 await page.waitForFunction(() => window.__fb.hud.get().bracket !== "", null, { timeout: 40000 });
+// The bracket is drawn (startMatch) a beat BEFORE the first pair is spawned (beginDuelRound), so
+// sampling on the bracket alone caught the room mid-change and reported one player on the map.
+await page.waitForFunction(() => window.__fb.hud.get().players.filter((p) => p.alive).length >= 2, null, { timeout: 30000 })
+  .catch(() => console.log("(the first pair never both came up)"));
 
 const hud = () => page.evaluate(() => window.__fb.hud.get());
 const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png` });
