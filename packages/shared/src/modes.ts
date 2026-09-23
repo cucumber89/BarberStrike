@@ -1,4 +1,5 @@
 import { MATCH, MAX_PLAYERS, OPEN_MAX_PLAYERS, OPEN_PLAYER_CAP_MAX } from "./constants";
+import { CS_ECONOMY, CS_ROUND, csKillReward, csLossBonus } from "./cs";
 import { DOM } from "./dom";
 import { BOMB } from "./bomb";
 import type { GameMode, Team } from "./types";
@@ -33,8 +34,8 @@ export interface ModeDef {
 
 /** Drop 4 + Drop D: the modes. FFA scores personal kills; Domination scores held flags. */
 export const MODES: Record<GameMode, ModeDef> = {
-  tdm: { id: "tdm", name: "TEAM DEATHMATCH", short: "TDM", blurb: `FADE kontra TAPER · pierwsza drużyna do ${MATCH.scoreLimit} zabójstw`, teams: true, scoreLimit: MATCH.scoreLimit, shop: "all", winner: "team",
-    objective: `Eliminuj przeciwników: wygrywa drużyna, która pierwsza zdobędzie ${MATCH.scoreLimit} zabójstw albo prowadzi po czasie.` },
+  tdm: { id: "tdm", name: "TEAM DEATHMATCH", short: "TDM", blurb: `FADE kontra TAPER · pierwsza drużyna do ${MATCH.scoreLimit} zabójstw · w większym lobby limit rośnie`, teams: true, scoreLimit: MATCH.scoreLimit, shop: "all", winner: "team",
+    objective: `Eliminuj przeciwników: wygrywa drużyna, która pierwsza zdobędzie limit zabójstw (${MATCH.scoreLimit} w pełnym pokoju, więcej w dużym lobby) albo prowadzi po czasie.` },
   boys: { id: "boys", name: "THE BOYS", short: "BOYS", blurb: "5 ról · przejmuj A / B / C · pierwsza drużyna do 100 punktów · B: sklep i zmiana roli", teams: true, scoreLimit: DOM.scoreLimit, shop: "all", winner: "team",
     objective: `Trzymaj punkty A / B / C jako jedna z pięciu ról: wygrywa drużyna, która pierwsza zbierze ${DOM.scoreLimit} punktów.` },
   ffa: { id: "ffa", name: "FREE FOR ALL", short: "FFA", blurb: "Każdy na siebie · pierwszy do 30 zabójstw", teams: false, scoreLimit: 30, shop: "all", winner: "player",
@@ -47,7 +48,7 @@ export const MODES: Record<GameMode, ModeDef> = {
     objective: "Każde zabójstwo daje ci następną broń z drabinki: wygrywa, kto pierwszy zaliczy wszystkie 14 szczebli." },
   ostrzyzeni: { id: "ostrzyzeni", name: "OSTRZYŻENI", short: "OSTRZ", blurb: "Jeden ostrzyżony z maszynką poluje na resztę · ogolenie przenosi cię na jego stronę · przetrwaj do końca czasu", teams: true, scoreLimit: 5, shop: "survivors", winner: "player",
     objective: "Przetrwaj rundę nieostrzyżony albo, jako ostrzyżony, ogol wszystkich maszynką: po 5 rundach wygrywa najwięcej punktów." },
-  duel: { id: "duel", name: "1 v 1", short: "DUEL", blurb: "Dwóch graczy · B: sklep w 4 s zamrożenia · runda to jedno życie albo 60 s · zmiana stron co 3 rundy · pierwszy do 6", teams: true, scoreLimit: 6, shop: "all", winner: "team",
+  duel: { id: "duel", name: "1 v 1", short: "DUEL", blurb: "Dwóch graczy · zasady jak w CS: 15 s zamrożenia na zakupy (plus 5 s po starcie) · kasa i broń zostają, jeśli przeżyjesz · zmiana stron co 3 rundy · pierwszy do 6", teams: true, scoreLimit: 6, shop: "all", winner: "team",
     objective: "Jedno życie na rundę, 60 sekund: wygrywa, kto pierwszy weźmie 6 rund." },
 };
 
@@ -69,6 +70,33 @@ export const MODE_ORDER: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "g
  * what "8 bots plus everybody" means in practice.
  */
 export const OPEN_MODES: ReadonlySet<GameMode> = new Set<GameMode>(["tdm", "ffa"]);
+
+/**
+ * THE KILL LIMIT OF A TEAM DEATHMATCH, scaled by how many bodies are in the room.
+ *
+ * TDM's limit is a TEAM total, and a team total fills at the rate the room shoots: at six a side
+ * the shipped 40 kills is a seven-minute match, and in the open lobby the same 40 is over in about
+ * a minute. (FFA's 30 is a PERSONAL total and scales the other way — more players means each one
+ * gets fewer, so it is deliberately left alone.)
+ *
+ * It is a function of the roster rather than a replicated field on purpose: the player map is
+ * already on the wire, so the server that ends the match and the HUD that prints the target
+ * compute the same number from the same thing, and no message had to be invented for it. The
+ * target therefore moves a little as people join and leave, which is the honest behaviour — the
+ * match is as long as the room is big.
+ *
+ * `bodies` counts everyone playing, bots included: a bot's kills fill the same bar.
+ */
+export function tdmScoreLimit(bodies: number): number {
+  const scale = Math.max(1, Math.round(bodies)) / MAX_PLAYERS;
+  return Math.max(MATCH.scoreLimit, Math.min(TDM_SCORE_LIMIT_MAX, Math.round(MATCH.scoreLimit * scale / 5) * 5));
+}
+/** A ceiling, so a freak room cannot ask for a match nobody has time to finish. */
+export const TDM_SCORE_LIMIT_MAX = 150;
+
+/** The limit a mode is played to, given the room. Only TDM's moves; everything else is its own. */
+export const scoreLimitFor = (mode: GameMode, bodies: number): number =>
+  mode === "tdm" ? tdmScoreLimit(bodies) : MODES[mode].scoreLimit;
 
 /** Is this mode an open lobby (bots on top of humans) or a fixed roster (bots in the seats)? */
 export const isOpenMode = (mode: GameMode): boolean => OPEN_MODES.has(mode);
@@ -250,19 +278,99 @@ export function pickFirstShaved<T extends { connected: boolean }>(players: reado
  */
 export const DUEL = {
   players: 2,
-  /** The frozen buy window at the start of every round. */
-  prepMs: 4000,
+  /**
+   * The frozen buy window at the start of every round — Counter-Strike's `mp_freezetime`, and the
+   * same fifteen seconds it uses in competitive. It was 4 s, which is enough time to press three
+   * buttons if you already know which three; the owner asked for CS's, so this is CS's.
+   */
+  prepMs: CS_ROUND.freezeMs,
+  /**
+   * And CS's `mp_buytime` on top of it: the shop stays open for this long AFTER the round goes
+   * live, so 15 + 5 = the 20 s CS counts from the start of a round. It is why a CS player can
+   * still buy while walking out of spawn, and why forgetting armour is not an instant loss.
+   */
+  buyTailMs: CS_ROUND.buyTailMs,
+  /**
+   * A cap on the fight, not a target: most duels are over in a fifth of it. CS's round is 1:55,
+   * which for two players on a roof is two players looking for each other; 60 s keeps the match
+   * moving and the clock rule (more health wins) rarely decides anything.
+   */
   roundMs: 60000,
   /** Result pause between rounds. */
   breakMs: 3000,
   wins: 6,
   /** Sides swap every this many rounds: 1–3 on the first set, 4–6 on the other, and so on. */
   halfRounds: 3,
-  /** Every round starts with this much and a clean wallet; nothing carries over. */
-  roundMoney: 6000,
   /** A cap on the whole match; at the cap a tie is played out, a lead ends it. */
   matchMs: 15 * 60000,
+  /**
+   * THE ECONOMY, Counter-Strike's shape with one change the owner asked for.
+   *
+   * CS's: you start a half with pistol money, you are paid for the round you won, for the rounds
+   * you lost (a ladder that climbs while you keep losing), and for each kill by the weapon that
+   * made it; what you carry you keep, what you died holding you lose, and the wallet is reset when
+   * the sides swap.
+   *
+   * The change: a `floor` under every round after the first of a half. In a five-player match a
+   * poor round is somebody else's problem to cover; in a duel it is three rounds of being shot at
+   * by a rifle while holding the free pistol, which is not a fight. The floor tops a purse up to
+   * a gun-and-armour buy, so the ladder still shapes the rich rounds (a won round plus leftovers
+   * buys everything) and stops shaping the desperate ones. The first round of each half is a REAL
+   * pistol round — it is exempt, or the mode would never have one.
+   */
+  economy: {
+    // CS's numbers, shared with Bomb (`CS_ECONOMY`), plus the one that is not CS's.
+    ...CS_ECONOMY,
+    /** The owner's floor: any round but a half's first tops up to at least this. */
+    floor: 2500,
+  },
 } as const;
+
+/** What a kill pays in a duel: CS's table (`csKillReward`), shared with Bomb. */
+export const duelKillReward = csKillReward;
+
+/** How a round ended FOR ONE PLAYER: they took it, they lost it, or nobody did (a trade or the clock). */
+export type DuelRoundResult = "win" | "loss" | "draw";
+
+/**
+ * A player's standing in the economy between rounds. Server-side only — money is already a
+ * replicated field, and a loss streak is two lines of bookkeeping that nobody needs to see.
+ */
+export interface DuelPurse {
+  money: number;
+  /** Rounds lost in a row, which is what the ladder climbs on. Reset by a win and by the swap. */
+  losses: number;
+}
+
+export const freshDuelPurse = (): DuelPurse => ({ money: DUEL.economy.start, losses: 0 });
+
+/** What the ladder pays after `losses` consecutive losses (0 = this is the first). CS's, shared. */
+export const duelLossBonus = csLossBonus;
+
+/**
+ * The purse after a round ended. A win pays the round award and clears the streak; a loss pays the
+ * ladder and climbs it; a draw (both dead, or the clock with even health) pays the first rung and
+ * leaves the streak alone — nobody won it, so nobody should be punished for the next one.
+ */
+export function duelPurseAfter(purse: DuelPurse, result: DuelRoundResult): DuelPurse {
+  const e = DUEL.economy;
+  if (result === "win") return { money: Math.min(e.max, purse.money + e.win), losses: 0 };
+  if (result === "draw") return { money: Math.min(e.max, purse.money + duelLossBonus(0)), losses: purse.losses };
+  return { money: Math.min(e.max, purse.money + duelLossBonus(purse.losses)), losses: purse.losses + 1 };
+}
+
+/** Is this round the first of a half — the pistol round, where the wallet and the sides both reset? */
+export const duelHalfStart = (round: number): boolean => (Math.max(1, round) - 1) % DUEL.halfRounds === 0;
+
+/**
+ * The money a player actually starts `round` with. A half's first round is the pistol round and
+ * gets exactly the start money; every other round is topped up to the floor if the match has been
+ * unkind. `round` is 1-based.
+ */
+export function duelStartMoney(purse: DuelPurse, round: number): number {
+  if (duelHalfStart(round)) return DUEL.economy.start;
+  return Math.min(DUEL.economy.max, Math.max(DUEL.economy.floor, purse.money));
+}
 
 /** The smallest view of a player the duel rule needs. */
 export interface DuelPlayer { team: number; alive: boolean; connected: boolean; health: number }

@@ -8,7 +8,7 @@ import {
   BOMB, sitesOf, bombAttackTeam, bombSpawnSide, resetBomb, stepBomb, type BombPlayer,
   createBody, quantAngle, quantVel, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
   makeRayHit, mulberry32, pickSpawn, sanitizeName, simulateBody, spreadDirection, traceBullet, unpackInput,
-  ECONOMY, GRENADES, THROW_INTERVAL_MS, FIRE_DPS, applyBuy, applySell, buyWindowOpen, giveGrenade, takeGrenade, killReward, weaponForSlot,
+  ECONOMY, GRENADES, THROW_INTERVAL_MS, FIRE_DPS, applyBuy, applySell, buyWindowOpen, giveGrenade, takeGrenade, killReward, weaponForSlot, modeAllowsItem,
   primaryOf, isShopItemId, isGrenadeId, createProjectile, stepProjectile, explosionDamage, flashStrength, flashMs, eyeOf,
   rayBox, targetBox, freshWallet, secondaryOf, sprintActive, usesAmmo, isBackstab, MELEE, PERK_EFFECT, PERK_ORDER, noPerks, perkActive,
   perkSpeedScale, splitDamage, isPerkId, isArmorId,
@@ -16,8 +16,10 @@ import {
   CHAT, MARK, MAX_BOTS, BOT_NAMES, botId, isBotLevel,
   GUN_GAME, MELEE_WEAPON, ladderAfterKill, ladderDone, ladderWeapon,
   OSTRZYZENI, PERK_ARMED_MS, convertsOnKill, infectionRoundWinner, pickFirstShaved,
-  DUEL, duelRoundWinner, duelSpawnSide,
-  isOpenMode, modeCapacity, openPlayerCap,
+  DUEL, duelRoundWinner, duelSpawnSide, duelPurseAfter, duelStartMoney, duelHalfStart, freshDuelPurse,
+  CS_ECONOMY, csKillReward, csLossBonus,
+  type DuelPurse, type DuelRoundResult,
+  isOpenMode, modeCapacity, openPlayerCap, scoreLimitFor,
   DEFAULT_HAIRCUT, HAIRCUTS, encodeHaircut, isHaircutId, isShave, resetShaves, shaveOnce,
   type BodyState, type CollisionWorld, type DamagedEvent, type FireMessage, type HitEvent, type InputTuple, type KillEvent,
   type MapDef, type PlayerInput, type SpawnPoint, type ShotEvent, type SpawnEvent, type Target, type Team, type WeaponId, type WelcomeMessage,
@@ -126,6 +128,11 @@ class Session {
   // ---- drop D: Gun Game. The rung is private; it is replicated as `PlayerState.score` (in this
   // mode the score IS the rung), so the HUD and the scoreboard need no new field.
   rung = 0;
+  // ---- 1 v 1: Counter-Strike's economy. The wallet is already replicated (`PlayerState.money`);
+  // the loss streak the ladder climbs on, and whether this player walked out of the last round
+  // alive (in CS a survivor keeps their gun and a casualty loses it), are the room's own business.
+  purse: DuelPurse = freshDuelPurse();
+  survivedRound = false;
   // ---- drop 5: chat / mark rate limits; the brain for a bot session.
   lastChatAt = -Infinity;
   lastMarkAt = -Infinity;
@@ -249,7 +256,20 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
    * same `state.bomb.round` counter, the same `scoreA` / `scoreB` — no new field, no new message.
    */
   private get duel(): boolean { return this.mode === "duel"; }
+  /**
+   * The two modes built on Counter-Strike's round: Bomb and the 1 v 1. They share the freeze, the
+   * buy window past it, the kill table and the money (`cs.ts`) — the point being that a player who
+   * has learnt one of them has learnt the other.
+   */
+  private get csRules(): boolean { return this.mode === "bomb" || this.duel; }
   private duelStage: "buy" | "break" = "buy";
+  /**
+   * Server time the round's buy window shuts — the freeze plus `DUEL.buyTailMs`, which is CS's
+   * `mp_buytime` running past `mp_freezetime`. 0 outside a live round.
+   */
+  private duelBuyEndsAt = 0;
+  /** The same clock for Bomb: when its round's buy window shuts. 0 outside a live round. */
+  private bombBuyEndsAt = 0;
   /**
    * How long a casualty waits. Gun Game has its own short timer (a party mode: no waves, no shop to
    * spend the wait in) and no perks, so the fade never applies there. A shaved chaser (infection)
@@ -938,7 +958,16 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     return best;
   }
 
-  private applyDamage(attacker: PlayerState, victimId: string, amount: number, headshot: boolean, attackerClient: Client | undefined, weapon: WeaponId | GrenadeId = attacker.weapon as WeaponId, backstab = false): void {
+  /**
+   * `src` is where the damage CAME FROM, when that is not the attacker: the blast's origin, the
+   * fire's centre. The victim's damage wedge is drawn from it.
+   *
+   * It is a named argument rather than a seventh positional one because the two call sites that
+   * need it (a detonation, a burning pool) do not want to restate `weapon` and `backstab`, and
+   * passing an array into `backstab` by mistake would report a grenade as a backstab in the kill
+   * feed.
+   */
+  private applyDamage(attacker: PlayerState, victimId: string, amount: number, headshot: boolean, attackerClient: Client | undefined, weapon: WeaponId | GrenadeId = attacker.weapon as WeaponId, backstab = false, src?: { x: number; z: number }): void {
     const v = this.state.players.get(victimId);
     const vs = this.sessions.get(victimId);
     if (!v || !vs || !v.alive || amount <= 0) return;
@@ -959,7 +988,11 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     (attackerClient ?? this.clientOf(attacker.id))?.send(S2C.Hit, { victim: victimId, damage: credited, kill, headshot, armor: split.absorbed > 0 } satisfies HitEvent);
     const victimClient = this.clients.find((c) => c.sessionId === victimId);
     if (victimClient) {
-      let ddx = attacker.x - v.x, ddz = attacker.z - v.z;
+      // The wedge points at what hit you. For a bullet that is the shooter; for a grenade it is the
+      // BLAST — the thrower may be two rooms away behind you, and an arrow over your shoulder while
+      // the fire is at your feet is worse than no arrow at all.
+      const from = src ?? attacker;
+      let ddx = from.x - v.x, ddz = from.z - v.z;
       const dl = Math.hypot(ddx, ddz) || 1;
       ddx /= dl; ddz /= dl;
       victimClient.send(S2C.Damaged, { from: attacker.id, amount: credited, dx: ddx, dz: ddz, health: v.health, armor: v.armor, broke: split.broke } satisfies DamagedEvent);
@@ -1042,8 +1075,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       ...(helpers.length ? { assists: helpers.slice(0, 3).map(h => h.name) } : {}),
     };
     this.broadcast(S2C.Kill, ev);
-    // Economy: the killer is paid, and so is everyone who helped.
-    this.pay(attacker, killReward(headshot), headshot ? "headshot" : "kill");
+    // Economy: the killer is paid, and so is everyone who helped. The two CS modes (Bomb and the
+    // 1 v 1) pay Counter-Strike's table — by the WEAPON, so the clippers are worth five rifles and
+    // the sniper almost nothing, and a head shot is its own reward and pays no bonus, as in CS.
+    this.pay(attacker, this.csRules ? csKillReward(weapon) : killReward(headshot), headshot ? "headshot" : "kill");
     for (const helper of helpers) {
       this.pay(helper, ECONOMY.assistReward, "assist");
       if (counts) { helper.assists += 1; if (!this.ladder) helper.score += 50; }
@@ -1053,7 +1088,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // Drop D: the ladder ends on the last rung's kill, never on a kill count — a clippers kill from
     // a low rung is a kill that moved nobody up. `endMatch` names the top rung, i.e. the finisher.
     if (finished) { this.endMatch(); return; }
-    const limit = MODES[this.mode].scoreLimit;
+    // TDM's limit follows the room (`scoreLimitFor`): a team total fills three times faster in a
+    // forty-body open lobby than at six a side, and 40 kills there is a one-minute match.
+    const limit = scoreLimitFor(this.mode, this.state.players.size);
     if (this.mode === "tdm" && (this.state.scoreA >= limit || this.state.scoreB >= limit)) this.endMatch();
     else if (this.mode === "ffa" && attacker.kills >= limit) this.endMatch();
   }
@@ -1227,6 +1264,35 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     }
   }
 
+  /**
+   * Somewhere to stand at `sp` that is not inside another player.
+   *
+   * The exact point when it is free — which is every spawn in a room of twelve, so nothing about a
+   * normal match changes. When somebody is already standing there, it walks a ring of candidates
+   * around the point (a golden-angle spiral, so the offsets never queue up along one line) and
+   * takes the first that is clear of the map and clear of people. If none is, the point itself is
+   * still the answer: overlapping is bad, and being put inside a wall is worse.
+   */
+  private spreadSpawn(sp: SpawnPoint, id: string): { x: number; y: number; z: number } {
+    const R = PLAYER.halfWidth, H = PLAYER.height;
+    const free = (x: number, z: number): boolean => {
+      if (this.world.overlaps(x - R, sp.y + 0.05, z - R, x + R, sp.y + H, z + R)) return false;
+      for (const [qid, q] of this.state.players) {
+        if (qid === id || !q.alive || !q.connected) continue;
+        if (Math.abs(q.y - sp.y) < 2 && Math.hypot(q.x - x, q.z - z) < R * 2.6) return false;
+      }
+      return true;
+    };
+    if (free(sp.x, sp.z)) return { x: sp.x, y: sp.y, z: sp.z };
+    // 2.399963 rad is the golden angle: successive candidates fan out instead of stacking up.
+    for (let i = 1; i <= 12; i++) {
+      const a = i * 2.399963, r = 0.9 + i * 0.12;
+      const x = sp.x + Math.cos(a) * r, z = sp.z + Math.sin(a) * r;
+      if (free(x, z)) return { x, y: sp.y, z };
+    }
+    return { x: sp.x, y: sp.y, z: sp.z };
+  }
+
   private spawn(id: string): void {
     const p = this.state.players.get(id);
     const s = this.sessions.get(id);
@@ -1269,8 +1335,13 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       // land the player back where they came from. `!this.teams` says "no sides" without naming a
       // mode, so the next sideless mode gets the right pool for free.
     }, !this.teams);
+    // A crowd does not fit on a spawn POINT. The map has eight per side and the open lobby holds
+    // thirty-two people, so a wave puts three of them on the same coordinates — bodies inside each
+    // other, one grenade for all three, and a player whose first frame is somebody else's back.
+    // `spreadSpawn` steps the later arrivals onto free ground beside the point.
+    const spot = this.spreadSpawn(sp, id);
     const b = s.body;
-    b.x = sp.x; b.y = sp.y; b.z = sp.z; b.vx = b.vy = b.vz = 0; b.grounded = true; b.crouching = false;
+    b.x = spot.x; b.y = spot.y; b.z = spot.z; b.vx = b.vy = b.vz = 0; b.grounded = true; b.crouching = false;
     // A new body is not mid-slide and owes no slide cooldown, and the client's `spawnAt` clears the
     // same two — they have to agree or the first slide of a life disagrees between the two ends.
     b.slide = 0; b.slideCd = 0;
@@ -1280,7 +1351,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     s.lean = 0; s.tac = false; p.lean = 0; p.tac = false;
     for (const w of WEAPON_ORDER) { s.ammo[w] = WEAPONS[w].magazine; s.reserve[w] = WEAPONS[w].reserve; }
     s.reloadEndsAt = 0; s.equipEndsAt = this.now() + 200; s.spread = 0;
-    p.x = sp.x; p.y = sp.y; p.z = sp.z; p.yaw = quantAngle(sp.yaw); p.pitch = 0;
+    p.x = spot.x; p.y = spot.y; p.z = spot.z; p.yaw = quantAngle(sp.yaw); p.pitch = 0;
     if (this.mode === "boys") {
       if (p.boysClass !== p.nextClass) {
         p.boysClass = p.nextClass;
@@ -1386,9 +1457,20 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   // ---------------------------------------------------------------- 1 v 1 (GÓRA tournament pass)
 
-  /** A round: fresh wallets with the round money, both players on their side's start, a 4 s freeze to buy. */
+  /**
+   * A round of the duel, Counter-Strike's shape: a fifteen-second freeze to buy in, both players on
+   * their side's start, and the wallet each of them earned.
+   *
+   * What carries and what does not is the CS rule and the reason the economy is worth having: a
+   * player who WALKED OUT of the last round alive keeps the gun, the plate and the grenades they
+   * did not throw; a player who died lost all of it and starts from the free pistol. The first
+   * round of each half is the pistol round — both purses reset, both loadouts reset, nobody keeps
+   * anything across the swap.
+   */
   private beginDuelRound(): void {
     const st = this.state, now = this.now();
+    const round = st.bomb.round + 1; // 1-based: the round about to be played
+    const half = duelHalfStart(round);
     st.phase = MatchPhase.Prep;
     st.phaseEndsAt = now + DUEL.prepMs;
     this.duelStage = "buy";
@@ -1396,17 +1478,33 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.flushPendingTeams();
     for (const [id, p] of st.players) {
       if (!p.connected) continue;
-      this.writeWallet(p, { ...freshWallet(), money: DUEL.roundMoney });
+      const s = this.sessions.get(id);
+      if (s && half) s.purse = freshDuelPurse();
+      const purse = s?.purse ?? freshDuelPurse();
+      const money = duelStartMoney(purse, round);
+      if (s) s.purse = { ...purse, money };
+      // Kept or lost, then the money on top. `writeWallet` is the only way a wallet moves.
+      const keep = !half && (s?.survivedRound ?? false);
+      const wallet = keep ? { ...this.walletOf(p), money } : { ...freshWallet(), money };
+      this.writeWallet(p, wallet);
+      if (s) s.survivedRound = false;
       this.spawn(id);
       this.clientOf(id)?.send(S2C.Money, { delta: 0, reason: "reset", total: p.money } satisfies MoneyEvent);
     }
     this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Prep, winner: -1, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
   }
 
+  /**
+   * The freeze ends and the round is live — but the shop is not shut yet. CS counts `mp_buytime`
+   * from the start of the round, so buying runs `DUEL.buyTailMs` past the release; `duelBuyEndsAt`
+   * is that moment and `buyContext` is what reads it.
+   */
   private releaseDuelRound(): void {
     const st = this.state;
+    const now = this.now();
     st.phase = MatchPhase.Playing;
-    st.phaseEndsAt = this.now() + DUEL.roundMs;
+    st.phaseEndsAt = now + DUEL.roundMs;
+    this.duelBuyEndsAt = now + DUEL.buyTailMs;
     this.duelStage = "break";
     this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Playing, winner: -1, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
   }
@@ -1429,6 +1527,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     else if (result.winner === 1) st.scoreB++;
     st.bomb.round++;
     st.bomb.result = result.reason;
+    this.payDuelRound(result.winner);
     this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
     const decided = Math.max(st.scoreA, st.scoreB) >= DUEL.wins || (now >= st.matchEndsAt && st.scoreA !== st.scoreB);
     if (decided) { this.endMatch(); return; }
@@ -1436,6 +1535,28 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     st.phaseEndsAt = now + DUEL.breakMs;
     this.duelStage = "break";
     this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Prep, winner: result.winner, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
+  }
+
+  /**
+   * The round is over: pay both players and remember who is still standing.
+   *
+   * CS's two payments, and nothing else — the round award to the winner, the loss ladder to the
+   * loser (a drawn round pays both the ladder's first rung and climbs nobody's streak, since
+   * neither of them lost it). Kill money was already paid as the kills happened. `survivedRound`
+   * is read by the next `beginDuelRound`: in CS the player who lived keeps what they carried.
+   */
+  private payDuelRound(winner: Team | -1): void {
+    for (const [id, p] of this.state.players) {
+      const s = this.sessions.get(id);
+      if (!s) continue;
+      s.survivedRound = p.alive && p.connected;
+      if (!p.connected) continue;
+      const result: DuelRoundResult = winner === -1 ? "draw" : p.team === winner ? "win" : "loss";
+      s.purse = duelPurseAfter({ ...s.purse, money: p.money }, result);
+      const delta = s.purse.money - p.money;
+      p.money = s.purse.money;
+      if (delta !== 0) this.clientOf(id)?.send(S2C.Money, { delta, reason: result === "win" ? "round" : "loss", total: p.money } satisfies MoneyEvent);
+    }
   }
 
   // ---------------------------------------------------------------- Ostrzyżeni (drop D)
@@ -1603,6 +1724,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // The vote closes exactly as the freeze lifts: everyone is still at spawn, so nothing changes
     // under a player's feet and nobody is mid-fight when the world does.
     this.resolvePlan();
+    // CS keeps the shop open a few seconds into the round (see `CS_ROUND`), so leaving spawn
+    // without armour is a mistake you can still fix rather than a round you have already lost.
+    this.bombBuyEndsAt = this.now() + BOMB.buyTailMs;
     this.state.phase = MatchPhase.Playing;
     this.state.bomb.stage = this.state.bomb.carrier ? "carried" : "dropped";
     this.state.bomb.roundEndsAt = this.now() + BOMB.roundMs;
@@ -1617,7 +1741,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       (p, q) => !this.losBlocked(p.x, p.y + 1, p.z, q.x, q.y + 0.3, q.z), sitesOf(this.map));
     if (!plantedBefore && this.state.bomb.stage === "planted") {
       const planter = this.state.players.get(carrier);
-      if (planter) { this.pay(planter, 300, "capture"); planter.score += 200; }
+      if (planter) { this.pay(planter, CS_ECONOMY.plant, "capture"); planter.score += 200; }
     }
     if (winner === null) return;
     if (this.state.bomb.result === "BOMB DETONATED") {
@@ -1629,8 +1753,14 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     const loser = 1 - winner;
     this.bombLosses[winner] = Math.max(0, this.bombLosses[winner] - 1);
     this.bombLosses[loser] = Math.min(5, this.bombLosses[loser] + 1);
+    // CS's two payments: the round award to the winners, the loss ladder to the losers — plus the
+    // planted-bomb bonus, which is the one that keeps a losing attack in the game. An attack that
+    // got the bomb down and then lost the round did its job and is paid for it.
+    const planted = this.state.bomb.result === "BOMB DEFUSED";
     for (const p of this.state.players.values()) if (p.connected && this.sessions.get(p.id)?.ready) this.pay(p,
-      p.team === winner ? BOMB.winMoney : 1400 + (this.bombLosses[loser] - 1) * 500, "capture");
+      p.team === winner ? BOMB.winMoney
+        : csLossBonus(this.bombLosses[loser] - 1) + (planted && p.team === this.state.bomb.attackTeam ? CS_ECONOMY.plantedLoss : 0),
+      "capture");
     if (Math.max(this.state.scoreA, this.state.scoreB) >= BOMB.wins || this.state.bomb.round >= BOMB.maxRounds) { this.endMatch(); return; }
     this.state.phase = MatchPhase.Prep;
     this.state.phaseEndsAt = now + BOMB.breakMs;
@@ -1958,12 +2088,24 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private buyContext(p: PlayerState, s: Session): BuyContext {
     return {
+      // The mode itself is part of the rules now (`modeAllowsItem`, `shopless`): the shelf a mode
+      // stocks is the same question on the client and here.
+      mode: this.mode,
+      shaved: p.shaved,
       boysClass: this.mode === "boys" ? p.boysClass : undefined,
-      bombBuying: this.mode === "bomb" ? this.state.phase === MatchPhase.Prep && this.state.bomb.stage === "buy"
-        : this.duel ? this.state.phase === MatchPhase.Prep : undefined,
+      bombBuying: this.mode === "bomb" ? (this.state.phase === MatchPhase.Prep && this.state.bomb.stage === "buy") || this.now() < this.bombBuyEndsAt
+        // The duel buys in the freeze AND for a few seconds after it, the way CS does: the window
+        // is `duelBuyEndsAt`, and during the freeze that is simply when the freeze ends.
+        : this.duel ? this.state.phase === MatchPhase.Prep ? this.duelStage === "buy" : this.now() < this.duelBuyEndsAt
+        : undefined,
       now: this.now(), spawnedAt: s.spawnedAt, phase: this.state.phase as MatchPhase, alive: p.alive,
       nearStation: this.nearStation(s.body),
       releaseAt: this.state.phase === MatchPhase.Prep ? this.state.phaseEndsAt : 0,
+      // What the HUD counts down. It is the freeze's end while frozen and the tail's end once the
+      // round is live; `releaseAt` stays what it was, because a perk must wait for the RELEASE.
+      windowEndsAt: this.duel ? (this.state.phase === MatchPhase.Prep ? this.state.phaseEndsAt : this.duelBuyEndsAt)
+        : this.mode === "bomb" ? (this.state.phase === MatchPhase.Prep ? this.state.phaseEndsAt : this.bombBuyEndsAt)
+        : undefined,
     };
   }
 
@@ -1996,7 +2138,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     if (this.noShop) return { ok: false, item, reason: "no-shop" }; // drop D: bots included
     // Drop D: the shaved side has no economy — the clippers are the whole loadout.
     if (MODES[this.mode].shop === "survivors" && p.shaved) return { ok: false, item, reason: "shaved" };
-    if (this.mode === "bomb" && (isPerkId(item) || item === "launcher")) return { ok: false, item, reason: "closed" };
+    // What this mode stocks at all (shared with the buy menu that draws the shelf): Bomb and the
+    // 1 v 1 sell no perks and no launcher. It was written here as a `bomb` special case; the rule
+    // now lives in `modeAllowsItem` so the buttons and the server cannot disagree about it.
+    if (!modeAllowsItem(this.mode, item)) return { ok: false, item, reason: "mode" };
     const w = this.walletOf(p);
     const v = applyBuy(w, item, this.buyContext(p, s));
     if (!v.ok) return { ok: false, item, reason: v.reason };
@@ -2064,8 +2209,14 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         const victim = this.sweepPlayers(pr.owner, px, py, pz, pr.x, pr.y, pr.z);
         if (victim) { pr.nx = 0; pr.ny = 1; pr.nz = 0; this.detonate(pr, now); this.projectiles.splice(i, 1); continue; }
       }
-      if (def.directDamage > 0 && !pr.stuck) {
+      if (def.directDamage > 0) {
         // Thrown knife: sweep the segment travelled this tick against player boxes.
+        //
+        // NOT `&& !pr.stuck`. `stepProjectile` sets `stuck` inside its contact handler, on the same
+        // step that carries the knife into the wall — and a player standing against that wall is on
+        // that step too. The guard therefore skipped the sweep on exactly the tick the knife
+        // arrived, so a knife thrown at somebody with their back to a wall passed through them and
+        // stuck in the plaster. At 28 m/s a tick is 0.47 m, which is the width of the dead zone.
         const victim = this.sweepPlayers(pr.owner, px, py, pz, pr.x, pr.y, pr.z);
         if (victim) {
           const owner = this.state.players.get(pr.owner);
@@ -2114,6 +2265,18 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private detonate(pr: Projectile, now: number): void {
     const def = GRENADES[pr.kind];
+    // A MOLOTOV BURNS ON THE GROUND, wherever it broke. It detonates on contact with anything —
+    // including a body (`impactOnPlayer`) and a wall — and the pool was then left at the point of
+    // impact: a bottle that hit somebody in the chest burned in mid-air at 1.5 m, and the burn band
+    // is only `f.y - 1.0 .. f.y + 1.6`, so a player standing on the floor under it took nothing.
+    // MEASURED: thrown flat from the 1.62 m eye at 15 m/s, the bottle is still at 1.50 m two metres
+    // out, i.e. a direct hit at close range did no damage at all. Drop the impact point onto the
+    // floor under it before anything reads it — the same value goes to the client's fireball, the
+    // scorch mark and the server's burning area, so the fire a player sees is the fire that burns.
+    if (pr.kind === "molotov") {
+      this.world.raycast(pr.x, pr.y, pr.z, 0, -1, 0, 3, worldHit);
+      if (worldHit.hit) pr.y = worldHit.y;
+    }
     // Lift the origin a little off the surface so ground LOS checks do not start inside the floor.
     const ox = pr.x + pr.nx * 0.12, oy = pr.y + pr.ny * 0.12, oz = pr.z + pr.nz * 0.12;
     this.broadcast(S2C.Boom, { id: pr.id, kind: pr.kind, x: pr.x, y: pr.y, z: pr.z, nx: pr.nx, ny: pr.ny, nz: pr.nz, effectMs: def.effectMs } satisfies BoomEvent);
@@ -2130,7 +2293,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         const chestY = qs.body.y + 0.9;
         const blocked = this.losBlocked(ox, oy, oz, qs.body.x, chestY, qs.body.z) && this.losBlocked(ox, oy, oz, qs.body.x, qs.body.y + 0.2, qs.body.z);
         const dmg = explosionDamage(def, dist, blocked);
-        if (dmg > 0) this.applyDamage(owner, id, dmg, false, undefined, pr.kind === "shell" ? "launcher" : pr.kind);
+        if (dmg > 0) this.applyDamage(owner, id, dmg, false, undefined, pr.kind === "shell" ? "launcher" : pr.kind, false, { x: ox, z: oz });
       }
     }
     if (pr.kind === "flash") {
@@ -2145,7 +2308,11 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         if (dist >= def.radius) continue;
         const fx = Math.sin(qs.lastYaw) * Math.cos(qs.lastPitch), fy = -Math.sin(qs.lastPitch), fz = Math.cos(qs.lastYaw) * Math.cos(qs.lastPitch);
         const cos = (dx * fx + dy * fy + dz * fz) / (dist || 1);
-        const strength = flashStrength(def, dist, cos, this.losBlocked(ox, oy, oz, qs.body.x, ey, qs.body.z));
+        // A smoke cloud between you and the flash saves you, as it does in CS. The HE blast above
+        // deliberately still goes through smoke — smoke stops light, not shrapnel.
+        const hidden = this.losBlocked(ox, oy, oz, qs.body.x, ey, qs.body.z)
+          || smokeBlocks(this.smokes, now, ox, oy, oz, qs.body.x, ey, qs.body.z);
+        const strength = flashStrength(def, dist, cos, hidden);
         if (strength > 0.05) {
           qs.blindedUntil = Math.max(qs.blindedUntil, now + flashMs(strength));
           c?.send(S2C.Flashed, { strength, ms: flashMs(strength) } satisfies FlashedEvent);
@@ -2177,7 +2344,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         if (Math.hypot(b.x - f.x, b.z - f.z) > f.radius || b.y > f.y + 1.6 || b.y < f.y - 1.0) continue;
         if (this.losBlocked(f.x, f.y + 0.15, f.z, b.x, b.y + 0.5, b.z)) continue;
         qs.burnAcc += FIRE_DPS * (TICK_MS / 1000);
-        if (qs.burnAcc >= 5) { const d = Math.floor(qs.burnAcc); qs.burnAcc -= d; this.applyDamage(owner, id, d, false, undefined, "molotov"); }
+        if (qs.burnAcc >= 5) { const d = Math.floor(qs.burnAcc); qs.burnAcc -= d; this.applyDamage(owner, id, d, false, undefined, "molotov", false, { x: f.x, z: f.z }); }
       }
     }
   }

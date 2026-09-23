@@ -662,14 +662,35 @@ which is why the cage is 4.4 m.
 ### The mode
 
 `duel` (`packages/shared/src/modes.ts`, `DUEL`): two seats, at most one of them a bot and only
-when asked for; every round a 4 s freeze with `roundMoney` (6 000, more than any gun) and a clean
-wallet, both players on their side's FIRST spawn point (no roll of the dice), one life, 60 s;
-a kill wins the round, a trade is a draw, the clock goes to the side with more health left and
-an even clock scores nobody; sides swap every 3 rounds; first to 6 wins; a 15-minute cap ends
+when asked for; both players on their side's FIRST spawn point (no roll of the dice), one life,
+60 s; a kill wins the round, a trade is a draw, the clock goes to the side with more health left
+and an even clock scores nobody; sides swap every 3 rounds; first to 6 wins; a 15-minute cap ends
 only a match somebody is winning. The result screen and the automatic return to Waiting →
 Countdown are the rematch — same two players, same room. Same Prep / Playing machine, same
 `state.bomb.round` and `scoreA` / `scoreB` as Bomb and Ostrzyżeni: no new replicated field, no
-new message (`apps/server/src/rooms/Duel.test.ts`, seven tests).
+new message.
+
+**The round and the money are Counter-Strike's** (owner's brief, 2026-09-22 — it was a 4 s freeze
+with a flat 6 000 a round and a clean wallet):
+
+- **15 s freeze** (`prepMs`, CS's `mp_freezetime`) and the shop stays open **5 s past the release**
+  (`buyTailMs`) — CS counts `mp_buytime` from the start of the round, so 15 + 5 = its 20.
+- **The wallet carries.** $800 opens each half (the pistol round), a won round pays $3,250, a lost
+  one pays the $1,400 → $3,400 ladder, a drawn one pays the ladder's first rung and climbs nobody's
+  streak, and a kill pays by the weapon that made it (clippers $1,500, shotguns $900, SMGs $600,
+  sniper $100, the rest $300). Cap $16,000, and both wallets reset at the side swap.
+- **What you carry, you keep** — if you walked out of the round alive. A casualty loses the gun,
+  the plate and the grenades and starts from the free pistol.
+- **One departure, the owner's**: a `floor` of $2,500 on every round that is not a half's first, so
+  a duel never becomes three pistol rounds in a row against a rifle. It buys a proper primary and a
+  plate, and deliberately not the rifle ($2,600) or the sniper.
+- **The shelf is CS's**: no perks and no launcher in this mode (`modeAllowsItem`, enforced by the
+  server, not only by the buy menu).
+
+Pinned by `apps/server/src/rooms/Duel.test.ts` (eleven tests),
+`apps/server/src/rooms/DuelPersonas.test.ts` (four buy behaviours) and the pure economy tests in
+`packages/shared/src/modes.test.ts`; played live over real sockets with
+`apps/client/e2e/tools/duel-check.mjs`.
 
 ### What is still not proven
 

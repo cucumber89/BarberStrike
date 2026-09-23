@@ -126,6 +126,12 @@
 .mm-bar-brand b { font-family: var(--font-display); font-size: 22px; letter-spacing: .18em; font-weight: normal; }
 .mm-bar-brand span { font-family: var(--font-mono); font-size: 11px; letter-spacing: .24em; color: var(--brass); }
 .mm-content { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 16px 0 22px; }
+/* THE PAGE SCROLLS, AND IT HAS TO LOOK LIKE IT DOES. The scrollbar here is an 8 px sliver on a
+   dark background; on a short screen a settings tab simply ended mid-row and a player read that as
+   "that is all there is". The fade is the standard affordance for "more below", and it is drawn on
+   the shell rather than the scroller so it does not scroll away with the content. */
+.mm-shell::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 44px;
+  background: linear-gradient(rgba(8,8,10,0), rgba(8,8,10,.92)); pointer-events: none; z-index: 2; }
 
 /* ------------------------------------------------------------------------- shared furniture */
 
@@ -313,8 +319,14 @@
 .mm-card { width: min(900px, 100%); margin: 0 auto; padding: 18px 22px 22px; background: rgba(14, 14, 18, .86); border: 1px solid var(--line); border-top: 2px solid rgba(217, 164, 65, .5); }
 /* Sliders and toggles read badly stretched across 900 px; the key grid wants the width. */
 .mm-card.panel { max-width: 720px; }
-/* The shell scrolls now, so the panel does not need its own 60vh window (the pause card still does). */
-.mm-card .settings { max-height: none; overflow: visible; padding-right: 0; }
+/* In the menu the SHELL scrolls, so the panel gets no 60 vh window of its own and the body grows
+   to its full height — a controls table behind an inner scrollbar inside an outer one is how a
+   player loses their place. The tab rail stays with the content for the same reason.
+   MEASURED FAULT this replaces: `.set-body { overflow: visible }` plus a height-capped card meant
+   the list was CLIPPED with no scrollbar and no hint that anything followed. */
+.mm-card .settings { max-height: none; }
+.mm-card .set-body { overflow: visible; padding-right: 0; }
+.mm-card.panel { max-height: none; }
 .keys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px 26px; align-content: start; }
 .keys-col { min-width: 0; }
 .keys-col .lb-h { font-size: 16px; margin-bottom: 6px; }
@@ -486,9 +498,28 @@
 .reel-track .epicki { border-bottom-color: #a34fff; }
 .reel-track .legendarny { border-bottom-color: #ef4d93; }
 .reel-track .zloty { border-bottom-color: #ffc52f; }
+/**
+ * WHERE THE REEL STOPS, worked out from the cards rather than from the viewport.
+ *
+ * It used to end at `min(46vw, 525px) - 4237.5px` — a number with the window's width in it, which
+ * is the one thing the winning card's position does not depend on. On a 1280-wide run it left the
+ * prize 466 px from the marker (`armoury.spec.ts` has measured this since it was written).
+ *
+ * The track now starts at the window's own centre (`left: 50%`), so a translation of exactly
+ * "distance from the track's left edge to card N's centre" puts card N under the marker at any
+ * width: N whole cells, plus half a cell. The card width and the gap are the same two custom
+ * properties the cells are laid out with, and `--win-index` is set by `Crates.tsx` from the same
+ * constant it tags `data-winning` with — so the animation and the prize cannot disagree.
+ */
+.reel-window { --reel-cell: 145px; --reel-gap: 8px; }
+.reel-track {
+  position: absolute; top: 0; left: 50%; height: 100%;
+  animation: crate-reel 2.8s cubic-bezier(.08, .72, .08, 1) forwards;
+}
 @keyframes crate-reel {
-  from { transform: translateX(0); }
-  to { transform: translateX(calc(min(46vw, 525px) - 4237.5px)); }
+  /* Card 0 under the marker, then the whole run of them past it. */
+  from { transform: translateX(calc(-1 * var(--reel-cell) / 2)); }
+  to { transform: translateX(calc(-1 * (var(--win-index, 27) * (var(--reel-cell) + var(--reel-gap)) + var(--reel-cell) / 2))); }
 }
 @media (prefers-reduced-motion: reduce) {
   .reel-track { animation-duration: .01ms; }

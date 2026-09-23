@@ -9,12 +9,21 @@ export const THROW_WINDUP_MS = 180;
  * still counted as cooking, so the grenade leaves the hand with ~270 ms left: it goes off right
  * in front of the thrower (punishing) but not in the hand (the server's in-hand rule is fuse − 50).
  */
-const AUTO_RELEASE_MARGIN_MS = 450;
+export const AUTO_RELEASE_MARGIN_MS = 450;
+
+/** How long a cookable grenade can actually be held: the ring reads 1 exactly here. */
+export const cookWindowMs = (fuseMs: number): number => Math.max(1, fuseMs - AUTO_RELEASE_MARGIN_MS);
 
 export interface ThrowState {
   /** Grenade in the hand (being cooked / wound up), or null. */
   kind: GrenadeId | null;
-  /** 0..1 cook progress for cookable grenades (0 otherwise). */
+  /**
+   * 0..1 of the window the grenade can actually be held for (0 for grenades that do not cook).
+   *
+   * Not of the fuse: the hand opens at `fuse - AUTO_RELEASE_MARGIN_MS`, so a ring drawn against
+   * the fuse stopped at 86 % and the player never saw it fill — the arm swung on its own at a
+   * point the HUD had never marked. 1 means "it is going now, whatever you do with the key".
+   */
   cook: number;
   /** ms until the grenade leaves the hand while winding up (0 when idle or still cooking). */
   windupLeft: number;
@@ -110,13 +119,13 @@ export class Throwing {
       // Cooking: progress towards the fuse; auto-release just before it.
       if (def.cookable) {
         const elapsed = now - this.cookStart;
-        this.state.cook = Math.min(1, elapsed / def.fuseMs);
+        this.state.cook = Math.min(1, elapsed / cookWindowMs(def.fuseMs));
         if (elapsed >= def.fuseMs - AUTO_RELEASE_MARGIN_MS) this.beginRelease(now);
       }
       return;
     }
     this.state.windupLeft = Math.max(0, this.windupEndsAt - now);
-    if (def.cookable) this.state.cook = Math.min(1, (this.releaseCook + (now - (this.windupEndsAt - THROW_WINDUP_MS))) / def.fuseMs);
+    if (def.cookable) this.state.cook = Math.min(1, (this.releaseCook + (now - (this.windupEndsAt - THROW_WINDUP_MS))) / cookWindowMs(def.fuseMs));
     if (now < this.windupEndsAt) return;
     // Release: the grenade leaves the hand now. Cook time counts up to this instant.
     const o: [number, number, number] = [0, 0, 0];

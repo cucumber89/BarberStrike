@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { boysClass, BOMB, DUEL, GAME_VERSION, GRENADES, GUN_GAME, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, PLAYER, TEAM_NAMES, WEAPONS, killerName, ladderDone, ladderWeapon, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
+import { boysClass, BOMB, DUEL, GAME_VERSION, scoreLimitFor, GRENADES, GUN_GAME, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_EFFECT, PERK_ORDER, PLAYER, SPAWN_PROTECTION_MS, TEAM_NAMES, WEAPONS, killerName, ladderDone, ladderWeapon, perkActive, perkTimed, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import { pelletRing } from "../game/combat/weaponFeel";
 import { TeamPicker } from "./TeamPicker";
@@ -59,7 +59,7 @@ function useClock(intervalMs: number): number {
 
 const money = (n: number) => `$${n.toLocaleString("en-US")}`;
 
-const REASON_SHORT: Record<string, string> = { kill: "ZABÓJSTWO", headshot: "W GŁOWĘ", assist: "ASYSTA", buy: "", sell: "SPRZEDAŻ", reset: "" };
+const REASON_SHORT: Record<string, string> = { kill: "ZABÓJSTWO", headshot: "W GŁOWĘ", assist: "ASYSTA", buy: "", sell: "SPRZEDAŻ", reset: "", round: "WYGRANA RUNDA", loss: "BONUS ZA PRZEGRANĄ" };
 
 export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, onChooseTeam, onVotePlan, shop, chat, radar, dormant = false }: Props) {
   const h = useHud();
@@ -73,8 +73,15 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
     prevPhase.current = h.phase;
   }, [h.phase, h.phaseEndsAt]);
   const inBreak = h.phase === MatchPhase.Prep && breakEndsAt !== 0 && breakEndsAt === h.phaseEndsAt;
+  /**
+   * Rule G9: the cook ring belongs to the ONE grenade that cooks. A smoke, a flash, a molotov or a
+   * knife is in the hand for the 180 ms of the wind-up and never cooks, so the ring it used to draw
+   * was an empty circle — and it cost the crosshair for exactly the moment the throw is aimed. Only
+   * the frag replaces the crosshair now; everything else is thrown with the sight you aim with.
+   */
+  const cookRing = h.cookingKind !== "" && GRENADES[h.cookingKind].cookable;
   // The flash overlay and cook ring need a smooth clock; everything else is fine at 4 Hz.
-  const fast = h.flashUntil > performance.now() || h.cookingKind !== "";
+  const fast = h.flashUntil > performance.now() || cookRing;
   const now = useClock(fast ? 33 : 250);
   const [scoreboard, setScoreboard] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -161,6 +168,26 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   const shopHint = h.shopResult && !h.shopOpen && h.shopResult.reason === "closed" && now - h.shopResult.at < 1800;
   const toasts = useMemo(() => h.moneyToasts.filter((t) => t.reason !== "reset" && t.reason !== "buy"), [h.moneyToasts]);
   const activePerks = PERK_ORDER.filter((id) => perkActive(h.perks, id, h.serverNow));
+  /**
+   * Rule P2: the steroids' two-second gate, in words. Regeneration only starts after
+   * `PERK_EFFECT.roidsDelayMs` without a hit, and nothing on the screen said so — so a player who
+   * bought the perk, traded shots, and watched their health sit at 40 concluded the perk was
+   * broken. The row now reads either the gate counting down or the rate it is actually healing at.
+   */
+  const roidsHeldMs = Math.max(0, PERK_EFFECT.roidsDelayMs - (performance.now() - h.damageAt));
+  /**
+   * Rule P5 / the fade receipt: a fade is spent at the instant you respawn, so it never appears in
+   * the perk list and the only thing the player gets for their 300 zł is a shield twice as long as
+   * everyone else's. `protectedUntil` is the only evidence, and it cannot simply be compared with
+   * SPAWN_PROTECTION_MS: a shield granted inside a freeze starts counting from the RELEASE, so the
+   * remaining time is the whole freeze plus the shield. Hence both guards — not in Prep, and the
+   * remainder inside the band only a fade can produce — and a latch on the deadline itself, so the
+   * badge stays up for the full three seconds rather than the first part of them.
+   */
+  const fadeSeen = useRef(0);
+  if (h.phase !== MatchPhase.Prep && h.spawnProtectedUntil - h.serverNow > SPAWN_PROTECTION_MS + 400
+      && h.spawnProtectedUntil - h.serverNow <= PERK_EFFECT.fadeShieldMs + 400) fadeSeen.current = h.spawnProtectedUntil;
+  const fadeShield = protectedNow && fadeSeen.current === h.spawnProtectedUntil;
   const brokeAge = now - h.armorBrokeAt;
   // Drop 4: mode-aware scoring. FFA shows my kills against the leader; Domination adds the flag row.
   const teams = MODES[h.mode].teams;
@@ -205,12 +232,16 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {h.smokeOpacity > 0 && <div className="smoke-screen" data-testid="smoke-screen" style={{ opacity: h.smokeOpacity }} />}
       {h.bomb && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && <div className={`bomb-hud ${h.bomb.stage === "planted" ? "armed" : ""}`} data-testid="bomb-hud">
         <b>RUNDA {h.bomb.round} / 12 · {h.bomb.attackTeam === h.myTeam ? "ATAK" : "OBRONA"} · DO 7</b>
+        {/* The objective ALWAYS, and while CS's buy tail runs it carries that too — the shop being
+            open a few seconds into the round is no use to anybody who does not know it is, and the
+            first five seconds of a round is exactly when a player needs to be told their job. */}
         <span>{h.bomb.stage === "buy" ? `${h.bomb.round === 7 ? "ZMIANA STRON · " : ""}B: SKLEP · START ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
           : h.phase === MatchPhase.Prep ? `${roundReasonText(h.bomb.result)} · NASTĘPNA RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
-          : h.bomb.stage === "planted" ? `ŁADUNEK NA ${h.bomb.site} · ${h.bomb.attackTeam === h.myTeam ? "PILNUJ ŁADUNKU" : "PRZYTRZYMAJ T, ŻEBY ROZBROIĆ"}`
-          : h.bomb.carrier === h.myId ? "MASZ ŁADUNEK · PRZYTRZYMAJ T NA A / B, ŻEBY PODŁOŻYĆ"
-          : h.bomb.attackTeam !== h.myTeam ? "BROŃ PUNKTÓW A / B"
-          : h.bomb.stage === "dropped" ? "ŁADUNEK UPUSZCZONY · PODEJDŹ, ŻEBY PODNIEŚĆ" : "OSŁANIAJ NIOSĄCEGO ŁADUNEK"}</span>
+          : (h.bomb.stage === "planted" ? `ŁADUNEK NA ${h.bomb.site} · ${h.bomb.attackTeam === h.myTeam ? "PILNUJ ŁADUNKU" : "PRZYTRZYMAJ T, ŻEBY ROZBROIĆ"}`
+            : h.bomb.carrier === h.myId ? "MASZ ŁADUNEK · PRZYTRZYMAJ T NA A / B, ŻEBY PODŁOŻYĆ"
+            : h.bomb.attackTeam !== h.myTeam ? "BROŃ PUNKTÓW A / B"
+            : h.bomb.stage === "dropped" ? "ŁADUNEK UPUSZCZONY · PODEJDŹ, ŻEBY PODNIEŚĆ" : "OSŁANIAJ NIOSĄCEGO ŁADUNEK")
+            + (h.alive && h.buyWindowLeft > 0 ? ` · SKLEP (B) JESZCZE ${Math.max(0, Math.ceil(h.buyWindowLeft / 1000))}s` : "")}</span>
         {h.bomb.actor && <><div className="bomb-progress"><i style={{ "--v": h.bomb.progress } as React.CSSProperties} /></div><small>{h.bomb.actor === h.myId ? "TRZYMAJ T · NIE RUSZAJ SIĘ" : h.bomb.stage === "planted" ? "ROZBRAJANIE" : "PODKŁADANIE"}</small></>}
       </div>}
       {/* Ostrzyżeni (drop D): the round, how many heads are left, and which side the clock favours. */}
@@ -223,21 +254,38 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
             : "PRZEŻYJ — nie daj się ostrzyc"}</span>
         </div>
       )}
-      {duel && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && (
-        <div className="bomb-hud duel" data-testid="duel-line">
-          <b>RUNDA {h.round + 1} · {TEAM_NAMES[h.myTeam]} {h.myTeam === 0 ? h.scoreA : h.scoreB} : {h.myTeam === 0 ? h.scoreB : h.scoreA} · DO {DUEL.wins} · {fmtTime(timeLeft)}</b>
-          <span>{h.phase === MatchPhase.Prep
-            ? (h.alive ? `${h.round > 0 && h.round % DUEL.halfRounds === 0 ? "ZMIANA STRON · " : ""}B: SKLEP · RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s` : `NASTĘPNA RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`)
-            : "JEDNO ŻYCIE · po czasie wygrywa więcej zdrowia"}</span>
-        </div>
-      )}
+      {/* The 1 v 1's line. Two different Preps run through here — the fifteen-second FREEZE you buy
+          in, and the three-second BREAK after a round — and they used to print the same words
+          ("B: SKLEP · RUNDA ZA 3s") while the shop was shut in one of them. What tells them apart
+          is the buy window itself, which the HUD already knows: `buyWindowLeft`. */}
+      {duel && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && (() => {
+        const secs = Math.max(0, Math.ceil(timeLeft / 1000));
+        const buying = h.buyWindowLeft > 0 && h.alive;
+        const buySecs = h.buyWindowLeft === Infinity ? null : Math.max(0, Math.ceil(h.buyWindowLeft / 1000));
+        const mine = h.myTeam === 0 ? h.scoreA : h.scoreB, theirs = h.myTeam === 0 ? h.scoreB : h.scoreA;
+        const matchPoint = Math.max(mine, theirs) === DUEL.wins - 1;
+        const swapping = h.round > 0 && h.round % DUEL.halfRounds === 0;
+        return (
+          <div className="bomb-hud duel" data-testid="duel-line">
+            <b>RUNDA {h.round + 1} · {TEAM_NAMES[h.myTeam]} {mine} : {theirs} · DO {DUEL.wins}{matchPoint ? (mine > theirs ? " · MECZBOL" : " · BRONISZ MECZBOLU") : ""} · {fmtTime(timeLeft)}</b>
+            <span>{h.phase === MatchPhase.Prep
+              ? buying
+                ? `${swapping ? "ZMIANA STRON · " : ""}ZAMROŻENIE · B: SKLEP · START ZA ${secs}s`
+                : `${h.roundResult ? `${roundReasonText(h.roundResult)} · ` : ""}NASTĘPNA RUNDA ZA ${secs}s`
+              : buying
+                // CS's buy time runs past the freeze; say so, or nobody uses it.
+                ? `SKLEP OTWARTY JESZCZE ${buySecs}s · B, ŻEBY DOKUPIĆ`
+                : "JEDNO ŻYCIE · po czasie wygrywa więcej zdrowia"}</span>
+          </div>
+        );
+      })()}
       {/* Damage vignette / direction */}
       {dmgAge < 600 && <div className="damage-dir" style={{ transform: `rotate(${h.damageAngle}rad)`, opacity: 1 - dmgAge / 600 }} />}
 
-      {/* Crosshair (hidden in ADS and while a grenade is in the hand: the cook ring takes its place).
+      {/* Crosshair (hidden in ADS, and while a frag cooks: there the ring takes its place).
           Shape, size, thickness, gap and colour come from the player's own settings — this is the
           one piece of UI they look at every second of the match. */}
-      {h.alive && h.pointerLocked && !h.aiming && h.cookingKind === "" && (
+      {h.alive && h.pointerLocked && !h.aiming && !cookRing && (
         <div
           className={`crosshair ch-${ch.style} ${ch.outline ? "outlined" : ""} ${hitAge < 180 ? (h.hitKill ? "kill" : h.hitHead ? "head" : h.hitArmor ? "armor" : "hit") : ""} ${protectedNow ? "shield" : ""}`}
           data-testid="crosshair"
@@ -254,7 +302,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           {protectedNow && <span className="ch-shield" />}
         </div>
       )}
-      {h.alive && h.cookingKind !== "" && (
+      {h.alive && cookRing && (
         <div className="cook" data-testid="cook" style={{ "--p": `${Math.round(h.cooking * 100)}%` } as React.CSSProperties} />
       )}
       {/* Tactical sprint budget (drop 4): only while it is running or refilling */}
@@ -288,6 +336,9 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           {h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep ? fmtTime(matchLeft)
             : h.phase === MatchPhase.Countdown ? `START ${Math.max(0, Math.ceil(timeLeft / 1000))}`
             : h.phase === MatchPhase.Waiting ? "ROZGRZEWKA" : "KONIEC"}
+          {/* TDM's target follows the size of the room (`scoreLimitFor`), so it is printed rather
+              than left to a mode blurb that would be wrong in half the rooms. */}
+          {h.mode === "tdm" && <small className="timer-goal" data-testid="score-goal">DO {scoreLimitFor("tdm", h.players.length)}</small>}
         </div>
         {teams
           ? <div className={`team-score t1 ${h.myTeam === 1 ? "mine" : ""}`}><span className="tscore" data-testid="score-b">{h.scoreB}</span><span className="tname">{sideNames[1]}</span></div>
@@ -354,28 +405,41 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           <div className="health-bar"><div className="health-fill" style={{ "--v": h.health / maxHealth } as React.CSSProperties} /></div>
           {h.armor > 0 && <div className="armor-bar"><div className="armor-fill" style={{ "--v": h.armor / 100 } as React.CSSProperties} /></div>}
         </div>
-        {(h.armor > 0 || brokeAge < 900) && <div className={`armor-num ${brokeAge < 900 ? "broke" : ""}`} data-testid="armor">🛡 {brokeAge < 900 && h.armor === 0 ? "BROKEN" : h.armor}</div>}
+        {(h.armor > 0 || brokeAge < 900) && <div className={`armor-num ${brokeAge < 900 ? "broke" : ""}`} data-testid="armor">🛡 {brokeAge < 900 && h.armor === 0 ? "ZNISZCZONA" : h.armor}</div>}
       </div>
-      {activePerks.length > 0 && (
+      {(activePerks.length > 0 || fadeShield) && (
         <div className="perk-list" data-testid="perks">
           {activePerks.map((id) => {
             const p = PERKS[id];
             const leftMs = h.perks[id] - h.serverNow;
-            // Drop D: a perk can be armed for a whole round rather than for its own duration (the
-            // Ostrzyżony's speed). That is written as `PERK_ARMED_MS`, which as a countdown reads
-            // "999985s" and pins the bar full — so anything longer than the perk's own life shows
-            // as ARMED, the same way a fade does.
-            const timed = p.durationMs > 0 && leftMs <= p.durationMs;
+            // Armed-for-the-round versus counting down: one rule, in `perkTimed`, because the shop
+            // row for the same perk has to read the same way and used to decide it separately.
+            const timed = perkTimed(id, h.perks[id], h.serverNow);
             const frac = timed ? Math.max(0, Math.min(1, leftMs / p.durationMs)) : 1;
+            // Rule P1: the last five seconds are the ones worth knowing about — a flask running out
+            // in the middle of a fight changes what you can walk into. The bar shrank towards it
+            // and said nothing.
+            const ending = timed && leftMs <= 5000;
+            const note = id === "roids" ? (roidsHeldMs > 0 ? `CZEKA ${Math.ceil(roidsHeldMs / 1000)}s` : `+${PERK_EFFECT.roidsRegenPerSec}/s`) : "";
             return (
-              <div key={id} className={`perk perk-${id}`} title={p.blurb}>
+              <div key={id} className={`perk perk-${id} ${ending ? "ending" : ""} ${note && roidsHeldMs > 0 ? "held" : ""}`} title={p.blurb}>
                 <span className="perk-glyph">{p.glyph}</span>
                 <span className="perk-name">{p.name.toUpperCase()}</span>
-                <span className="perk-time">{timed ? `${Math.max(0, Math.ceil(leftMs / 1000))}s` : "ARMED"}</span>
+                {note && <span className="perk-note">{note}</span>}
+                <span className="perk-time">{timed ? `${Math.max(0, Math.ceil(leftMs / 1000))}s` : "UZBROJONE"}</span>
                 <span className="perk-bar" style={{ "--v": frac } as React.CSSProperties} />
               </div>
             );
           })}
+          {fadeShield && (
+            <div className="perk perk-fade" data-testid="perk-shield" title={PERKS.fade.blurb}>
+              <span className="perk-glyph">🛡</span>
+              <span className="perk-name">ŚWIEŻY FADE</span>
+              <span className="perk-note">TARCZA</span>
+              <span className="perk-time">{Math.max(0, Math.ceil((h.spawnProtectedUntil - h.serverNow) / 1000))}s</span>
+              <span className="perk-bar" style={{ "--v": Math.max(0, Math.min(1, (h.spawnProtectedUntil - h.serverNow) / PERK_EFFECT.fadeShieldMs)) } as React.CSSProperties} />
+            </div>
+          )}
         </div>
       )}
 
@@ -430,8 +494,13 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
         </div>
       )}
 
-      {/* Flask (drop 3): the promised blurry edges */}
-      {h.alive && activePerks.includes("flask") && <div className="flask-haze" />}
+      {/* Flask (drop 3): the promised blurry edges. Rule P5: they used to switch off between two
+          frames, 25 s after the bottle — the screen cleared and nothing said the 20 % resistance
+          had gone with it. The haze now thins over the last four seconds, so the perk ending is
+          something the player SEES rather than something they find out by dying. */}
+      {h.alive && activePerks.includes("flask") && (
+        <div className="flask-haze" style={{ "--v": Math.max(0.15, Math.min(1, (h.perks.flask - h.serverNow) / 4000)) } as React.CSSProperties} />
+      )}
       {/* Flash blindness (above everything but the menus) */}
       {flashOpacity > 0.01 && <div className="flash-out" data-testid="flash" style={{ opacity: flashOpacity }} />}
 

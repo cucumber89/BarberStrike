@@ -149,6 +149,25 @@ export const installAudio: GameModule = (ctx) => {
   on("grenadePrime", () => play(sfx.pinPull, Priority.reload, 0.8));
   on("grenadeThrow", () => play(sfx.throwSwish, Priority.reload, 0.8));
   on("throw", (e) => { if (e.owner !== ctx.connection.sessionId) eng.play(sfx.throwSwish, { priority: Priority.movement, gain: 0.6, position: at(e.o[0], e.o[1], e.o[2]), maxDistance: 14 }); });
+  /**
+   * Rule G1: a grenade knocking off the world. `sfx.bounce` has been written since drop 2 and had
+   * no caller — a frag skittering past your feet or off the wall behind you made no sound at all,
+   * which is the single loudest cue a player has for "that one is landing near me".
+   *
+   * Two limits, at the two places they belong. The view swallows knocks less than 120 ms apart on
+   * ONE grenade (a grenade settling rattles several times in a tenth of a second); this caps how
+   * many DIFFERENT grenades may be voiced on one frame, because a wave of four frags landing
+   * together is four metal knocks in the same millisecond, which reads as a glitch rather than a
+   * grenade. The rest of the frame's bounces are dropped, not queued: a late knock is a lie about
+   * where the grenade is.
+   */
+  let bouncesThisFrame = 0;
+  const BOUNCES_PER_FRAME = 2;
+  on("grenadeBounce", (e) => {
+    if (bouncesThisFrame >= BOUNCES_PER_FRAME) return;
+    bouncesThisFrame++;
+    eng.play(sfx.bounce(e.kind, e.speed), { priority: Priority.movement, gain: Math.min(0.9, 0.3 + e.speed / 20), position: at(e.x, e.y, e.z), maxDistance: 24 });
+  });
   on("boom", (e) => {
     const d = dist(e.x, e.y, e.z);
     switch (e.kind) {
@@ -159,7 +178,12 @@ export const installAudio: GameModule = (ctx) => {
         if (d < 12) eng.duck(Math.min(1, 1 - d / 14), 350);
         break;
       case "flash": eng.play(sfx.flashBang(0), { priority: Priority.gunshot, gain: 0.9, position: at(e.x, e.y, e.z), rolloff: 0.6, maxDistance: 70 }); break;
-      case "smoke": eng.play(sfx.smokeHiss(Math.min(6, e.effectMs / 1000)), { priority: Priority.movement, gain: 0.7, position: at(e.x, e.y, e.z), maxDistance: 30 }); break;
+      // The hiss runs for as long as the cloud stands. It used to be capped at six seconds against
+      // a twelve-second cloud, so a smoke went quiet half way through and the second half looked
+      // like a cloud nobody had thrown. Four clouds is the hard maximum (`MAX_SMOKE_CLOUDS`) and
+      // they are movement-priority, so at worst four of twenty-four voices are held — and a
+      // gunshot takes one straight back.
+      case "smoke": eng.play(sfx.smokeHiss(e.effectMs / 1000), { priority: Priority.movement, gain: 0.7, position: at(e.x, e.y, e.z), maxDistance: 30 }); break;
       case "molotov":
         eng.play(sfx.molotovBreak, { priority: Priority.hit, gain: 0.9, position: at(e.x, e.y, e.z), maxDistance: 50 });
         eng.play(sfx.fireCrackle(e.effectMs / 1000), { priority: Priority.movement, gain: 0.7, position: at(e.x, e.y, e.z), maxDistance: 26 });
@@ -167,7 +191,9 @@ export const installAudio: GameModule = (ctx) => {
       case "knife": eng.play(sfx.knifeHit(e.effectMs === 0), { priority: Priority.hit, gain: 0.8, position: at(e.x, e.y, e.z), maxDistance: 30 }); break;
     }
   });
-  on("flashed", (e) => { play(sfx.flashBang(e.strength), Priority.gunshot, 1); eng.duck(Math.min(1, 0.4 + e.strength * 0.6), e.ms * 0.5); });
+  // Rule G5: the ring WITHOUT the crack. The crack already played, positioned, from `boom` a
+  // moment earlier — this event says the grenade caught US, not that a second one went off.
+  on("flashed", (e) => { play(sfx.flashBang(e.strength, false), Priority.gunshot, 1); eng.duck(Math.min(1, 0.4 + e.strength * 0.6), e.ms * 0.5); });
   on("money", (e) => { if (e.reason === "kill" || e.reason === "headshot" || e.reason === "assist") play(sfx.cash("sell"), Priority.ui, 0.5); });
   on("shop", (e) => {
     play(sfx.cash(e.ok ? "buy" : "deny"), Priority.ui, 0.8);
@@ -214,6 +240,7 @@ export const installAudio: GameModule = (ctx) => {
 
   const cam = ctx.camera;
   unsubs.push(ctx.onFrame((dtMs) => {
+    bouncesThisFrame = 0;
     // Listener = camera. TargetCamera direction helpers are allocation-free with *ToRef.
     cam.getDirectionToRef(Vector3.Forward(), fwd);
     cam.getDirectionToRef(Vector3.Up(), up);

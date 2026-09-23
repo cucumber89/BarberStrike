@@ -53,25 +53,95 @@ it("clamps a bot request to one, so a practice duel is one human and one bot", a
   expect(bot.team).not.toBe(P(a).team);
 });
 
-it("starts every round frozen with round money and both players on their side's first start", async () => {
+it("opens with the pistol round: CS money, both players on their side's first start", async () => {
   const { a, b } = await duel();
   expect(h.state.phase).toBe(MatchPhase.Prep);
   for (const c of [a, b]) {
     const p = P(c);
-    expect(p.money).toBe(DUEL.roundMoney);
+    // The first round of a half is the pistol round; the floor does not apply to it.
+    expect(p.money).toBe(DUEL.economy.start);
     expect(p.alive).toBe(true);
     const s = start(duelSpawnSide(p.team as 0 | 1, 1));
     expect([p.x, p.z]).toEqual([s.x, s.z]);
   }
-  // The buy window is open in the freeze and shut when the round goes live.
+  // $800 buys a sidearm and not a rifle, exactly as it does in CS.
+  h.send(a, "buy", { item: "rifle" });
+  h.send(a, "buy", { item: "revolver" });
+  await h.advance(50);
+  expect(P(a).owned.includes("rifle"), "a rifle is out of reach on pistol money").toBe(false);
+  expect(P(a).owned.includes("revolver")).toBe(true);
+  expect(h.room.handlerErrors).toBe(0);
+});
+
+it("keeps the shop open for CS's buy time: the whole freeze and a few seconds into the round", async () => {
+  const { a, b } = await duel();
+  // The freeze is long enough to be worth calling one: fifteen seconds, not four.
+  expect(DUEL.prepMs).toBeGreaterThanOrEqual(15000);
+  expect(h.state.phaseEndsAt - h.now()).toBeGreaterThan(DUEL.prepMs - 500);
+  P(a).money = 9000; P(b).money = 9000;
   h.send(a, "buy", { item: "rifle" });
   await h.advance(50);
-  expect(P(a).owned.includes("rifle")).toBe(true);
+  expect(P(a).owned.includes("rifle"), "buying in the freeze").toBe(true);
+
   await h.until(MatchPhase.Playing);
+  // ...and still open a moment after the round goes live (mp_buytime past mp_freezetime).
+  await h.advance(DUEL.buyTailMs - 1500);
   h.send(b, "buy", { item: "rifle" });
   await h.advance(50);
-  expect(P(b).owned.includes("rifle")).toBe(false);
+  expect(P(b).owned.includes("rifle"), "the tail after the release").toBe(true);
+
+  // Then it shuts, and stays shut for the rest of the round.
+  await h.advance(2000);
+  h.send(b, "buy", { item: "heavy" });
+  await h.advance(50);
+  expect(P(b).armor, "the tail has run out").toBe(0);
   expect(h.room.handlerErrors).toBe(0);
+});
+
+it("pays like CS: the round award, the loss ladder, kill money by weapon, and the winner keeps the gun", async () => {
+  const { a, b } = await duel();
+  P(a).money = 6000; P(b).money = 6000;
+  h.send(a, "buy", { item: "rifle" });
+  h.send(a, "buy", { item: "heavy" });
+  await h.advance(50);
+  const spent = P(a).money;
+  await h.until(MatchPhase.Playing);
+  kill(P(a), P(b));
+  await h.tick(2);
+  // A rifle kill is $300, winning the round is $3250, and the loser gets the ladder's first rung.
+  expect(P(a).money).toBe(spent + 300 + DUEL.economy.win);
+  expect(P(b).money).toBe(6000 + DUEL.economy.lossBase);
+
+  // Next round: the survivor still has the rifle and the plate, the casualty is back on the pistol.
+  await h.advance(DUEL.breakMs + 100);
+  expect(h.state.phase).toBe(MatchPhase.Prep);
+  expect(P(a).owned.includes("rifle"), "the survivor keeps what they carried").toBe(true);
+  expect(P(a).armor, "and the plate with it").toBeGreaterThan(0);
+  expect(P(b).owned.includes("rifle"), "the casualty lost theirs").toBe(false);
+  expect(h.room.handlerErrors).toBe(0);
+});
+
+it("never leaves a duellist below the floor, and resets both purses at the swap", async () => {
+  const { a, b } = await duel();
+  // Lose the first round broke: the ladder plus the floor decide what round two can afford.
+  P(a).money = 0; P(b).money = 0;
+  await h.until(MatchPhase.Playing);
+  kill(P(a), P(b));
+  await h.tick(2);
+  await h.advance(DUEL.breakMs + 100);
+  expect(P(b).money, "the floor, not the ladder, is what a duellist actually starts with").toBe(DUEL.economy.floor);
+  expect(P(a).money).toBeGreaterThanOrEqual(DUEL.economy.floor);
+
+  // Play out the rest of the half; the first round of the next one is a pistol round again.
+  for (let round = 2; round <= DUEL.halfRounds; round++) {
+    await h.until(MatchPhase.Playing);
+    kill(P(a), P(b));
+    await h.tick(2);
+    await h.advance(DUEL.breakMs + 100);
+  }
+  expect(h.state.bomb.round).toBe(DUEL.halfRounds);
+  for (const c of [a, b]) expect(P(c).money, "the swap resets the economy").toBe(DUEL.economy.start);
+  expect(P(a).owned.includes("rifle"), "and nobody carries a gun across it").toBe(false);
 });
 
 it("scores a kill as a round, keeps the dead player down until the next round, then respawns both", async () => {
@@ -89,7 +159,7 @@ it("scores a kill as a round, keeps the dead player down until the next round, t
   await h.advance(300);
   expect(h.state.phase).toBe(MatchPhase.Prep);
   expect(P(b).alive).toBe(true);
-  expect(P(b).money).toBe(DUEL.roundMoney);
+  expect(P(b).money, "the loser's ladder, raised to the floor").toBe(DUEL.economy.floor);
   expect(P(a).health).toBe(100);
   expect(h.room.handlerErrors).toBe(0);
 });
@@ -149,4 +219,29 @@ it("ends the match on a walkover when the other player is gone for good", async 
   await h.tick(2);
   expect(h.state.phase).toBe(MatchPhase.Ended);
   expect(h.state.winner).toBe(P(a).team);
+});
+
+it("stocks a Counter-Strike shelf: no regeneration, no resistance, no launcher", async () => {
+  // A CS player's objection, and a fair one: a duel where one side heals 6 HP/s or takes 20 % less
+  // damage is not a duel. The rule is shared with the buy menu (`modeAllowsItem`), but it is the
+  // SERVER that has to refuse it — the menu only decides which buttons exist.
+  const { a } = await duel();
+  P(a).money = 9000;
+  for (const item of ["roids", "flask", "energy", "fade", "launcher"]) {
+    h.send(a, "buy", { item });
+    await h.advance(30);
+    const answer = h.sentOf(a, S2C.Shop).at(-1)?.payload as { ok: boolean; item: string; reason?: string };
+    expect(answer.ok, `${item} must not be for sale in a duel`).toBe(false);
+    expect(answer.reason).toBe("mode");
+  }
+  expect(P(a).money, "and nothing was taken for any of them").toBe(9000);
+  // What a duel IS made of is still on the shelf.
+  h.send(a, "buy", { item: "rifle" });
+  h.send(a, "buy", { item: "heavy" });
+  h.send(a, "buy", { item: "flash" });
+  await h.advance(50);
+  expect(P(a).owned.includes("rifle")).toBe(true);
+  expect(P(a).armor).toBeGreaterThan(0);
+  expect(P(a).tacticalCount).toBeGreaterThan(0);
+  expect(h.room.handlerErrors).toBe(0);
 });

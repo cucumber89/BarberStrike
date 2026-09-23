@@ -12,7 +12,7 @@ async function match() {
 async function hold(c: FakeClient, ms: number) {
   for (let t = 0; t < ms; t += 100) { h.send(c, "objective", true); await h.advance(100); }
 }
-it("starts with pistol-round money and closes shopping when combat begins", async () => {
+it("starts with pistol-round money and buys on Counter-Strike's clock", async () => {
   h = await RoomHarness.create({ room: "bomb-economy", mode: "bomb", bots: 0 });
   const a = await h.join("Alpha"); await h.join("Bravo");
   await h.advance(MATCH.countdownMs + 100);
@@ -20,9 +20,21 @@ it("starts with pistol-round money and closes shopping when combat begins", asyn
   const p = h.player(a.sessionId); expect(p.money).toBe(800);
   h.send(a, C2S.Buy, { item: "revolver" }); expect(p.money).toBe(200);
   expect([...p.owned]).toContain("revolver");
+  // The freeze is CS's fifteen seconds, not thirty.
+  expect(BOMB.buyMs).toBe(15000);
   await h.until(MatchPhase.Playing);
-  p.money = 9000; h.send(a, C2S.Buy, { item: "rifle" });
-  expect(p.money).toBe(9000); expect([...p.owned]).not.toContain("rifle");
+  // ...and buying runs a few seconds past the release, the way `mp_buytime` runs past
+  // `mp_freezetime`: leaving spawn without armour is a mistake you can still fix.
+  p.money = 9000;
+  await h.advance(BOMB.buyTailMs - 2000);
+  h.send(a, C2S.Buy, { item: "rifle" }); await h.advance(20);
+  expect([...p.owned], "the buy tail is open").toContain("rifle");
+  // Then it shuts for the rest of the round.
+  await h.advance(2500);
+  const before = p.money;
+  h.send(a, C2S.Buy, { item: "heavy" }); await h.advance(20);
+  expect(p.money, "past the tail nothing is sold").toBe(before);
+  expect(p.armor).toBe(0);
   expect(p.protectedUntil).toBe(0);
 });
 it("loses dead players' equipment, retains survivors' guns and pays escalating losses", async () => {

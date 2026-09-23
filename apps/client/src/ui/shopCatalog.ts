@@ -1,6 +1,6 @@
 import {
-  ARMOR, ARMOR_ORDER, GRENADES, GRENADE_ORDER, PERKS, PERK_ORDER, PRIMARY_ORDER, SECONDARY_ORDER, WEAPONS,
-  boysAllows, isArmorId, isGrenadeId, isPerkId, isWeaponId,
+  ARMOR, ARMOR_ORDER, GRENADES, GRENADE_ORDER, PERKS, PERK_EFFECT, PERK_ORDER, PRIMARY_ORDER, SECONDARY_ORDER, WEAPONS,
+  boysAllows, isArmorId, isGrenadeId, isPerkId, isWeaponId, modeAllowsItem,
   type ArmorId, type GameMode, type GrenadeId, type PerkId, type ShopItemId, type WeaponId,
 } from "@frankibarber/shared";
 
@@ -11,15 +11,28 @@ import {
  * the screen advertised did nothing. Pure and Node-testable on purpose.
  */
 
-export type ShopCat = 1 | 2 | 3 | 4;
-export const SHOP_CATS: readonly ShopCat[] = [1, 2, 3, 4];
+/**
+ * THE AISLES, in Counter-Strike 2's order and for its reason.
+ *
+ * They used to be four, by SLOT: primary, secondary, grenades, gear. That is how the game thinks
+ * about a loadout and not how a player shops — it put a $1,200 SMG next to a $3,400 sniper in one
+ * ten-row aisle, and on the pistol round it opened on an aisle where a player with $800 could not
+ * afford a single thing.
+ *
+ * CS2 splits the guns by what you can afford and when you buy them, which is the same five
+ * headings every CS player has in their fingers: pistols, the mid-tier, the rifles, gear,
+ * grenades. The digits follow, so "4, 3" is a plate here as it is there.
+ */
+export type ShopCat = 1 | 2 | 3 | 4 | 5;
+export const SHOP_CATS: readonly ShopCat[] = [1, 2, 3, 4, 5];
 
 /** Aisle names and the one-line note under each, in Polish — the shop's language. */
 export const CAT_INFO: Record<ShopCat, { label: string; short: string; note: string }> = {
-  1: { label: "BROŃ GŁÓWNA", short: "GŁÓWNA", note: "slot 1 · wymiana zwraca 70 % ceny starej broni" },
-  2: { label: "BROŃ BOCZNA", short: "BOCZNA", note: "slot 2 · maszynka zawsze pod 3 (V)" },
-  3: { label: "GRANATY", short: "GRANATY", note: "bojowe pod G · taktyczne pod 4 · po dwa" },
+  1: { label: "PISTOLETY", short: "PISTOLETY", note: "slot 2 · zawsze masz darmowy P9 · maszynka pod 3 (V)" },
+  2: { label: "ŚREDNIA PÓŁKA", short: "ŚREDNIA", note: "slot 1 · tanie i skuteczne z bliska" },
+  3: { label: "KARABINY", short: "KARABINY", note: "slot 1 · na każdy dystans · wymiana zwraca 70 % ceny starej broni" },
   4: { label: "WYPOSAŻENIE", short: "SPRZĘT", note: "płyta i wzmocnienia na jedno życie" },
+  5: { label: "GRANATY", short: "GRANATY", note: "bojowe pod G · taktyczne pod 4 · po dwa" },
 };
 
 /** At most this many items fit one aisle's keys: digits 1–9 and then 0 for the tenth. */
@@ -39,7 +52,7 @@ export function posForCode(code: string): number {
 /** Which aisle a first keypress arms, or null when the digit is not an aisle. */
 export const catForCode = (code: string): ShopCat | null => {
   const n = posForCode(code);
-  return n >= 1 && n <= 4 ? (n as ShopCat) : null;
+  return n >= 1 && n <= SHOP_CATS.length ? (n as ShopCat) : null;
 };
 
 export interface CatalogCtx {
@@ -48,16 +61,25 @@ export interface CatalogCtx {
   boysClass?: number;
 }
 
+/**
+ * Which slot-1 guns are "the mid-tier" — CS2's second aisle: the cheap, close-range answer to a
+ * pistol round you won. Everything else in slot 1 is a rifle as far as a shopper is concerned.
+ */
+const MID_TIER: readonly string[] = ["smg", "smg2", "shotgun", "autoshotgun"];
+
 /** Item ids per aisle in shortcut order, for this mode and role. */
 export function shopCatalog(ctx: CatalogCtx): Record<ShopCat, ShopItemId[]> {
   const boys = ctx.mode === "boys" && ctx.boysClass !== undefined;
-  const allowed = (id: string) => !boys || boysAllows(ctx.boysClass!, id);
-  const bomb = ctx.mode === "bomb";
+  // Two filters, and they are different questions: what this ROLE may carry (The Boys) and what
+  // this MODE stocks at all (`modeAllowsItem`, the rule the server enforces on the same purchase).
+  const allowed = (id: ShopItemId) => (!boys || boysAllows(ctx.boysClass!, id)) && modeAllowsItem(ctx.mode, id);
+  const primaries = PRIMARY_ORDER.filter(allowed);
   const cats: Record<ShopCat, ShopItemId[]> = {
-    1: PRIMARY_ORDER.filter((id) => (!bomb || id !== "launcher") && allowed(id)),
-    2: SECONDARY_ORDER.filter(allowed),
-    3: GRENADE_ORDER.filter(allowed),
-    4: ([...ARMOR_ORDER, ...(bomb ? [] : PERK_ORDER)] as ShopItemId[]).filter(allowed),
+    1: SECONDARY_ORDER.filter(allowed),
+    2: primaries.filter((id) => MID_TIER.includes(id)),
+    3: primaries.filter((id) => !MID_TIER.includes(id)),
+    4: ([...ARMOR_ORDER, ...PERK_ORDER] as ShopItemId[]).filter(allowed),
+    5: GRENADE_ORDER.filter(allowed),
   };
   for (const c of SHOP_CATS) if (cats[c].length > MAX_PER_CAT) throw new Error(`aisle ${c} has ${cats[c].length} items, more than the keys can reach`);
   return cats;
@@ -98,32 +120,70 @@ export const ITEM_ROLE: Record<ShopItemId, string> = {
 
 export interface ItemStat { label: string; value: string }
 
+/** A number the way Polish writes it: 4,5 — and 3 rather than 3,0. */
+const pl = (n: number): string => (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, "").replace(".", ",");
+
+/**
+ * What each perk actually DOES, in numbers, read off `PERK_EFFECT` rather than typed out.
+ *
+ * The card used to show one row — "Czas: 25 s" — for every perk, so the shop answered "how long"
+ * without ever answering "for what". These are the same constants the server applies, which is
+ * the point: a balance change moves the price tag's promise with it instead of leaving the shop
+ * quoting last month's numbers.
+ */
+const PERK_STATS: Record<PerkId, ItemStat[]> = {
+  flask: [{ label: "Obrażenia", value: `−${Math.round(PERK_EFFECT.flaskResist * 100)} %` }],
+  roids: [
+    { label: "Regeneracja", value: `${PERK_EFFECT.roidsRegenPerSec} HP/s` },
+    { label: "Rusza po", value: `${pl(PERK_EFFECT.roidsDelayMs / 1000)} s bez trafienia` },
+  ],
+  energy: [
+    { label: "Sprint", value: `+${Math.round((PERK_EFFECT.energySprint - 1) * 100)} %` },
+    { label: "Chód", value: `+${Math.round((PERK_EFFECT.energyWalk - 1) * 100)} %` },
+  ],
+  fade: [
+    { label: "Odrodzenie", value: `−${pl(PERK_EFFECT.fadeRespawnMs / 1000)} s` },
+    { label: "Osłona", value: `${pl(PERK_EFFECT.fadeShieldMs / 1000)} s` },
+  ],
+};
+
 /** The numbers behind the role line, for the detail panel (hover / focus / keyboard). */
 export function itemStats(id: ShopItemId): ItemStat[] {
   if (isWeaponId(id)) {
     const w = WEAPONS[id as WeaponId];
+    const launcher = w.kind === "launcher";
     const out: ItemStat[] = [];
-    if (w.kind === "launcher") out.push({ label: "Wybuch", value: `${GRENADES.shell.radius} m` });
+    // The launcher's damage is its SHELL's, and it is not a number the weapon table holds: `w.damage`
+    // is 0 for it, so the most expensive gun in the shop advertised no damage at all. `w.range` is
+    // a hitscan figure and equally meaningless for a grenade that flies until it hits something —
+    // the card promised "Zasięg 40 m" for a weapon with no such limit, so that row is skipped here
+    // and only here. Everything else (rate of fire, reload) is the same question for every gun.
+    if (launcher) out.push({ label: "Wybuch", value: `${GRENADES.shell.damage} obr. · ${pl(GRENADES.shell.radius)} m` });
     else out.push({ label: "Obrażenia", value: w.pellets > 1 ? `${w.pellets} × ${w.damage}` : `${w.damage}` });
     out.push({ label: "Ogień", value: `${w.rpm}/min` });
     out.push({ label: "Tryb", value: w.automatic ? "seria" : "pojedynczy" });
     if (w.magazine > 0) out.push({ label: "Magazynek", value: `${w.magazine} + ${w.reserve}` });
-    out.push({ label: "Zasięg", value: `${w.range} m` });
-    out.push({ label: "Przeładowanie", value: `${(w.reloadMs / 1000).toFixed(1)} s` });
+    if (!launcher) out.push({ label: "Zasięg", value: `${w.range} m` });
+    out.push({ label: "Przeładowanie", value: `${pl(w.reloadMs / 1000)} s` });
     return out;
   }
   if (isGrenadeId(id)) {
     const g = GRENADES[id as GrenadeId];
     const out: ItemStat[] = [];
     if (g.damage > 0) out.push({ label: "Obrażenia", value: `${g.damage}` });
-    out.push({ label: "Promień", value: `${g.radius} m` });
-    if (g.fuseMs > 0) out.push({ label: "Zapalnik", value: `${(g.fuseMs / 1000).toFixed(1)} s` });
+    if (g.directDamage > 0) out.push({ label: "Trafienie wprost", value: `${g.directDamage}` });
+    if (g.radius > 0) out.push({ label: "Promień", value: `${pl(g.radius)} m` });
+    if (g.effectMs > 0) out.push({ label: "Trwa", value: `${pl(g.effectMs / 1000)} s` });
+    out.push({ label: "Zapalnik", value: g.fuseMs > 0 ? `${pl(g.fuseMs / 1000)} s` : "przy uderzeniu" });
     out.push({ label: "Slot", value: g.slot === "lethal" ? "bojowy (G)" : "taktyczny (4)" });
     return out;
   }
   if (isPerkId(id)) {
     const p = PERKS[id as PerkId];
-    return p.durationMs > 0 ? [{ label: "Czas", value: `${Math.round(p.durationMs / 1000)} s` }] : [{ label: "Działa", value: "przy następnym odrodzeniu" }];
+    return [
+      ...PERK_STATS[id as PerkId],
+      p.durationMs > 0 ? { label: "Czas", value: `${Math.round(p.durationMs / 1000)} s` } : { label: "Działa", value: "przy następnym odrodzeniu" },
+    ];
   }
   if (isArmorId(id)) return [{ label: "Płyta", value: `${ARMOR[id as ArmorId].armor} pkt` }, { label: "Trwa", value: "do śmierci" }];
   return [];

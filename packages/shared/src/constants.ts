@@ -1,7 +1,13 @@
 /** Simulation / networking constants shared by client and server. Single source of truth. */
 
-/** Product version shown in the menu, pause screen, telemetry and `/health`. Bump with package.json. */
-export const GAME_VERSION = "2.0 beta";
+/**
+ * Product version shown in the menu, pause screen, telemetry and `/health`. Bump with the
+ * package.json files (all five carry it).
+ *
+ * 2.1 is the owner's release number, set on 2026-09-23: the beta label came off with the pass that
+ * put both Counter-Strike modes on one set of rules and got the e2e suite to 18/18.
+ */
+export const GAME_VERSION = "2.1";
 
 export const TICK_RATE = 60;
 export const TICK_DT = 1 / TICK_RATE;

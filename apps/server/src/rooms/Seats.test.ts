@@ -74,6 +74,24 @@ describe("seats", () => {
     expect(seats().playerSlots).toBe(MAX_PLAYERS - Math.min(MAX_BOTS, MAX_PLAYERS - 2));
   });
 
+  it("does not stack a crowd on the same spawn point", async () => {
+    // Eight spawn points a side and thirty-two seats: a wave used to put several people on the
+    // exact same coordinates — bodies inside each other, and one grenade for all of them.
+    // 24 people over eight points a side: MORE than one per point, which is the case that stacks.
+    h = await RoomHarness.create({ room: "stack", mode: "tdm", bots: 0 });
+    for (let i = 0; i < 24; i++) await h.join(`P${i}`);
+    await h.tick(2);
+    const alive = [...h.state.players.values()].filter((p) => p.alive);
+    expect(alive.length).toBe(24);
+    let tooClose = 0;
+    for (let i = 0; i < alive.length; i++) for (let j = i + 1; j < alive.length; j++) {
+      const a = alive[i], b = alive[j];
+      if (Math.abs(a.y - b.y) < 2 && Math.hypot(a.x - b.x, a.z - b.z) < 0.7) tooClose++;
+    }
+    expect(tooClose, "nobody spawns inside anybody").toBe(0);
+    expect(h.room.handlerErrors).toBe(0);
+  }, 60000);
+
   it("agrees with the shared capacity table the client reads", () => {
     expect(modeCapacity("tdm")).toBe(OPEN_MAX_PLAYERS);
     expect(modeCapacity("ffa")).toBe(OPEN_MAX_PLAYERS);

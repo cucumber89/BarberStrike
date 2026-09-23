@@ -120,7 +120,12 @@ test.describe("two clients", () => {
       // run and pass alone, which is the worst kind of test: it fails for a reason that is not the
       // thing it is testing. 0.9 of the opacity of a full-screen div is "you cannot see", which is
       // the claim in the test's own name.
-      await expect.poll(async () => (await hud(p)).smokeOpacity, { timeout: 10000 }).toBeGreaterThan(0.9);
+      // The window is wall-clock and the cloud grows in FRAMES, so a loaded machine needs more of
+      // it: measured on the third full suite run of a session in this container, the reading was
+      // still climbing through 0.44 when ten seconds were up, and the same test alone finishes in
+      // 11.6 s with the opacity well past 0.9. Twenty-five seconds is the same assertion with room
+      // for a slow renderer — the claim (0.9 = you cannot see) is untouched.
+      await expect.poll(async () => (await hud(p)).smokeOpacity, { timeout: 25000 }).toBeGreaterThan(0.9);
       await expect(p.getByTestId("smoke-screen")).toBeVisible();
       await p.evaluate(() => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x: 27, y: 0, z: 21.5 }));
       await expect.poll(async () => (await hud(p)).smokeOpacity).toBe(0);
@@ -356,8 +361,8 @@ test.describe("two clients", () => {
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeVisible();
     await expect.poll(async () => (await hud(a)).shopOpen).toBe(true);
-    // The shop is four aisle tabs; the grenade aisle is tab 3 (also the "3" key).
-    await a.getByTestId("shop-tab-3").click();
+    // The shop is CS2's five aisle tabs; grenades are the last one, tab 5 (also the "5" key).
+    await a.getByTestId("shop-tab-5").click();
     await a.getByTestId("buy-frag").click();
     await expect.poll(async () => (await hud(a)).lethal, { timeout: 3000 }).toBe("frag");
     await expect.poll(async () => (await hud(a)).money, { timeout: 3000 }).toBe(1700);
@@ -367,15 +372,15 @@ test.describe("two clients", () => {
     await expect.poll(async () => (await hud(a)).tactical, { timeout: 3000 }).toBe("flash");
     // The DMR is refused, because $2900 is more than what is left after the frag and the flash —
     // and the row says by how much, from the same rule the server runs.
-    await a.getByTestId("shop-tab-1").click();
+    await a.getByTestId("shop-tab-3").click();
     await expect(a.getByTestId("buy-dmr")).toBeDisabled();
     await expect(a.getByTestId("why-dmr")).toContainText("Brakuje $1,400");
-    // The tenth primary is reachable by key: "1" arms the aisle, "0" is the launcher. Too poor, so
-    // nothing is bought — but the arming is visible and the key is accepted.
-    await a.keyboard.press("Digit1");
-    await expect(a.getByTestId("shop-result")).toContainText("numer przedmiotu");
-    await a.keyboard.press("Digit0");
-    await expect(a.getByTestId("shop-result")).not.toContainText("numer przedmiotu");
+    // The keys: "3" arms the rifle aisle, and a position key in it is accepted. Too poor to buy
+    // anything, so nothing is bought — but the arming is visible and the key is taken.
+    await a.keyboard.press("Digit3");
+    await expect(a.getByTestId("shop-result")).toContainText("numer z kafelka");
+    await a.keyboard.press("Digit6");
+    await expect(a.getByTestId("shop-result")).not.toContainText("numer z kafelka");
     await expect.poll(async () => (await hud(a)).money).toBe(1500);
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeHidden();
@@ -462,6 +467,8 @@ test.describe("two clients", () => {
     // Shop reflects the running perk and the worn plate; the sniper is out of reach at $250.
     await a.keyboard.press("KeyB");
     await expect(a.getByTestId("shop")).toBeVisible();
+    // The sniper lives in the rifle aisle (CS2's third); the shop opens on the pistols.
+    await a.getByTestId("shop-tab-3").click();
     await expect(a.getByTestId("shop-sniper")).toContainText("LUNETA");
     await expect(a.getByTestId("buy-sniper")).toBeDisabled();
     // The equipment aisle shows the running perk and the worn plate.
@@ -938,8 +945,29 @@ test.describe("two clients", () => {
         return hips && crownY > 0 ? { hipY: hips.getAbsolutePosition().y - feet, crownY: crownY - feet } : null;
       }, id);
       await expect.poll(async () => (await remoteBody(b, idA))?.hipY ?? 0, { timeout: 30_000 }).toBeGreaterThan(0);
-      const seenByB = (await remoteBody(b, idA))!;   // B is looking at BARYŁKA
-      const seenByA = (await remoteBody(a, idB))!;   // A is looking at TYCZKA
+      /**
+       * OVER A BREATHING CYCLE, not at one instant. An idle body shifts its weight
+       * (`sin(time * 0.9)`) and breathes (`sin(time * 1.6)`), and the phase is seeded from the
+       * player's id so that two bodies in a room are deliberately out of step — so one reading of
+       * each compares two different moments of two different cycles. MEASURED that way: crowns
+       * 1.877 vs 1.853, a 24 mm "difference between the builds" that is really the sway, failing a
+       * 20 mm tolerance about one run in four. Nine readings over ~3.6 s (a full breath) and a mean
+       * per body asks the question the test means to ask, which is about the BODIES.
+       */
+      const meanBody = async (p: Page, id: string) => {
+        const hips: number[] = [], crowns: number[] = [];
+        for (let i = 0; i < 9; i++) {
+          const r = await remoteBody(p, id);
+          if (r) { hips.push(r.hipY); crowns.push(r.crownY); }
+          await p.waitForTimeout(400);
+        }
+        const mean = (xs: number[]) => xs.reduce((n, x) => n + x, 0) / Math.max(1, xs.length);
+        const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
+        return { hipY: mean(hips), crownY: mean(crowns), crownSpread: spread(crowns), n: crowns.length };
+      };
+      const [seenByB, seenByA] = await Promise.all([meanBody(b, idA), meanBody(a, idB)]);
+      expect(seenByB.n, "readings of BARYŁKA").toBeGreaterThan(4);
+      expect(seenByA.n, "readings of TYCZKA").toBeGreaterThan(4);
       const hipBarylka = seenByB.hipY, hipTyczka = seenByA.hipY;
       expect(hipBarylka, "BARYŁKA stands on short legs").toBeLessThan(0.9);
       expect(hipTyczka, "TYCZKA on long ones").toBeGreaterThan(1.0);
@@ -948,7 +976,9 @@ test.describe("two clients", () => {
       // different builds, same head height. The head node sits directly under the crown, and the
       // crown is what an opponent aims at.
       const crownBarylka = seenByB.crownY, crownTyczka = seenByA.crownY;
-      expect(Math.abs(crownBarylka - crownTyczka), `crowns: ${crownBarylka} vs ${crownTyczka}`).toBeLessThan(0.02);
+      expect(Math.abs(crownBarylka - crownTyczka),
+        `crowns: ${crownBarylka.toFixed(4)} vs ${crownTyczka.toFixed(4)} (sway spread ${seenByB.crownSpread.toFixed(4)} / ${seenByA.crownSpread.toFixed(4)})`,
+      ).toBeLessThan(0.02);
 
       // 4. The outfit was built too, not merely received: material names carry the outfit id, and
       // the team's accent is on the body whatever that outfit is — the thing that stops two

@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 import { DROPPABLE_OUTFITS, HAIRCUTS, outfitDef, type HaircutDef, type HaircutStyle, type OutfitDef } from "@frankibarber/shared";
 import { catalog, collectionName, skinById, type Rarity, type SkinDef } from "@frankibarber/skins";
 import {
@@ -52,6 +52,13 @@ function outfitSwatch(outfit: OutfitDef): string {
   return `linear-gradient(160deg, ${p.cloth} 42%, ${p.vest} 42%, ${p.vest} 78%, ${p.trim} 78%)`;
 }
 
+/**
+ * Which card of the reel is the prize. The animation in `menu.css` stops on this index and the
+ * card at this index is the one that gets the real prize: ONE constant, passed to the CSS as
+ * `--win-index`, because two of them drifting apart is a prize the marker does not point at.
+ */
+const WIN_INDEX = 27;
+
 /** A skin card in the reel carries the skin's real art, painted once and cached by `SkinArt`. */
 function skinItem(skin: SkinDef): ReelItem {
   return { id: skin.id, kind: "skin", name: skin.name, rarity: skin.rarity, swatch: String(skin.params.colors ?? "#65717a").split(",")[0], skin };
@@ -79,6 +86,8 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
   const [profile, setProfile] = useState(() => refreshDailyCrates());
   const [result, setResult] = useState<CratePrize | null>(null);
   const [phase, setPhase] = useState<"closed" | "rolling" | "won">("closed");
+  /** Guards the reveal: whichever of the animation and the fallback timer arrives first wins. */
+  const settled = useRef(true);
 
   /**
    * The reel is drawn from the REAL pool — outfits and finishes both — so the cards flying past are
@@ -89,7 +98,7 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
     const crateCuts = HAIRCUTS.filter((item) => item.requirement === "Ze skrzynki");
     const pool: ReelItem[] = [...DROPPABLE_OUTFITS.map(outfitItem), ...crateCuts.map(haircutItem), ...catalog.map(skinItem)];
     const items = Array.from({ length: 31 }, (_, index) => pool[(index * 7 + 3) % pool.length]);
-    if (result) items[27] = prizeItem(result);
+    if (result) items[WIN_INDEX] = prizeItem(result);
     return items;
   }, [result]);
 
@@ -99,6 +108,23 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
     { label: "FRYZURY", have: HAIRCUTS.filter((h) => h.unlockedBy(profile.life) || profile.crateCuts.includes(h.id)).length, all: HAIRCUTS.length },
   ];
 
+  /**
+   * The prize appears when the reel has STOPPED — and "stopped" is the animation saying so, not a
+   * timer hoping so. It was a 3 s timer against a 4.2 s roll: the cards were still moving when the
+   * prize was announced, and on a slow machine the winning card was a whole cell away from the
+   * marker it is supposed to be under (`armoury.spec.ts` measures exactly that).
+   *
+   * `animationend` also covers the reduced-motion case for free — there the roll is 0.01 ms, so it
+   * fires at once. The timer that remains is a fallback for a browser that never delivers the
+   * event (a background tab), so a crate can never be opened and never revealed.
+   */
+  const settle = () => {
+    if (settled.current) return;
+    settled.current = true;
+    setPhase("won");
+    uiSound("click");
+  };
+
   const open = () => {
     if (!profile.crates || phase === "rolling") return;
     const rolled = openCrate();
@@ -106,13 +132,10 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
     setProfile(rolled.profile);
     onProfile(rolled.profile);
     setResult(rolled.prize);
+    settled.current = false;
     setPhase("rolling");
     uiSound("open");
-    const revealMs = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 250 : 3000;
-    window.setTimeout(() => {
-      setPhase("won");
-      uiSound("click");
-    }, revealMs);
+    window.setTimeout(settle, 6000);
   };
 
   return (
@@ -167,11 +190,14 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
           <div className="crate-dialog">
             <button className="crate-close" onClick={() => setPhase("closed")} disabled={phase === "rolling"} aria-label="Zamknij">×</button>
             <header><small>SKRZYNKA DZIELNICY</small><b>{phase === "rolling" ? "LOSOWANIE NAGRODY" : kindHeading[result?.kind ?? "skin"]}</b></header>
-            <div className="reel-window">
+            {/* `--win-index` is what the stop position in `menu.css` is computed from; it is set
+                here so the card the animation lands on and the card tagged as the prize are one
+                constant and cannot drift apart. */}
+            <div className="reel-window" style={{ "--win-index": WIN_INDEX } as CSSProperties}>
               <i />
-              <div className="reel-track">
+              <div className="reel-track" onAnimationEnd={settle}>
                 {reel.map((item, index) => (
-                  <div key={`${item.id}-${index}`} className={item.rarity} data-winning={index === 27 ? "true" : undefined}>
+                  <div key={`${item.id}-${index}`} className={item.rarity} data-winning={index === WIN_INDEX ? "true" : undefined}>
                     {item.kind === "haircut" && item.haircut
                       ? <HaircutArt style={item.haircut} className="haircut-drop" />
                       : item.skin

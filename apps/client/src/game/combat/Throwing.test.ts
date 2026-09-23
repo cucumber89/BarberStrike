@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { C2S, GRENADES, THROW_INTERVAL_MS, type ThrowMessage } from "@frankibarber/shared";
-import { THROW_WINDUP_MS, Throwing } from "./Throwing";
+import { THROW_WINDUP_MS, Throwing, cookWindowMs } from "./Throwing";
 import type { Connection, NetPlayer } from "../net/Connection";
 import type { LocalPlayer } from "../player/LocalPlayer";
 
@@ -50,7 +50,9 @@ describe("Throwing (client grenade controller)", () => {
     expect(events).toEqual(["prime:frag"]);
     run(t, 1000, 1800);
     expect(t.state.kind).toBe("frag");
-    expect(t.state.cook).toBeCloseTo(800 / GRENADES.frag.fuseMs, 1);
+    // The ring measures the window the grenade can be HELD for (fuse minus the auto-release
+    // margin), not the fuse: it has to read 1 at the moment the arm goes by itself.
+    expect(t.state.cook).toBeCloseTo(800 / cookWindowMs(GRENADES.frag.fuseMs), 3);
     expect(sent.length).toBe(0);
     t.releaseLethal(1800);
     expect(events.at(-1)).toBe("throw:frag");
