@@ -12,6 +12,7 @@ import { Chat, type ChatApi } from "./Chat";
 import { Minimap } from "./Minimap";
 import { HeadShot, Razor, Scoreboard } from "./Scoreboard";
 import { MatchResult, RoundBreak } from "./MatchResult";
+import { BracketPanel, bracketLine, standing } from "./Bracket";
 import { OSTRZYZENI_SIDES, roundReasonText } from "./resultText";
 import type { RadarSnapshot } from "../game/Game";
 
@@ -167,6 +168,9 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   const windowSecs = h.buyWindowLeft === Infinity ? null : Math.ceil(h.buyWindowLeft / 1000);
   const shopHint = h.shopResult && !h.shopOpen && h.shopResult.reason === "closed" && now - h.shopResult.at < 1800;
   const toasts = useMemo(() => h.moneyToasts.filter((t) => t.reason !== "reset" && t.reason !== "buy"), [h.moneyToasts]);
+  // Drop T: playing this pair, waiting for yours, or out — read off the bracket, not a new field.
+  const myName = h.players.find((r) => r.id === h.myId)?.name ?? "";
+  const tourStanding = h.bracket ? standing(h.bracket, myName) : "";
   const activePerks = PERK_ORDER.filter((id) => perkActive(h.perks, id, h.serverNow));
   /**
    * Rule P2: the steroids' two-second gate, in words. Regeneration only starts after
@@ -510,13 +514,27 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           <div className="death-title">{h.killerName ? <>WYELIMINOWAŁ CIĘ <b>{h.killerName}</b></> : "WYELIMINOWANY"}</div>
           {h.killerWeapon && h.killerName && <div className="death-weapon">{killerName(h.killerWeapon)}</div>}
           <div className="death-respawn">
-            {(h.mode === "bomb" || h.mode === "duel") && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) ? "WRACASZ W NASTĘPNEJ RUNDZIE" : `ODRODZENIE ZA ${Math.max(0, Math.ceil((h.respawnAt - now) / 1000))}`}
+            {/* A tournament leaves most of the room dead for minutes at a time, and counting down a
+                respawn that is never coming is the one thing the card must not do. */}
+            {tourStanding === "waiting" ? "CZEKASZ NA SWOJĄ PARĘ"
+              : tourStanding === "out" ? "ODPADŁEŚ · OGLĄDASZ DO KOŃCA"
+              : (h.mode === "bomb" || h.mode === "duel" || h.mode === "turniej") && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) ? "WRACASZ W NASTĘPNEJ RUNDZIE"
+              : `ODRODZENIE ZA ${Math.max(0, Math.ceil((h.respawnAt - now) / 1000))}`}
           </div>
         </div>
       )}
 
       {/* Between rounds: who took it and why, from the round's real signals */}
       {inBreak && !h.shopOpen && <RoundBreak h={h} />}
+
+      {/* Drop T: the tournament's bracket. Full size between pairs and on the result screen — the
+          only moments anybody has time to read it — and one line in the corner while a pair is
+          being played, so you always know which round of the draw you are in. */}
+      {h.bracket !== "" && !h.shopOpen && (
+        h.phase === MatchPhase.Prep || ended
+          ? <div className="bracket-card" data-testid="bracket-card"><h3>DRABINKA</h3><BracketPanel bracket={h.bracket} /></div>
+          : <div className="bracket-strip" data-testid="bracket-strip">{bracketLine(h.bracket)}</div>
+      )}
 
       {/* Match end */}
       {ended && <MatchResult h={h} now={now} onLeave={onLeave} />}

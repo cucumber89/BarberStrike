@@ -664,7 +664,7 @@ export class Game {
       bomb: s.mode === "bomb" && s.bomb ? { round: s.bomb.round, attackTeam: s.bomb.attackTeam, stage: s.bomb.stage, carrier: s.bomb.carrier,
         site: s.bomb.site, x: s.bomb.x, y: s.bomb.y, z: s.bomb.z, endsAt: s.bomb.endsAt, roundEndsAt: s.bomb.roundEndsAt,
         actor: s.bomb.actor, progress: s.bomb.progress, result: s.bomb.result } : null,
-      round: s.bomb?.round ?? 0, roundResult: s.bomb?.result ?? "",
+      round: s.bomb?.round ?? 0, roundResult: s.bomb?.result ?? "", bracket: s.bracket ?? "",
       tac: this.local.tacFraction, tacOn: this.local.isTacSprinting(),
       // Drop 5: expired chat lines (unless the box is open) and marks drop out here.
       chat: !cur.chatOpen && cur.chat.some((l) => now - l.seen > CHAT.showMs) ? cur.chat.filter((l) => now - l.seen <= CHAT.showMs) : cur.chat,

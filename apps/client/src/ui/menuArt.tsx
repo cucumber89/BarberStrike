@@ -82,6 +82,15 @@ const Duel = (): ReactElement => (
   </svg>
 );
 
+/** The bracket: four pairs narrowing to one line, which is what a knockout looks like on paper. */
+const Turniej = (): ReactElement => (
+  <svg {...stroke}>
+    <path d="M3 5h4v4H3zM3 15h4v4H3zM17 5h4v4h-4zM17 15h4v4h-4z" />
+    <path d="M7 7h3v10H7M17 7h-3v10h3" />
+    <path d="M10 12h4" />
+  </svg>
+);
+
 /** Everyone for themselves. Kept for completeness — the picker does not offer FFA. */
 const Ffa = (): ReactElement => (
   <svg {...stroke}>
@@ -90,7 +99,7 @@ const Ffa = (): ReactElement => (
 );
 
 export const MODE_ART: Record<GameMode, () => ReactElement> = {
-  tdm: Tdm, boys: Boys, dom: Dom, bomb: Bomb, gungame: GunGame, ostrzyzeni: Ostrzyzeni, duel: Duel, ffa: Ffa,
+  tdm: Tdm, boys: Boys, dom: Dom, bomb: Bomb, gungame: GunGame, ostrzyzeni: Ostrzyzeni, duel: Duel, turniej: Turniej, ffa: Ffa,
 };
 
 /**

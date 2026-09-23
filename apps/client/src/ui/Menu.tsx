@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BOYS_CLASSES, BOYS, BUILDS, OUTFITS, buildDef, outfitDef, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, DUEL_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MAX_PLAYERS, MODES, MODE_ORDER, isGameMode, isOpenMode, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { BOYS_CLASSES, BOYS, BUILDS, OUTFITS, buildDef, outfitDef, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, DUEL_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MAX_PLAYERS, MODES, MODE_ORDER, TOURNAMENT, isGameMode, isOpenMode, type BotLevel, type GameMode } from "@frankibarber/shared";
 import { equippedBuild, equippedHaircut, equippedOutfit, ownedCuts } from "../game/progression/profile";
 import { copyText, inviteLink, isMapId, mapChoices, parseInvite } from "./invite";
 import { Connection, defaultServerUrl, type RoomListing } from "../game/net/Connection";
@@ -88,8 +88,9 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   const [botCount, setBotCount] = useState(() => { try { return Math.max(0, Math.min(MAX_BOTS, Number(localStorage.getItem("fb_bots") ?? 0) || 0)); } catch { return 0; } });
   const [botLevel, setBotLevel] = useState<BotLevel>(() => { try { const l = localStorage.getItem("fb_botlevel"); return l === "easy" || l === "hard" ? l : "normal"; } catch { return "normal"; } });
   const pickBots = (n: number, l: BotLevel) => { setBotCount(n); setBotLevel(l); try { localStorage.setItem("fb_bots", String(n)); localStorage.setItem("fb_botlevel", l); } catch { /* private mode */ } };
-  // A duel has two seats: at most one of them a bot, and none unless asked for.
-  const botMax = gameMode === "duel" ? 1 : MAX_BOTS;
+  // A duel has two seats: at most one of them a bot, and none unless asked for. A tournament holds
+  // the whole draw and may be filled with bots to play a bracket out — but never the last seat.
+  const botMax = gameMode === "duel" ? 1 : gameMode === "turniej" ? TOURNAMENT.maxSize - 1 : MAX_BOTS;
   const bots = { count: Math.min(botMax, botCount), level: botLevel };
   const [rooms, setRooms] = useState<RoomListing[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);

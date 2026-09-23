@@ -17,6 +17,7 @@ import {
   GUN_GAME, MELEE_WEAPON, ladderAfterKill, ladderDone, ladderWeapon,
   OSTRZYZENI, PERK_ARMED_MS, convertsOnKill, infectionRoundWinner, pickFirstShaved,
   DUEL, duelRoundWinner, duelSpawnSide, duelPurseAfter, duelStartMoney, duelHalfStart, freshDuelPurse,
+  TOURNAMENT, seedBracket, currentMatch, reportWinner, withdraw, isDone, champion, bracketString, type Bracket,
   CS_ECONOMY, csKillReward, csLossBonus,
   type DuelPurse, type DuelRoundResult,
   isOpenMode, modeCapacity, openPlayerCap, scoreLimitFor,
@@ -255,7 +256,22 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
    * swapped every `DUEL.halfRounds`. The same Prep / Playing machine as Bomb and Ostrzyżeni, the
    * same `state.bomb.round` counter, the same `scoreA` / `scoreB` — no new field, no new message.
    */
-  private get duel(): boolean { return this.mode === "duel"; }
+  /**
+   * Drop T: a tournament pair plays a DUEL. Freeze, buy window, economy, one life a round, the
+   * half swap, first to `DUEL.wins` — all of it is the duel's, so `duel` is true in a tournament
+   * too and the machine below runs unchanged. What a tournament adds is the bracket and the
+   * question `playingNow` answers: of the eight people in this room, which two are on?
+   */
+  private get duel(): boolean { return this.mode === "duel" || this.mode === "turniej"; }
+  private get tournament(): boolean { return this.mode === "turniej"; }
+  /** The bracket, drawn when the tournament starts. Null in a plain duel. */
+  private bracket: Bracket | null = null;
+  /** The two ids playing the pair on the board. Null in a plain duel, where everybody plays. */
+  private pair: [string, string] | null = null;
+  /** Set when a pair has been decided and the next one has to be put on the map. */
+  private needPair = false;
+  /** Is this player one of the two playing right now? A plain duel has two players, so always. */
+  private playingNow(id: string): boolean { return !this.pair || this.pair[0] === id || this.pair[1] === id; }
   /**
    * The two modes built on Counter-Strike's round: Bomb and the 1 v 1. They share the freeze, the
    * buy window past it, the kill table and the money (`cs.ts`) — the point being that a player who
@@ -302,7 +318,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.mode = isGameMode(options?.mode) ? options.mode : "tdm";
     this.state.mode = this.mode;
     const asked = typeof options?.map === "string" ? MAPS[options.map] : undefined;
-    this.map = (this.mode === "duel" ? MAPS[DUEL_MAP_ID] : undefined) ?? asked ?? MAPS[DEFAULT_MAP_ID];
+    this.map = (this.duel ? MAPS[DUEL_MAP_ID] : undefined) ?? asked ?? MAPS[DEFAULT_MAP_ID];
     this.world = roomCollisionWorld(this.map);
     this.state.mapId = this.map.id;
     this.state.roomName = typeof options?.room === "string" ? options.room.slice(0, 24) : "";
@@ -327,7 +343,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // itself full to the seventh who wanted to play.
     this.playerSlots = open ? capacity : MAX_PLAYERS - this.botCount;
     // A duel is two seats and nothing fills an empty one: at most one bot, and only if asked for.
-    if (this.duel) { this.botCount = Math.min(this.botCount, DUEL.players - 1); this.playerSlots = DUEL.players - this.botCount; }
+    if (this.mode === "duel") { this.botCount = Math.min(this.botCount, DUEL.players - 1); this.playerSlots = DUEL.players - this.botCount; }
+    // A tournament is one room holding the whole draw. Bots may fill it so a bracket can be played
+    // (and tested) without eight people in the building, but never the last seat.
+    if (this.tournament) { this.botCount = Math.min(this.botCount, TOURNAMENT.maxSize - 1); this.playerSlots = TOURNAMENT.maxSize - this.botCount; }
     this.maxClients = this.playerSlots + MAX_SPECTATORS;
     this.botLevel = isBotLevel(options?.botLevel) ? options.botLevel : "normal";
     // Tests and tooling may pin the room's PRNG (spawn picks, pellets, bot aim); never in production.
@@ -700,6 +719,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.sessions.delete(id);
     // A duel with one side gone for good is over — a walkover on the score as it stands, so the
     // result screen and the rematch loop run instead of a lone player winning empty rounds.
+    if (this.tournament) { this.withdrawFromBracket(id); return; }
     if (this.duel && (this.state.phase === MatchPhase.Playing || this.state.phase === MatchPhase.Prep)) {
       const sides = new Set([...this.state.players.values()].filter((p) => p.connected).map((p) => p.team));
       if (sides.size < 2) this.endMatch();
@@ -1452,10 +1472,104 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       // next snapshot corrected it.
       this.clientOf(id)?.send(S2C.Money, { delta: 0, reason: "reset", total: p.money } satisfies MoneyEvent);
     }
+    if (this.tournament) this.drawBracket();
     if (this.mode === "bomb") this.beginBombRound(true);
     else if (this.infection) this.beginInfectionRound();
     else if (this.duel) this.beginDuelRound();
     else this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Playing, winner: -1, endsAt: this.state.phaseEndsAt } satisfies MatchEventMessage);
+  }
+
+  // ---------------------------------------------------------------- the tournament bracket
+
+  /**
+   * Draw the bracket from everybody in the room, and put the first pair up.
+   *
+   * The size is the draw that fits: four people play a four-bracket, five or more play an eight
+   * with byes for the empty slots. The draw itself comes out of the room's own seeded generator,
+   * so a test can pin one and a room can be replayed.
+   */
+  private drawBracket(): void {
+    const entrants = [...this.state.players.values()].filter((p) => p.connected).map((p) => ({ id: p.id, name: p.name }));
+    this.bracket = seedBracket(entrants, entrants.length <= 4 ? 4 : TOURNAMENT.maxSize, this.rand);
+    this.needPair = true;
+    this.publishBracket();
+  }
+
+  /** The bracket, on the wire, whenever anything about it changes. */
+  private publishBracket(): void {
+    this.state.bracket = this.bracket ? bracketString(this.bracket) : "";
+  }
+
+  /**
+   * Put the pair the bracket is pointing at on the map: sides, a fresh economy, a fresh score.
+   *
+   * Every pair is a whole 1 v 1 match of its own — CS's pistol round, CS's ladder, first to
+   * `DUEL.wins` — so everything a `startMatch` resets for a duel is reset here for the pair.
+   */
+  private startPair(): void {
+    const st = this.state;
+    this.needPair = false;
+    const m = this.bracket ? currentMatch(this.bracket) : null;
+    if (!m) { this.pair = null; return; }
+    this.pair = [m.a, m.b];
+    st.scoreA = 0; st.scoreB = 0; st.bomb.round = 0; st.bomb.result = "";
+    st.matchEndsAt = this.now() + DUEL.matchMs;
+    for (const [id, p] of st.players) {
+      const s = this.sessions.get(id);
+      if (!this.playingNow(id)) continue;
+      p.team = (id === m.a ? 0 : 1) as Team;
+      if (s) { s.purse = freshDuelPurse(); s.survivedRound = false; }
+      this.writeWallet(p, freshWallet());
+    }
+    this.publishBracket();
+    this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Prep, winner: -1, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
+  }
+
+  /**
+   * A pair is over. The winner goes through; the bracket decides whether that was the final.
+   *
+   * The pause before the next pair is `TOURNAMENT.breakMs` rather than the duel's three seconds:
+   * it is the only moment anybody reads the bracket, and the two people who are up next need long
+   * enough to notice that they are.
+   */
+  private finishPair(): void {
+    const st = this.state;
+    const m = this.bracket ? currentMatch(this.bracket) : null;
+    if (!this.bracket || !m) { this.endMatch(); return; }
+    const winner = st.scoreA > st.scoreB ? m.a : m.b;
+    this.bracket = reportWinner(this.bracket, winner, st.scoreA, st.scoreB);
+    this.publishBracket();
+    if (isDone(this.bracket)) { this.endMatch(); return; }
+    this.needPair = true;
+    this.pair = null;                       // nobody is on the board while the bracket is up
+    st.phase = MatchPhase.Prep;
+    st.phaseEndsAt = this.now() + TOURNAMENT.breakMs;
+    this.duelStage = "break";
+    for (const [, p] of st.players) { p.alive = false; p.health = 0; }
+    this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Prep, winner: -1, endsAt: st.phaseEndsAt } satisfies MatchEventMessage);
+  }
+
+  /**
+   * Somebody left a tournament. In the pair being played it is a walkover; anywhere else they are
+   * struck out of the draw so whoever would have met them goes through rather than waiting for a
+   * player who is not coming back. If that decided the pair on the board, the next one comes up.
+   */
+  private withdrawFromBracket(id: string): void {
+    if (!this.bracket) return;
+    const before = this.bracket.at;
+    this.bracket = withdraw(this.bracket, id);
+    this.publishBracket();
+    if (this.bracket.at === before) return;             // a waiting entrant: nothing else changes
+    if (isDone(this.bracket)) { this.endMatch(); return; }
+    this.needPair = true;
+    this.pair = null;
+    const st = this.state;
+    if (st.phase === MatchPhase.Playing || st.phase === MatchPhase.Prep) {
+      st.phase = MatchPhase.Prep;
+      st.phaseEndsAt = this.now() + TOURNAMENT.breakMs;
+      this.duelStage = "break";
+      for (const [, p] of st.players) { p.alive = false; p.health = 0; }
+    }
   }
 
   // ---------------------------------------------------------------- 1 v 1 (GÓRA tournament pass)
@@ -1472,6 +1586,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
    */
   private beginDuelRound(): void {
     const st = this.state, now = this.now();
+    if (this.needPair) this.startPair();
     const round = st.bomb.round + 1; // 1-based: the round about to be played
     const half = duelHalfStart(round);
     st.phase = MatchPhase.Prep;
@@ -1481,6 +1596,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.flushPendingTeams();
     for (const [id, p] of st.players) {
       if (!p.connected) continue;
+      // Everybody who is not in the pair on the board is a spectator with a body: down, out of the
+      // round judge's roster (`stepDuel`), and never spawned. The duel already refuses to respawn
+      // anybody mid-round, so this is the whole of what "waiting your turn" means.
+      if (!this.playingNow(id)) { p.alive = false; p.health = 0; continue; }
       const s = this.sessions.get(id);
       if (s && half) s.purse = freshDuelPurse();
       const purse = s?.purse ?? freshDuelPurse();
@@ -1519,7 +1638,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private stepDuel(now: number): void {
     if (!this.duel || this.state.phase !== MatchPhase.Playing) return;
     const st = this.state;
-    const roster = [...st.players.values()].map((p) => ({ team: p.team, alive: p.alive, connected: p.connected && !!this.sessions.get(p.id)?.ready, health: p.health }));
+    // The pair on the board, and nobody else: six people waiting their turn in a tournament room
+    // are dead bodies on both sides, and an unfiltered roster would call every round a draw.
+    const roster = [...st.players.values()].filter((p) => this.playingNow(p.id))
+      .map((p) => ({ team: p.team, alive: p.alive, connected: p.connected && !!this.sessions.get(p.id)?.ready, health: p.health }));
     const result = duelRoundWinner(roster, now, st.phaseEndsAt);
     if (!result) {
       // A side with nobody connected (a reconnect in progress) holds the clock rather than losing on it.
@@ -1533,7 +1655,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.payDuelRound(result.winner);
     this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
     const decided = Math.max(st.scoreA, st.scoreB) >= DUEL.wins || (now >= st.matchEndsAt && st.scoreA !== st.scoreB);
-    if (decided) { this.endMatch(); return; }
+    if (decided) { if (this.tournament) this.finishPair(); else this.endMatch(); return; }
     st.phase = MatchPhase.Prep;
     st.phaseEndsAt = now + DUEL.breakMs;
     this.duelStage = "break";
@@ -1551,7 +1673,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private payDuelRound(winner: Team | -1): void {
     for (const [id, p] of this.state.players) {
       const s = this.sessions.get(id);
-      if (!s) continue;
+      if (!s || !this.playingNow(id)) continue;
       s.survivedRound = p.alive && p.connected;
       if (!p.connected) continue;
       const result: DuelRoundResult = winner === -1 ? "draw" : p.team === winner ? "win" : "loss";
@@ -1772,6 +1894,13 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   }
 
   private endMatch(): void {
+    // A tournament is won by a person, not a side: the bracket knows who, and the result screen
+    // reads `winnerId` / `winnerName` exactly as Gun Game's and FFA's does.
+    if (this.tournament && this.bracket) {
+      const champ = champion(this.bracket);
+      if (champ) { this.state.winnerId = champ; this.state.winnerName = this.bracket.names[champ] ?? ""; }
+      this.publishBracket();
+    }
     // Clear pending respawns so nobody returns on the result screen.
     for (const s of this.sessions.values()) s.respawnAt = 0;
     this.state.phase = MatchPhase.Ended;

@@ -106,15 +106,23 @@ test("a /r/<room> link asks for a nickname only, and CHANGE opens the full lobby
   expect(link).toContain("mode=gungame");
 });
 
-/** Drop D: the picker offers main's four modes and both party modes. */
-test("the lobby offers six modes", async ({ page }) => {
+/** Drop D: the picker offers main's four modes and both party modes; drop T added the tournament. */
+test("the lobby offers every mode it has", async ({ page }) => {
   await page.goto("/");
   await page.getByTestId("btn-play").click();
   await expect(page.getByRole("heading", { name: "01 TRYB GRY" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /02 MAPA/ })).toBeVisible();
-  for (const m of ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni"]) {
+  for (const m of ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni", "duel", "turniej"]) {
     await expect(page.getByTestId(`mode-${m}`)).toBeVisible();
   }
+  // The 1 v 1 and the tournament are both played on the arena, and the picker says so instead of
+  // offering a map choice the server overrides.
+  await page.getByTestId("mode-duel").click();
+  await expect(page.getByTestId("map-fixed")).toBeVisible();
+  await expect(page.getByTestId("map-gora")).toBeVisible();
+  await expect(page.getByTestId("map-night_district")).toHaveCount(0);
+  await page.getByTestId("mode-tdm").click();
+  await expect(page.getByTestId("map-night_district")).toBeVisible();
   await expect(page.getByTestId("mode-ffa")).toHaveCount(0);
   await expect(page.getByTestId("haircut-picker")).toContainText("WYGLĄD POSTACI");
   await page.getByRole("button", { name: /OTWÓRZ SZAFĘ/ }).click();

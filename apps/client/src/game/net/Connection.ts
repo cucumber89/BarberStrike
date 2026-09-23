@@ -35,6 +35,8 @@ export interface NetState {
   /** Living arena (2.4): the tactical plan in force this round, 0 = none. */
   planId: number;
   mapId: string; roomName: string;
+  /** Drop T: the tournament bracket, written by the server as one string; "" in every other mode. */
+  bracket: string;
   mode: GameMode; winnerId: string; winnerName: string;
   flags: ArraySchema<NetFlag>;
   bomb: BombData;

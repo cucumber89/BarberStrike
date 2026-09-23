@@ -13,6 +13,7 @@ export * from "./util";
 export * from "./grenades";
 export * from "./economy";
 export * from "./perks";
+export * from "./tournament";
 export * from "./dom";
 export * from "./cs";
 export * from "./modes";

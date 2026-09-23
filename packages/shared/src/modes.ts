@@ -50,9 +50,13 @@ export const MODES: Record<GameMode, ModeDef> = {
     objective: "Przetrwaj rundę nieostrzyżony albo, jako ostrzyżony, ogol wszystkich maszynką: po 5 rundach wygrywa najwięcej punktów." },
   duel: { id: "duel", name: "1 v 1", short: "DUEL", blurb: "Dwóch graczy · zasady jak w CS: 15 s zamrożenia na zakupy (plus 5 s po starcie) · kasa i broń zostają, jeśli przeżyjesz · zmiana stron co 3 rundy · pierwszy do 6", teams: true, scoreLimit: 6, shop: "all", winner: "team",
     objective: "Jedno życie na rundę, 60 sekund: wygrywa, kto pierwszy weźmie 6 rund." },
+  // The numbers are written out rather than read from DUEL / TOURNAMENT below, because this table
+  // is defined before them; `modes.test.ts` asserts the two agree, so they cannot drift quietly.
+  turniej: { id: "turniej", name: "TURNIEJ 1 v 1", short: "TURNIEJ", blurb: "Drabinka na 4 albo 8 graczy · pary grają po kolei na zasadach 1 v 1 (pierwszy do 6 rund) · przegrani zostają i oglądają · wygrywa finał", teams: true, scoreLimit: 6, shop: "all", winner: "player",
+    objective: "Drabinka pojedynków: wygraj swoją parę (pierwszy do 6 rund), żeby wejść wyżej — wygrywa ten, kto weźmie finał." },
 };
 
-export const MODE_ORDER: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni", "duel"];
+export const MODE_ORDER: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni", "duel", "turniej"];
 
 
 // ---------------------------------------------------------------- how many people fit
@@ -107,6 +111,9 @@ export const isOpenMode = (mode: GameMode): boolean => OPEN_MODES.has(mode);
  */
 export function modeCapacity(mode: GameMode, open: number = OPEN_MAX_PLAYERS): number {
   if (mode === "duel") return DUEL.players;
+  // A tournament is one room holding the whole draw: everybody who is entered is in it from the
+  // first pair to the final, whether they are playing that pair or watching it.
+  if (mode === "turniej") return TOURNAMENT.maxSize;
   return isOpenMode(mode) ? Math.max(2, Math.min(OPEN_PLAYER_CAP_MAX, Math.round(open))) : MAX_PLAYERS;
 }
 
@@ -276,6 +283,19 @@ export function pickFirstShaved<T extends { connected: boolean }>(players: reado
  * choice each round is the loadout and never the wallet (L1: nothing is gated). Sides swap every
  * `halfRounds` so a map that is not perfectly symmetric still gives both players both starts.
  */
+/**
+ * The tournament's own numbers. Everything else about a pair's match — the freeze, the buy window,
+ * the economy, the half swap, first to `DUEL.wins` — is the duel's, because a pair IS a duel.
+ */
+export const TOURNAMENT = {
+  sizes: [4, 8] as const,
+  maxSize: 8,
+  /** The bracket card between two pairs: long enough to read who is up next, short enough to sit through. */
+  breakMs: 9000,
+  /** A tournament that nobody has entered waits this long for the room to fill before it draws. */
+  fillMs: 45000,
+} as const;
+
 export const DUEL = {
   players: 2,
   /**

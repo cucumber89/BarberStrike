@@ -925,3 +925,23 @@ td.sb-shaved.none { opacity: 0.4; }
 .result-goal-text b { color: var(--brass); font-weight: normal; font-family: var(--font-mono); }
 .result-goal-bar { height: 4px; background: rgba(255,255,255,.1); }
 .result-goal-bar i { display: block; height: 100%; width: 100%; background: var(--brass); transform-origin: left; transform: scaleX(var(--v, 0)); }
+
+/* ---------------------------------------------------------------- the tournament bracket (drop T)
+   A column per round, read left to right. The pair being played is the only thing that moves. */
+.bracket-card { position: absolute; left: 50%; top: 96px; transform: translateX(-50%); z-index: 12; display: grid; gap: 10px; justify-items: center; padding: 16px 20px 18px; background: rgba(6, 15, 20, .93); border: 1px solid var(--line); border-top: 2px solid var(--brass); box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.bracket-card h3 { margin: 0; font: 20px var(--font-display); letter-spacing: .22em; color: var(--brass); }
+.bracket { display: flex; align-items: center; gap: 22px; }
+.bracket-round { display: grid; gap: 10px; align-content: center; }
+.bracket-round h4 { margin: 0 0 2px; font: 10px var(--font-mono); letter-spacing: .18em; color: var(--tx-3); text-align: center; }
+.bracket-pair { display: grid; gap: 2px; min-width: 132px; padding: 5px 7px; background: rgba(13, 28, 35, .8); border: 1px solid var(--line); border-left: 3px solid var(--line); }
+.bracket-pair span { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--tx-2); }
+.bracket-pair b { font-family: var(--font-display); font-size: 14px; font-weight: normal; letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bracket-pair i { font-family: var(--font-mono); font-style: normal; font-size: 12px; color: var(--tx-3); }
+.bracket-pair span.won b, .bracket-pair span.won i { color: var(--brass); }
+.bracket-pair span.lost b, .bracket-pair span.lost i { color: var(--tx-3); opacity: .6; }
+.bracket-pair.done { border-left-color: rgba(231, 182, 46, .5); }
+.bracket-pair.now { border-left-color: var(--red); animation: pulse 1400ms ease-in-out infinite; }
+/* While a pair is on: one line in the corner, out of the way of everything that matters. */
+.bracket-strip { position: absolute; left: 50%; top: 74px; transform: translateX(-50%); z-index: 6; padding: 3px 11px; background: rgba(6, 15, 20, .72); border: 1px solid var(--line); font: 11px var(--font-mono); letter-spacing: .16em; color: var(--tx-2); white-space: nowrap; }
+.bracket.compact .bracket-pair { min-width: 104px; }
+@media (prefers-reduced-motion: reduce) { .bracket-pair.now { animation: none; } }
