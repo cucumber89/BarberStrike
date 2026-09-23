@@ -507,8 +507,19 @@ button { font-family: inherit; }
 .perk-time { margin-left: auto; font-family: var(--font-mono); color: var(--brass); }
 .perk-bar { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--brass); transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform 250ms linear; }
 .perk-flask .perk-bar { background: #d9a441; } .perk-roids .perk-bar { background: #7dff9a; } .perk-energy .perk-bar { background: #8fd3ff; } .perk-fade .perk-bar { background: var(--purple); }
+/* What the perk is doing right now, next to its name: the steroids' healing rate, or the gate
+   they are waiting on. Small and dim — the countdown on the right is still the headline. */
+.perk-note { font-size: 10px; color: var(--tx-3); letter-spacing: 0.1em; }
+.perk-roids .perk-note { color: #7dff9a; }
+.perk.held .perk-note { color: var(--tx-3); }
+/* The last five seconds. The bar alone shrank towards nothing and said nothing about it. */
+.perk.ending { border-color: var(--red); animation: pulse 900ms ease-in-out infinite; }
+.perk.ending .perk-time { color: var(--red); }
 .crosshair.armor span { background: #8fd3ff; }
-.flask-haze { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 140px 40px rgba(217,164,65,.22); backdrop-filter: blur(0px); }
+/* `--v` thins the haze over the perk's last four seconds (Hud.tsx), so the resistance wearing off
+   is visible rather than instant. It never reaches zero while the perk is up: the floor is the
+   difference between "nearly gone" and "gone". */
+.flask-haze { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 140px 40px rgba(217,164,65,.22); backdrop-filter: blur(0px); opacity: var(--v, 1); transition: opacity 250ms linear; }
 /* `contain: paint` + its own layer keeps the full-viewport gradient below from being re-rasterised
    with every HUD re-render (the HUD re-renders each frame: fps, timer, breath).
    NOT measured as a win here: SwiftShader is CPU-bound at 2-5 fps, and hiding this overlay entirely

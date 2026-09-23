@@ -49,6 +49,13 @@ export interface GameEventMap {
   grenadeCancel: Record<string, never>;
   /** Server: a grenade was thrown by anyone (start the visual flight). */
   throw: ThrowEvent;
+  /**
+   * Client-local: a grenade in flight knocked off a surface. Emitted by the view, which owns the
+   * re-simulation, and not by the server — bounces are deterministic, so every client finds the
+   * same ones without a packet for each. The view already swallows knocks closer together than
+   * 120 ms on one grenade; the audio module caps how many it will voice on one frame.
+   */
+  grenadeBounce: { kind: GrenadeId; x: number; y: number; z: number; speed: number };
   /** Server: a grenade detonated / stuck / began its area effect. */
   boom: BoomEvent;
   /** Server: we are flashed. */

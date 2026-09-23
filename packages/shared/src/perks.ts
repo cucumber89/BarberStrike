@@ -21,11 +21,16 @@ export interface PerkDef {
   glyph: string;
 }
 
+/**
+ * The blurbs are in Polish because the shop, the HUD and the menus are: these six (with the two
+ * plates below) were the last English sentences a player could meet in the game, sitting in the
+ * tooltip of the perk row they had just paid for. Their numbers are the ones in `PERK_EFFECT`.
+ */
 export const PERKS: Record<PerkId, PerkDef> = {
-  flask: { id: "flask", name: "Flaszka", price: 500, durationMs: 25_000, blurb: "A pull of vodka: 20 % less damage taken for 25 s, slightly blurry edges.", glyph: "🍾" },
-  roids: { id: "roids", name: "Sterydy", price: 400, durationMs: 30_000, blurb: "A jab of juice: health regenerates 6/s after 2 s without damage, for 30 s.", glyph: "💉" },
-  energy: { id: "energy", name: "Energetyk", price: 400, durationMs: 25_000, blurb: "Sugar and taurine: 15 % faster sprint, 8 % faster walk, for 25 s.", glyph: "⚡" },
-  fade: { id: "fade", name: "Świeży fade", price: 300, durationMs: 0, blurb: "Fresh cut, fresh confidence: next respawn 1 s faster with a 3 s shield.", glyph: "✂" },
+  flask: { id: "flask", name: "Flaszka", price: 500, durationMs: 25_000, blurb: "Łyk wódki: 20 % mniej obrażeń przez 25 s i lekko rozmyte krawędzie ekranu.", glyph: "🍾" },
+  roids: { id: "roids", name: "Sterydy", price: 400, durationMs: 30_000, blurb: "Zastrzyk mocy: zdrowie wraca po 6 HP/s, ale dopiero 2 s po ostatnim trafieniu. Działa 30 s.", glyph: "💉" },
+  energy: { id: "energy", name: "Energetyk", price: 400, durationMs: 25_000, blurb: "Cukier i tauryna: sprint szybszy o 15 %, chód o 8 %. Przez 25 s.", glyph: "⚡" },
+  fade: { id: "fade", name: "Świeży fade", price: 300, durationMs: 0, blurb: "Świeży fejd, świeża pewność: następne odrodzenie 1 s szybciej i 3 s osłony zamiast 1,5 s.", glyph: "✂" },
 };
 
 export const PERK_ORDER: PerkId[] = ["flask", "roids", "energy", "fade"];
@@ -44,11 +49,32 @@ export const PERK_EFFECT = {
 /** "Until" value of an armed one-shot perk (fade): far enough to read as active until consumed. */
 export const PERK_ARMED_MS = 1e9;
 
+/**
+ * How far past a perk's own duration its deadline may sit and still be read as a countdown.
+ *
+ * Two clocks decide this. The perk's end is stamped on the SERVER; the HUD and the shop subtract
+ * the client's own estimate of that clock, so a flask bought a millisecond ago can come back as
+ * 25_020 ms left against a 25_000 ms perk. Without slack the row would flip to the "armed
+ * open-endedly" wording for the first instants of every perk anybody buys.
+ */
+export const PERK_CLOCK_SLACK_MS = 1500;
+
+/**
+ * Does this perk show a countdown, or is it armed open-endedly?
+ *
+ * Armed covers two cases and both read the same way to a player: a perk with no duration at all
+ * (the fade, spent at the next respawn) and a perk handed out for a whole round rather than for
+ * its own life (the Ostrzyżony's speed, written as `PERK_ARMED_MS`). Shown as a countdown, the
+ * second one reads "999985s" and pins the bar full for the entire match.
+ */
+export const perkTimed = (id: PerkId, until: number, now: number): boolean =>
+  PERKS[id].durationMs > 0 && until - now <= PERKS[id].durationMs + PERK_CLOCK_SLACK_MS;
+
 export interface ArmorDef { id: ArmorId; name: string; price: number; armor: number; blurb: string }
 
 export const ARMOR: Record<ArmorId, ArmorDef> = {
-  light: { id: "light", name: "Lekka płyta", price: 650, armor: 50, blurb: "Absorbs half of every hit until 50 points are gone. Lost on death." },
-  heavy: { id: "heavy", name: "Ciężka płyta", price: 1000, armor: 100, blurb: "Absorbs half of every hit until 100 points are gone. Lost on death." },
+  light: { id: "light", name: "Lekka płyta", price: 650, armor: 50, blurb: "Bierze na siebie połowę każdego trafienia, póki nie zużyje swoich 50 punktów. Przepada po śmierci." },
+  heavy: { id: "heavy", name: "Ciężka płyta", price: 1000, armor: 100, blurb: "Bierze na siebie połowę każdego trafienia, póki nie zużyje swoich 100 punktów. Przepada po śmierci." },
 };
 export const ARMOR_ORDER: ArmorId[] = ["light", "heavy"];
 export const isArmorId = (v: unknown): v is ArmorId => typeof v === "string" && v in ARMOR;

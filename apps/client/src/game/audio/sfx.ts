@@ -620,27 +620,39 @@ export function explosion(distance: number): SoundFn {
   };
 }
 
-/** Flashbang: a hard crack, then a ringing sine that fades with the blindness. `strength` 0..1 (0 = heard from afar). */
-export function flashBang(strength: number): SoundFn {
+/**
+ * Flashbang: a hard crack, then a ringing sine that fades with the blindness. `strength` 0..1
+ * (0 = heard from afar).
+ *
+ * `crack` is what tells the two ways of hearing one grenade apart. Everybody in earshot gets the
+ * crack, positioned where the grenade went off (the `boom` event). The person it CAUGHT also gets
+ * a `flashed` event — and playing the whole sound again for them fired two blasts from one
+ * grenade, a few milliseconds apart, the second one centred on their head. The victim now gets the
+ * ringing alone, which is the part their own ears are supposed to add to the crack they already
+ * heard.
+ */
+export function flashBang(strength: number, crack = true): SoundFn {
   return (g) => {
     const t = g.t;
-    const sat = saturator(g);
-    const m = gain(g, 0.9);
-    sat.connect(m); m.connect(g.out);
-    send(g, m, 0.5);
-    const cG = gain(g, 0);
-    const cF = filter(g, "highpass", 900, 0.8);
-    noise(g, "white", 0.12).connect(cF);
-    cF.connect(cG); cG.connect(sat);
-    env(cG.gain, t, 1.1, 0.001, 0.09);
-    thud(g, t, 150, 0.6, 0.06);
+    if (crack) {
+      const sat = saturator(g);
+      const m = gain(g, 0.9);
+      sat.connect(m); m.connect(g.out);
+      send(g, m, 0.5);
+      const cG = gain(g, 0);
+      const cF = filter(g, "highpass", 900, 0.8);
+      noise(g, "white", 0.12).connect(cF);
+      cF.connect(cG); cG.connect(sat);
+      env(cG.gain, t, 1.1, 0.001, 0.09);
+      thud(g, t, 150, 0.6, 0.06);
+    }
     if (strength > 0.05) {
       const ring = osc(g, "sine", 3400, 0.4 + strength * 2.4);
       const rG = gain(g, 0);
       ring.connect(rG); rG.connect(g.out);
-      env(rG.gain, t + 0.02, 0.16 * strength, 0.01, 0.4 + strength * 2.2, 0.1);
+      env(rG.gain, t + 0.02, 0.16 * strength * (crack ? 1 : 1.35), 0.01, 0.4 + strength * 2.2, 0.1);
     }
-    return 0.6 + strength * 2.5;
+    return (crack ? 0.6 : 0.1) + strength * 2.5;
   };
 }
 

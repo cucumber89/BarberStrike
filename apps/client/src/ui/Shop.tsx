@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { MatchPhase,
   ARMOR, BOYS, BOYS_CLASSES, ECONOMY, GRENADES, PERKS, PERK_ORDER, WEAPONS, WEAPON_PRICES,
-  boysClass, buyShortfall, canBuy, canSell, perkActive, primaryOf, secondaryOf,
+  boysClass, buyShortfall, canBuy, canSell, perkActive, perkTimed, primaryOf, secondaryOf,
   DUEL, CS_KILL_REWARD, CS_KILL_REWARD_DEFAULT,
   isArmorId, isGrenadeId, isPerkId, isWeaponId,
   type ArmorId, type GrenadeId, type PerkId, type ShopItemId, type Wallet, type WeaponId,
@@ -266,7 +266,13 @@ export function Shop({ h, api, now }: Props) {
       });
     }
     const p = PERKS[id as PerkId]; const active = perkActive(wallet.perks, id as PerkId, h.serverNow); const v = verdict(id);
-    const leftS = active && p.durationMs > 0 ? Math.ceil((wallet.perks[id as PerkId] - h.serverNow) / 1000) : null;
+    // `perkTimed`, not `durationMs > 0`: a perk armed for the whole round (the Ostrzyżony's speed)
+    // otherwise printed "działa jeszcze 999985 s", and — the other way round — a flask bought this
+    // instant can measure a few ms OVER its own duration against the client's estimate of the
+    // server clock, which without the slack in that rule would read "uzbrojone" on a perk that is
+    // plainly counting down.
+    const leftS = active && perkTimed(id as PerkId, wallet.perks[id as PerkId], h.serverNow)
+      ? Math.max(1, Math.ceil((wallet.perks[id as PerkId] - h.serverNow) / 1000)) : null;
     return row(id, i + 1, p.name, {
       carried: active, v, price: p.price,
       sub: active ? { text: leftS !== null ? `działa jeszcze ${leftS} s` : "uzbrojone", tone: "tag" } : null,

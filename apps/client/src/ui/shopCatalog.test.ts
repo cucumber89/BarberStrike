@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOYS_CLASSES, MODES, PRIMARY_ORDER, boysAllows, type GameMode } from "@frankibarber/shared";
+import { BOYS_CLASSES, GRENADES, MODES, PERK_EFFECT, PERK_ORDER, PRIMARY_ORDER, boysAllows, type GameMode } from "@frankibarber/shared";
 import { CAT_INFO, ITEM_ROLE, MAX_PER_CAT, SHOP_CATS, catForCode, itemName, itemStats, keyForPos, posForCode, shopCatalog } from "./shopCatalog";
 
 describe("shop catalogue", () => {
@@ -58,6 +58,36 @@ describe("shop catalogue", () => {
     }
     expect(shopCatalog({ mode: "tdm" })[3]).toContain("launcher");
     expect(shopCatalog({ mode: "tdm" })[4]).toContain("flask");
+  });
+
+  it("the launcher card quotes its blast, and no range it does not have", () => {
+    // `WEAPONS.launcher.damage` is 0 — the damage is the SHELL's — so the most expensive gun in
+    // the shop used to advertise no damage at all, under a "Zasięg 40 m" that means nothing for a
+    // projectile: it flies until it hits something. Both were read straight off the weapon table.
+    const rows = itemStats("launcher");
+    const blast = rows.find((r) => r.label === "Wybuch");
+    expect(blast, "the launcher says what its shell does").toBeTruthy();
+    expect(blast!.value).toContain(String(GRENADES.shell.damage));
+    expect(blast!.value).toContain("4,5 m");
+    expect(rows.map((r) => r.label), "no hitscan range on a grenade").not.toContain("Zasięg");
+    // The rows every gun shares are still there: this is one card's numbers, not a different card.
+    expect(rows.map((r) => r.label)).toEqual(expect.arrayContaining(["Ogień", "Przeładowanie"]));
+    // And a gun that DOES have a range keeps it.
+    expect(itemStats("rifle").map((r) => r.label)).toContain("Zasięg");
+  });
+
+  it("a perk card says what the perk does, in the server's own numbers", () => {
+    // It used to say "Czas: 25 s" and nothing else — how long, never for what.
+    const val = (id: "flask" | "roids" | "energy" | "fade", label: string) =>
+      itemStats(id).find((r) => r.label === label)?.value;
+    expect(val("flask", "Obrażenia")).toBe(`−${Math.round(PERK_EFFECT.flaskResist * 100)} %`);
+    expect(val("roids", "Regeneracja")).toBe(`${PERK_EFFECT.roidsRegenPerSec} HP/s`);
+    expect(val("roids", "Rusza po"), "the two-second gate, which nothing used to mention").toBe("2 s bez trafienia");
+    expect(val("energy", "Sprint")).toBe("+15 %");
+    expect(val("fade", "Osłona")).toBe("3 s");
+    // The fade has no duration of its own, so its last row is what triggers it, not a countdown.
+    expect(itemStats("fade").at(-1)!.label).toBe("Działa");
+    for (const id of PERK_ORDER) expect(itemStats(id).length, id).toBeGreaterThan(1);
   });
 
   it("every item on sale has a role line, a name and at least one stat", () => {

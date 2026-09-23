@@ -1,5 +1,5 @@
 import {
-  ARMOR, ARMOR_ORDER, GRENADES, GRENADE_ORDER, PERKS, PERK_ORDER, PRIMARY_ORDER, SECONDARY_ORDER, WEAPONS,
+  ARMOR, ARMOR_ORDER, GRENADES, GRENADE_ORDER, PERKS, PERK_EFFECT, PERK_ORDER, PRIMARY_ORDER, SECONDARY_ORDER, WEAPONS,
   boysAllows, isArmorId, isGrenadeId, isPerkId, isWeaponId, modeAllowsItem,
   type ArmorId, type GameMode, type GrenadeId, type PerkId, type ShopItemId, type WeaponId,
 } from "@frankibarber/shared";
@@ -120,32 +120,70 @@ export const ITEM_ROLE: Record<ShopItemId, string> = {
 
 export interface ItemStat { label: string; value: string }
 
+/** A number the way Polish writes it: 4,5 — and 3 rather than 3,0. */
+const pl = (n: number): string => (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, "").replace(".", ",");
+
+/**
+ * What each perk actually DOES, in numbers, read off `PERK_EFFECT` rather than typed out.
+ *
+ * The card used to show one row — "Czas: 25 s" — for every perk, so the shop answered "how long"
+ * without ever answering "for what". These are the same constants the server applies, which is
+ * the point: a balance change moves the price tag's promise with it instead of leaving the shop
+ * quoting last month's numbers.
+ */
+const PERK_STATS: Record<PerkId, ItemStat[]> = {
+  flask: [{ label: "Obrażenia", value: `−${Math.round(PERK_EFFECT.flaskResist * 100)} %` }],
+  roids: [
+    { label: "Regeneracja", value: `${PERK_EFFECT.roidsRegenPerSec} HP/s` },
+    { label: "Rusza po", value: `${pl(PERK_EFFECT.roidsDelayMs / 1000)} s bez trafienia` },
+  ],
+  energy: [
+    { label: "Sprint", value: `+${Math.round((PERK_EFFECT.energySprint - 1) * 100)} %` },
+    { label: "Chód", value: `+${Math.round((PERK_EFFECT.energyWalk - 1) * 100)} %` },
+  ],
+  fade: [
+    { label: "Odrodzenie", value: `−${pl(PERK_EFFECT.fadeRespawnMs / 1000)} s` },
+    { label: "Osłona", value: `${pl(PERK_EFFECT.fadeShieldMs / 1000)} s` },
+  ],
+};
+
 /** The numbers behind the role line, for the detail panel (hover / focus / keyboard). */
 export function itemStats(id: ShopItemId): ItemStat[] {
   if (isWeaponId(id)) {
     const w = WEAPONS[id as WeaponId];
+    const launcher = w.kind === "launcher";
     const out: ItemStat[] = [];
-    if (w.kind === "launcher") out.push({ label: "Wybuch", value: `${GRENADES.shell.radius} m` });
+    // The launcher's damage is its SHELL's, and it is not a number the weapon table holds: `w.damage`
+    // is 0 for it, so the most expensive gun in the shop advertised no damage at all. `w.range` is
+    // a hitscan figure and equally meaningless for a grenade that flies until it hits something —
+    // the card promised "Zasięg 40 m" for a weapon with no such limit, so that row is skipped here
+    // and only here. Everything else (rate of fire, reload) is the same question for every gun.
+    if (launcher) out.push({ label: "Wybuch", value: `${GRENADES.shell.damage} obr. · ${pl(GRENADES.shell.radius)} m` });
     else out.push({ label: "Obrażenia", value: w.pellets > 1 ? `${w.pellets} × ${w.damage}` : `${w.damage}` });
     out.push({ label: "Ogień", value: `${w.rpm}/min` });
     out.push({ label: "Tryb", value: w.automatic ? "seria" : "pojedynczy" });
     if (w.magazine > 0) out.push({ label: "Magazynek", value: `${w.magazine} + ${w.reserve}` });
-    out.push({ label: "Zasięg", value: `${w.range} m` });
-    out.push({ label: "Przeładowanie", value: `${(w.reloadMs / 1000).toFixed(1)} s` });
+    if (!launcher) out.push({ label: "Zasięg", value: `${w.range} m` });
+    out.push({ label: "Przeładowanie", value: `${pl(w.reloadMs / 1000)} s` });
     return out;
   }
   if (isGrenadeId(id)) {
     const g = GRENADES[id as GrenadeId];
     const out: ItemStat[] = [];
     if (g.damage > 0) out.push({ label: "Obrażenia", value: `${g.damage}` });
-    out.push({ label: "Promień", value: `${g.radius} m` });
-    if (g.fuseMs > 0) out.push({ label: "Zapalnik", value: `${(g.fuseMs / 1000).toFixed(1)} s` });
+    if (g.directDamage > 0) out.push({ label: "Trafienie wprost", value: `${g.directDamage}` });
+    if (g.radius > 0) out.push({ label: "Promień", value: `${pl(g.radius)} m` });
+    if (g.effectMs > 0) out.push({ label: "Trwa", value: `${pl(g.effectMs / 1000)} s` });
+    out.push({ label: "Zapalnik", value: g.fuseMs > 0 ? `${pl(g.fuseMs / 1000)} s` : "przy uderzeniu" });
     out.push({ label: "Slot", value: g.slot === "lethal" ? "bojowy (G)" : "taktyczny (4)" });
     return out;
   }
   if (isPerkId(id)) {
     const p = PERKS[id as PerkId];
-    return p.durationMs > 0 ? [{ label: "Czas", value: `${Math.round(p.durationMs / 1000)} s` }] : [{ label: "Działa", value: "przy następnym odrodzeniu" }];
+    return [
+      ...PERK_STATS[id as PerkId],
+      p.durationMs > 0 ? { label: "Czas", value: `${Math.round(p.durationMs / 1000)} s` } : { label: "Działa", value: "przy następnym odrodzeniu" },
+    ];
   }
   if (isArmorId(id)) return [{ label: "Płyta", value: `${ARMOR[id as ArmorId].armor} pkt` }, { label: "Trwa", value: "do śmierci" }];
   return [];

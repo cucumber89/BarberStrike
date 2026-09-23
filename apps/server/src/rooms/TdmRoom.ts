@@ -958,7 +958,16 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     return best;
   }
 
-  private applyDamage(attacker: PlayerState, victimId: string, amount: number, headshot: boolean, attackerClient: Client | undefined, weapon: WeaponId | GrenadeId = attacker.weapon as WeaponId, backstab = false): void {
+  /**
+   * `src` is where the damage CAME FROM, when that is not the attacker: the blast's origin, the
+   * fire's centre. The victim's damage wedge is drawn from it.
+   *
+   * It is a named argument rather than a seventh positional one because the two call sites that
+   * need it (a detonation, a burning pool) do not want to restate `weapon` and `backstab`, and
+   * passing an array into `backstab` by mistake would report a grenade as a backstab in the kill
+   * feed.
+   */
+  private applyDamage(attacker: PlayerState, victimId: string, amount: number, headshot: boolean, attackerClient: Client | undefined, weapon: WeaponId | GrenadeId = attacker.weapon as WeaponId, backstab = false, src?: { x: number; z: number }): void {
     const v = this.state.players.get(victimId);
     const vs = this.sessions.get(victimId);
     if (!v || !vs || !v.alive || amount <= 0) return;
@@ -979,7 +988,11 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     (attackerClient ?? this.clientOf(attacker.id))?.send(S2C.Hit, { victim: victimId, damage: credited, kill, headshot, armor: split.absorbed > 0 } satisfies HitEvent);
     const victimClient = this.clients.find((c) => c.sessionId === victimId);
     if (victimClient) {
-      let ddx = attacker.x - v.x, ddz = attacker.z - v.z;
+      // The wedge points at what hit you. For a bullet that is the shooter; for a grenade it is the
+      // BLAST — the thrower may be two rooms away behind you, and an arrow over your shoulder while
+      // the fire is at your feet is worse than no arrow at all.
+      const from = src ?? attacker;
+      let ddx = from.x - v.x, ddz = from.z - v.z;
       const dl = Math.hypot(ddx, ddz) || 1;
       ddx /= dl; ddz /= dl;
       victimClient.send(S2C.Damaged, { from: attacker.id, amount: credited, dx: ddx, dz: ddz, health: v.health, armor: v.armor, broke: split.broke } satisfies DamagedEvent);
@@ -2196,8 +2209,14 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         const victim = this.sweepPlayers(pr.owner, px, py, pz, pr.x, pr.y, pr.z);
         if (victim) { pr.nx = 0; pr.ny = 1; pr.nz = 0; this.detonate(pr, now); this.projectiles.splice(i, 1); continue; }
       }
-      if (def.directDamage > 0 && !pr.stuck) {
+      if (def.directDamage > 0) {
         // Thrown knife: sweep the segment travelled this tick against player boxes.
+        //
+        // NOT `&& !pr.stuck`. `stepProjectile` sets `stuck` inside its contact handler, on the same
+        // step that carries the knife into the wall — and a player standing against that wall is on
+        // that step too. The guard therefore skipped the sweep on exactly the tick the knife
+        // arrived, so a knife thrown at somebody with their back to a wall passed through them and
+        // stuck in the plaster. At 28 m/s a tick is 0.47 m, which is the width of the dead zone.
         const victim = this.sweepPlayers(pr.owner, px, py, pz, pr.x, pr.y, pr.z);
         if (victim) {
           const owner = this.state.players.get(pr.owner);
@@ -2246,6 +2265,18 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
 
   private detonate(pr: Projectile, now: number): void {
     const def = GRENADES[pr.kind];
+    // A MOLOTOV BURNS ON THE GROUND, wherever it broke. It detonates on contact with anything —
+    // including a body (`impactOnPlayer`) and a wall — and the pool was then left at the point of
+    // impact: a bottle that hit somebody in the chest burned in mid-air at 1.5 m, and the burn band
+    // is only `f.y - 1.0 .. f.y + 1.6`, so a player standing on the floor under it took nothing.
+    // MEASURED: thrown flat from the 1.62 m eye at 15 m/s, the bottle is still at 1.50 m two metres
+    // out, i.e. a direct hit at close range did no damage at all. Drop the impact point onto the
+    // floor under it before anything reads it — the same value goes to the client's fireball, the
+    // scorch mark and the server's burning area, so the fire a player sees is the fire that burns.
+    if (pr.kind === "molotov") {
+      this.world.raycast(pr.x, pr.y, pr.z, 0, -1, 0, 3, worldHit);
+      if (worldHit.hit) pr.y = worldHit.y;
+    }
     // Lift the origin a little off the surface so ground LOS checks do not start inside the floor.
     const ox = pr.x + pr.nx * 0.12, oy = pr.y + pr.ny * 0.12, oz = pr.z + pr.nz * 0.12;
     this.broadcast(S2C.Boom, { id: pr.id, kind: pr.kind, x: pr.x, y: pr.y, z: pr.z, nx: pr.nx, ny: pr.ny, nz: pr.nz, effectMs: def.effectMs } satisfies BoomEvent);
@@ -2262,7 +2293,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         const chestY = qs.body.y + 0.9;
         const blocked = this.losBlocked(ox, oy, oz, qs.body.x, chestY, qs.body.z) && this.losBlocked(ox, oy, oz, qs.body.x, qs.body.y + 0.2, qs.body.z);
         const dmg = explosionDamage(def, dist, blocked);
-        if (dmg > 0) this.applyDamage(owner, id, dmg, false, undefined, pr.kind === "shell" ? "launcher" : pr.kind);
+        if (dmg > 0) this.applyDamage(owner, id, dmg, false, undefined, pr.kind === "shell" ? "launcher" : pr.kind, false, { x: ox, z: oz });
       }
     }
     if (pr.kind === "flash") {
@@ -2277,7 +2308,11 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         if (dist >= def.radius) continue;
         const fx = Math.sin(qs.lastYaw) * Math.cos(qs.lastPitch), fy = -Math.sin(qs.lastPitch), fz = Math.cos(qs.lastYaw) * Math.cos(qs.lastPitch);
         const cos = (dx * fx + dy * fy + dz * fz) / (dist || 1);
-        const strength = flashStrength(def, dist, cos, this.losBlocked(ox, oy, oz, qs.body.x, ey, qs.body.z));
+        // A smoke cloud between you and the flash saves you, as it does in CS. The HE blast above
+        // deliberately still goes through smoke — smoke stops light, not shrapnel.
+        const hidden = this.losBlocked(ox, oy, oz, qs.body.x, ey, qs.body.z)
+          || smokeBlocks(this.smokes, now, ox, oy, oz, qs.body.x, ey, qs.body.z);
+        const strength = flashStrength(def, dist, cos, hidden);
         if (strength > 0.05) {
           qs.blindedUntil = Math.max(qs.blindedUntil, now + flashMs(strength));
           c?.send(S2C.Flashed, { strength, ms: flashMs(strength) } satisfies FlashedEvent);
@@ -2309,7 +2344,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
         if (Math.hypot(b.x - f.x, b.z - f.z) > f.radius || b.y > f.y + 1.6 || b.y < f.y - 1.0) continue;
         if (this.losBlocked(f.x, f.y + 0.15, f.z, b.x, b.y + 0.5, b.z)) continue;
         qs.burnAcc += FIRE_DPS * (TICK_MS / 1000);
-        if (qs.burnAcc >= 5) { const d = Math.floor(qs.burnAcc); qs.burnAcc -= d; this.applyDamage(owner, id, d, false, undefined, "molotov"); }
+        if (qs.burnAcc >= 5) { const d = Math.floor(qs.burnAcc); qs.burnAcc -= d; this.applyDamage(owner, id, d, false, undefined, "molotov", false, { x: f.x, z: f.z }); }
       }
     }
   }

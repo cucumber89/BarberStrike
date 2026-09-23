@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { HEADSHOT_MULTIPLIER, PLAYER } from "./constants";
 import { ARMOR, ARMOR_ABSORB } from "./perks";
 import { PRIMARY_ORDER, SECONDARY_ORDER, WEAPONS, damageAtDistance, fireIntervalMs, type WeaponDef } from "./weapons";
+import { GRENADES, GRENADE_ORDER, type GrenadeId } from "./grenades";
 
 /**
  * Weapon balance, as arithmetic rather than opinion.
@@ -52,6 +53,24 @@ describe("weapon balance", () => {
       });
     console.log("\n" + rows.join("\n"));
     expect(rows.length).toBeGreaterThan(8);
+  });
+
+  /**
+   * The same rule, for the things that explode. It used to apply to bullets only, and the launcher
+   * was skipped in the loop below because its damage is not in `WeaponDef` — which is how the
+   * shell sat on 95 against 100 health for as long as it did: the exact sliver the test bans.
+   */
+  it("leaves nobody alive on a sliver after a perfect explosive hit either", () => {
+    for (const id of GRENADE_ORDER.concat(["shell"] as GrenadeId[])) {
+      const g = GRENADES[id];
+      if (g.damage <= 0) continue; // molotov and the tacticals kill by other means
+      expect(`${g.id} centre ${g.damage}`,
+        `${g.id}: a direct hit does ${g.damage} against ${HP} health — a sliver`)
+        .toBe(g.damage >= SLIVER_LO && g.damage < HP ? "" : `${g.id} centre ${g.damage}`);
+    }
+    // ...and the knife, whose whole damage is the direct hit, is deliberately NOT a one-shot: it is
+    // 200 credits and it is thrown, so it asks for a follow-up.
+    expect(GRENADES.knife.directDamage).toBeLessThan(HP);
   });
 
   it("leaves nobody alive on a sliver after a perfect hit", () => {

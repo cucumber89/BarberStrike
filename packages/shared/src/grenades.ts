@@ -46,8 +46,18 @@ export const GRENADES: Record<GrenadeId, GrenadeDef> = {
   knife: { id: "knife", name: "Nóż", slot: "lethal", price: 200, fuseMs: 0, cookable: false, throwSpeed: 28, gravity: 6, restitution: 0, friction: 1, radius: 0, damage: 0, minDamage: 0, effectMs: 0, sticks: true, directDamage: 70, impactOnPlayer: false, shop: true },
   flash: { id: "flash", name: "Flash", slot: "tactical", price: 200, fuseMs: 1700, cookable: false, throwSpeed: 17, gravity: 13, restitution: 0.4, friction: 0.5, radius: 14, damage: 0, minDamage: 0, effectMs: 0, sticks: false, directDamage: 0, impactOnPlayer: false, shop: true },
   smoke: { id: "smoke", name: "Smoke", slot: "tactical", price: 300, fuseMs: 1500, cookable: false, throwSpeed: 16, gravity: 13, restitution: 0.25, friction: 0.6, radius: 3.5, damage: 0, minDamage: 0, effectMs: 12000, sticks: false, directDamage: 0, impactOnPlayer: false, shop: true },
-  // Launcher round: fast, flat, goes off on anything it touches. Blast is smaller than a frag's.
-  shell: { id: "shell", name: "GL-1 Blowout", slot: "lethal", price: 0, fuseMs: 0, cookable: false, throwSpeed: 26, gravity: 9, restitution: 0, friction: 1, radius: 4.5, damage: 95, minDamage: 20, effectMs: 0, sticks: false, directDamage: 0, impactOnPlayer: true, shop: false },
+  /**
+   * Launcher round: fast, flat, goes off on anything it touches. Blast is smaller than a frag's.
+   *
+   * 110 at the centre, not 95. `balance.test.ts` has a rule for exactly this number — "anything in
+   * [95, 100) is an accident: perfect play, victim survives, shooter punished" — and the launcher
+   * was the one weapon the rule skipped, because its damage lives here rather than in `WeaponDef`.
+   * So the most expensive gun in the shop, with one round in the tube and a 2.6 s reload, landed a
+   * perfect direct hit and left a full-health player standing on 5 HP. A direct hit from a rocket
+   * kills; the falloff (to `minDamage` at 4.5 m) and the plates are what everyone else gets: a
+   * heavy plate still survives it on 45 HP, and at 2 m the blast does 70.
+   */
+  shell: { id: "shell", name: "GL-1 Blowout", slot: "lethal", price: 0, fuseMs: 0, cookable: false, throwSpeed: 26, gravity: 9, restitution: 0, friction: 1, radius: 4.5, damage: 110, minDamage: 20, effectMs: 0, sticks: false, directDamage: 0, impactOnPlayer: true, shop: false },
 };
 
 export const GRENADE_ORDER: GrenadeId[] = ["frag", "molotov", "knife", "flash", "smoke"];

@@ -237,6 +237,64 @@ describe("grenades", () => {
     expect(h.sentOf(b, S2C.Flashed).length).toBe(before);
   });
 
+  /**
+   * The three explosives, each tested at the thing that was broken about it rather than at the
+   * happy path the mode was written for.
+   */
+  it("a molotov thrown FLAT at somebody burns them: the pool lands on the floor, not in mid-air", async () => {
+    const { a, b } = await playing();
+    await h.arm(a, "molotov");
+    const sa = h.session(a.sessionId), sb = h.session(b.sessionId);
+    const victim = h.player(b.sessionId);
+    // Bravo two metres in front of Alpha, both on the ground, and the bottle thrown level at him.
+    sb.body.x = sa.body.x + 2; sb.body.z = sa.body.z; sb.body.y = sa.body.y;
+    await h.advance(THROW_INTERVAL_MS);
+    h.send(a, C2S.Throw, throwMsg([sa.body.x, sa.body.y + 1.6, sa.body.z], [1, 0, 0], "molotov"));
+    await h.advance(1500);
+    expect(h.broadcastsOf(S2C.Boom).some((m) => (m.payload as BoomEvent).kind === "molotov"), "it broke on him").toBe(true);
+    // Before the floor snap the bottle burned at chest height and the burn band (f.y-1.0) sat above
+    // a standing victim, so a point-blank molotov did nothing at all.
+    expect(victim.health, "a molotov in the chest burns").toBeLessThan(100);
+  });
+
+  it("a knife thrown at somebody with their back to a wall hits the somebody", async () => {
+    const { a, b } = await playing();
+    await h.arm(a, "knife");
+    const sa = h.session(a.sessionId), sb = h.session(b.sessionId);
+    const victim = h.player(b.sessionId);
+    // Put Bravo one step in front of Alpha; at 28 m/s the knife crosses him and the wall behind him
+    // inside a single tick, which is the case that used to be skipped because the projectile had
+    // already been marked `stuck` by the same step.
+    sb.body.x = sa.body.x + 1.2; sb.body.z = sa.body.z; sb.body.y = sa.body.y;
+    await h.advance(THROW_INTERVAL_MS);
+    h.send(a, C2S.Throw, throwMsg([sa.body.x, sa.body.y + 1.6, sa.body.z], [1, -0.05, 0], "knife"));
+    await h.advance(300);
+    expect(victim.health, `a thrown knife does ${GRENADES.knife.directDamage}`).toBe(100 - GRENADES.knife.directDamage);
+  });
+
+  it("points the damage wedge at the blast, not at whoever threw it", async () => {
+    const { a, b } = await playing();
+    await h.arm(a, "frag");
+    const sa = h.session(a.sessionId), sb = h.session(b.sessionId);
+    // Alpha drops a frag at his own feet and WALKS AWAY while it cooks — the ordinary thing a
+    // player does. Bravo steps in near where it landed. When it goes off, the arrow on Bravo's
+    // screen has to point at the grenade, which is no longer where Alpha is.
+    const gx = sa.body.x, gz = sa.body.z;
+    await h.advance(THROW_INTERVAL_MS);
+    h.send(a, C2S.Throw, throwMsg([sa.body.x, sa.body.y + 1.6, sa.body.z], [0, -1, 0], "frag"));
+    await h.advance(200);
+    sb.body.x = gx + 3; sb.body.z = gz; sb.body.y = sa.body.y;   // Bravo 3 m from the grenade
+    sa.body.x = gx; sa.body.z = gz + 14;                          // Alpha 14 m away, at 90 degrees
+    const beforeHits = h.sentOf(b, S2C.Damaged).length;
+    await h.advance(GRENADES.frag.fuseMs);
+    const hits = h.sentOf(b, S2C.Damaged).slice(beforeHits).map((m) => m.payload as { dx: number; dz: number });
+    expect(hits.length, "the frag caught Bravo").toBeGreaterThan(0);
+
+    // Towards the grenade is -x from Bravo; towards Alpha is mostly +z. The arrow is the grenade's.
+    expect(hits[0].dx, "the arrow points back at the blast").toBeLessThan(-0.9);
+    expect(Math.abs(hits[0].dz), "and not off towards the thrower").toBeLessThan(0.3);
+  });
+
   it("a molotov leaves a fire that burns players standing in it", async () => {
     const { a, b } = await playing();
     await h.arm(a, "molotov");

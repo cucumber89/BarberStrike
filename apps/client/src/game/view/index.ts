@@ -13,7 +13,21 @@ import { BombSites } from "./BombSites";
 import { Marks } from "./Marks";
 import { hud } from "../store";
 import { feelOf } from "../combat/weaponFeel";
-import { boysClass, INTERP_DELAY_MS, MatchPhase, WEAPONS, makeRayHit } from "@frankibarber/shared";
+import { boysClass, GRENADES, INTERP_DELAY_MS, MatchPhase, WEAPONS, makeRayHit, type GrenadeId } from "@frankibarber/shared";
+
+/**
+ * How hard each blast shoves the camera, and how far out it is still felt — as a multiple of that
+ * grenade's own effect radius, so the shake stops roughly where the damage does.
+ *
+ * The flash is the odd one: its radius (14 m) is how far it BLINDS, not how far it is felt, so it
+ * gets a fraction of it. The knife and the smoke shake nothing, which is why they are absent.
+ */
+const BLAST_SHAKE: Partial<Record<GrenadeId, { amp: number; radii: number }>> = {
+  frag: { amp: 0.075, radii: 2 },      // 120 damage, 6 m radius  -> felt to 12 m
+  shell: { amp: 0.065, radii: 2.4 },   // 110 damage, 4.5 m       -> felt to ~11 m
+  molotov: { amp: 0.03, radii: 2.5 },  // burns rather than blasts -> 8 m, and a third of the kick
+  flash: { amp: 0.02, radii: 0.6 },    // the pop, not the blindness -> ~8 m
+};
 
 /**
  * Presentation module: first-person viewmodel, muzzle flashes, tracers, impacts, decals,
@@ -41,14 +55,25 @@ export const installView: GameModule = (ctx) => {
   // Drop 5: team marks as world billboards.
   const marks = new Marks(ctx.scene, ctx.remotes, () => ({ x: ctx.local.body.x, y: ctx.local.body.y, z: ctx.local.body.z }));
   grenades.setHooks({
-    onBounce: (kind, x, y, z, speed) => { if (speed > 1.5) { tmpB.set(x, y, z); effects.puff(tmpB, Math.min(1, speed / 10) * 0.5); } void kind; },
+    onBounce: (kind, x, y, z, speed) => {
+      if (speed > 1.5) { tmpB.set(x, y, z); effects.puff(tmpB, Math.min(1, speed / 10) * 0.5); }
+      // The knock itself. The bounces are re-simulated here, not sent by the server, so this is
+      // the only place that knows one happened — and until now the only thing it did with that
+      // was a puff of dust.
+      ctx.events.emit("grenadeBounce", { kind, x, y, z, speed });
+    },
     onBoom: (e) => {
-      // Camera shake by distance for blasts.
-      if (e.kind === "frag" || e.kind === "molotov") {
-        const b = ctx.local.body;
-        const d = Math.hypot(b.x - e.x, b.y + 1 - e.y, b.z - e.z);
-        ctx.local.addShake(Math.max(0, 0.05 * (1 - d / 16)));
-      }
+      // Rule G11: what a blast does to the view. It used to be one number for the frag and the
+      // molotov together (0.05, fading over a flat 16 m) and NOTHING for the launcher's shell — so
+      // a bottle of petrol landing across the room kicked the screen exactly as hard as a frag at
+      // your feet, and a rocket going off against your chest did not move it at all. Each kind now
+      // shakes by what it is, and fades out over its own blast radius rather than a number that
+      // belongs to none of them.
+      const k = BLAST_SHAKE[e.kind];
+      if (!k) return;
+      const b = ctx.local.body;
+      const d = Math.hypot(b.x - e.x, b.y + 1 - e.y, b.z - e.z);
+      ctx.local.addShake(Math.max(0, k.amp * (1 - d / (GRENADES[e.kind].radius * k.radii))));
     },
   });
   const eye = new Vector3();

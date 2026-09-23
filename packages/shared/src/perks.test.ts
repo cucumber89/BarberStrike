@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ARMOR, PERKS, PERK_EFFECT, perkActive, perkSpeedScale, splitDamage, noPerks } from "./perks";
+import { ARMOR, PERKS, PERK_ARMED_MS, PERK_CLOCK_SLACK_MS, PERK_EFFECT, PERK_ORDER, perkActive, perkSpeedScale, perkTimed, splitDamage, noPerks } from "./perks";
 import { ECONOMY, WEAPON_PRICES, applyBuy, applySell, canBuy, canSell, carriedWeapons, freshWallet, isShopItemId, weaponForSlot, type BuyContext } from "./economy";
 import { MELEE, WEAPONS, isBackstab } from "./weapons";
 import { MatchPhase } from "./types";
@@ -92,6 +92,55 @@ describe("shop: perks, armour, sidearms, clippers", () => {
     expect(isShopItemId("frag")).toBe(true);
     expect(isShopItemId("flask")).toBe(true);
     expect(isShopItemId("heavy")).toBe(true);
+  });
+});
+
+describe("how a perk reads on the screen", () => {
+  it("counts down when it has a life of its own, and says ARMED when it does not", () => {
+    const now = 100_000;
+    // A flask just bought: a countdown, and the HUD bar means something.
+    expect(perkTimed("flask", now + PERKS.flask.durationMs, now)).toBe(true);
+    expect(perkTimed("flask", now + 1, now), "about to run out, still a countdown").toBe(true);
+    // The fade has no duration at all: it is spent at the next respawn, whenever that comes.
+    expect(perkTimed("fade", now + PERK_ARMED_MS, now)).toBe(false);
+    // A perk handed out for a whole round (the Ostrzyżony's speed) is written the same way, and
+    // shown as a countdown it read "999985s" with the bar pinned full for the entire match.
+    expect(perkTimed("energy", now + PERK_ARMED_MS, now)).toBe(false);
+  });
+
+  it("does not flip to ARMED on the first frames of a perk, where the two clocks disagree", () => {
+    // The deadline is stamped on the SERVER and the client subtracts its own estimate of that
+    // clock, so a flask bought a millisecond ago can measure as slightly MORE than its own
+    // duration. Without the slack every purchase showed "uzbrojone" before it showed "25s".
+    const now = 100_000;
+    const slightlyOver = now + PERKS.flask.durationMs + PERK_CLOCK_SLACK_MS - 1;
+    expect(perkTimed("flask", slightlyOver, now)).toBe(true);
+    expect(perkTimed("flask", now + PERKS.flask.durationMs + PERK_CLOCK_SLACK_MS + 1, now)).toBe(false);
+    // The slack is small enough that it can never swallow `PERK_ARMED_MS`, which is the case it
+    // has to keep telling apart.
+    expect(PERK_CLOCK_SLACK_MS).toBeLessThan(PERK_ARMED_MS / 1000);
+  });
+
+  it("every perk and plate explains itself in Polish, with its own numbers", () => {
+    // These blurbs are the tooltip on the row a player just paid for, and they were the last
+    // English sentences left in a game whose every other screen is Polish.
+    // Checked by what the sentence is NOT: a diacritic would be a poor rule (plenty of correct
+    // Polish sentences have none) and these six all came from the same English originals, so the
+    // words those originals were made of are the thing to keep out.
+    const english = /\b(the|of|and|for|with|less|damage|until|health|next|shield|faster|second|seconds)\b/i;
+    for (const id of PERK_ORDER) {
+      expect(PERKS[id].blurb.length, id).toBeGreaterThan(20);
+      expect(PERKS[id].blurb, id).not.toMatch(english);
+    }
+    for (const a of [ARMOR.light, ARMOR.heavy]) {
+      expect(a.blurb).not.toMatch(english);
+      expect(a.blurb, "and it says how many points the plate is worth").toContain(String(a.armor));
+    }
+    // The numbers in the copy are the ones the server applies.
+    expect(PERKS.flask.blurb).toContain(`${Math.round(PERK_EFFECT.flaskResist * 100)} %`);
+    expect(PERKS.roids.blurb).toContain(`${PERK_EFFECT.roidsRegenPerSec} HP/s`);
+    expect(PERKS.energy.blurb).toContain(`${Math.round((PERK_EFFECT.energySprint - 1) * 100)} %`);
+    expect(PERKS.fade.blurb).toContain(`${PERK_EFFECT.fadeShieldMs / 1000} s`);
   });
 });
 
