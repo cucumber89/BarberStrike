@@ -93,6 +93,17 @@ export function joinOptions(opts: ConnectOptions, boysClass: number, haircut: st
  */
 type MsgHandler = { type: string; cb: (payload: unknown) => void };
 
+/**
+ * Does a room error mean the match is over, or is it the reconnection working?
+ *
+ * The SDK retries a dropped socket by itself (fifteen attempts with backoff) and reports every
+ * failed ATTEMPT through `onError` — with no code and no message, because nothing is actually
+ * wrong yet. Treating those as fatal is what put a player back in the menu one second into a
+ * network blip while the SDK reconnected successfully three seconds later, into a room the client
+ * had already thrown away. An error that arrives while nothing is being retried is still fatal.
+ */
+export const errorEndsMatch = (isReconnecting: boolean | undefined): boolean => !isReconnecting;
+
 export class Connection {
   room: Room<NetState>;
   readonly sessionId: string;
@@ -149,18 +160,47 @@ export class Connection {
       }
     }
     room.onLeave((code) => this.handleLeave(code));
-    room.onError((code, message) => { for (const h of this.errorHandlers) h(code, message); });
+    /**
+     * A FAILED RECONNECTION ATTEMPT IS NOT AN ERROR THE MATCH SHOULD END ON.
+     *
+     * The SDK (0.18) reconnects a dropped socket by itself — fifteen attempts with backoff — and
+     * every attempt that fails arrives here as `onError` with no code and no message. The game
+     * mapped any error to "connection lost" and tore the match down, so MEASURED on a 1.5 s
+     * network blip: the player was back in the menu at 1.0 s while the SDK's own retry chain
+     * reconnected successfully at 3.7 s — into a room nobody was holding any more, with the server
+     * still keeping their seat until the grace ran out.
+     *
+     * While the SDK is retrying, the honest report is "reconnecting", which is what the HUD
+     * already has a flag for. A real error (one that arrives when nothing is being retried) still
+     * ends the match as it always did.
+     */
+    room.onError((code, message) => {
+      if (!errorEndsMatch(room.reconnection?.isReconnecting)) { this.setReconnecting(true); return; }
+      for (const h of this.errorHandlers) h(code, message);
+    });
+    // ...and the SDK's success is the end of it: same room, same session, the state resumes.
+    room.onReconnect(() => this.setReconnecting(false));
+  }
+
+  /** One place that moves the reconnecting flag and tells the HUD about it. */
+  private setReconnecting(active: boolean): void {
+    if (this.reconnecting === active) return;
+    this.reconnecting = active;
+    for (const cb of this.reconnectHandlers) cb(active);
   }
 
   /**
-   * Unexpected drop: try to resume the same session (the server keeps the player for a grace
-   * period). Consented leaves (1000) and reconnect failures propagate to the game.
+   * The drop the SDK did NOT recover from: it reconnects on its own first (fifteen attempts), and
+   * only calls this when it has given up or refused — after all its retries failed, or because the
+   * room was younger than its five-second minimum uptime, which is the case this loop still saves
+   * (MEASURED: a blip seconds after joining recovers here and nowhere else).
+   *
+   * Consented leaves (1000) and 4000 are the player's own, and propagate straight to the game.
    */
   private async handleLeave(code: number): Promise<void> {
     if (this.disposed) return;
     if (code === 1000 || code === 4000) { for (const h of this.leaveHandlers) h(code); return; }
-    this.reconnecting = true;
-    for (const cb of this.reconnectHandlers) cb(true);
+    this.setReconnecting(true);
     const token = this.room.reconnectionToken;
     const client = new Client(this.url);
     for (let attempt = 0; attempt < 4 && !this.disposed; attempt++) {
@@ -169,14 +209,13 @@ export class Connection {
         if (this.disposed) { await room.leave(); return; }
         this.room = room;
         this.bindRoom(room);
-        this.reconnecting = false;
-        for (const cb of this.reconnectHandlers) cb(false);
+        this.setReconnecting(false);
         return;
       } catch {
         await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
       }
     }
-    this.reconnecting = false;
+    this.setReconnecting(false);
     for (const h of this.leaveHandlers) h(code);
   }
 

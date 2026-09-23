@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_HAIRCUT, DEFAULT_MAP_ID, HAIRCUTS, MAP_ORDER } from "@frankibarber/shared";
-import { joinOptions } from "./Connection";
+import { errorEndsMatch, joinOptions } from "./Connection";
 
 /**
  * What the lobby sends the room. A map the player picked that never leaves the menu is the whole
@@ -47,4 +47,22 @@ it("says plainly whether this client wants to play or to watch", () => {
   expect(joinOptions({ ...base, spectator: false }, 1).spectator).toBe(false);
   // The rest of the join is unchanged by it — a viewer still names the room it wants to watch.
   expect(joinOptions({ ...base, spectator: true, roomName: "finał" }, 1).room).toBe("finał");
+});
+
+/**
+ * A dropped socket is not a lost match. The SDK reconnects on its own and reports each failed
+ * attempt as an error with no code; the client used to end the match on the first of them.
+ *
+ * MEASURED on a 1.5 s outage before this rule existed (`e2e/tools/reconnect.mjs`): the player was
+ * in the menu at 1.0 s, and the SDK's retry chain then reconnected at 3.7 s into a room nobody was
+ * holding. After: "reconnecting" in the HUD, the same session back, still alive, inputs acked
+ * (39 -> 48).
+ */
+describe("what ends a match", () => {
+  it("ignores the noise of a reconnection in progress, and nothing else", () => {
+    expect(errorEndsMatch(true), "the SDK is retrying: not fatal").toBe(false);
+    expect(errorEndsMatch(false), "a real error with nothing being retried").toBe(true);
+    // `reconnection` is optional on the room; an SDK that does not have it behaves as before.
+    expect(errorEndsMatch(undefined)).toBe(true);
+  });
 });

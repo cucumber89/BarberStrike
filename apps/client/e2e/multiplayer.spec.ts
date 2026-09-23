@@ -120,7 +120,12 @@ test.describe("two clients", () => {
       // run and pass alone, which is the worst kind of test: it fails for a reason that is not the
       // thing it is testing. 0.9 of the opacity of a full-screen div is "you cannot see", which is
       // the claim in the test's own name.
-      await expect.poll(async () => (await hud(p)).smokeOpacity, { timeout: 10000 }).toBeGreaterThan(0.9);
+      // The window is wall-clock and the cloud grows in FRAMES, so a loaded machine needs more of
+      // it: measured on the third full suite run of a session in this container, the reading was
+      // still climbing through 0.44 when ten seconds were up, and the same test alone finishes in
+      // 11.6 s with the opacity well past 0.9. Twenty-five seconds is the same assertion with room
+      // for a slow renderer — the claim (0.9 = you cannot see) is untouched.
+      await expect.poll(async () => (await hud(p)).smokeOpacity, { timeout: 25000 }).toBeGreaterThan(0.9);
       await expect(p.getByTestId("smoke-screen")).toBeVisible();
       await p.evaluate(() => (window.__fb.game as unknown as { conn: { send(t: string, m: unknown): void } }).conn.send("dev:teleport", { x: 27, y: 0, z: 21.5 }));
       await expect.poll(async () => (await hud(p)).smokeOpacity).toBe(0);
@@ -940,8 +945,29 @@ test.describe("two clients", () => {
         return hips && crownY > 0 ? { hipY: hips.getAbsolutePosition().y - feet, crownY: crownY - feet } : null;
       }, id);
       await expect.poll(async () => (await remoteBody(b, idA))?.hipY ?? 0, { timeout: 30_000 }).toBeGreaterThan(0);
-      const seenByB = (await remoteBody(b, idA))!;   // B is looking at BARYŁKA
-      const seenByA = (await remoteBody(a, idB))!;   // A is looking at TYCZKA
+      /**
+       * OVER A BREATHING CYCLE, not at one instant. An idle body shifts its weight
+       * (`sin(time * 0.9)`) and breathes (`sin(time * 1.6)`), and the phase is seeded from the
+       * player's id so that two bodies in a room are deliberately out of step — so one reading of
+       * each compares two different moments of two different cycles. MEASURED that way: crowns
+       * 1.877 vs 1.853, a 24 mm "difference between the builds" that is really the sway, failing a
+       * 20 mm tolerance about one run in four. Nine readings over ~3.6 s (a full breath) and a mean
+       * per body asks the question the test means to ask, which is about the BODIES.
+       */
+      const meanBody = async (p: Page, id: string) => {
+        const hips: number[] = [], crowns: number[] = [];
+        for (let i = 0; i < 9; i++) {
+          const r = await remoteBody(p, id);
+          if (r) { hips.push(r.hipY); crowns.push(r.crownY); }
+          await p.waitForTimeout(400);
+        }
+        const mean = (xs: number[]) => xs.reduce((n, x) => n + x, 0) / Math.max(1, xs.length);
+        const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
+        return { hipY: mean(hips), crownY: mean(crowns), crownSpread: spread(crowns), n: crowns.length };
+      };
+      const [seenByB, seenByA] = await Promise.all([meanBody(b, idA), meanBody(a, idB)]);
+      expect(seenByB.n, "readings of BARYŁKA").toBeGreaterThan(4);
+      expect(seenByA.n, "readings of TYCZKA").toBeGreaterThan(4);
       const hipBarylka = seenByB.hipY, hipTyczka = seenByA.hipY;
       expect(hipBarylka, "BARYŁKA stands on short legs").toBeLessThan(0.9);
       expect(hipTyczka, "TYCZKA on long ones").toBeGreaterThan(1.0);
@@ -950,7 +976,9 @@ test.describe("two clients", () => {
       // different builds, same head height. The head node sits directly under the crown, and the
       // crown is what an opponent aims at.
       const crownBarylka = seenByB.crownY, crownTyczka = seenByA.crownY;
-      expect(Math.abs(crownBarylka - crownTyczka), `crowns: ${crownBarylka} vs ${crownTyczka}`).toBeLessThan(0.02);
+      expect(Math.abs(crownBarylka - crownTyczka),
+        `crowns: ${crownBarylka.toFixed(4)} vs ${crownTyczka.toFixed(4)} (sway spread ${seenByB.crownSpread.toFixed(4)} / ${seenByA.crownSpread.toFixed(4)})`,
+      ).toBeLessThan(0.02);
 
       // 4. The outfit was built too, not merely received: material names carry the outfit id, and
       // the team's accent is on the body whatever that outfit is — the thing that stops two
