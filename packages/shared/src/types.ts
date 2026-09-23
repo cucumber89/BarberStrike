@@ -14,8 +14,8 @@ export type Team = 0 | 1;
  * picker (PR #14) while the mode itself stays playable for rooms that already ask for it, which is
  * why `isGameMode` still accepts it.
  */
-export type GameMode = "tdm" | "ffa" | "dom" | "bomb" | "boys" | "gungame" | "ostrzyzeni" | "duel";
-export const GAME_MODES: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni", "duel"] as const;
+export type GameMode = "tdm" | "ffa" | "dom" | "bomb" | "boys" | "gungame" | "ostrzyzeni" | "duel" | "turniej";
+export const GAME_MODES: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni", "duel", "turniej"] as const;
 export const isGameMode = (v: unknown): v is GameMode =>
   typeof v === "string" && (v === "ffa" || (GAME_MODES as readonly string[]).includes(v));
 

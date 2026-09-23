@@ -106,19 +106,63 @@ test("a /r/<room> link asks for a nickname only, and CHANGE opens the full lobby
   expect(link).toContain("mode=gungame");
 });
 
-/** Drop D: the picker offers main's four modes and both party modes. */
-test("the lobby offers six modes", async ({ page }) => {
+/** Drop D: the picker offers main's four modes and both party modes; drop T added the tournament. */
+test("the lobby offers every mode it has", async ({ page }) => {
   await page.goto("/");
   await page.getByTestId("btn-play").click();
   await expect(page.getByRole("heading", { name: "01 TRYB GRY" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /02 MAPA/ })).toBeVisible();
-  for (const m of ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni"]) {
+  for (const m of ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni", "duel", "turniej"]) {
     await expect(page.getByTestId(`mode-${m}`)).toBeVisible();
   }
+  // The 1 v 1 and the tournament are both played on the arena, and the picker says so instead of
+  // offering a map choice the server overrides.
+  await page.getByTestId("mode-duel").click();
+  await expect(page.getByTestId("map-fixed")).toBeVisible();
+  await expect(page.getByTestId("map-gora")).toBeVisible();
+  await expect(page.getByTestId("map-night_district")).toHaveCount(0);
+  await page.getByTestId("mode-tdm").click();
+  await expect(page.getByTestId("map-night_district")).toBeVisible();
   await expect(page.getByTestId("mode-ffa")).toHaveCount(0);
   await expect(page.getByTestId("haircut-picker")).toContainText("WYGLĄD POSTACI");
   await page.getByRole("button", { name: /OTWÓRZ SZAFĘ/ }).click();
   await expect(page.getByTestId("armoury")).toBeVisible();
   await page.getByTestId("armoury-haircuts").click();
   await expect(page.getByTestId("armoury-haircut-cap")).toBeVisible();
+});
+
+/**
+ * Drop T: the front page is where you get into a match and where your crate lives.
+ *
+ * Both used to be somewhere else. The match rows on the title screen were `div`s — you could read
+ * that a game was running and then had to press GRAJ and find the same row again in the browser to
+ * join it — and the crate was two screens in, behind SZAFA and its SKRZYNKI tab.
+ */
+test("the front page joins a match and opens a crate", async ({ page }) => {
+  // One stubbed match, so the row is there whatever the real server is doing.
+  await page.route("**/rooms", (route) => route.fulfill({ json: [
+    { roomId: "front-1", clients: 3, maxClients: 12, metadata: { name: "front-page", map: "night_district", mode: "tdm" } },
+  ] }));
+  // No crate is seeded: a profile that has never played is given its one daily crate on the spot,
+  // which is the same starting point `armoury.spec.ts` measures the wardrobe from.
+  await page.goto("/");
+
+  // The match is a button on the title screen, and it carries the JOIN affordance.
+  const row = page.getByTestId("room-front-1");
+  await expect(row).toBeVisible();
+  await expect(row).toContainText("front-page");
+  expect(await row.evaluate((el) => el.tagName)).toBe("BUTTON");
+
+  // Clicking it without a nickname does not navigate — it asks for the name, in place.
+  await row.click();
+  await expect(page.getByTestId("menu")).toBeVisible();
+  await expect(page.getByTestId("input-name")).toBeFocused();
+
+  // The crate is on this screen too, and it opens the same reel the wardrobe opens.
+  await expect(page.getByTestId("crate-tile")).toBeVisible();
+  await expect(page.getByTestId("crate-count")).toHaveText(/^MASZ1$/);
+  await page.getByTestId("crate-open").click();
+  await expect(page.getByTestId("crate-opening")).toBeVisible();
+  await expect(page.getByTestId("crate-prize")).toBeVisible({ timeout: 8000 });
+  await expect(page.getByTestId("crate-count")).toHaveText(/^MASZ0$/);
 });

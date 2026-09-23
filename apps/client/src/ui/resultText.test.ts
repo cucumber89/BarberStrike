@@ -82,3 +82,12 @@ describe("round end", () => {
     expect(roundEnd("tdm", "", 0, -1, 0)).toBeNull();
   });
 });
+
+it("a tournament is decided by its final, not by a points limit", () => {
+  // The screen carries ONE pair's score (6 — 4), and "the first team to 6 points" is a sentence
+  // about a mode this is not: there are no teams in a draw of eight and no limit decided it.
+  const ctx = { mode: "turniej" as const, scoreA: 6, scoreB: 4, winner: 0 as const, winnerId: "p3", winnerName: "ZDZICHU", players: [] };
+  expect(matchWhy(ctx as never)).toBe("ZDZICHU wygrał finał drabinki");
+  expect(matchWhy(ctx as never)).not.toContain("drużyna");
+  expect(scoreLine(ctx as never)).toContain("ZDZICHU");
+});

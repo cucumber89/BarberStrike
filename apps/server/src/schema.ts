@@ -133,6 +133,19 @@ export class MatchState extends Schema {
   @type("float64") t = 0;
   @type("string") mapId = "";
   @type("string") roomName = "";
+  /**
+   * Drop T: the whole 1 v 1 tournament bracket as one string — who plays whom, the score of each
+   * pair, who went through, and which pair is on now. `bracketString` writes it and `parseBracket`
+   * reads it; both live in `packages/shared/src/tournament.ts`.
+   *
+   * A NEW REPLICATED FIELD, which L6 makes a stop-and-ask change — the owner said yes on
+   * 2026-09-23, over the two alternatives that added nothing to the schema: riding the unused
+   * `BombState` strings (a field named after the bomb carrying a tournament bracket), and
+   * broadcasting it on change (a player who joins or reconnects mid-pair sees no bracket at all
+   * until the next one ends). Empty in every other mode, and written only when it changes, so an
+   * eight-player bracket costs about 250 bytes once per pair.
+   */
+  @type("string") bracket = "";
   /** Drop 4: "tdm" | "ffa" | "dom"; FFA winner by name (team modes leave it empty). */
   @type("string") mode = "tdm";
   @type("string") winnerId = "";

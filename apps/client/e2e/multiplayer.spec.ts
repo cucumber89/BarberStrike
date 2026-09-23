@@ -645,8 +645,13 @@ test.describe("two clients", () => {
     await joinRoom(b, "BRAVO", room);
     await expect.poll(async () => (await hud(a)).phase, { timeout: 30_000 }).not.toBe("waiting");
 
-    // A fresh browser profile: nothing earned yet.
-    expect(await a.evaluate(() => JSON.parse(localStorage.getItem("bs_profile_v1") ?? "null"))).toBeNull();
+    // A fresh browser: nothing EARNED yet. Not "no profile at all" — since drop T the crate sits on
+    // the front page, and the crate's daily top-up writes the profile the first time the menu is
+    // drawn. What must be untouched is everything a match pays for.
+    const before = await a.evaluate(() => JSON.parse(localStorage.getItem("bs_profile_v1") ?? "null"));
+    expect(before?.xp ?? 0, "no experience before the first match").toBe(0);
+    expect(before?.life?.matches ?? 0, "and no matches played").toBe(0);
+    expect(before?.badges ?? [], "and nothing unlocked").toEqual([]);
 
     // End the match through the real path rather than waiting seven minutes for the clock.
     await waveRoom(a, 3000);

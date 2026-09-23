@@ -106,15 +106,29 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); out
 .mm-nav-btn.primary .mm-nav-no, .mm-nav-btn.primary em { color: #071117; }
 .mm-nav-btn.primary:hover { background: linear-gradient(100deg, #f4cc58, #e9b832 72%, #d99f17); border-color: #fff0a7; }
 
+/* The strip is one height for both panels, so the crate and the match list read as one shelf. */
+.mm-front { width: 100%; height: clamp(190px, 30vh, 252px); }
 .mm-live {
-  width: 100%; max-height: 174px; overflow: hidden; padding: 11px 13px;
+  /* `min-height: 0` and the clipped overflow are what make the fixed strip height real: without
+     them the panel sizes to its rows and grows straight through the page footer. */
+  width: 100%; min-height: 0; overflow: hidden; padding: 11px 13px;
   background: linear-gradient(100deg, rgba(7,18,23,.94), rgba(7,18,23,.72));
   border: 1px solid rgba(167,190,200,.18); border-top: 2px solid var(--brass);
   box-shadow: 0 14px 40px rgba(0,0,0,.22); backdrop-filter: blur(10px);
 }
 .mm-live-list { grid-template-columns: 1fr 1fr; }
 .mm-live .lb-h { margin: 0; }
-.srv-row.static { min-width: 0; }
+/* The rows carry a whole match in half a column, so they lose the bar and tighten up. */
+.mm-live .srv-row { min-width: 0; gap: 8px; padding: 6px 9px; grid-template-columns: auto minmax(0, 1fr) auto; }
+.mm-live .srv-name { font-size: 14px; }
+/* One line per match on the front page: badge, name, count. The map goes with the second line in
+   the full browser — here a two-line row costs the third row of matches, and a half-drawn row at
+   the bottom edge is worse than a match you cannot see. */
+.mm-live .srv-meta { display: none; }
+.mm-live .srv-bar { display: none; }
+.mm-live .srv-count b { font-size: 12px; }
+.mm-live .srv-go { display: none; }
+.mm-live .srv-row:hover:not(:disabled) .srv-count b { color: var(--brass); }
 .mm-title-foot { width: min(640px, 49vw); border-top: 1px solid rgba(167,190,200,.22); padding-top: 13px; }
 .mm-status { border-radius: 2px; background: rgba(5,14,18,.76); backdrop-filter: blur(7px); }
 .mm-version { color: #8da0a8; }
@@ -235,7 +249,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); out
 @media (max-width: 1100px) {
   .mm-title-grid, .mm-title-foot { width: min(610px, 57vw); }
   .mm-live-list { grid-template-columns: 1fr; }
-  .mm-live { max-height: 150px; }
+  .mm-front { height: 190px; grid-template-columns: minmax(0, 1fr) 178px; }
 }
 @media (max-width: 800px) {
   .menu::after { background: rgba(3,10,14,.58); }
@@ -253,7 +267,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); out
   .mm-kicker, .loading-eyebrow { font-size: 8px; letter-spacing: .19em; }
   .mm-nav-btn { grid-template-columns: 22px 30px minmax(0,1fr) 20px; gap: 1px 9px; }
   .mm-nav-btn em { display: none; }
-  .mm-live { display: none; }
+  .mm-front { display: none; }
   .mm-title-foot { margin-top: 8px; }
   .loading-controls { gap: 10px; }
 }
@@ -264,11 +278,23 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); out
   .mm-tagline { display: none; }
   .mm-title-left { gap: 12px; }
   .mm-nav-btn { min-height: 48px; padding-block: 6px; }
-  .mm-live { max-height: 119px; }
+  /* The short-screen budget. The strip keeps two rows of matches and the whole crate tile: it is
+     the reason a player opens the game, so it is the last thing that gets cut. */
+  .mm-front { height: 212px; }
+  .mm-live .srv-row { padding: 5px 8px; }
+  .crate-panel.compact .crate-top div>b { font-size: 15px; }
   .loading-rule { margin-bottom: 18px; }
   .loading-tip { margin-block: 12px; }
   .loading-controls { margin-top: 15px; }
 }
+/* Browser zoom shrinks the viewport rather than the page, so 1280x720 at 125 % arrives here as
+   1024x576 — and at that height the 212 px strip pushed the status footer off the bottom edge.
+   Last in the file on purpose: it has to win over the two queries above, which it overlaps with. */
+@media (max-height: 640px) {
+  .mm-front { height: 168px; }
+  .crate-panel.compact .crate-top small { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mm-bg { animation: none; }
   .mm-nav-btn::before { display: none; }
@@ -352,6 +378,55 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); out
 .crate-tasks { grid-template-columns: repeat(3,1fr); gap: 7px; }
 .crate-tasks>div { min-height: 44px; align-items: center; padding: 9px 10px; background: rgba(15,32,39,.84); font-size: 10px; }
 .crate-tasks>div>i { height: 3px; background: linear-gradient(90deg,#b77b0d,var(--brass)); box-shadow: 0 0 8px var(--gold-glow); }
+
+/* The case as an OBJECT: brass banding, rivets, a sheen that sweeps across it on hover, and a
+   slow breath while there is something inside. A crate that sits dead still reads as a button. */
+.crate-case { position: relative; overflow: hidden; transition: transform .15s ease, filter .15s ease; }
+.crate-case::after {
+  content: ""; position: absolute; inset: 0 auto 0 -45%; width: 36%; transform: skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.42), transparent);
+  transition: left .55s ease; pointer-events: none;
+}
+.crate-case:hover:not(:disabled)::after { left: 112%; }
+.crate-case.ready { animation: crate-breath 3.6s ease-in-out infinite; }
+.crate-case.empty { filter: grayscale(.7) brightness(.66); }
+@keyframes crate-breath {
+  0%, 100% { box-shadow: inset 0 0 0 3px #10191bbb, 0 13px 34px #0008, 0 0 0 0 rgba(231,182,46,0); }
+  50% { box-shadow: inset 0 0 0 3px #10191bbb, 0 16px 40px #0009, 0 0 28px 3px rgba(231,182,46,.30); }
+}
+/* The lid gets its banding and two rivets; the lock keeps its green ring. */
+.crate-case>.crate-lid::before, .crate-case>.crate-lid::after {
+  content: ""; position: absolute; width: 7px; height: 7px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #cfe0e6, #5d7078 60%, #22323a);
+}
+.crate-case>.crate-lid { position: relative; }
+.crate-case>.crate-lid::before { left: 6px; top: 6px; }
+.crate-case>.crate-lid::after { right: 6px; top: 6px; }
+
+/* The front page's tile: the same case and the same reel in a 200 px column. */
+.crate-panel.compact {
+  display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 9px; min-height: 0; overflow: hidden;
+  margin: 0; padding: 11px 12px; box-shadow: 0 14px 40px rgba(0,0,0,.22);
+}
+.crate-panel.compact .crate-top { margin: 0; align-items: start; }
+.crate-panel.compact .crate-top div>b { font-size: 17px; letter-spacing: .09em; }
+.crate-panel.compact .crate-top small { font-size: 8px; line-height: 1.35; }
+.crate-panel.compact .crate-top>strong { gap: 5px; font-size: 27px; }
+.crate-panel.compact .crate-case {
+  height: auto !important; min-height: 0; margin: 0; gap: 11px; padding: 10px 12px !important;
+  grid-template-columns: 62px minmax(0, 1fr); align-content: center;
+}
+.crate-panel.compact .crate-case>.crate-lid { width: 58px; height: 38px; box-shadow: inset 0 0 0 3px #24343a, 0 5px 0 #0a1317; }
+.crate-panel.compact .crate-case>.crate-lid::before, .crate-panel.compact .crate-case>.crate-lid::after { width: 5px; height: 5px; top: 5px; }
+.crate-panel.compact .crate-case>.crate-lock { left: 38px; top: 50%; width: 24px; height: 24px; margin-top: -14px; border-width: 4px; font-size: 13px; }
+.crate-panel.compact .crate-case>span b { font-size: 17px; letter-spacing: .05em; line-height: 1.1; }
+.crate-panel.compact .crate-case>span small { font-size: 7px; }
+.crate-panel.compact .crate-case>em { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .crate-case.ready { animation: none; }
+  .crate-case::after { display: none; }
+}
 
 .crate-opening { background: radial-gradient(circle at 50% 42%,rgba(101,75,17,.38),rgba(3,9,13,.96) 63%); }
 .crate-dialog { width: min(1000px,94vw); padding: clamp(22px,3vw,38px); background: linear-gradient(145deg,#0d1d24,#050e13); border: 1px solid rgba(231,182,46,.6); border-top: 3px solid var(--brass); }

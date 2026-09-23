@@ -245,6 +245,14 @@ export const GORA: MapDef = (() => {
   // The duel start stands in the strip west of the stair head, behind the gate wall, where nothing
   // but the doorway itself can see it; the other five are for the team modes and sit in the south
   // strip, out of every line the other pocket can draw.
+  //
+  // MEASURED, 2026-09-23, and left where it is: this start is 29.7 m from its twin with 19.6 m of
+  // walking before either duellist can contest the perch, which is long for a 1 v 1 — but every
+  // shorter start outside this stair head BREAKS the walked route onto the perch. Four were
+  // audited with `map-duel.ts` ((-10.1,-8.1), (-12.1,-8.1), (-8.1,-8.1), (-9.6,-9.1)); all four
+  // keep the symmetry at 0 ms and hide the start as well or better (5.0-6.9 % of surfaces against
+  // 7.8 % here), and all four end the perch route stuck, because from the south strip the mover
+  // arrives at the stair side-on. Shortening the approach means fixing that approach first.
   const t0: [number, number, number][] = [
     [-13.6, -6.0, 0.1],
     [-15.5, -9.6, 1.35], [-13.5, -9.6, 1.35], [-11.5, -9.6, 1.35], [-9.5, -9.6, 1.35],

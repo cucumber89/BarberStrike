@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BOYS_CLASSES, BOYS, BUILDS, OUTFITS, buildDef, outfitDef, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MAX_PLAYERS, MODES, MODE_ORDER, isGameMode, isOpenMode, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { BOYS_CLASSES, BOYS, BUILDS, OUTFITS, buildDef, outfitDef, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, DUEL_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MAX_PLAYERS, MODES, MODE_ORDER, TOURNAMENT, isGameMode, isOpenMode, type BotLevel, type GameMode } from "@frankibarber/shared";
 import { equippedBuild, equippedHaircut, equippedOutfit, ownedCuts } from "../game/progression/profile";
 import { copyText, inviteLink, isMapId, mapChoices, parseInvite } from "./invite";
 import { Connection, defaultServerUrl, type RoomListing } from "../game/net/Connection";
@@ -7,6 +7,7 @@ import type { Settings } from "../settings";
 import { SettingsPanel } from "./SettingsPanel";
 import { MODE_ART, NAV_ART, mapArt } from "./menuArt";
 import { Armoury } from "./Armoury";
+import { Crates } from "./Crates";
 import "./menu.css";
 
 interface Props {
@@ -37,6 +38,9 @@ const touchOnly = (): boolean =>
   typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(pointer: fine)").matches;
 
 /** How the mode reads on its card, in two words: who is on your side, and what ends the match. */
+/** Matches the front page lists before it sends you to the full browser. Six fills the rail. */
+const MAIN_ROWS = 6;
+
 const modeTag = (m: GameMode): string => `${MODES[m].teams ? "DRUŻYNY" : "SOLO"} · DO ${MODES[m].scoreLimit}`;
 
 /** The map's real footprint, from its own bounds — a picker that says "34 × 18 m" says something. */
@@ -84,8 +88,9 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   const [botCount, setBotCount] = useState(() => { try { return Math.max(0, Math.min(MAX_BOTS, Number(localStorage.getItem("fb_bots") ?? 0) || 0)); } catch { return 0; } });
   const [botLevel, setBotLevel] = useState<BotLevel>(() => { try { const l = localStorage.getItem("fb_botlevel"); return l === "easy" || l === "hard" ? l : "normal"; } catch { return "normal"; } });
   const pickBots = (n: number, l: BotLevel) => { setBotCount(n); setBotLevel(l); try { localStorage.setItem("fb_bots", String(n)); localStorage.setItem("fb_botlevel", l); } catch { /* private mode */ } };
-  // A duel has two seats: at most one of them a bot, and none unless asked for.
-  const botMax = gameMode === "duel" ? 1 : MAX_BOTS;
+  // A duel has two seats: at most one of them a bot, and none unless asked for. A tournament holds
+  // the whole draw and may be filled with bots to play a bracket out — but never the last seat.
+  const botMax = gameMode === "duel" ? 1 : gameMode === "turniej" ? TOURNAMENT.maxSize - 1 : MAX_BOTS;
   const bots = { count: Math.min(botMax, botCount), level: botLevel };
   const [rooms, setRooms] = useState<RoomListing[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -104,7 +109,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
       const list = await Connection.listRooms(defaultServerUrl());
       setRooms(list); setListError(null);
     } catch {
-      setListError("Server unreachable");
+      setListError("Serwer nieosiągalny");
     } finally {
       setRefreshing(false);
     }
@@ -153,8 +158,8 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
     <div className={`mm-status ${netState}`} data-testid="server-status">
       <span className="mm-dot" />
       {rooms && !listError
-        ? <span>{rooms.length === 0 ? "NO OPEN MATCHES" : `${rooms.length} ${rooms.length === 1 ? "MATCH" : "MATCHES"}`} · {playersOnline} {playersOnline === 1 ? "PLAYER" : "PLAYERS"}</span>
-        : <span>{listError ?? "CONTACTING SERVER…"}</span>}
+        ? <span>{rooms.length === 0 ? "BRAK OTWARTYCH MECZÓW" : `${rooms.length} ${rooms.length === 1 ? "MECZ" : "MECZE"}`} · {playersOnline} {playersOnline === 1 ? "GRACZ" : "GRACZY"}</span>
+        : <span>{listError ?? "ŁĄCZENIE Z SERWEREM…"}</span>}
     </div>
   );
 
@@ -182,13 +187,13 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
 
   /** What the list has to say when it has no rooms to show — looking, empty, or unreachable. */
   const emptyList = (short: boolean) => {
-    if (listError) return <div className="srv-empty err">{listError}.{short ? "" : " The list refreshes by itself once it is back."}</div>;
-    if (listed === null) return <div className="srv-empty">Looking for matches…</div>;
+    if (listError) return <div className="srv-empty err">{listError}.{short ? "" : " Lista odświeży się sama, gdy serwer wróci."}</div>;
+    if (listed === null) return <div className="srv-empty">Szukam meczów…</div>;
     if (listed.length === 0) {
       return (
         <div className="srv-empty">
-          <b>No open matches.</b>
-          <span>{short ? "Press PLAY and start one." : "Start one with QUICK PLAY, or name a room below and send a friend the link."}</span>
+          <b>Nikt jeszcze nie gra.</b>
+          <span>{short ? "Wpisz ksywkę i załóż mecz." : "Załóż mecz SZYBKĄ GRĄ albo nazwij pokój i wyślij komuś link."}</span>
         </div>
       );
     }
@@ -197,10 +202,10 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
 
   const nickField = (autoFocus: boolean) => (
     <label className="mm-field nick">
-      <span>NICKNAME</span>
+      <span>KSYWKA</span>
       <input
         ref={nickRef} value={name} maxLength={MAX_NAME_LENGTH} onChange={(e) => setName(e.target.value)}
-        placeholder="2–16 characters" autoFocus={autoFocus} data-testid="input-name"
+        placeholder="twoja ksywka" autoFocus={autoFocus} data-testid="input-name"
         onKeyDown={(e) => { if (e.key === "Enter" && nameOk && !connecting) play("auto"); }}
       />
     </label>
@@ -252,26 +257,52 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
               )}
             </div>
 
-            {/* "Is anyone playing?" is the first question, so it is answered on the front page and
-                not four clicks in. Read-only here — joining needs a nickname, which the lobby asks
-                for — so the panel's job is to say what is running and hand you to the browser. */}
+            {/* "Is anyone playing?" is the first question, so it is answered on the front page.
+                It used to be answered and nothing more: the rows were `div.srv-row.static`, so a
+                player who could SEE a match running still had to press GRAJ, scroll a lobby column
+                and find the same row again to get into it. They are buttons now — the one thing
+                between a click and the match is a nickname, so the field for it sits right here
+                rather than two screens away. */}
+            <div className="mm-front">
             <aside className="mm-live" data-testid="live-matches">
               <div className="srv-head">
-                <h2 className="lb-h">LIVE MATCHES</h2>
-                <button type="button" className={`srv-refresh ${refreshing ? "busy" : ""}`} onClick={() => void refresh()} title="Refresh the list">⟳</button>
+                <h2 className="lb-h">MECZE NA ŻYWO</h2>
+                <button type="button" className={`srv-refresh ${refreshing ? "busy" : ""}`} onClick={() => void refresh()} data-testid="btn-refresh-main" title="Odśwież listę">⟳</button>
               </div>
-              <div className="mm-live-list">
+              <div className="mm-live-list" data-testid="room-list-main">
                 {emptyList(true)}
-                {listed?.slice(0, 4).map((r) => (
-                  <div className="srv-row static" key={r.roomId}>{roomLine(r)}</div>
-                ))}
+                {listed?.slice(0, MAIN_ROWS).map((r) => {
+                  const full = r.clients >= r.maxClients;
+                  return (
+                    <button
+                      type="button" key={r.roomId} className={`srv-row ${full ? "full" : ""}`} data-testid={`room-${r.roomId}`}
+                      disabled={connecting || full || mobile} onClick={() => joinRoom(r)}
+                      title={full ? "Ten mecz jest pełny" : !nameOk ? "Najpierw wpisz ksywkę" : `Dołącz do ${r.metadata?.name || r.roomId}`}
+                    >
+                      {roomLine(r)}
+                      <span className="srv-go">{full ? "PEŁNY" : "WEJDŹ ▸"}</span>
+                    </button>
+                  );
+                })}
               </div>
-              {!mobile && listed && listed.length > 0 && (
-                <button type="button" className="mm-link" onClick={() => setPanel("lobby")}>
-                  {listed.length > 4 ? `ALL ${listed.length} MATCHES ▸` : "OPEN THE MATCH LIST ▸"}
-                </button>
+              {!mobile && (
+                <div className="mm-live-foot">
+                  {nickField(false)}
+                  <button type="button" className="mm-btn small primary" disabled={connecting} onClick={() => { if (!nameOk) { nickRef.current?.focus(); nickRef.current?.select(); return; } play("auto"); }} data-testid="btn-quickplay-main">
+                    {listed && listed.length > 0 ? "SZYBKA GRA" : "ZAŁÓŻ MECZ"}
+                  </button>
+                  <button type="button" className="mm-link" onClick={() => setPanel("lobby")}>
+                    {listed && listed.length > MAIN_ROWS ? `WSZYSTKIE (${listed.length}) ▸` : "WIĘCEJ OPCJI ▸"}
+                  </button>
+                </div>
               )}
             </aside>
+
+            {/* The crate was four clicks away — SZAFA, then the SKRZYNKI tab — which is a strange
+                place to hide the one thing a player comes back the next day for. The same component
+                as the wardrobe's, in its compact form: one counter, one case, and the same reel. */}
+            {!mobile && <Crates compact onProfile={() => { setHaircut(equippedHaircut()); setBuild(equippedBuild()); setOutfit(equippedOutfit()); }} />}
+            </div>
           </div>
 
           <footer className="mm-title-foot">
@@ -355,12 +386,17 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
 
                   <div className="lb-block">
                     <h2 className="lb-h"><em>{gameMode === "boys" ? "03" : "02"}</em> MAPA</h2>
+                    {/* A 1 v 1 is played on the arena built for it, so the picker says so instead of
+                        offering a choice the server overrides. */}
+                    {gameMode === "duel" && (
+                      <p className="mm-hint" data-testid="map-fixed">Pojedynek zawsze na {MAPS[DUEL_MAP_ID].name} — arenie zrobionej pod 1 v 1 ({mapSize(DUEL_MAP_ID)}).</p>
+                    )}
                     <div className="map-grid" role="radiogroup" aria-label="Map" data-testid="map-picker">
-                      {maps.map((m) => {
+                      {(gameMode === "duel" ? maps.filter((m) => m.id === DUEL_MAP_ID) : maps).map((m) => {
                         const Plan = mapArt(m.id);
                         return (
                           <button
-                            key={m.id} role="radio" aria-checked={mapId === m.id} className={`map-card ${mapId === m.id ? "on" : ""}`}
+                            key={m.id} role="radio" aria-checked={gameMode === "duel" || mapId === m.id} className={`map-card ${gameMode === "duel" || mapId === m.id ? "on" : ""}`}
                             onClick={() => pickMap(m.id)} data-testid={`map-${m.id}`} title={m.name}
                           >
                             <span className="map-plan"><Plan /></span>

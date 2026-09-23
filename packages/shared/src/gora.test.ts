@@ -39,6 +39,8 @@ describe("GÓRA is its own 180° rotation", () => {
     expect(t0.length).toBe(t1.length);
     for (const s of t0) expect(t1.some((t) => Math.abs(t.x + s.x) < 1e-9 && Math.abs(t.z + s.z) < 1e-9 && t.y === s.y), `spawn (${s.x}, ${s.z}) has no twin`).toBe(true);
     // The duel start is index 0 of each side (the room reads it that way), and it is the hidden one.
+    // It stays in the stair head: `map-duel.ts` audited four starts closer to the middle and every
+    // one of them ended the walked route onto the perch stuck (see the note in `gora.ts`).
     expect(t0[0].x).toBeLessThan(-12.6);
     expect(t0[0].z).toBeGreaterThan(-7.6);
   });

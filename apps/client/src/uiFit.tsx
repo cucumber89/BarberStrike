@@ -89,6 +89,10 @@ const resultState: HudState = resultCase === "loss" ? { ...resultBase, winner: 1
   : resultCase === "spectator" ? { ...resultBase, myId: "watcher", reward: null }
   : resultCase === "noreward" ? { ...resultBase, reward: null }
   : resultCase === "ostrzyzeni" ? { ...resultBase, mode: "ostrzyzeni", winnerId: "p1", winnerName: "P1", scoreA: 3, scoreB: 2 }
+  // Drop T: a finished tournament, so the result card's third tab (the whole draw) is measured
+  // like every other screen. The string is the one the server writes — eight entrants, played out.
+  : resultCase === "turniej" ? { ...resultBase, mode: "turniej", winnerId: "p3", winnerName: "ZDZICHU", scoreA: 6, scoreB: 4,
+      bracket: "8|7;TY|RYSIEK|0|6|b;MIREK|ZDZICHU|4|6|b;KUBA|WALDEK|6|2|a;STASZEK|HENIU|3|6|b;RYSIEK|ZDZICHU|4|6|b;KUBA|HENIU|6|5|a;ZDZICHU|KUBA|6|4|a" }
   : resultBase;
 const roundState = { ...resultBase, mode: "bomb", phase: MatchPhase.Prep, roundWinner: -1, scoreA: 3, scoreB: 2,
   // `roundResult` is what the card reads (the bomb block is only mirrored in Bomb); it carries the

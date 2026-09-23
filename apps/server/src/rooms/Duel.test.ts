@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { DUEL, MAPS, MATCH, MatchPhase, S2C, duelSpawnSide } from "@frankibarber/shared";
+import { DUEL, DUEL_MAP_ID, MAPS, MATCH, MatchPhase, S2C, duelSpawnSide } from "@frankibarber/shared";
 import type { PlayerState } from "../schema";
 import { RoomHarness, type FakeClient } from "./testHarness";
 
@@ -28,6 +28,26 @@ function kill(killer: PlayerState, victim: PlayerState): void {
   victim.protectedUntil = 0;
   (h.room as unknown as Damage).applyDamage(killer, victim.id, 999, false, undefined, "rifle");
 }
+
+it("is played on the arena built for it, whatever the lobby asked for", async () => {
+  // GÓRA has been the duel arena since it was built, and nothing pinned the mode to it: a room
+  // created from the lobby carried whatever map was selected there, and the default is the 100 m
+  // night district — two people, one life, sixty seconds, and a quarter of a kilometre of streets
+  // to find each other in.
+  h = await RoomHarness.create({ room: "duel-map", mode: "duel", map: "night_district", bots: 0 });
+  expect(h.state.mapId).toBe(DUEL_MAP_ID);
+  expect(h.room.metadata.map).toBe(DUEL_MAP_ID);
+  await h.join("Alpha"); await h.join("Bravo");
+  await h.until(MatchPhase.Prep);
+  for (const p of h.state.players.values()) {
+    expect(GORA.spawns.some((sp) => sp.team === p.team && sp.x === p.x && sp.z === p.z),
+      `a duellist must start on one of GÓRA's own spawns, not (${p.x}, ${p.z})`).toBe(true);
+  }
+  // And the other modes still take the lobby's word.
+  await h.dispose();
+  h = await RoomHarness.create({ room: "tdm-map", mode: "tdm", map: "night_district", bots: 0 });
+  expect(h.state.mapId).toBe("night_district");
+});
 
 it("seats exactly two, refuses a third, and never fills a seat with a bot it was not asked for", async () => {
   const { a, b } = await duel();

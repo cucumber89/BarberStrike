@@ -121,7 +121,7 @@ for (const size of SIZES) {
 }
 // The match-end screen: every case the brief lists, at 720p and at 720p @ 125 %. The verdict, the
 // score line and the footer's LEAVE must be on screen; the body may scroll inside the card.
-const RESULT_CASES = ["win", "loss", "draw", "ffa", "spectator", "noreward", "ostrzyzeni"];
+const RESULT_CASES = ["win", "loss", "draw", "ffa", "spectator", "noreward", "ostrzyzeni", "turniej"];
 for (const size of [SIZES[0], SIZES[4]]) {
   for (const c of RESULT_CASES) {
     const page = await browser.newPage({ viewport: { width: size.width, height: size.height } });
@@ -130,7 +130,10 @@ for (const size of [SIZES[0], SIZES[4]]) {
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(300);
     const faults = [];
-    for (const tab of ["summary", "table"]) {
+    // The bracket is a third tab, and only a tournament has one — so it is measured where it
+    // exists and skipped where it does not, rather than failing every other result screen.
+    const tabs = ["summary", "table", ...(await page.locator('[data-testid="result-tab-bracket"]').count() ? ["bracket"] : [])];
+    for (const tab of tabs) {
       await page.locator(`[data-testid="result-tab-${tab}"]`).click();
       if (tab === "summary") { const t = page.locator('[data-testid="summary-toggle"]'); if (await t.count()) await t.click(); }
       await page.waitForTimeout(80);

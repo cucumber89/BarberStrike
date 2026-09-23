@@ -89,13 +89,21 @@
 .mm-nav-btn.primary b, .mm-nav-btn.primary .mm-nav-art, .mm-nav-btn.primary .mm-nav-go { color: var(--brass); }
 .mm-nav-btn.primary:hover { background: linear-gradient(90deg, rgba(217, 164, 65, .28), rgba(217, 164, 65, .07)); }
 
-/* The live panel: the same rows the browser draws, read-only, four at most. */
-.mm-live { display: grid; gap: 9px; align-content: start; padding: 14px 15px 13px; background: var(--mm-plate); border: 1px solid var(--line); border-top: 2px solid rgba(217, 164, 65, .55); }
+/* The front page's bottom strip: the matches you can join, and the crate you came back for. */
+.mm-front { display: grid; grid-template-columns: minmax(0, 1fr) minmax(190px, 214px); gap: 10px; align-items: stretch; }
+.mm-live { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 9px; align-content: start; padding: 14px 15px 13px; background: var(--mm-plate); border: 1px solid var(--line); border-top: 2px solid rgba(217, 164, 65, .55); }
 .mm-live .srv-head { margin-bottom: 1px; }
 .mm-live .srv-refresh { padding: 4px 8px; font-size: 12px; line-height: 1; }
-.mm-live-list { display: grid; gap: 6px; }
+.mm-live-list { display: grid; gap: 6px; align-content: start; min-height: 0; overflow: auto; }
+/* Nickname, one button, one link — the whole path from "a match is running" to being in it. */
+.mm-live-foot { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+/* The label is dropped, not shrunk: the placeholder says the same word, and the 22 px it costs is
+   a whole match row in a strip this tall. */
+.mm-live-foot .mm-field { flex: 1 1 120px; min-width: 0; margin: 0; }
+.mm-live-foot .mm-field span { display: none; }
+.mm-live-foot .mm-field input { padding: 7px 10px; font-size: 12px; }
+.mm-live-foot .mm-btn { flex: 0 0 auto; }
 .mm-live .mm-link { justify-self: start; padding: 2px; font-size: 12px; }
-.srv-row.static { cursor: default; border-left-color: rgba(217, 164, 65, .45); }
 
 .mm-title-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .mm-version { font-family: var(--font-mono); font-size: 11px; letter-spacing: .16em; color: var(--tx-3); }

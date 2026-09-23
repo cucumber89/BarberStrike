@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DUEL, GUN_GAME, MODES, MODE_ORDER, OSTRZYZENI, convertsOnKill, isOpenMode, modeCapacity, openPlayerCap,
+import { DUEL, GUN_GAME, MODES, MODE_ORDER, OSTRZYZENI, TOURNAMENT, convertsOnKill, isOpenMode, modeCapacity, openPlayerCap,
   TDM_SCORE_LIMIT_MAX, scoreLimitFor, tdmScoreLimit,
   duelHalfStart, duelKillReward, duelLossBonus, duelPurseAfter, duelStartMoney, freshDuelPurse, duelRoundWinner, duelSpawnSide, infectionRoundWinner, ladderAfterKill, ladderDone, ladderRung, ladderWeapon, pickFirstShaved } from "./modes";
 import { GAME_MODES, isGameMode } from "./types";
@@ -156,10 +156,21 @@ describe("room capacity", () => {
     for (const m of GAME_MODES) {
       if (m === "tdm" || m === "ffa") continue;
       expect(isOpenMode(m), `${m} keeps its roster`).toBe(false);
-      expect(modeCapacity(m)).toBe(m === "duel" ? DUEL.players : MAX_PLAYERS);
+      // The two brackets of the mode table: a duel is its two seats, a tournament is its whole
+      // draw, everything else is the twelve-body roster.
+      expect(modeCapacity(m)).toBe(m === "duel" ? DUEL.players : m === "turniej" ? TOURNAMENT.maxSize : MAX_PLAYERS);
     }
     expect(modeCapacity("tdm")).toBe(OPEN_MAX_PLAYERS);
     expect(modeCapacity("ffa")).toBe(OPEN_MAX_PLAYERS);
+  });
+
+  it("says the same thing in the mode table as in the rules", () => {
+    // MODES is defined before DUEL and TOURNAMENT, so the tournament card spells its numbers out.
+    // This is what stops them drifting apart.
+    expect(MODES.turniej.scoreLimit, "a pair is first to DUEL.wins").toBe(DUEL.wins);
+    expect(MODES.turniej.blurb).toContain(`${DUEL.wins} rund`);
+    expect(MODES.turniej.blurb).toContain(TOURNAMENT.sizes.join(" albo "));
+    expect(MODES.turniej.objective).toContain(`${DUEL.wins} rund`);
   });
 
   it("lets a host move the open cap, within what the build will serve", () => {
@@ -179,7 +190,9 @@ describe("room capacity", () => {
   });
 
   it("holds at least the old room, so nothing this changes can make a room smaller", () => {
-    for (const m of GAME_MODES) expect(modeCapacity(m)).toBeGreaterThanOrEqual(m === "duel" ? 2 : MAX_PLAYERS);
+    // A duel and a tournament are the two modes whose roster is smaller than the old room ON
+    // PURPOSE: two seats, and one bracket.
+    for (const m of GAME_MODES) expect(modeCapacity(m)).toBeGreaterThanOrEqual(m === "duel" ? 2 : m === "turniej" ? TOURNAMENT.maxSize : MAX_PLAYERS);
     expect(OPEN_MAX_PLAYERS).toBeGreaterThan(MAX_PLAYERS);
     expect(OPEN_PLAYER_CAP_MAX).toBeGreaterThanOrEqual(OPEN_MAX_PLAYERS);
   });
