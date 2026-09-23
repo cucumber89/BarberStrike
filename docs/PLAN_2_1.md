@@ -836,10 +836,10 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
   a one-line strip while a pair is on, but the world they are looking at is wherever they last
   died. A spectator camera that follows the live pair is the next thing this mode needs, and it is
   a feature rather than a tweak — `ViewerScene` exists but is a separate page with no player.
-- Drop T 2026-09-23: **the top bar names the sides, not the two people playing.** In a tournament
-  pair it reads FADE 3 — 6 TAPER, which is true and useless; it should carry the two nicknames.
-  One line in `Hud.tsx`, left alone because it wants a look at the whole scoring row rather than a
-  patch (Ostrzyżeni and Gun Game read that bar differently again).
+- ~~Drop T 2026-09-23: the top bar names the sides, not the two people playing~~ — **done the same
+  day**: `pairNames` reads the two off the bracket and the bar carries the nicknames, in side order
+  (`a` is team 0, which is how the room seats a pair). It falls back to the side names between
+  pairs and in every other mode, so Ostrzyżeni's own two names are untouched.
 - Drop T 2026-09-23: **shortening the duel's approach needs the stair fixed first.** Measured:
   every start outside the west stair head ends the walked route onto the perch stuck, because the
   mover arrives at the stair side-on. Fix the approach (a wider landing, or a nav link that meets

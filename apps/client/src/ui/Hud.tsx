@@ -12,7 +12,7 @@ import { Chat, type ChatApi } from "./Chat";
 import { Minimap } from "./Minimap";
 import { HeadShot, Razor, Scoreboard } from "./Scoreboard";
 import { MatchResult, RoundBreak } from "./MatchResult";
-import { BracketPanel, bracketLine, standing } from "./Bracket";
+import { BracketPanel, bracketLine, pairNames, standing } from "./Bracket";
 import { OSTRZYZENI_SIDES, roundReasonText } from "./resultText";
 import type { RadarSnapshot } from "../game/Game";
 
@@ -219,7 +219,8 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   const maxHealth = h.mode === "boys" ? boysClass(h.boysClass).health
     : infection && !!h.players.find((r) => r.id === h.myId)?.shaved ? OSTRZYZENI.shavedHealth
     : PLAYER.maxHealth;
-  const sideNames = infection ? OSTRZYZENI_SIDES : TEAM_NAMES;
+  // Drop T: in a tournament the two sides are two people, so the bar carries their nicknames.
+  const sideNames = infection ? OSTRZYZENI_SIDES : (h.bracket ? pairNames(h.bracket) : null) ?? TEAM_NAMES;
   const meShaved = !!meRow?.shaved;
   const unshavedLeft = infection ? h.players.filter((r) => r.connected && r.alive && !r.shaved).length : 0;
   const here = h.inFlag >= 0 ? h.flags[h.inFlag] : null;
@@ -271,7 +272,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
         const swapping = h.round > 0 && h.round % DUEL.halfRounds === 0;
         return (
           <div className="bomb-hud duel" data-testid="duel-line">
-            <b>RUNDA {h.round + 1} · {TEAM_NAMES[h.myTeam]} {mine} : {theirs} · DO {DUEL.wins}{matchPoint ? (mine > theirs ? " · MECZBOL" : " · BRONISZ MECZBOLU") : ""} · {fmtTime(timeLeft)}</b>
+            <b>RUNDA {h.round + 1} · {sideNames[h.myTeam]} {mine} : {theirs} · DO {DUEL.wins}{matchPoint ? (mine > theirs ? " · MECZBOL" : " · BRONISZ MECZBOLU") : ""} · {fmtTime(timeLeft)}</b>
             <span>{h.phase === MatchPhase.Prep
               ? buying
                 ? `${swapping ? "ZMIANA STRON · " : ""}ZAMROŻENIE · B: SKLEP · START ZA ${secs}s`

@@ -63,6 +63,17 @@ export function standing(bracket: string, name: string): "playing" | "waiting" |
   return entered || view.at < view.matches.length ? "waiting" : "out";
 }
 
+/**
+ * The two names playing right now, in side order — `a` is team 0, which is how the room seats a
+ * pair. The scoreboard's two sides are two PEOPLE in a tournament, and reading FADE 3 — 6 TAPER
+ * off a bracket of eight tells you nothing about which of them you are watching.
+ */
+export function pairNames(bracket: string): readonly [string, string] | null {
+  const view = parseBracket(bracket);
+  const m = view?.matches[view.at];
+  return m && m.a && m.b ? [m.a, m.b] : null;
+}
+
 /** One line for the HUD while a pair is being played: which round it is, and who is on. */
 export function bracketLine(bracket: string): string {
   const view = parseBracket(bracket);

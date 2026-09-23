@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bracketString, currentMatch, reportWinner, seedBracket } from "@frankibarber/shared";
 import { mulberry32 } from "@frankibarber/shared";
-import { bracketLine, standing } from "./Bracket";
+import { bracketLine, pairNames, standing } from "./Bracket";
 
 /**
  * The one line the HUD carries while a pair is being played. The bracket itself is drawn from
@@ -66,5 +66,23 @@ describe("where you stand in the draw", () => {
   it("says nothing when there is no bracket or no name", () => {
     expect(standing("", "ALFA")).toBe("");
     expect(standing(bracketString(four()), "")).toBe("");
+  });
+});
+
+describe("the two on the board", () => {
+  const four = () => seedBracket(
+    ["ALFA", "BRAVO", "CEZAR", "DAWID"].map((n, i) => ({ id: `p${i}`, name: n })), 4, mulberry32(3));
+
+  it("gives the scoreboard two people instead of two side names", () => {
+    const b = four();
+    const names = pairNames(bracketString(b))!;
+    expect(names, "side order: a is team 0").toEqual([b.names[b.matches[0].a], b.names[b.matches[0].b]]);
+  });
+
+  it("gives nothing between pairs and after the final, so the bar falls back to the sides", () => {
+    let b = four();
+    for (let i = 0; i < 3; i++) b = reportWinner(b, currentMatch(b)!.a, 6, 0);
+    expect(pairNames(bracketString(b))).toBeNull();
+    expect(pairNames("")).toBeNull();
   });
 });
