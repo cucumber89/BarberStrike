@@ -82,7 +82,16 @@ function prizeItem(prize: CratePrize): ReelItem {
   return haircutItem(haircut);
 }
 
-export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
+/**
+ * `compact` is the front page's crate: the counter, the case and the reveal, without the odds
+ * table, the collection totals and the daily tasks that belong in the wardrobe's 900 px column.
+ *
+ * It is a variant of this component rather than a second one on purpose. The reel, the stop index
+ * and the `animationend` reveal are measured to the pixel by `armoury.spec.ts`; a second
+ * implementation of the same thing on the main menu would be a second thing to keep in step with
+ * that measurement, and the first one to drift.
+ */
+export function Crates({ onProfile, compact = false }: { onProfile(profile: Profile): void; compact?: boolean }) {
   const [profile, setProfile] = useState(() => refreshDailyCrates());
   const [result, setResult] = useState<CratePrize | null>(null);
   const [phase, setPhase] = useState<"closed" | "rolling" | "won">("closed");
@@ -138,20 +147,24 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
     window.setTimeout(settle, 6000);
   };
 
+  const caseButton = (
+    <button className={`crate-case ${profile.crates ? "ready" : "empty"}`} type="button" onClick={open} disabled={!profile.crates || phase === "rolling"} data-testid="crate-open">
+      <i className="crate-lid" /><i className="crate-lock">M</i>
+      <span><small>{profile.crates ? "GOTOWA DO OTWARCIA" : "DZIŚ JUŻ ODEBRANA"}</small><b>{phase === "rolling" ? "LOSOWANIE…" : profile.crates ? "OTWÓRZ SKRZYNKĘ" : "WRÓĆ JUTRO"}</b></span>
+      <em>→</em>
+    </button>
+  );
+
   return (
-    <section className="crate-panel" data-testid="crates">
+    <section className={`crate-panel ${compact ? "compact" : ""}`} data-testid={compact ? "crate-tile" : "crates"}>
       <div className="crate-top">
-        <div><b>SKRZYNKA DZIELNICY</b><small>Jedna dziennie · kolejne za zadania</small></div>
+        <div><b>SKRZYNKA DZIELNICY</b><small>{compact ? "Jedna dziennie" : "Jedna dziennie · kolejne za zadania"}</small></div>
         <strong data-testid="crate-count"><span>MASZ</span>{profile.crates}</strong>
       </div>
 
-      <button className="crate-case" type="button" onClick={open} disabled={!profile.crates || phase === "rolling"} data-testid="crate-open">
-        <i className="crate-lid" /><i className="crate-lock">M</i>
-        <span><small>{profile.crates ? "GOTOWA DO OTWARCIA" : "DZIŚ JUŻ ODEBRANA"}</small><b>{phase === "rolling" ? "LOSOWANIE…" : profile.crates ? "OTWÓRZ SKRZYNKĘ" : "WRÓĆ JUTRO"}</b></span>
-        <em>→</em>
-      </button>
+      {caseButton}
 
-      <div className="crate-odds" data-testid="crate-odds" aria-label="Szanse nagród">
+      {!compact && <div className="crate-odds" data-testid="crate-odds" aria-label="Szanse nagród">
         {(Object.keys(CRATE_ODDS) as PrizeKind[]).map((kind) => (
           <div key={kind}>
             <i className={`odds-${kind}`} />
@@ -159,19 +172,19 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
             <b>{Math.round(CRATE_ODDS[kind] * 100)}%</b>
           </div>
         ))}
-      </div>
+      </div>}
 
-      <div className="crate-collection" data-testid="crate-collection" aria-label="Stan kolekcji">
+      {!compact && <div className="crate-collection" data-testid="crate-collection" aria-label="Stan kolekcji">
         {collection.map((row) => (
           <div key={row.label}>
             <span>{row.label}</span>
             <b>{row.have}/{row.all}</b>
           </div>
         ))}
-      </div>
+      </div>}
 
-      <div className="crate-task-title"><b>ZDOBĄDŹ KOLEJNE</b><span>Zadania odnawiają się codziennie</span></div>
-      <div className="crate-tasks">
+      {!compact && <div className="crate-task-title"><b>ZDOBĄDŹ KOLEJNE</b><span>Zadania odnawiają się codziennie</span></div>}
+      {!compact && <div className="crate-tasks">
         {CRATE_CHALLENGES.map((task) => {
           const progress = Math.max(0, profile.life[task.stat] - profile.challengeBase[task.stat]);
           const done = profile.challengeClaims.includes(task.id);
@@ -183,7 +196,7 @@ export function Crates({ onProfile }: { onProfile(profile: Profile): void }) {
             </div>
           );
         })}
-      </div>
+      </div>}
 
       {phase !== "closed" && (
         <div className={`crate-opening ${phase}`} data-testid="crate-opening">
