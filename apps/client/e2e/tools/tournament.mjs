@@ -39,7 +39,8 @@ console.log(`# Turniej 1 v 1, na żywo (${new Date().toISOString().slice(0, 10)}
 const h0 = await hud();
 const b0 = await read();
 console.log("```");
-console.log(`mapa: ${h0.mapId}   tryb: ${h0.mode}   w pokoju: ${h0.players.length}`);
+const mapId = await page.evaluate(() => window.__fb.game.conn.state.mapId);   // the HUD does not carry it; the room state does
+console.log(`mapa: ${mapId}   tryb: ${h0.mode}   w pokoju: ${h0.players.length}`);
 console.log(`drabinka na ${b0.size}, par: ${b0.matches.length}, gra para nr ${b0.at + 1}`);
 for (const [a, b, sa, sb, w] of b0.matches) console.log(`  ${(a || "—").padEnd(10)} ${sa}:${sb} ${(b || "—").padEnd(10)} ${w === "-" ? "" : "→ " + (w === "a" ? a : b)}`);
 const board = h0.players.filter((p) => p.connected).length;
@@ -49,7 +50,9 @@ await shot("01-start");
 
 // Watch it play itself out. The bots fight; every time the bracket moves on, note it.
 let lastAt = b0.at, pairs = 0;
-const deadline = Date.now() + 15 * 60_000;
+// A pair of bots takes about seven minutes to reach six wins, so a draw of four is half an
+// hour. `MINUTES=10` cuts it short for a quick look.
+const deadline = Date.now() + Number(process.env.MINUTES ?? 34) * 60_000;
 while (Date.now() < deadline) {
   await page.waitForTimeout(4000);
   const h = await hud();
