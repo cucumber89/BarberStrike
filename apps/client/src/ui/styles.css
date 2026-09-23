@@ -945,3 +945,5 @@ td.sb-shaved.none { opacity: 0.4; }
 .bracket-strip { position: absolute; left: 50%; top: 74px; transform: translateX(-50%); z-index: 6; padding: 3px 11px; background: rgba(6, 15, 20, .72); border: 1px solid var(--line); font: 11px var(--font-mono); letter-spacing: .16em; color: var(--tx-2); white-space: nowrap; }
 .bracket.compact .bracket-pair { min-width: 104px; }
 @media (prefers-reduced-motion: reduce) { .bracket-pair.now { animation: none; } }
+/* The bracket as a tab of the result card: it scrolls with the body rather than floating over it. */
+.result-bracket { display: grid; justify-items: center; padding: 10px 0 4px; overflow: auto; }

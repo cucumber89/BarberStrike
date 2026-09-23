@@ -3,6 +3,7 @@ import { BADGES, HAIRCUTS, MODES, worstHaircut, type GameMode } from "@frankibar
 import type { HudState } from "../game/store";
 import { CRATE_CHALLENGES, type MatchReward, type Profile } from "../game/progression/profile";
 import { Razor, Scoreboard } from "./Scoreboard";
+import { BracketPanel } from "./Bracket";
 import { OUTCOME_TITLE, keyStats, matchOutcome, matchWhy, roundEnd, scoreLine, topReward } from "./resultText";
 
 /**
@@ -19,7 +20,10 @@ import { OUTCOME_TITLE, keyStats, matchOutcome, matchWhy, roundEnd, scoreLine, t
 interface Props { h: HudState; now: number; onLeave: () => void }
 
 export function MatchResult({ h, now, onLeave }: Props) {
-  const [tab, setTab] = useState<"summary" | "table">("summary");
+  // Drop T: a tournament's result screen owes the whole draw — who beat whom on the way to the
+  // final — so the bracket is a third tab rather than a card floating over the verdict, which is
+  // what it was on the first run and it covered the word PORAŻKA.
+  const [tab, setTab] = useState<"summary" | "table" | "bracket">("summary");
   const outcome = matchOutcome(h);
   const me = h.players.find((p) => p.id === h.myId);
   const stats = keyStats(h.mode as GameMode, me);
@@ -48,10 +52,15 @@ export function MatchResult({ h, now, onLeave }: Props) {
         <div className="result-tabs" role="tablist">
           <button role="tab" aria-selected={tab === "summary"} className={tab === "summary" ? "on" : ""} onClick={() => setTab("summary")} data-testid="result-tab-summary">PODSUMOWANIE</button>
           <button role="tab" aria-selected={tab === "table"} className={tab === "table" ? "on" : ""} onClick={() => setTab("table")} data-testid="result-tab-table">TABELA <kbd>TAB</kbd></button>
+          {h.bracket !== "" && (
+            <button role="tab" aria-selected={tab === "bracket"} className={tab === "bracket" ? "on" : ""} onClick={() => setTab("bracket")} data-testid="result-tab-bracket">DRABINKA</button>
+          )}
         </div>
 
         <div className="result-body" data-testid="result-body">
-          {tab === "summary" ? (
+          {tab === "bracket" ? (
+            <div className="result-bracket"><BracketPanel bracket={h.bracket} compact /></div>
+          ) : tab === "summary" ? (
             <>
               {stats.length > 0 && (
                 <div className="result-stats" data-testid="result-stats">

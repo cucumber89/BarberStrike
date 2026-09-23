@@ -528,11 +528,12 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {/* Between rounds: who took it and why, from the round's real signals */}
       {inBreak && !h.shopOpen && <RoundBreak h={h} />}
 
-      {/* Drop T: the tournament's bracket. Full size between pairs and on the result screen — the
-          only moments anybody has time to read it — and one line in the corner while a pair is
-          being played, so you always know which round of the draw you are in. */}
-      {h.bracket !== "" && !h.shopOpen && (
-        h.phase === MatchPhase.Prep || ended
+      {/* Drop T: the tournament's bracket. Full size between pairs — the one moment anybody has
+          time to read it — and one line in the corner while a pair is on, so you always know which
+          round of the draw you are in. On the result screen it is a TAB of the result card rather
+          than a card over it: floating, it covered the word PORAŻKA. */}
+      {h.bracket !== "" && !h.shopOpen && !ended && (
+        h.phase === MatchPhase.Prep
           ? <div className="bracket-card" data-testid="bracket-card"><h3>DRABINKA</h3><BracketPanel bracket={h.bracket} /></div>
           : <div className="bracket-strip" data-testid="bracket-strip">{bracketLine(h.bracket)}</div>
       )}

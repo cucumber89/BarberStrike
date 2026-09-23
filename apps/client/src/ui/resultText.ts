@@ -73,6 +73,9 @@ export function matchWhy(c: ResultCtx): string {
     return c.winnerId ? "Czas minął — najwięcej zabójstw wygrywa" : "Czas minął przy równej liczbie zabójstw";
   }
   // Team modes.
+  // A tournament is decided by the FINAL, not by a limit: the pair scores on the screen are one
+  // pair's, and "the first team to 6 points" is a sentence about a mode this is not.
+  if (c.mode === "turniej") return c.winnerName ? `${c.winnerName} wygrał finał drabinki` : "Drabinka rozegrana";
   if (top >= limit) return c.mode === "bomb" ? `Pierwsza drużyna z ${BOMB.wins} wygranymi rundami` : c.mode === "duel" ? `Pierwszy do ${DUEL.wins} wygranych rund` : `Pierwsza drużyna do ${limit} ${unitOf[c.mode] ?? "punktów"}`;
   if (!connected(0) || !connected(1)) return "Druga strona opuściła mecz";
   if (c.scoreA === c.scoreB) return "Czas minął przy równym wyniku";
