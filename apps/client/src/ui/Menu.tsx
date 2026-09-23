@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BOYS_CLASSES, BOYS, BUILDS, OUTFITS, buildDef, outfitDef, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MAX_PLAYERS, MODES, MODE_ORDER, isGameMode, isOpenMode, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { BOYS_CLASSES, BOYS, BUILDS, OUTFITS, buildDef, outfitDef, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, DUEL_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MAX_PLAYERS, MODES, MODE_ORDER, isGameMode, isOpenMode, type BotLevel, type GameMode } from "@frankibarber/shared";
 import { equippedBuild, equippedHaircut, equippedOutfit, ownedCuts } from "../game/progression/profile";
 import { copyText, inviteLink, isMapId, mapChoices, parseInvite } from "./invite";
 import { Connection, defaultServerUrl, type RoomListing } from "../game/net/Connection";
@@ -385,12 +385,17 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
 
                   <div className="lb-block">
                     <h2 className="lb-h"><em>{gameMode === "boys" ? "03" : "02"}</em> MAPA</h2>
+                    {/* A 1 v 1 is played on the arena built for it, so the picker says so instead of
+                        offering a choice the server overrides. */}
+                    {gameMode === "duel" && (
+                      <p className="mm-hint" data-testid="map-fixed">Pojedynek zawsze na {MAPS[DUEL_MAP_ID].name} — arenie zrobionej pod 1 v 1 ({mapSize(DUEL_MAP_ID)}).</p>
+                    )}
                     <div className="map-grid" role="radiogroup" aria-label="Map" data-testid="map-picker">
-                      {maps.map((m) => {
+                      {(gameMode === "duel" ? maps.filter((m) => m.id === DUEL_MAP_ID) : maps).map((m) => {
                         const Plan = mapArt(m.id);
                         return (
                           <button
-                            key={m.id} role="radio" aria-checked={mapId === m.id} className={`map-card ${mapId === m.id ? "on" : ""}`}
+                            key={m.id} role="radio" aria-checked={gameMode === "duel" || mapId === m.id} className={`map-card ${gameMode === "duel" || mapId === m.id ? "on" : ""}`}
                             onClick={() => pickMap(m.id)} data-testid={`map-${m.id}`} title={m.name}
                           >
                             <span className="map-plan"><Plan /></span>

@@ -3,7 +3,7 @@ import { Room, type Client } from "@colyseus/core";
 import {
   Btn, C2S, S2C, DEFAULT_WEAPON, HEADSHOT_MULTIPLIER, LAG_COMP_MAX_MS, MATCH, MAX_INPUT_BATCH, MAX_INPUT_DT_MS,
   MAX_INPUT_QUEUE, MAX_INPUT_RATE, MAX_OTHER_MSG_RATE, MAX_PLAYERS, MAX_SPECTATORS, MatchPhase, MAPS, DEFAULT_MAP_ID, PLAYER,
-  RESPAWN_DELAY_MS, SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER,
+  RESPAWN_DELAY_MS, SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER, DUEL_MAP_ID,
   isLive, isFrozen, maskInput, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
   BOMB, sitesOf, bombAttackTeam, bombSpawnSide, resetBomb, stepBomb, type BombPlayer,
   createBody, quantAngle, quantVel, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
@@ -297,12 +297,15 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // Drop G: which map this room runs, validated against the shared table exactly like `mode` is —
     // an unknown or missing id lands on the default rather than on `undefined`. Everything derived
     // from the map (collision world, spawns, flags, bomb sites, `state.mapId`) follows this line.
-    this.map = (typeof options?.map === "string" ? MAPS[options.map] : undefined) ?? MAPS[DEFAULT_MAP_ID];
+    // The mode is read BEFORE the map, because a 1 v 1 does not get a choice: it is played on the
+    // arena built for it (`DUEL_MAP_ID`). Everything else takes what the lobby asked for.
+    this.mode = isGameMode(options?.mode) ? options.mode : "tdm";
+    this.state.mode = this.mode;
+    const asked = typeof options?.map === "string" ? MAPS[options.map] : undefined;
+    this.map = (this.mode === "duel" ? MAPS[DUEL_MAP_ID] : undefined) ?? asked ?? MAPS[DEFAULT_MAP_ID];
     this.world = roomCollisionWorld(this.map);
     this.state.mapId = this.map.id;
     this.state.roomName = typeof options?.room === "string" ? options.room.slice(0, 24) : "";
-    this.mode = isGameMode(options?.mode) ? options.mode : "tdm";
-    this.state.mode = this.mode;
     if ((this.mode === "dom" || this.mode === "boys")) {
       for (const f of this.map.flags) { const fs = new FlagState(); fs.id = f.id; this.state.flags.push(fs); this.flagSims.push(neutralFlag()); }
     }

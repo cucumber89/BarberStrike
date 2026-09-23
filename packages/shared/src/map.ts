@@ -646,6 +646,14 @@ export const NIGHT_DISTRICT: MapDef = (() => {
 
 export const MAPS: Record<string, MapDef> = { [NIGHT_DISTRICT.id]: NIGHT_DISTRICT, [GORA.id]: GORA };
 export const DEFAULT_MAP_ID = NIGHT_DISTRICT.id;
+/**
+ * The map a 1 v 1 is played on, whatever the lobby asked for.
+ *
+ * GÓRA was built as the duel arena — 34 × 22 m, its symmetry a construction rather than a tuning —
+ * and nothing pinned the mode to it, so a duel ran on whatever map the room happened to carry;
+ * by default the 100 m night district, where two people spend the round looking for each other.
+ */
+export const DUEL_MAP_ID = GORA.id;
 export const MAP_ORDER: readonly string[] = [NIGHT_DISTRICT.id, GORA.id];
 
 /** The map's bomb sites, or NIGHT_DISTRICT's pair for a map that predates the field. */
