@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { MatchPhase,
   ARMOR, BOYS, BOYS_CLASSES, ECONOMY, GRENADES, PERKS, PERK_ORDER, WEAPONS, WEAPON_PRICES,
   boysClass, buyShortfall, canBuy, canSell, perkActive, primaryOf, secondaryOf,
-  DUEL, DUEL_KILL_REWARD, DUEL_KILL_REWARD_DEFAULT,
+  DUEL, CS_KILL_REWARD, CS_KILL_REWARD_DEFAULT,
   isArmorId, isGrenadeId, isPerkId, isWeaponId,
   type ArmorId, type GrenadeId, type PerkId, type ShopItemId, type Wallet, type WeaponId,
 } from "@frankibarber/shared";

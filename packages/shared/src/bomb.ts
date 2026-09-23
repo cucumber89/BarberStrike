@@ -1,7 +1,18 @@
+import { CS_ECONOMY, CS_ROUND } from "./cs";
 import type { Team } from "./types";
 
-export const BOMB = { roundMs: 115000, fuseMs: 40000, plantMs: 3200, defuseMs: 10000, breakMs: 5000, buyMs: 30000,
-  halfRounds: 6, maxRounds: 12, wins: 7, startMoney: 800, winMoney: 3250, useRadius: 2.5 } as const;
+/**
+ * Bomb's numbers are Counter-Strike's, and since 2026-09-23 they are literally CS's: the freeze,
+ * the buy window and the money come from `CS_ROUND` / `CS_ECONOMY`, the same block the 1 v 1 uses.
+ *
+ * `buyMs` was thirty seconds of its own, twice CS's freeze, and the shop shut the instant the
+ * round went live — so a Bomb player and a duel player were learning two different games. It is
+ * now `mp_freezetime`, with `CS_ROUND.buyTailMs` of buying past the release.
+ */
+export const BOMB = { roundMs: 115000, fuseMs: 40000, plantMs: 3200, defuseMs: 10000, breakMs: 5000,
+  buyMs: CS_ROUND.freezeMs, buyTailMs: CS_ROUND.buyTailMs,
+  halfRounds: 6, maxRounds: 12, wins: 7,
+  startMoney: CS_ECONOMY.start, winMoney: CS_ECONOMY.win, useRadius: 2.5 } as const;
 export const bombAttackTeam = (round: number): Team => round <= BOMB.halfRounds ? 0 : 1;
 /**
  * Which spawn SET a player uses in Bomb — attackers take the south (team-0) points, defenders the

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ECONOMY, WEAPON_PRICES, applyBuy, applySell, buyShortfall, buyWindowLeft, buyWindowOpen, canBuy, freshWallet, killReward, modeAllowsItem, takeGrenade, weaponForSlot, type BuyContext } from "./economy";
 import { MatchPhase, type GameMode } from "./types";
+import { BOMB } from "./bomb";
+import { DUEL } from "./modes";
+import { CS_ECONOMY, CS_KILL_REWARD_DEFAULT, CS_ROUND, csKillReward, csLossBonus } from "./cs";
 
 const open = (over: Partial<BuyContext> = {}): BuyContext => ({ now: 5000, spawnedAt: 0, phase: MatchPhase.Playing, alive: true, nearStation: false, ...over });
 const closed = (): BuyContext => open({ now: 50_000 });
@@ -171,5 +174,45 @@ describe("the shelf a mode stocks", () => {
     }
     // A caller with no mode at all (older call sites, tools) is not gated by this rule.
     expect(modeAllowsItem(undefined, "roids")).toBe(true);
+  });
+});
+
+/**
+ * The two CS modes pay the same way. This is the test that stops them drifting apart again: Bomb
+ * and the 1 v 1 read one block (`cs.ts`), so a change to CS's table is a change to both.
+ */
+describe("Counter-Strike's economy, shared by Bomb and the 1 v 1", () => {
+  it("is one set of numbers, not two", () => {
+    expect(BOMB.startMoney).toBe(CS_ECONOMY.start);
+    expect(BOMB.winMoney).toBe(CS_ECONOMY.win);
+    expect(DUEL.economy.start).toBe(CS_ECONOMY.start);
+    expect(DUEL.economy.win).toBe(CS_ECONOMY.win);
+    expect(DUEL.economy.lossMax).toBe(CS_ECONOMY.lossMax);
+    // One window, too: fifteen frozen and five more once the round is live.
+    expect(BOMB.buyMs).toBe(CS_ROUND.freezeMs);
+    expect(BOMB.buyTailMs).toBe(CS_ROUND.buyTailMs);
+    expect(DUEL.prepMs).toBe(CS_ROUND.freezeMs);
+    expect(DUEL.buyTailMs).toBe(CS_ROUND.buyTailMs);
+    expect(CS_ROUND.freezeMs + CS_ROUND.buyTailMs, "mp_buytime, from the start of the round").toBe(20000);
+  });
+
+  it("climbs the loss ladder exactly as CS does and stops where CS stops", () => {
+    expect(csLossBonus(0)).toBe(1400);
+    expect(csLossBonus(1)).toBe(1900);
+    expect(csLossBonus(2)).toBe(2400);
+    expect(csLossBonus(3)).toBe(2900);
+    expect(csLossBonus(4)).toBe(3400);
+    expect(csLossBonus(5), "the ladder stops climbing").toBe(3400);
+    expect(csLossBonus(99)).toBe(3400);
+    expect(csLossBonus(-3), "a nonsense streak is the first rung").toBe(1400);
+  });
+
+  it("pays a kill by the weapon that made it", () => {
+    expect(csKillReward("clippers")).toBe(1500);
+    expect(csKillReward("shotgun")).toBe(900);
+    expect(csKillReward("smg")).toBe(600);
+    expect(csKillReward("sniper")).toBe(100);
+    expect(csKillReward("rifle")).toBe(300);
+    expect(csKillReward("")).toBe(CS_KILL_REWARD_DEFAULT);
   });
 });

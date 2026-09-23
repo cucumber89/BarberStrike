@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * The 1 v 1, played against a running server over real websockets.
+ * A Counter-Strike round, played against a running server over real websockets — either of the two
+ * modes that run on CS's rules (`MODE=duel`, the default, or `MODE=bomb`).
  *
  * The unit tests drive the room in-process with a fake clock; this joins a real duel room with a
  * real socket and a real bot opponent and watches the clock it actually ships with: how long the
@@ -9,7 +10,8 @@
  * rounds. Anything that only works with fake timers fails here.
  *
  *   node apps/server/dist/index.js &                # or: pnpm host
- *   HOST_URL=http://127.0.0.1:2567 node apps/client/e2e/tools/duel-check.mjs
+ *   HOST_URL=http://127.0.0.1:2567 node apps/client/e2e/tools/cs-round-check.mjs
+ *   MODE=bomb HOST_URL=http://127.0.0.1:2567 node apps/client/e2e/tools/cs-round-check.mjs
  */
 import { Client } from "@colyseus/sdk";
 
@@ -19,9 +21,12 @@ const log = [];
 const say = (line) => { log.push(line); console.log(line); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const MODE = process.env.MODE ?? "duel";
 const room = await client.joinOrCreate("tdm", {
-  name: "PROBE", room: `duel-${Date.now()}`, mode: "duel", map: "gora", bots: 1, botLevel: "normal",
+  name: "PROBE", room: `${MODE}-${Date.now()}`, mode: MODE,
+  ...(MODE === "duel" ? { map: "gora", bots: 1 } : { bots: 3 }), botLevel: "normal",
 });
+say(`mode=${MODE}`);
 const me = () => room.state.players.get(room.sessionId);
 const phase = () => room.state.phase;
 
@@ -30,6 +35,7 @@ const t0 = Date.now();
 while (phase() !== "prep" && Date.now() - t0 < 30000) await wait(100);
 const freezeStart = Date.now();
 say(`phase=${phase()} money=${me()?.money} (pistol round should be $800)`);
+const expectFreeze = 15;
 
 const buy = async (item) => {
   const before = me()?.money ?? 0;
@@ -50,7 +56,7 @@ say(`freeze: launcher → ${JSON.stringify(await buy("launcher"))}`);
 // 3. How long the freeze really lasts.
 while (phase() === "prep" && Date.now() - freezeStart < 40000) await wait(100);
 const freezeMs = Date.now() - freezeStart;
-say(`freeze lasted ${(freezeMs / 1000).toFixed(1)} s (expected ~15 s), now phase=${phase()}`);
+say(`freeze lasted ${(freezeMs / 1000).toFixed(1)} s (expected ~${expectFreeze} s), now phase=${phase()}`);
 
 // 4. Sit through the round and read the wallet the next one starts with.
 const roundStart = Date.now();

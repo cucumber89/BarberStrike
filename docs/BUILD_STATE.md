@@ -4,7 +4,7 @@ Compact shared state. Read `ARCHITECTURE.md` first. Keep this file short.
 
 ## Current integration — The Boys and simplified UI (2026-09-07)
 The Boys replaces FFA in the menu; five classes, team control points, class shops and support healing.
-Entry waits for scene readiness and an explicit ENTER MATCH; 30-second buy windows, including Bomb.
+Entry waits for scene readiness and an explicit ENTER MATCH; 30-second buy windows in the open modes. The two CS modes (Bomb, 1 v 1) are on Counter-Strike's window instead since 2026-09-23 — 15 s frozen plus 5 s into the live round (`CS_ROUND`) — and on CS's economy (`CS_ECONOMY`, `csKillReward`).
 The simplified UI, movement without sliding and simplified Bomb rules from the local branch remain current;
 older feature entries below are historical. Main's weapon art/feel, map materials, graphics settings fixes,
 shared collision/navigation caches, compact snapshots, health statistics and precompressed hosting are retained.

@@ -1,4 +1,5 @@
 import { MATCH, MAX_PLAYERS, OPEN_MAX_PLAYERS, OPEN_PLAYER_CAP_MAX } from "./constants";
+import { CS_ECONOMY, CS_ROUND, csKillReward, csLossBonus } from "./cs";
 import { DOM } from "./dom";
 import { BOMB } from "./bomb";
 import type { GameMode, Team } from "./types";
@@ -33,8 +34,8 @@ export interface ModeDef {
 
 /** Drop 4 + Drop D: the modes. FFA scores personal kills; Domination scores held flags. */
 export const MODES: Record<GameMode, ModeDef> = {
-  tdm: { id: "tdm", name: "TEAM DEATHMATCH", short: "TDM", blurb: `FADE kontra TAPER · pierwsza drużyna do ${MATCH.scoreLimit} zabójstw`, teams: true, scoreLimit: MATCH.scoreLimit, shop: "all", winner: "team",
-    objective: `Eliminuj przeciwników: wygrywa drużyna, która pierwsza zdobędzie ${MATCH.scoreLimit} zabójstw albo prowadzi po czasie.` },
+  tdm: { id: "tdm", name: "TEAM DEATHMATCH", short: "TDM", blurb: `FADE kontra TAPER · pierwsza drużyna do ${MATCH.scoreLimit} zabójstw · w większym lobby limit rośnie`, teams: true, scoreLimit: MATCH.scoreLimit, shop: "all", winner: "team",
+    objective: `Eliminuj przeciwników: wygrywa drużyna, która pierwsza zdobędzie limit zabójstw (${MATCH.scoreLimit} w pełnym pokoju, więcej w dużym lobby) albo prowadzi po czasie.` },
   boys: { id: "boys", name: "THE BOYS", short: "BOYS", blurb: "5 ról · przejmuj A / B / C · pierwsza drużyna do 100 punktów · B: sklep i zmiana roli", teams: true, scoreLimit: DOM.scoreLimit, shop: "all", winner: "team",
     objective: `Trzymaj punkty A / B / C jako jedna z pięciu ról: wygrywa drużyna, która pierwsza zbierze ${DOM.scoreLimit} punktów.` },
   ffa: { id: "ffa", name: "FREE FOR ALL", short: "FFA", blurb: "Każdy na siebie · pierwszy do 30 zabójstw", teams: false, scoreLimit: 30, shop: "all", winner: "player",
@@ -69,6 +70,33 @@ export const MODE_ORDER: readonly GameMode[] = ["tdm", "boys", "dom", "bomb", "g
  * what "8 bots plus everybody" means in practice.
  */
 export const OPEN_MODES: ReadonlySet<GameMode> = new Set<GameMode>(["tdm", "ffa"]);
+
+/**
+ * THE KILL LIMIT OF A TEAM DEATHMATCH, scaled by how many bodies are in the room.
+ *
+ * TDM's limit is a TEAM total, and a team total fills at the rate the room shoots: at six a side
+ * the shipped 40 kills is a seven-minute match, and in the open lobby the same 40 is over in about
+ * a minute. (FFA's 30 is a PERSONAL total and scales the other way — more players means each one
+ * gets fewer, so it is deliberately left alone.)
+ *
+ * It is a function of the roster rather than a replicated field on purpose: the player map is
+ * already on the wire, so the server that ends the match and the HUD that prints the target
+ * compute the same number from the same thing, and no message had to be invented for it. The
+ * target therefore moves a little as people join and leave, which is the honest behaviour — the
+ * match is as long as the room is big.
+ *
+ * `bodies` counts everyone playing, bots included: a bot's kills fill the same bar.
+ */
+export function tdmScoreLimit(bodies: number): number {
+  const scale = Math.max(1, Math.round(bodies)) / MAX_PLAYERS;
+  return Math.max(MATCH.scoreLimit, Math.min(TDM_SCORE_LIMIT_MAX, Math.round(MATCH.scoreLimit * scale / 5) * 5));
+}
+/** A ceiling, so a freak room cannot ask for a match nobody has time to finish. */
+export const TDM_SCORE_LIMIT_MAX = 150;
+
+/** The limit a mode is played to, given the room. Only TDM's moves; everything else is its own. */
+export const scoreLimitFor = (mode: GameMode, bodies: number): number =>
+  mode === "tdm" ? tdmScoreLimit(bodies) : MODES[mode].scoreLimit;
 
 /** Is this mode an open lobby (bots on top of humans) or a fixed roster (bots in the seats)? */
 export const isOpenMode = (mode: GameMode): boolean => OPEN_MODES.has(mode);
@@ -255,13 +283,13 @@ export const DUEL = {
    * same fifteen seconds it uses in competitive. It was 4 s, which is enough time to press three
    * buttons if you already know which three; the owner asked for CS's, so this is CS's.
    */
-  prepMs: 15000,
+  prepMs: CS_ROUND.freezeMs,
   /**
    * And CS's `mp_buytime` on top of it: the shop stays open for this long AFTER the round goes
    * live, so 15 + 5 = the 20 s CS counts from the start of a round. It is why a CS player can
    * still buy while walking out of spawn, and why forgetting armour is not an instant loss.
    */
-  buyTailMs: 5000,
+  buyTailMs: CS_ROUND.buyTailMs,
   /**
    * A cap on the fight, not a target: most duels are over in a fifth of it. CS's round is 1:55,
    * which for two players on a roof is two players looking for each other; 60 s keeps the match
@@ -291,43 +319,15 @@ export const DUEL = {
    * pistol round — it is exempt, or the mode would never have one.
    */
   economy: {
-    /** The pistol round: CS's $800, and the same first round of every half. */
-    start: 800,
-    /** Never more than this in hand, as in CS. */
-    max: 16000,
+    // CS's numbers, shared with Bomb (`CS_ECONOMY`), plus the one that is not CS's.
+    ...CS_ECONOMY,
     /** The owner's floor: any round but a half's first tops up to at least this. */
     floor: 2500,
-    /** Paid for winning a round (CS's elimination award). */
-    win: 3250,
-    /** The loss ladder: first loss, each further one, and where it stops. */
-    lossBase: 1400,
-    lossStep: 500,
-    lossMax: 3400,
   },
 } as const;
 
-/**
- * What a kill pays, by the weapon that made it — CS's table, mapped onto this roster: the clippers
- * are the knife, the shotguns are the shotguns, anything that fires like an SMG pays like one, the
- * sniper pays almost nothing, and everything else is the flat rifle award.
- *
- * It is the one piece of the economy a player feels while shooting rather than while buying: a
- * clippers kill in a duel is worth five rifle kills, which is exactly the joke the mode is built
- * on (and this game's melee weapon is a pair of clippers, so the joke lands twice).
- */
-export const DUEL_KILL_REWARD: Partial<Record<WeaponId, number>> = {
-  clippers: 1500,
-  shotgun: 900,
-  autoshotgun: 900,
-  smg: 600,
-  smg2: 600,
-  machinepistol: 600,
-  sniper: 100,
-};
-/** The flat award for everything not in the table (pistols, rifles, the launcher). */
-export const DUEL_KILL_REWARD_DEFAULT = 300;
-export const duelKillReward = (weapon: string): number =>
-  DUEL_KILL_REWARD[weapon as WeaponId] ?? DUEL_KILL_REWARD_DEFAULT;
+/** What a kill pays in a duel: CS's table (`csKillReward`), shared with Bomb. */
+export const duelKillReward = csKillReward;
 
 /** How a round ended FOR ONE PLAYER: they took it, they lost it, or nobody did (a trade or the clock). */
 export type DuelRoundResult = "win" | "loss" | "draw";
@@ -344,9 +344,8 @@ export interface DuelPurse {
 
 export const freshDuelPurse = (): DuelPurse => ({ money: DUEL.economy.start, losses: 0 });
 
-/** What the ladder pays after `losses` consecutive losses (0 = this is the first). */
-export const duelLossBonus = (losses: number): number =>
-  Math.min(DUEL.economy.lossMax, DUEL.economy.lossBase + DUEL.economy.lossStep * Math.max(0, losses));
+/** What the ladder pays after `losses` consecutive losses (0 = this is the first). CS's, shared. */
+export const duelLossBonus = csLossBonus;
 
 /**
  * The purse after a round ended. A win pays the round award and clears the streak; a loss pays the

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { boysClass, BOMB, DUEL, GAME_VERSION, GRENADES, GUN_GAME, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, PLAYER, TEAM_NAMES, WEAPONS, killerName, ladderDone, ladderWeapon, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
+import { boysClass, BOMB, DUEL, GAME_VERSION, scoreLimitFor, GRENADES, GUN_GAME, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_ORDER, PLAYER, TEAM_NAMES, WEAPONS, killerName, ladderDone, ladderWeapon, perkActive, type GameMode, type WeaponId } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import { pelletRing } from "../game/combat/weaponFeel";
 import { TeamPicker } from "./TeamPicker";
@@ -205,12 +205,16 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {h.smokeOpacity > 0 && <div className="smoke-screen" data-testid="smoke-screen" style={{ opacity: h.smokeOpacity }} />}
       {h.bomb && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && <div className={`bomb-hud ${h.bomb.stage === "planted" ? "armed" : ""}`} data-testid="bomb-hud">
         <b>RUNDA {h.bomb.round} / 12 · {h.bomb.attackTeam === h.myTeam ? "ATAK" : "OBRONA"} · DO 7</b>
+        {/* The objective ALWAYS, and while CS's buy tail runs it carries that too — the shop being
+            open a few seconds into the round is no use to anybody who does not know it is, and the
+            first five seconds of a round is exactly when a player needs to be told their job. */}
         <span>{h.bomb.stage === "buy" ? `${h.bomb.round === 7 ? "ZMIANA STRON · " : ""}B: SKLEP · START ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
           : h.phase === MatchPhase.Prep ? `${roundReasonText(h.bomb.result)} · NASTĘPNA RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
-          : h.bomb.stage === "planted" ? `ŁADUNEK NA ${h.bomb.site} · ${h.bomb.attackTeam === h.myTeam ? "PILNUJ ŁADUNKU" : "PRZYTRZYMAJ T, ŻEBY ROZBROIĆ"}`
-          : h.bomb.carrier === h.myId ? "MASZ ŁADUNEK · PRZYTRZYMAJ T NA A / B, ŻEBY PODŁOŻYĆ"
-          : h.bomb.attackTeam !== h.myTeam ? "BROŃ PUNKTÓW A / B"
-          : h.bomb.stage === "dropped" ? "ŁADUNEK UPUSZCZONY · PODEJDŹ, ŻEBY PODNIEŚĆ" : "OSŁANIAJ NIOSĄCEGO ŁADUNEK"}</span>
+          : (h.bomb.stage === "planted" ? `ŁADUNEK NA ${h.bomb.site} · ${h.bomb.attackTeam === h.myTeam ? "PILNUJ ŁADUNKU" : "PRZYTRZYMAJ T, ŻEBY ROZBROIĆ"}`
+            : h.bomb.carrier === h.myId ? "MASZ ŁADUNEK · PRZYTRZYMAJ T NA A / B, ŻEBY PODŁOŻYĆ"
+            : h.bomb.attackTeam !== h.myTeam ? "BROŃ PUNKTÓW A / B"
+            : h.bomb.stage === "dropped" ? "ŁADUNEK UPUSZCZONY · PODEJDŹ, ŻEBY PODNIEŚĆ" : "OSŁANIAJ NIOSĄCEGO ŁADUNEK")
+            + (h.alive && h.buyWindowLeft > 0 ? ` · SKLEP (B) JESZCZE ${Math.max(0, Math.ceil(h.buyWindowLeft / 1000))}s` : "")}</span>
         {h.bomb.actor && <><div className="bomb-progress"><i style={{ "--v": h.bomb.progress } as React.CSSProperties} /></div><small>{h.bomb.actor === h.myId ? "TRZYMAJ T · NIE RUSZAJ SIĘ" : h.bomb.stage === "planted" ? "ROZBRAJANIE" : "PODKŁADANIE"}</small></>}
       </div>}
       {/* Ostrzyżeni (drop D): the round, how many heads are left, and which side the clock favours. */}
@@ -305,6 +309,9 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           {h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep ? fmtTime(matchLeft)
             : h.phase === MatchPhase.Countdown ? `START ${Math.max(0, Math.ceil(timeLeft / 1000))}`
             : h.phase === MatchPhase.Waiting ? "ROZGRZEWKA" : "KONIEC"}
+          {/* TDM's target follows the size of the room (`scoreLimitFor`), so it is printed rather
+              than left to a mode blurb that would be wrong in half the rooms. */}
+          {h.mode === "tdm" && <small className="timer-goal" data-testid="score-goal">DO {scoreLimitFor("tdm", h.players.length)}</small>}
         </div>
         {teams
           ? <div className={`team-score t1 ${h.myTeam === 1 ? "mine" : ""}`}><span className="tscore" data-testid="score-b">{h.scoreB}</span><span className="tname">{sideNames[1]}</span></div>

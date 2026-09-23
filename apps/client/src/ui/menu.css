@@ -498,9 +498,28 @@
 .reel-track .epicki { border-bottom-color: #a34fff; }
 .reel-track .legendarny { border-bottom-color: #ef4d93; }
 .reel-track .zloty { border-bottom-color: #ffc52f; }
+/**
+ * WHERE THE REEL STOPS, worked out from the cards rather than from the viewport.
+ *
+ * It used to end at `min(46vw, 525px) - 4237.5px` — a number with the window's width in it, which
+ * is the one thing the winning card's position does not depend on. On a 1280-wide run it left the
+ * prize 466 px from the marker (`armoury.spec.ts` has measured this since it was written).
+ *
+ * The track now starts at the window's own centre (`left: 50%`), so a translation of exactly
+ * "distance from the track's left edge to card N's centre" puts card N under the marker at any
+ * width: N whole cells, plus half a cell. The card width and the gap are the same two custom
+ * properties the cells are laid out with, and `--win-index` is set by `Crates.tsx` from the same
+ * constant it tags `data-winning` with — so the animation and the prize cannot disagree.
+ */
+.reel-window { --reel-cell: 145px; --reel-gap: 8px; }
+.reel-track {
+  position: absolute; top: 0; left: 50%; height: 100%;
+  animation: crate-reel 2.8s cubic-bezier(.08, .72, .08, 1) forwards;
+}
 @keyframes crate-reel {
-  from { transform: translateX(0); }
-  to { transform: translateX(calc(min(46vw, 525px) - 4237.5px)); }
+  /* Card 0 under the marker, then the whole run of them past it. */
+  from { transform: translateX(calc(-1 * var(--reel-cell) / 2)); }
+  to { transform: translateX(calc(-1 * (var(--win-index, 27) * (var(--reel-cell) + var(--reel-gap)) + var(--reel-cell) / 2))); }
 }
 @media (prefers-reduced-motion: reduce) {
   .reel-track { animation-duration: .01ms; }

@@ -1,4 +1,4 @@
-import { BOMB, DUEL, GUN_GAME, MODES, OSTRZYZENI, TEAM_NAMES, parseHaircut, type GameMode, type Team } from "@frankibarber/shared";
+import { BOMB, DUEL, GUN_GAME, MODES, OSTRZYZENI, TEAM_NAMES, parseHaircut, scoreLimitFor, type GameMode, type Team } from "@frankibarber/shared";
 import type { MatchReward } from "../game/progression/profile";
 import type { ScoreRow } from "../game/store";
 
@@ -53,7 +53,9 @@ const unitOf: Partial<Record<GameMode, string>> = { tdm: "zabójstw", dom: "punk
 /** One sentence on how the match was decided. */
 export function matchWhy(c: ResultCtx): string {
   const def = MODES[c.mode];
-  const limit = def.scoreLimit;
+  // TDM's limit is the room's (`scoreLimitFor`), not the mode's: the result screen has to explain
+  // the match that was actually played.
+  const limit = scoreLimitFor(c.mode, c.players.length);
   const top = Math.max(c.scoreA, c.scoreB);
   const connected = (t: Team) => c.players.some((p) => p.connected && p.team === t);
   if (c.mode === "gungame") {

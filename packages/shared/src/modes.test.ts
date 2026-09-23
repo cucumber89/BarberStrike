@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { DUEL, GUN_GAME, MODES, MODE_ORDER, OSTRZYZENI, convertsOnKill, isOpenMode, modeCapacity, openPlayerCap,
+  TDM_SCORE_LIMIT_MAX, scoreLimitFor, tdmScoreLimit,
   duelHalfStart, duelKillReward, duelLossBonus, duelPurseAfter, duelStartMoney, freshDuelPurse, duelRoundWinner, duelSpawnSide, infectionRoundWinner, ladderAfterKill, ladderDone, ladderRung, ladderWeapon, pickFirstShaved } from "./modes";
 import { GAME_MODES, isGameMode } from "./types";
-import { MAX_PLAYERS, OPEN_MAX_PLAYERS, OPEN_PLAYER_CAP_MAX } from "./constants";
+import { MATCH, MAX_PLAYERS, OPEN_MAX_PLAYERS, OPEN_PLAYER_CAP_MAX } from "./constants";
 import { WEAPONS, WEAPON_ORDER } from "./weapons";
 import { ARMOR } from "./perks";
 import { WEAPON_PRICES } from "./economy";
@@ -250,5 +251,34 @@ describe("the duel economy", () => {
     expect(DUEL.prepMs + DUEL.buyTailMs, "mp_buytime, counted from the start of the round").toBe(20000);
     // The freeze cannot be longer than the round it prepares for.
     expect(DUEL.prepMs).toBeLessThan(DUEL.roundMs);
+  });
+});
+
+/**
+ * How long a deathmatch lasts, now that a room can hold forty bodies. TDM's is a TEAM total, so it
+ * fills at the rate the whole room shoots; FFA's is a personal one and is deliberately fixed.
+ */
+describe("the deathmatch limit follows the room", () => {
+  it("leaves a normal room exactly as it was", () => {
+    expect(tdmScoreLimit(MAX_PLAYERS)).toBe(MATCH.scoreLimit);
+    expect(tdmScoreLimit(2), "a two-player room does not get a shorter match than the shipped one").toBe(MATCH.scoreLimit);
+    expect(scoreLimitFor("tdm", MAX_PLAYERS)).toBe(MATCH.scoreLimit);
+  });
+
+  it("raises it with the crowd, and stops at a number somebody has time to reach", () => {
+    expect(tdmScoreLimit(24), "twice the bodies, twice the kills").toBe(MATCH.scoreLimit * 2);
+    expect(tdmScoreLimit(40)).toBeGreaterThan(MATCH.scoreLimit * 3);
+    expect(tdmScoreLimit(40)).toBeLessThanOrEqual(TDM_SCORE_LIMIT_MAX);
+    expect(tdmScoreLimit(1000), "the ceiling holds").toBe(TDM_SCORE_LIMIT_MAX);
+    // It only ever climbs, so a player who joins cannot end the match by arriving.
+    for (let n = 2; n < 60; n++) expect(tdmScoreLimit(n + 1)).toBeGreaterThanOrEqual(tdmScoreLimit(n));
+  });
+
+  it("moves nothing else", () => {
+    for (const m of GAME_MODES) {
+      if (m === "tdm") continue;
+      expect(scoreLimitFor(m, 40), m).toBe(MODES[m].scoreLimit);
+    }
+    expect(scoreLimitFor("ffa", 40), "FFA's is a personal total: more players make it harder, not easier").toBe(MODES.ffa.scoreLimit);
   });
 });
