@@ -5,43 +5,18 @@ import { pelletRing } from "../game/combat/weaponFeel";
 import { TeamPicker } from "./TeamPicker";
 import { PlanPanel } from "./PlanPanel";
 import { Hints } from "./Hints";
-import type { Settings } from "../settings";
 import { SettingsPanel } from "./SettingsPanel";
-import { Shop, type ShopApi } from "./Shop";
-import { Chat, type ChatApi } from "./Chat";
+import { Shop } from "./Shop";
+import { Chat } from "./Chat";
 import { Minimap } from "./Minimap";
 import { HeadShot, Razor, Scoreboard } from "./Scoreboard";
 import { MatchResult, RoundBreak } from "./MatchResult";
 import { BracketPanel, bracketLine, pairNames, standing } from "./Bracket";
 import { OSTRZYZENI_SIDES, roundReasonText } from "./resultText";
-import type { RadarSnapshot } from "../game/Game";
+import type { HudProps } from "./hud/types";
 
-interface Props {
-  settings: Settings;
-  onSettings: (s: Settings) => void;
-  onLeave: () => void;
-  /** Resolves to whether the pointer really ended up locked — a refusal must be visible, not silent. */
-  onResume: () => Promise<boolean>;
-  /** Release the pointer so Escape can open the pause card even when the browser did not do it. */
-  onPause: () => void;
-  /** Toggle fullscreen; resolves to whether the game is fullscreen afterwards. */
-  onFullscreen: () => Promise<boolean>;
-  /** Ask the server to move you to a side; it decides and answers. */
-  onChooseTeam: (t: import("@frankibarber/shared").Team) => void;
-  /** Living arena: vote for one of this round's plans. */
-  onVotePlan: (id: number) => void;
-  /** Drop 2: shop actions routed to the game (buy/sell go to the server, close re-locks the pointer). */
-  shop: ShopApi;
-  /** Drop 5: chat send / close, and the minimap's per-frame feed. */
-  chat: ChatApi;
-  radar: () => RadarSnapshot | null;
-  /**
-   * Mounted but not yet in play: the tree is built and committed while the loading screen is still
-   * up, so the ~25 ms first commit is not paid at the instant the player presses DEPLOY. Nothing
-   * is interactive and nothing is visible until this goes false.
-   */
-  dormant?: boolean;
-}
+/** The props are the drop-U contract (`hud/types.ts`): today's, plus the inert `entering`. */
+type Props = HudProps;
 
 const fmtTime = (ms: number): string => {
   const s = Math.max(0, Math.ceil(ms / 1000));
