@@ -35,8 +35,9 @@
  * says so with `elapsed` (see `Scenario.elapsed`).
  */
 // The same cascade as the game. `App` imports `Menu`, which imports menu.css, and main.tsx's own
-// sheets are evaluated after its imports — so menu.css comes first, then the fonts, styles.css and
-// cinematic.css. Measured font sizes and colours are only the game's if the cascade is.
+// sheets are evaluated after its imports — so menu.css comes first, then the fonts, styles.css, the
+// HUD's ui/hud/index.css and cinematic.css. Measured font sizes and colours are only the game's if the
+// cascade is.
 import "./ui/menu.css";
 import "@fontsource/bebas-neue";
 import "@fontsource/inter/400.css";
@@ -45,6 +46,7 @@ import "@fontsource/inter/600.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "./ui/styles.css";
+import "./ui/hud/index.css";
 import "./ui/cinematic.css";
 import React from "react";
 import { createRoot } from "react-dom/client";

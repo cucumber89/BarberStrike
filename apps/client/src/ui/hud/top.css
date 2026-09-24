@@ -1,0 +1,109 @@
+/* ui/hud/top.css — the top strip, mode line, flags, bracket and objective line (seeded by P0 for P2).
+   Drop U P0 0e moved these rules VERBATIM from ui/styles.css and then ui/cinematic.css, each in
+   its original order, without collapsing the later layer into the earlier one. index.css imports
+   the hud/*.css files between styles.css and cinematic.css, so the cascade is the one they had. */
+
+.top-bar { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 18px; }
+.team-score { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); }
+.team-score .tname { font-size: 14px; letter-spacing: 0.25em; color: var(--tx-2); }
+.team-score .tscore { font-size: 30px; min-width: 44px; text-align: center; padding: 2px 8px; background: rgba(10,10,12,.7); border-bottom: 2px solid var(--line); }
+.team-score.t0 .tscore { border-color: var(--team0); } .team-score.t1 .tscore { border-color: var(--team1); }
+.team-score.mine .tname { color: var(--tx); }
+.timer { font-family: var(--font-mono); font-size: 20px; letter-spacing: 0.08em; color: var(--tx); padding: 6px 12px; background: rgba(10,10,12,.7); }
+.bomb-hud { position: absolute; top: 94px; left: 50%; transform: translateX(-50%); display: grid; gap: 7px; text-align: center; width: min(480px, 55vw); padding: 10px 18px; background: rgba(14, 20, 23, .88); border-top: 2px solid #e5ae52; color: #e5ae52; font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; }
+.bomb-hud b { color: #fff; font-size: 13px; }
+.bomb-hud.armed { border-color: #ff7050; color: #ff9070; }
+.bomb-progress { height: 5px; background: #ffffff25; }
+.bomb-progress i { display: block; height: 100%; width: 100%; background: #e5ae52; transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform .1s linear; }
+.timer, .tscore { font-variant-numeric: tabular-nums; }
+
+/* ---- drop 4: Domination flags, capture state, tactical sprint meter (the lobby's own mode
+   picker moved to menu.css in 2.6) ---- */
+.ffa-score { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); }
+.ffa-score .tname { font-size: 12px; letter-spacing: .25em; color: var(--tx-2); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ffa-score .tscore { font-size: 30px; min-width: 44px; text-align: center; padding: 2px 8px; background: rgba(10,10,12,.7); border-bottom: 2px solid var(--line); }
+.ffa-score.mine .tscore { border-color: var(--brass); } .ffa-score.mine .tname { color: var(--tx); }
+.ffa-score.lead .tscore { border-color: var(--red); }
+
+.flags { position: absolute; top: 68px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+.flag { position: relative; width: 56px; height: 30px; display: flex; align-items: center; justify-content: center; background: rgba(10,10,12,.7); border: 1px solid var(--line); font-family: var(--font-display); font-size: 18px; color: var(--tx-2); overflow: hidden; }
+.flag.own0 { border-color: var(--team0); color: var(--team0); } .flag.own1 { border-color: var(--team1); color: var(--team1); }
+.flag.here { box-shadow: 0 0 0 1px var(--tx) inset; }
+.flag-cap { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--tx); transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform 120ms linear; }
+.flag.cap0 .flag-cap { background: var(--team0); } .flag.cap1 .flag-cap { background: var(--team1); }
+.flag.contested { animation: pulse .6s ease-in-out infinite; border-color: #ff7a3d; }
+.capture { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); text-align: center; font-size: 12px; letter-spacing: .25em; color: var(--tx); text-shadow: 0 2px 6px rgba(0,0,0,.8); }
+.capture.contested { color: #ff7a3d; }
+.capture-bar { width: 180px; height: 4px; background: rgba(255,255,255,.15); margin: 6px auto 0; }
+.capture-fill { height: 100%; width: 100%; background: var(--brass); transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform 120ms linear; }
+.capture.enemy .capture-fill { background: var(--red); }
+.top-bar { gap:10px; background:#10151eed; border:1px solid #ffffff26; border-radius:10px; padding:8px 12px; box-shadow:0 4px 18px #0006; }
+.timer { font-size:28px; font-weight:700; min-width:104px; text-align:center; background:none; padding:4px 10px; }
+/* The kill target under the clock (TDM only): small, and it never moves the clock. */
+.timer-goal { display:block; margin-top:-2px; font-family: var(--font-display); font-size:12px; font-weight:400; letter-spacing:.16em; color: var(--tx-3); }
+.team-score .tscore { font-size:32px; background:none; }
+.team-score .tname { font-size:12px; letter-spacing:.08em; }
+@media(max-width:900px) {
+  .team-score .tname { display:none; }
+  .top-bar { top:12px; padding:4px; }
+  .timer { min-width:90px; font-size:24px; }
+}
+
+
+.flags { top:88px; }
+@media(max-width:900px) { .flags { top:74px; } }
+
+/* Drop D: the Gun Game ladder in the top bar — rung, the gun it hands you, and the next one. */
+.ffa-score.ladder .tscore { min-width: 64px; }
+.ffa-score .ladder-gun { display: flex; flex-direction: column; line-height: 1.1; font-family: var(--font-ui); }
+.ffa-score .ladder-gun b { font-size: 12px; letter-spacing: .08em; color: var(--tx); white-space: nowrap; }
+.ffa-score .ladder-gun small { font-size: 10px; letter-spacing: .12em; color: var(--tx-2); white-space: nowrap; }
+
+/* Drop D — Ostrzyżeni: the round line reuses the bomb banner's shape, in the shaved side's colour
+   when you are the one holding the clippers, so a glance at the top of the screen says which you are. */
+.bomb-hud.infection { border-top-color: var(--team1, #7fb2d8); color: #cfe3f2; }
+.bomb-hud.infection.shaved { border-top-color: #d8556a; color: #ffc9d1; }
+
+.top-bar {
+  background: var(--plate); border: 1px solid var(--plate-line); border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(0,0,0,.38);
+}
+
+/* --- top: the match, quieter than the things that kill you --- */
+.top-bar { top: var(--edge); padding: 6px 14px; gap: 14px; }
+.timer { font-size: 24px; min-width: 92px; }
+.team-score .tscore { font-size: 26px; }
+
+/* The mode's goal, one sentence: under the countdown / warm-up, on the pause card, on the loading
+   screen. Same sentence in all three (`MODES[mode].objective`), so nobody meets a rule for the
+   first time on the result screen. */
+.center-sub.objective { top: 96px; display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: min(760px, 90vw); text-align: center; letter-spacing: 0.04em; }
+.center-sub.objective b { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.22em; color: var(--brass); font-weight: normal; }
+.center-sub.objective span { font-size: 15px; color: var(--tx); line-height: 1.35; text-shadow: 0 1px 4px rgba(0,0,0,.9); }
+
+/* ---------------------------------------------------------------- the tournament bracket (drop T)
+   A column per round, read left to right. The pair being played is the only thing that moves. */
+.bracket-card { position: absolute; left: 50%; top: 96px; transform: translateX(-50%); z-index: 12; display: grid; gap: 10px; justify-items: center; padding: 16px 20px 18px; background: rgba(6, 15, 20, .93); border: 1px solid var(--line); border-top: 2px solid var(--brass); box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.bracket-card h3 { margin: 0; font: 20px var(--font-display); letter-spacing: .22em; color: var(--brass); }
+.bracket { display: flex; align-items: center; gap: 22px; }
+.bracket-round { display: grid; gap: 10px; align-content: center; }
+.bracket-round h4 { margin: 0 0 2px; font: 10px var(--font-mono); letter-spacing: .18em; color: var(--tx-3); text-align: center; }
+.bracket-pair { display: grid; gap: 2px; min-width: 132px; padding: 5px 7px; background: rgba(13, 28, 35, .8); border: 1px solid var(--line); border-left: 3px solid var(--line); }
+.bracket-pair span { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--tx-2); }
+.bracket-pair b { font-family: var(--font-display); font-size: 14px; font-weight: normal; letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bracket-pair i { font-family: var(--font-mono); font-style: normal; font-size: 12px; color: var(--tx-3); }
+.bracket-pair span.won b, .bracket-pair span.won i { color: var(--brass); }
+.bracket-pair span.lost b, .bracket-pair span.lost i { color: var(--tx-3); opacity: .6; }
+.bracket-pair.done { border-left-color: rgba(231, 182, 46, .5); }
+.bracket-pair.now { border-left-color: var(--red); animation: pulse 1400ms ease-in-out infinite; }
+/* While a pair is on: one line in the corner, out of the way of everything that matters. */
+.bracket-strip { position: absolute; left: 50%; top: 74px; transform: translateX(-50%); z-index: 6; padding: 3px 11px; background: rgba(6, 15, 20, .72); border: 1px solid var(--line); font: 11px var(--font-mono); letter-spacing: .16em; color: var(--tx-2); white-space: nowrap; }
+.bracket.compact .bracket-pair { min-width: 104px; }
+@media (prefers-reduced-motion: reduce) { .bracket-pair.now { animation: none; } }
+
+/* ---------------------------------------- from ui/cinematic.css, which loaded after styles.css */
+.top-bar {
+  border-radius: 2px; backdrop-filter: blur(8px);
+  box-shadow: 0 8px 28px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.03);
+}
+.top-bar { border-top: 2px solid var(--brass); }

@@ -17,6 +17,7 @@ import "@fontsource/inter/600.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "./ui/styles.css";
+import "./ui/hud/index.css";
 import "./ui/cinematic.css";
 import { Shop } from "./ui/Shop";
 import { PlanPanel } from "./ui/PlanPanel";
