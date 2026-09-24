@@ -173,9 +173,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); out
 }
 .mm-field input, .row.tight input { background: rgba(2,9,13,.7); border-color: rgba(171,195,203,.23); }
 
-/* -------------------------------- in-match UI */
-.hud { --plate: rgba(5, 15, 20, .88); --plate-line: rgba(178, 201, 210, .2); }
-
 @media (max-width: 1100px) {
   .mm-title-grid, .mm-title-foot { width: min(610px, 57vw); }
   .mm-live-list { grid-template-columns: 1fr; }

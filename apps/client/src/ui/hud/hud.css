@@ -1,0 +1,46 @@
+/* ui/hud/hud.css — the HUD's shared layer (P0; frozen after P0): the .hud root and its plate
+   variables, the shared keyframes, the debug readout and .urgent, which three packages read.
+   Drop U P0 0e moved these rules VERBATIM from ui/styles.css and then ui/cinematic.css, each in
+   its original order, without collapsing the later layer into the earlier one. index.css imports
+   the hud/*.css files between styles.css and cinematic.css, so the cascade is the one they had. */
+
+/* ---------- HUD ---------- */
+.hud { position: absolute; inset: 0; z-index: 1; pointer-events: none; user-select: none; font-family: var(--font-ui); }
+.hud > * { pointer-events: none; }
+@keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+@keyframes slide-in { from { transform: translateX(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes result-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.debug { position: absolute; left: 12px; top: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--tx-3); background: rgba(0,0,0,.5); padding: 3px 6px; }
+@keyframes reload-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.telemetry { margin-top: 4px; border-collapse: collapse; }
+.telemetry td { padding: 1px 8px 1px 0; color: var(--tx-2); font-variant-numeric: tabular-nums; }
+.telemetry td:last-child { color: var(--tx); text-align: right; }
+@keyframes toast-rise { 0% { opacity: 0; transform: translateY(6px); } 12% { opacity: 1; transform: translateY(0); } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px); } }
+.urgent { color:#ffbd70 !important; border-color:#ffbd70 !important; }
+
+/* The HUD is built while the loading screen is still up so its first commit is not paid at DEPLOY
+   (see App.tsx). Until the match starts it is invisible and cannot be clicked or tabbed into. */
+.hud.dormant { visibility: hidden; pointer-events: none; }
+
+/* ==========================================================================================
+   HUD — one plate, one hierarchy (2.5)
+
+   The report was "brzydki i opornie" — ugly, and it drags. The drag was CSS forcing layout every
+   frame (fixed above). The ugliness was inconsistency: #14/#17 gave the health block and the top
+   bar a rounded plate and left the wallet, the ammo and the grenade slots floating naked beside
+   them, so the same screen had two visual languages and no order of importance.
+
+   The rules here are the whole design, and they are deliberately few:
+     PLATE   one treatment for every grouped readout — same ink, same radius, same border.
+     RANK    what you die without is biggest (health, ammo), what you plan with is smaller
+             (money, grenades), what you glance at is smallest (kill feed, timer).
+     STATE   health carries its own colour, so "am I in trouble" is answered by the colour and
+             never by reading a number under fire.
+     EDGE    everything sits on one 24 px margin and one 12 px inner rhythm.
+   ========================================================================================== */
+.hud { --plate: #0d1117e8; --plate-line: #ffffff1f; --plate-pad: 10px 14px; --edge: 24px; }
+
+/* ---------------------------------------- from ui/cinematic.css, which loaded after styles.css */
+/* -------------------------------- in-match UI */
+.hud { --plate: rgba(5, 15, 20, .88); --plate-line: rgba(178, 201, 210, .2); }
