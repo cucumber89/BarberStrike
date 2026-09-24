@@ -1,11 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { boysClass, GAME_VERSION, GRENADES, MODES, MatchPhase } from "@frankibarber/shared";
 import { useHud } from "../game/store";
-import { TeamPicker } from "./TeamPicker";
 import { PlanPanel } from "./PlanPanel";
 import { Hints } from "./Hints";
-import { SettingsPanel } from "./SettingsPanel";
-import { Shop } from "./Shop";
 import { Chat } from "./Chat";
 import { Minimap } from "./Minimap";
 import { Scoreboard } from "./Scoreboard";
@@ -24,6 +21,9 @@ import { BracketHud } from "./hud/BracketHud";
 import { FlagNotice, Moments } from "./hud/Moments";
 import { RoundBannerLayer } from "./hud/RoundBanner";
 import { DeathCard } from "./hud/DeathCard";
+import { PauseMenu } from "./hud/PauseMenu";
+import { ShopLayer } from "./hud/ShopLayer";
+import { uiFlags, useUiFlags } from "./hud/uiFlags";
 
 /** The props are the drop-U contract (`hud/types.ts`): today's, plus the inert `entering`. */
 type Props = HudProps;
@@ -57,63 +57,23 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   const fast = h.flashUntil > performance.now() || cookRing;
   const now = useClock(fast ? 33 : 250);
   const [scoreboard, setScoreboard] = useState(false);
-  const [paused, setPaused] = useState(false);
   const [telemetry, setTelemetry] = useState(false);
-  const [pauseSettings, setPauseSettings] = useState(false);
-  /** Set when a resume attempt came back without the pointer, so the card can say so and retry. */
-  const [lockRefused, setLockRefused] = useState(false);
-  const [fullscreen, setFullscreen] = useState(() => typeof document !== "undefined" && document.fullscreenElement != null);
-
-  useEffect(() => {
-    const sync = () => setFullscreen(document.fullscreenElement != null);
-    document.addEventListener("fullscreenchange", sync);
-    return () => document.removeEventListener("fullscreenchange", sync);
-  }, []);
-
-  const resume = useCallback(async () => {
-    const ok = await onResume();
-    setLockRefused(!ok);
-    if (ok) setPaused(false);
-  }, [onResume]);
+  // The pause card is PauseMenu's; it publishes whether it shows.
+  const paused = useUiFlags((f) => f.overlay.pause);
 
   useEffect(() => {
     if (dormant) return;
     const down = (e: KeyboardEvent) => {
       if (h.chatOpen) return; // the chat box owns the keyboard (drop 5)
       // Tab is the scoreboard in play, but plain focus navigation inside the pause card / shop.
-      if (e.code === "Tab" && !paused && !h.shopOpen) { e.preventDefault(); setScoreboard(true); }
-      if (e.code === "Escape" && !h.shopOpen) {
-        // Two ways in. Normally the browser has already released the pointer by the time this
-        // runs. Under Keyboard Lock (fullscreen, Chromium) Escape reaches the page WITHOUT
-        // releasing it, so the lock has to be dropped here or the pause card would be unclickable.
-        e.preventDefault();
-        if (paused) void resume();
-        else { onPause(); setPaused(true); }
-      }
+      if (e.code === "Tab" && !uiFlags.get().overlay.pause && !h.shopOpen) { e.preventDefault(); setScoreboard(true); }
       if (e.code === "F3" && import.meta.env.DEV) { e.preventDefault(); setTelemetry((t) => !t); }
     };
     const up = (e: KeyboardEvent) => { if (e.code === "Tab") setScoreboard(false); };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
-  }, [h.shopOpen, h.chatOpen, paused, resume, onPause, dormant]);
-
-  // Escape releases pointer lock (browser) → show pause overlay; clicking resume re-locks.
-  // The shop and the chat box release / hold the lock on purpose, so they never count as a pause.
-  useEffect(() => {
-    // A DORMANT hud is the one mounted behind the loading screen from READY on (App.tsx), and
-    // nobody has entered the match yet: it is connected and it has no pointer, which is exactly
-    // the shape of "the player pressed Escape", so it armed the pause card 300 ms into the ready
-    // screen. Invisible (`.hud.dormant`), but real: `startup.spec.ts` asserts no pause card there
-    // and was passing only by beating that timer to the assertion. The gate is the same one the
-    // keyboard effect above already has — a hud that is not on screen decides nothing.
-    if (dormant) return;
-    if (!h.pointerLocked && h.connected && h.phase !== MatchPhase.Ended && !h.shopOpen && !h.chatOpen) {
-      const timer = window.setTimeout(() => setPaused(true), 300);
-      return () => window.clearTimeout(timer);
-    }
-    if (h.pointerLocked || h.shopOpen || h.chatOpen) setPaused(false);
-  }, [dormant, h.pointerLocked, h.connected, h.phase, h.shopOpen, h.chatOpen]);
+  }, [h.shopOpen, h.chatOpen, dormant]);
 
   const lowHealth = h.alive && h.health <= 30;
   const windowSecs = h.buyWindowLeft === Infinity ? null : Math.ceil(h.buyWindowLeft / 1000);
@@ -192,34 +152,9 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {/* Living arena: the round's plan vote, or what is in force (2.4) */}
       {!h.shopOpen && !ended && <PlanPanel h={h} onVote={onVotePlan} />}
 
-      {/* Buy menu (B) */}
-      {h.shopOpen && h.phase !== MatchPhase.Ended && <Shop h={h} api={shop} now={now} />}
-
-      {/* Pause / settings */}
-      {paused && h.phase !== MatchPhase.Ended && (
-        <div className="pause" data-testid="pause">
-          <div className="pause-card">
-            <div className="wordmark small">BARBERSTRIKE</div>
-            <p className="pause-hint">Pauza · <kbd>ESC</kbd> albo WRÓĆ DO GRY, żeby grać dalej</p>
-            <p className="pause-objective" data-testid="pause-objective"><b>{MODES[h.mode].name}</b> · {MODES[h.mode].objective}</p>
-            {lockRefused && (
-              <p className="pause-warn" data-testid="pause-lock-refused">
-                Przeglądarka nie oddała myszy. Kliknij <strong>WRÓĆ DO GRY</strong> jeszcze raz —
-                odmowa tuż po wciśnięciu Escape jest normalna i mija po sekundzie.
-              </p>
-            )}
-            <button className="menu-btn primary" onClick={() => void resume()} data-testid="btn-resume">WRÓĆ DO GRY</button>
-            <button className="menu-btn" onClick={() => void onFullscreen().then(setFullscreen)} data-testid="btn-fullscreen">
-              {fullscreen ? "WYJDŹ Z PEŁNEGO EKRANU" : "PEŁNY EKRAN"}
-            </button>
-            <button className="menu-btn" onClick={() => setPauseSettings((v) => !v)} data-testid="btn-pause-settings">{pauseSettings ? "UKRYJ USTAWIENIA" : "USTAWIENIA"}</button>
-            {!pauseSettings && <TeamPicker h={h} onChoose={onChooseTeam} />}
-            {pauseSettings && <SettingsPanel settings={settings} onChange={onSettings} />}
-            <button className="menu-btn" onClick={onLeave} data-testid="btn-leave">OPUŚĆ MECZ</button>
-            <div className="version">v{GAME_VERSION}</div>
-          </div>
-        </div>
-      )}
+      <ShopLayer model={model} api={shop} now={now} />
+      <PauseMenu model={model} settings={settings} onSettings={onSettings} onLeave={onLeave} onResume={onResume} onPause={onPause}
+        onFullscreen={onFullscreen} onChooseTeam={onChooseTeam} dormant={dormant} />
 
       {/* Frame counter. The player can turn this on in a built game now — it used to be DEV-only,
           so the one number anybody asks for ("what fps am I getting?") did not exist outside a dev
