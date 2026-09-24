@@ -41,6 +41,12 @@
  *                `none` when it has none. The breakdown below the table adds each zone's min font,
  *                its <13px count, its rows (the element children of the zone root, below any single
  *                wrapper — one row, chip or item each) and its §5.1 budget
+ *   zone box     what a zone root paints: the union of its own box and the boxes of its visible
+ *                descendant elements and text, each cut by the overflow of the ancestors between
+ *                it and the root. The root's own box is not enough: the crosshair is a 0×0 anchor
+ *                its arms hang from, and a `display: contents` wrapper has no box at all — with
+ *                the root alone their `apart` pairs were silently never measured. (Pseudo-elements
+ *                and shadows are not in it; a root that paints nothing has no box.)
  *   overlaps     pairs of visible zone boxes of different zones intersecting by more than 2 px on
  *                both axes; veil, fade, scoreboard, result, shop, pause, settings and loading are
  *                excluded (§4.2)
@@ -236,19 +242,70 @@ function measure() {
     const zone = root.getAttribute("data-zone");
     (zones[zone].rows ??= []).push(...per.words.values());
   }
-  // Zone boxes, and what each zone holds that its budget depends on.
+  // Zone boxes (the header's "zone box"), and what each zone holds that its budget depends on.
+  // Overflow cuts what an element holds, at its padding box — except that an absolutely or fixed
+  // positioned box answers only to its containing block's chain: the ancestors between it and that
+  // block do not cut it. `display: contents` and inline elements cut nothing.
+  const holdsFixed = (cs) => cs.transform !== "none" || cs.perspective !== "none" || cs.filter !== "none"
+    || (cs.backdropFilter ?? "none") !== "none" || /layout|paint|strict|content/.test(cs.contain) || /transform|perspective|filter/.test(cs.willChange);
+  const cut = (q, from, root, mode) => {
+    let x = q.left, y = q.top, r = q.right, b = q.bottom;
+    for (let p = from; p; p = p === root ? null : p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (mode === "fixed" ? !holdsFixed(cs) : mode === "absolute" && cs.position === "static" && !holdsFixed(cs)) continue;
+      mode = cs.position;
+      if (cs.display === "contents" || cs.display === "inline" || (cs.overflowX === "visible" && cs.overflowY === "visible")) continue;
+      const pr = p.getBoundingClientRect();
+      // A transform that scales the element leaves clientWidth unscaled: use the border box then.
+      const flat = p instanceof HTMLElement && Math.abs(pr.width - p.offsetWidth) < 0.5 && Math.abs(pr.height - p.offsetHeight) < 0.5;
+      const px = flat ? pr.left + p.clientLeft : pr.left, pw = flat ? p.clientWidth : pr.width;
+      const py = flat ? pr.top + p.clientTop : pr.top, ph = flat ? p.clientHeight : pr.height;
+      if (cs.overflowX !== "visible") { x = Math.max(x, px); r = Math.min(r, px + pw); }
+      if (cs.overflowY !== "visible") { y = Math.max(y, py); b = Math.min(b, py + ph); }
+    }
+    return { x, y, r, b };
+  };
+  // The union of what the root paints; null when it paints nothing. A descendant inside a nested
+  // zone root is that zone's (the rule text follows, §4.2), not this one's.
+  const footprint = (root, contents) => {
+    const own = (el) => el.closest("[data-zone]") === root;
+    const parts = [];
+    if (!contents) { const q = root.getBoundingClientRect(); parts.push({ x: q.left, y: q.top, r: q.right, b: q.bottom }); }
+    for (const el of root.querySelectorAll("*")) {
+      if (own(el) && shows(el)) parts.push(cut(el.getBoundingClientRect(), el.parentElement, root, getComputedStyle(el).position));
+    }
+    const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = tw.nextNode(); n; n = tw.nextNode()) {
+      const el = n.parentElement;
+      if (!el || !(n.textContent ?? "").trim() || !own(el) || !shows(el)) continue;
+      const color = getComputedStyle(el).color;
+      if (/rgba?\([^)]*,\s*0\)$/.test(color) || color === "transparent") continue;
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      parts.push(cut(range.getBoundingClientRect(), el, root, "static"));
+    }
+    const on = parts.filter((q) => q.r - q.x >= 1 && q.b - q.y >= 1);
+    if (!on.length) return null;
+    return { x: Math.min(...on.map((q) => q.x)), y: Math.min(...on.map((q) => q.y)), r: Math.max(...on.map((q) => q.r)), b: Math.max(...on.map((q) => q.b)) };
+  };
   const boxes = [];
+  const blank = []; // zones whose root is on screen but paints nothing (an empty kill feed): no box
   const HAS = { card: "[data-testid=death]", spectate: "[data-testid=spectate]", teamPicker: "[data-testid=team-picker]", leaveConfirm: "[data-testid=btn-leave-confirm]", enterGame: "[data-testid=enter-game]" };
   for (const root of document.querySelectorAll("[data-zone]")) {
-    if (!shows(root)) continue;
+    // `display: contents` has no box, so checkVisibility is false for it whatever it holds: such a
+    // wrapper is on screen when something it holds is painted.
+    const contents = getComputedStyle(root).display === "contents";
+    if (!contents && !shows(root)) continue;
+    const box = footprint(root, contents);
+    if (contents && !box) continue;
     const zone = root.getAttribute("data-zone");
     const z = (zones[zone] ??= { words: 0, minFont: Infinity, under13: 0, under12: 0, texts: 0 });
     for (const [k, sel] of Object.entries(HAS)) {
       const hit = root.matches(sel) ? root : root.querySelector(sel);
       if (hit && shows(hit)) (z.has ??= {})[k] = true;
     }
-    const r = root.getBoundingClientRect();
-    if (r.width >= 1 && r.height >= 1) boxes.push({ zone, x: r.left, y: r.top, r: r.right, b: r.bottom });
+    if (box) boxes.push({ zone, ...box });
+    else if (!blank.includes(zone)) blank.push(zone);
   }
   const chatLines = [...document.querySelectorAll("[data-testid=chat-line]")].filter((el) => el.closest("[data-zone]")?.getAttribute("data-zone") === "chat" && shows(el)).length;
   if (zones.chat) zones.chat.chatLines = chatLines;
@@ -263,7 +320,7 @@ function measure() {
   return {
     words, blocks: blocks.size, minFontPx: Number.isFinite(minFont) ? Math.round(minFont * 10) / 10 : null, under12: small, under13,
     sizes: sizes.size, sizeList: [...sizes].sort((a, b) => a - b), textNodes: texts.length, smallest: texts.slice(0, 8),
-    zones, boxes, stage,
+    zones, boxes, blank: blank.filter((zone) => !boxes.some((b) => b.zone === zone)), stage,
     canvasMin: canvas.length ? Math.min(...canvas.map((t) => t.px)) : null, canvasTexts: canvas.length,
   };
 }
@@ -465,9 +522,12 @@ const md = [
   "",
   "## Overlaps and apart pairs",
   "",
-  ...results.filter((r) => r.overlaps?.length || r.apart?.length).map((r) => `- **${r.id}** @${r.size}: ${[
+  "A zone on screen that paints nothing (an empty kill feed) has no box, so no pair with it is measured: it is listed as `no box`.",
+  "",
+  ...results.filter((r) => r.overlaps?.length || r.apart?.length || r.blank?.length).map((r) => `- **${r.id}** @${r.size}: ${[
     ...r.overlaps.map((o) => `overlap ${o.a} × ${o.b} ${o.w}×${o.h}px`),
     ...r.apart.map((p) => `${p.a} × ${p.b} ${p.gap}px (≥ ${p.min}, ${p.kind}${p.ok ? "" : ", FAILS"})`),
+    ...(r.blank?.length ? [`no box: ${r.blank.join(", ")}`] : []),
   ].join("; ")}`),
   ...(results.some((r) => r.overlaps?.length || r.apart?.length) ? [] : ["no zone boxes on any page (no `[data-zone]` yet)"]),
   "",
