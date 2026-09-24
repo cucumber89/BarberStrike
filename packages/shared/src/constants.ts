@@ -136,16 +136,13 @@ export const MATCH = {
    */
   endedMs: 20000,
   /**
-   * Respawn waves (1.1 drop 7). A match alternates a LIVE window of `waveMs` with a frozen PREP
-   * window of `prepMs`: everyone who died during the wave comes back at the start of prep, nobody
-   * can act until it ends, and both sides are released together.
-   *
-   * These two numbers are the whole feel of the mode and are meant to be tuned by playing:
-   *  - the longest you can be dead is `waveMs + prepMs` (17 s), the typical wait about 11 s,
-   *    against the flat 3.2 s of the old individual respawn;
-   *  - the freeze is `prepMs / (waveMs + prepMs)` of the match — 29% at these values, which is the
-   *    price of everyone starting a fight from the line rather than trickling into one.
-   * Warm-up (WAITING) keeps the old individual respawn: waves are a rule of the MATCH.
+   * DEAD NUMBERS. These timed the respawn waves of 1.1 drop 7 (LIVE `waveMs` → frozen PREP `prepMs`),
+   * which were removed on 2026-09-06 (8bc1256): a continuous match is one PLAYING phase with the
+   * individual respawn (`respawnDelayMs` in `rounds.ts`), and the round modes time their own PREPs
+   * (`BOMB.buyMs`, `DUEL.prepMs`, `OSTRZYZENI.prepMs` and each mode's `breakMs`). No room reads
+   * either. `prepMs` is kept only because the client's freeze beeps still count from it
+   * (`apps/client/src/game/audio/index.ts`), which drop U replaces with the phase's own `endsAt`;
+   * `waveMs` has no reader at all. Tuning them changes nothing in a match.
    */
   waveMs: 12000,
   prepMs: 5000,

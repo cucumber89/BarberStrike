@@ -4,18 +4,19 @@ import { PERK_EFFECT } from "./perks";
 import { Btn, MatchPhase, type GameMode } from "./types";
 
 /**
- * Respawn waves and the frozen preparation window (1.1 drop 7).
+ * The frozen PREP window, and the respawn timer.
  *
- * The rule the owner asked for: "there is a countdown before both teams respawn, so you can calmly
- * prepare". So a match is not one continuous scramble with players trickling back three seconds
- * after they die. It alternates:
+ * PREP is a round-mode phase now. The respawn WAVES that first used it (1.1 drop 7: LIVE
+ * `MATCH.waveMs` → PREP `MATCH.prepMs` → LIVE …) were removed on 2026-09-06 (8bc1256): a continuous
+ * mode (TDM, FFA, DOM, BOYS, Gun Game) is one PLAYING phase from the countdown to the clock, and a
+ * casualty comes back on their own timer, `respawnDelayMs` below.
  *
- *   LIVE (MATCH.waveMs)  →  PREP (MATCH.prepMs)  →  LIVE  →  …
- *
- * Everyone who died during the wave comes back at the START of prep — not at its end — because the
- * point is to PREPARE: you want to see where you are, look at the map, buy, and reload before the
- * fight restarts. During prep nobody can move, shoot or throw, so both sides are released from the
- * line at the same instant and nobody can take a position (or a spawn) while the others wait.
+ * Bomb, the 1 v 1, the tournament and Ostrzyżeni run in rounds, and there a PREP is one of two
+ * windows, told apart by the round state rather than the phase (`bomb.result` is empty in the first):
+ *  - the FREEZE at the start of a round — everyone is respawned as it begins, so you can look at
+ *    the map, buy and reload before the fight; nobody can move, shoot or throw, and both sides are
+ *    released from the line at the same instant;
+ *  - the BREAK after a round — the result stands, nobody comes back, and nobody moves.
  *
  * These rules live in `shared` for one reason that is not tidiness: the client PREDICTS movement
  * with the same `simulateBody` the server runs. If the freeze were implemented only on the server,
@@ -67,9 +68,9 @@ export const maskInput = (buttons: number, frozen: boolean): number =>
  * long, so the movement was not delayed but discarded, and discarded in proportion to ping. A
  * 200 ms player lost ten times the start a 20 ms player lost, every single wave.
  *
- * So: the wave clock running out means frozen; the preparation clock running out means released.
- * The phase says which window `phaseEndsAt` belongs to, and a stale phase gives the right answer
- * either way, which is the point of reading the clock instead of the phase.
+ * So: the preparation clock running out means released. The phase says which window `phaseEndsAt`
+ * belongs to, and a stale phase gives the right answer either way, which is the point of reading
+ * the clock instead of the phase. (PLAYING never freezes: the waves that did are gone, see above.)
  */
 export const frozenAt = (phase: MatchPhase, phaseEndsAt: number, serverNow: number): boolean => {
   if (phaseEndsAt <= 0) return isFrozen(phase);
