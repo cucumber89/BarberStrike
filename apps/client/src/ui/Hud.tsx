@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { boysClass, GAME_VERSION, GRENADES, MODES, MatchPhase, killerName } from "@frankibarber/shared";
+import { boysClass, GAME_VERSION, GRENADES, MODES, MatchPhase } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import { TeamPicker } from "./TeamPicker";
 import { PlanPanel } from "./PlanPanel";
@@ -10,7 +10,6 @@ import { Chat } from "./Chat";
 import { Minimap } from "./Minimap";
 import { Scoreboard } from "./Scoreboard";
 import { MatchResult } from "./MatchResult";
-import { standing } from "./Bracket";
 import type { HudProps } from "./hud/types";
 import { usePhaseModel } from "./hud/phase";
 import { Crosshair, FlashVeil, SmokeVeil } from "./hud/Crosshair";
@@ -24,6 +23,7 @@ import { ActionPrompt } from "./hud/ActionPrompt";
 import { BracketHud } from "./hud/BracketHud";
 import { FlagNotice, Moments } from "./hud/Moments";
 import { RoundBannerLayer } from "./hud/RoundBanner";
+import { DeathCard } from "./hud/DeathCard";
 
 /** The props are the drop-U contract (`hud/types.ts`): today's, plus the inert `entering`. */
 type Props = HudProps;
@@ -119,9 +119,6 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   const windowSecs = h.buyWindowLeft === Infinity ? null : Math.ceil(h.buyWindowLeft / 1000);
   const shopHint = h.shopResult && !h.shopOpen && h.shopResult.reason === "closed" && now - h.shopResult.at < 1800;
   const toasts = useMemo(() => h.moneyToasts.filter((t) => t.reason !== "reset" && t.reason !== "buy"), [h.moneyToasts]);
-  // Drop T: playing this pair, waiting for yours, or out — read off the bracket, not a new field.
-  const myName = h.players.find((r) => r.id === h.myId)?.name ?? "";
-  const tourStanding = h.bracket ? standing(h.bracket, myName) : "";
   // Drop 4: mode-aware scoring. FFA shows my kills against the leader; Domination adds the flag row.
   const teams = MODES[h.mode].teams;
   const noShop = MODES[h.mode].shop === "none";
@@ -173,21 +170,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
 
       <FlashVeil model={model} now={now} />
 
-      {/* Death screen */}
-      {!h.alive && h.connected && h.phase !== MatchPhase.Ended && (
-        <div className="death" data-testid="death">
-          <div className="death-title">{h.killerName ? <>WYELIMINOWAŁ CIĘ <b>{h.killerName}</b></> : "WYELIMINOWANY"}</div>
-          {h.killerWeapon && h.killerName && <div className="death-weapon">{killerName(h.killerWeapon)}</div>}
-          <div className="death-respawn">
-            {/* A tournament leaves most of the room dead for minutes at a time, and counting down a
-                respawn that is never coming is the one thing the card must not do. */}
-            {tourStanding === "waiting" ? "CZEKASZ NA SWOJĄ PARĘ"
-              : tourStanding === "out" ? "ODPADŁEŚ · OGLĄDASZ DO KOŃCA"
-              : (h.mode === "bomb" || h.mode === "duel" || h.mode === "turniej") && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) ? "WRACASZ W NASTĘPNEJ RUNDZIE"
-              : `ODRODZENIE ZA ${Math.max(0, Math.ceil((h.respawnAt - now) / 1000))}`}
-          </div>
-        </div>
-      )}
+      <DeathCard model={model} now={now} />
 
       <RoundBannerLayer model={model} />
 
