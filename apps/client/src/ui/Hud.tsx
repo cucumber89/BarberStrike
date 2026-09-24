@@ -1,10 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { boysClass, GAME_VERSION, GRENADES, MODES, MatchPhase } from "@frankibarber/shared";
+import { useEffect, useState } from "react";
+import { GAME_VERSION, GRENADES } from "@frankibarber/shared";
 import { useHud } from "../game/store";
-import { PlanPanel } from "./PlanPanel";
-import { Hints } from "./Hints";
-import { Chat } from "./Chat";
-import { Minimap } from "./Minimap";
 import type { HudProps } from "./hud/types";
 import { usePhaseModel } from "./hud/phase";
 import { Crosshair, FlashVeil, SmokeVeil } from "./hud/Crosshair";
@@ -23,7 +19,8 @@ import { PauseMenu } from "./hud/PauseMenu";
 import { ShopLayer } from "./hud/ShopLayer";
 import { ScoreboardOverlay } from "./hud/ScoreboardOverlay";
 import { ResultLayer } from "./hud/ResultLayer";
-import { useUiFlags } from "./hud/uiFlags";
+import { HintLine, LeftColumn, PlanCard } from "./hud/LeftColumn";
+import { Wallet } from "./hud/Wallet";
 
 /** The props are the drop-U contract (`hud/types.ts`): today's, plus the inert `entering`. */
 type Props = HudProps;
@@ -38,14 +35,9 @@ function useClock(intervalMs: number): number {
   return t;
 }
 
-const money = (n: number) => `$${n.toLocaleString("en-US")}`;
-
-const REASON_SHORT: Record<string, string> = { kill: "ZABÓJSTWO", headshot: "W GŁOWĘ", assist: "ASYSTA", buy: "", sell: "SPRZEDAŻ", reset: "", round: "WYGRANA RUNDA", loss: "BONUS ZA PRZEGRANĄ" };
-
 export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, onChooseTeam, onVotePlan, shop, chat, radar, dormant = false }: Props) {
   const h = useHud();
   const model = usePhaseModel();
-  const ended = h.phase === MatchPhase.Ended;
   /**
    * Rule G9: the cook ring belongs to the ONE grenade that cooks. A smoke, a flash, a molotov or a
    * knife is in the hand for the 180 ms of the wind-up and never cooks, so the ring it used to draw
@@ -57,8 +49,6 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   const fast = h.flashUntil > performance.now() || cookRing;
   const now = useClock(fast ? 33 : 250);
   const [telemetry, setTelemetry] = useState(false);
-  // The pause card is PauseMenu's; it publishes whether it shows.
-  const paused = useUiFlags((f) => f.overlay.pause);
 
   useEffect(() => {
     if (dormant) return;
@@ -71,12 +61,6 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   }, [h.chatOpen, dormant]);
 
   const lowHealth = h.alive && h.health <= 30;
-  const windowSecs = h.buyWindowLeft === Infinity ? null : Math.ceil(h.buyWindowLeft / 1000);
-  const shopHint = h.shopResult && !h.shopOpen && h.shopResult.reason === "closed" && now - h.shopResult.at < 1800;
-  const toasts = useMemo(() => h.moneyToasts.filter((t) => t.reason !== "reset" && t.reason !== "buy"), [h.moneyToasts]);
-  // Drop 4: mode-aware scoring. FFA shows my kills against the leader; Domination adds the flag row.
-  const teams = MODES[h.mode].teams;
-  const noShop = MODES[h.mode].shop === "none";
 
   return (
     <div className={`hud ${lowHealth ? "low-health" : ""} ${dormant ? "dormant" : ""}`} data-testid="hud" aria-hidden={dormant || undefined}>
@@ -88,35 +72,13 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       <FlagNotice model={model} now={now} />
       <ActionPrompt model={model} />
 
-      {/* Minimap + compass (drop 5): hidden behind the scope and the result screen */}
-      {/* The tube takes your surroundings away with it; the M-1's ring is the weapon that does NOT,
-          which is most of what separates the two long rifles in play. */}
-      {h.connected && h.scopeStyle !== "tube" && h.phase !== MatchPhase.Ended && <Minimap radar={radar} />}
-      {/* Chat (drop 5) */}
-      {h.connected && <Chat lines={h.chat} open={h.chatOpen} teams={teams} myId={h.myId} api={chat} />}
+      <LeftColumn model={model} radar={radar} chat={chat} />
 
       <KillFeed model={model} />
 
       <Vitals model={model} now={now} />
 
-      {/* Wallet + buy prompt (drop 2) */}
-      {h.connected && !noShop && !ended && (
-        <div className="wallet" data-testid="wallet">
-          {h.mode === "boys" && <div className="wallet-role">{boysClass(h.boysClass).name} · B: rola / sklep{h.nextClass !== h.boysClass ? ` · następna: ${boysClass(h.nextClass).name}` : ""}</div>}
-          <div className={`wallet-money ${h.money >= 8000 ? "rich" : ""}`} data-testid="money">{money(h.money)}</div>
-          {h.alive && !h.shopOpen && h.buyWindowLeft > 0 && (
-            <div className={`wallet-prompt ${h.nearStation ? "station" : ""} ${windowSecs !== null && windowSecs <= 5 ? "urgent" : ""}`} data-testid="buy-prompt">
-              <kbd>B</kbd><span>SKLEP</span><strong data-testid="buy-countdown">{windowSecs !== null ? `${windowSecs}s` : "OTWARTY"}</strong>
-            </div>
-          )}
-        </div>
-      )}
-      <div className="money-toasts" aria-live="polite">
-        {!ended && toasts.map((t) => (
-          <div key={t.key} className={`money-toast ${t.delta < 0 ? "neg" : ""}`}>{t.delta > 0 ? "+" : ""}{money(t.delta)}<span className="why">{REASON_SHORT[t.reason] ?? t.reason.toUpperCase()}</span></div>
-        ))}
-      </div>
-      {shopHint && !ended && <div className="shop-closed-hint" data-testid="shop-closed">{noShop ? `W TRYBIE ${MODES[h.mode].name} NIE MA SKLEPU · BROŃ DAJĄ ZABÓJSTWA` : "SKLEP ZAMKNIĘTY · PODEJDŹ DO LADY $"}</div>}
+      <Wallet model={model} now={now} />
 
       <Inventory model={model} />
 
@@ -134,13 +96,8 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       <ResultLayer model={model} now={now} onLeave={onLeave} />
       <ScoreboardOverlay model={model} dormant={dormant} />
 
-      {/* First-run hints: one short line, once each, never blocking (2.4) */}
-      {/* NOT while dormant: a hint is shown once ever and then remembered, so letting the timer
-          run behind an invisible HUD would burn them all before the player saw one. */}
-      {!paused && !dormant && !ended && <Hints h={h} />}
-
-      {/* Living arena: the round's plan vote, or what is in force (2.4) */}
-      {!h.shopOpen && !ended && <PlanPanel h={h} onVote={onVotePlan} />}
+      <HintLine model={model} dormant={dormant} />
+      <PlanCard model={model} onVote={onVotePlan} />
 
       <ShopLayer model={model} api={shop} now={now} />
       <PauseMenu model={model} settings={settings} onSettings={onSettings} onLeave={onLeave} onResume={onResume} onPause={onPause}
