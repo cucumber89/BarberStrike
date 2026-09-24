@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { boysClass, GAME_VERSION, GRENADES, MODES, MatchPhase, killerName } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import { TeamPicker } from "./TeamPicker";
@@ -9,7 +9,7 @@ import { Shop } from "./Shop";
 import { Chat } from "./Chat";
 import { Minimap } from "./Minimap";
 import { Scoreboard } from "./Scoreboard";
-import { MatchResult, RoundBreak } from "./MatchResult";
+import { MatchResult } from "./MatchResult";
 import { standing } from "./Bracket";
 import type { HudProps } from "./hud/types";
 import { usePhaseModel } from "./hud/phase";
@@ -22,6 +22,8 @@ import { ModeLine, Objective } from "./hud/ModeLine";
 import { FlagRow } from "./hud/FlagRow";
 import { ActionPrompt } from "./hud/ActionPrompt";
 import { BracketHud } from "./hud/BracketHud";
+import { FlagNotice, Moments } from "./hud/Moments";
+import { RoundBannerLayer } from "./hud/RoundBanner";
 
 /** The props are the drop-U contract (`hud/types.ts`): today's, plus the inert `entering`. */
 type Props = HudProps;
@@ -44,15 +46,6 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   const h = useHud();
   const model = usePhaseModel();
   const ended = h.phase === MatchPhase.Ended;
-  // The break after a round is the FIRST Prep window after Playing; the buy window that follows
-  // is a second Prep with a new deadline. Remembering the break's deadline is what tells them apart.
-  const prevPhase = useRef(h.phase);
-  const [breakEndsAt, setBreakEndsAt] = useState(0);
-  useEffect(() => {
-    if (prevPhase.current === MatchPhase.Playing && h.phase === MatchPhase.Prep) setBreakEndsAt(h.phaseEndsAt);
-    prevPhase.current = h.phase;
-  }, [h.phase, h.phaseEndsAt]);
-  const inBreak = h.phase === MatchPhase.Prep && breakEndsAt !== 0 && breakEndsAt === h.phaseEndsAt;
   /**
    * Rule G9: the cook ring belongs to the ONE grenade that cooks. A smoke, a flash, a molotov or a
    * knife is in the hand for the 180 ms of the wind-up and never cooks, so the ring it used to draw
@@ -122,7 +115,6 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
     if (h.pointerLocked || h.shopOpen || h.chatOpen) setPaused(false);
   }, [dormant, h.pointerLocked, h.connected, h.phase, h.shopOpen, h.chatOpen]);
 
-  const timeLeft = h.phaseEndsAt ? h.phaseEndsAt - h.serverNow : 0;
   const lowHealth = h.alive && h.health <= 30;
   const windowSecs = h.buyWindowLeft === Infinity ? null : Math.ceil(h.buyWindowLeft / 1000);
   const shopHint = h.shopResult && !h.shopOpen && h.shopResult.reason === "closed" && now - h.shopResult.at < 1800;
@@ -133,7 +125,6 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   // Drop 4: mode-aware scoring. FFA shows my kills against the leader; Domination adds the flag row.
   const teams = MODES[h.mode].teams;
   const noShop = MODES[h.mode].shop === "none";
-  const noticeAge = h.flagNotice ? now - h.flagNotice.at : Infinity;
 
   return (
     <div className={`hud ${lowHealth ? "low-health" : ""} ${dormant ? "dormant" : ""}`} data-testid="hud" aria-hidden={dormant || undefined}>
@@ -142,9 +133,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       <Crosshair model={model} settings={settings} now={now} />
       <TopStrip model={model} />
       <FlagRow model={model} />
-      {h.flagNotice && noticeAge < 2600 && !ended && (
-        <div className={`flag-notice t${h.flagNotice.team}`} data-testid="flag-notice" style={{ opacity: Math.min(1, (2600 - noticeAge) / 500) }}>{h.flagNotice.text}</div>
-      )}
+      <FlagNotice model={model} now={now} />
       <ActionPrompt model={model} />
 
       {/* Minimap + compass (drop 5): hidden behind the scope and the result screen */}
@@ -179,12 +168,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
 
       <Inventory model={model} />
 
-      {h.reconnecting && <div className="reconnect" data-testid="reconnecting">UTRACONO POŁĄCZENIE · ŁĄCZĘ PONOWNIE…</div>}
-
-      {/* Countdown */}
-      {h.phase === MatchPhase.Countdown && (
-        <div className="center-msg countdown" data-testid="countdown">{Math.max(1, Math.ceil(timeLeft / 1000))}</div>
-      )}
+      <Moments model={model} />
       <Objective model={model} />
 
       <FlashVeil model={model} now={now} />
@@ -205,8 +189,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
         </div>
       )}
 
-      {/* Between rounds: who took it and why, from the round's real signals */}
-      {inBreak && !h.shopOpen && <RoundBreak h={h} />}
+      <RoundBannerLayer model={model} />
 
       <BracketHud model={model} />
 

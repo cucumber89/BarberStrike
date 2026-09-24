@@ -20,7 +20,8 @@ import "./ui/styles.css";
 import "./ui/cinematic.css";
 import { Shop } from "./ui/Shop";
 import { PlanPanel } from "./ui/PlanPanel";
-import { MatchResult, RoundBreak } from "./ui/MatchResult";
+import { MatchResult } from "./ui/MatchResult";
+import { RoundBanner } from "./ui/hud/RoundBanner";
 import { emptyProfile, type MatchReward } from "./game/progression/profile";
 import { PLANS, planOffer } from "@frankibarber/shared";
 import type { HudState, ScoreRow } from "./game/store";
@@ -107,7 +108,7 @@ createRoot(document.getElementById("root")!).render(
       : which === "result"
         ? <div className="hud"><MatchResult h={resultState} now={100000} onLeave={() => console.log("leave")} /></div>
         : which === "round"
-          ? <div className="hud"><RoundBreak h={roundState} /></div>
+          ? <div className="hud"><RoundBanner h={roundState} standalone /></div>
           : <Shop h={shopState} api={api as never} now={100000} />}
   </div>,
 );

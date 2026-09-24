@@ -4,7 +4,7 @@ import type { HudState } from "../game/store";
 import { CRATE_CHALLENGES, type MatchReward, type Profile } from "../game/progression/profile";
 import { Razor, Scoreboard } from "./Scoreboard";
 import { BracketPanel } from "./Bracket";
-import { OUTCOME_TITLE, keyStats, matchOutcome, matchWhy, roundEnd, scoreLine, topReward } from "./resultText";
+import { OUTCOME_TITLE, keyStats, matchOutcome, matchWhy, scoreLine, topReward } from "./resultText";
 
 /**
  * The end of the match, in the order a player reads it: the verdict from their seat and the
@@ -171,31 +171,3 @@ function NextGoal({ profile }: { profile: Profile }) {
   );
 }
 
-/**
- * Between rounds (Bomb, 1 v 1, Ostrzyżeni): who took the round, why, the score, the clock to the
- * next one. Shown only during the break that follows a round — `breakEndsAt` is the deadline of
- * the first Prep window after Playing, so the buy window that follows (a second Prep with a new
- * deadline) never shows a stale reason.
- */
-export function RoundBreak({ h }: { h: HudState }) {
-  // `roundResult` and not `bomb.result`: the bomb block is only mirrored in Bomb, so the 1 v 1 —
-  // which runs on the same round machine — was passing "" here and the card NEVER appeared. Its
-  // players were told who won a round nowhere at all.
-  const end = roundEnd(h.mode as GameMode, h.roundResult, h.roundWinner, h.bomb ? (h.bomb.attackTeam as 0 | 1) : -1, h.myTeam);
-  if (!end) return null;
-  const [a, b] = h.mode === "ostrzyzeni" ? ["OCALENI", "OSTRZYŻENI"] : ["FADE", "TAPER"];
-  const left = Math.max(0, Math.ceil((h.phaseEndsAt - h.serverNow) / 1000));
-  // The 1 v 1 carries a loadout between rounds (CS's rule), and whether YOURS carried is decided
-  // by whether you are standing here. That is worth one line: it is the difference between the
-  // next round being a rifle round and a pistol round.
-  const carry = h.mode === "duel" ? (h.alive ? "Przeżyłeś — broń i płyta zostają z tobą" : "Zginąłeś — broń przepada, wracasz z pistoletem") : "";
-  return (
-    <div className={`round-end ${end.mine === null ? "even" : end.mine ? "mine" : "theirs"}`} data-testid="round-end" role="status">
-      <div className="round-end-title">{end.title}</div>
-      <div className="round-end-why">{end.why}</div>
-      {carry && <div className="round-end-carry" data-testid="round-end-carry">{carry}</div>}
-      <div className="round-end-score">{a} <b>{h.scoreA}</b> : <b>{h.scoreB}</b> {b}</div>
-      <div className="round-end-next">następna runda za {left} s</div>
-    </div>
-  );
-}
