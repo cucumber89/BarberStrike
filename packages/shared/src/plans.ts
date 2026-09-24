@@ -32,6 +32,7 @@ import type { Solid } from "./map";
 export interface TacticalPlan {
   /** 1-based; 0 means "no plan", which is also what a round with no votes gets. */
   id: number;
+  /** The HUD's words, in Polish like the rest of it (drop U): the name, then one line each. */
   name: string;
   /** What it does, in the words the HUD shows. */
   gain: string;
@@ -46,25 +47,25 @@ export interface TacticalPlan {
 export const PLANS: readonly TacticalPlan[] = [
   {
     id: 1,
-    name: "OPEN THE SHUTTER",
-    gain: "The roller door on the neighbour unit's south wall goes up: a second way in off Main Street.",
-    cost: "It is a doorway, not a one-way valve — the defence can come out of it too.",
+    name: "OTWÓRZ ROLETĘ",
+    gain: "Drugie wejście od Głównej ulicy.",
+    cost: "Obrona też może nim wyjść.",
     removes: ["roller_door"],
     at: { x: 12, z: 0 },
   },
   {
     id: 2,
-    name: "BREAK THE ALLEY WALL",
-    gain: "The middle span of the alley wall comes down: cross between alley and backlot anywhere.",
-    cost: "That wall was waist-high cover. Crossing there is now done in the open.",
+    name: "ZBURZ MUR W ZAUŁKU",
+    gain: "Przejdziesz między zaułkiem a zapleczem.",
+    cost: "Tracisz osłonę do pasa — idziesz odkryty.",
     removes: ["alley_wall_m"],
     at: { x: -14, z: 11 },
   },
   {
     id: 3,
-    name: "PULL THE LOOKOUT STEPS",
-    gain: "The ramp up to the yard lookout is gone: nobody holds that angle over the yard this round.",
-    cost: "Nobody includes you. The perch is denied to both sides, not taken from one.",
+    name: "ZDEJMIJ SCHODY NA CZATOWNIĘ",
+    gain: "Nikt nie trzyma kąta nad podwórzem.",
+    cost: "Czatownia zamknięta dla obu stron.",
     removes: Array.from({ length: 10 }, (_, i) => `lookout_step_${i}`),
     at: { x: -6, z: 29 },
   },
