@@ -282,18 +282,6 @@ button { font-family: inherit; }
 .telemetry td:last-child { color: var(--tx); text-align: right; }
 .wordmark, .health-num, .ammo-num { font-variant-numeric: tabular-nums; }
 .reconnect { position: absolute; left: 50%; top: 96px; transform: translateX(-50%); padding: 8px 14px; background: rgba(10,10,12,.85); border-left: 3px solid var(--red); font-size: 12px; letter-spacing: 0.2em; color: var(--tx); animation: pulse 1s ease-in-out infinite; }
-
-/* ---------- Drop 2: wallet, grenades, flash, shop ---------- */
-.wallet { position: absolute; left: 26px; bottom: 96px; display: flex; flex-direction: column; gap: 6px; }
-.wallet-money { font-family: var(--font-display); font-size: 26px; letter-spacing: 0.08em; color: #7dff9a; text-shadow: 0 2px 6px rgba(0,0,0,.8); }
-.wallet-money.rich { color: #b9ffc9; }
-.wallet-prompt { font-size: 11px; letter-spacing: 0.22em; color: var(--tx-2); }
-.wallet-prompt b { color: #7dff9a; font-weight: normal; font-family: var(--font-mono); }
-.wallet-prompt.station { color: #7dff9a; }
-.money-toasts { position: absolute; left: 26px; bottom: 150px; display: flex; flex-direction: column-reverse; gap: 2px; }
-.money-toast { font-family: var(--font-mono); font-size: 14px; color: #7dff9a; animation: toast-rise 2.4s ease-out forwards; text-shadow: 0 1px 4px rgba(0,0,0,.9); }
-.money-toast.neg { color: var(--tx-2); }
-.money-toast .why { font-size: 10px; letter-spacing: 0.2em; color: var(--tx-2); margin-left: 8px; }
 @keyframes toast-rise { 0% { opacity: 0; transform: translateY(6px); } 12% { opacity: 1; transform: translateY(0); } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px); } }
 .gear { position: absolute; right: 26px; bottom: 100px; display: flex; gap: 8px; }
 .gear-slot { display: flex; align-items: center; gap: 6px; padding: 4px 8px; background: rgba(10,10,12,.6); border: 1px solid var(--line); font-size: 11px; letter-spacing: 0.15em; color: var(--tx-2); min-width: 86px; }
@@ -304,7 +292,6 @@ button { font-family: inherit; }
 .cook { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: conic-gradient(var(--red) var(--p), rgba(255,255,255,.12) 0); -webkit-mask: radial-gradient(circle, transparent 17px, #000 18px); mask: radial-gradient(circle, transparent 17px, #000 18px); }
 .flash-out { position: absolute; inset: 0; background: #fff; pointer-events: none; }
 .smoke-screen { position: absolute; inset: 0; background: radial-gradient(ellipse at 45% 45%, #747a7b, #4e5556); pointer-events: none; }
-.shop-closed-hint { position: absolute; left: 50%; top: 68%; transform: translateX(-50%); font-size: 12px; letter-spacing: 0.25em; color: var(--tx-2); background: rgba(10,10,12,.7); padding: 6px 14px; animation: slide-in 160ms ease-out; }
 
 .shop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(6,6,8,.78); pointer-events: auto; }
 /* THE LAYOUT RULE (see Shop.tsx): head, rail + one aisle, foot. The head (money, buy time, CLOSE)
@@ -543,23 +530,6 @@ button { font-family: inherit; }
 .result-score b { color: var(--brass); font-weight: normal; }
 .kf-name.ffa { color: var(--tx); }
 
-/* ---- drop 5: chat, minimap + compass, scoreboard v2 (the lobby's bots row is in menu.css) ---- */
-.chat { position: absolute; left: 26px; bottom: 120px; width: 380px; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
-.chat-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
-.chat-lines li { display: flex; gap: 8px; align-items: baseline; padding: 3px 8px; background: rgba(10,10,12,.55); font-size: 13px; animation: slide-in 160ms ease-out; max-width: 100%; }
-.chat-lines li.me { border-left: 2px solid var(--brass); }
-.chat-tag { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: var(--tx-2); }
-.chat-name { font-weight: 600; white-space: nowrap; } .chat-name.t0 { color: var(--team0); } .chat-name.t1 { color: var(--team1); } .chat-name.ffa { color: var(--tx); }
-.chat-text { color: var(--tx); overflow-wrap: anywhere; }
-.chat-form { display: flex; align-items: center; gap: 8px; pointer-events: auto; background: rgba(10,10,12,.85); border: 1px solid var(--brass); padding: 4px 8px; }
-.chat-kind { font-family: var(--font-mono); font-size: 10px; letter-spacing: .15em; color: var(--brass); }
-.chat-form input { flex: 1; background: transparent; border: none; outline: none; color: var(--tx); font-size: 14px; font-family: inherit; }
-.chat.open .chat-lines li { animation: none; }
-
-.minimap { position: absolute; left: 26px; top: 26px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.minimap .radar { border-radius: 50%; border: 2px solid rgba(255,255,255,.2); background: #0a0a0d; }
-.minimap .compass { border: 1px solid var(--line); }
-
 .sb-team td.sb-money { color: #7dd68a; }
 .sb-bot { display: inline-block; margin-left: 6px; padding: 0 4px; border: 1px solid var(--line); font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: var(--tx-2); vertical-align: middle; }
 
@@ -569,8 +539,6 @@ button { font-family: inherit; }
 .credits p { margin: 0; line-height: 1.45; }
 .credits a { color: var(--accent, #e0a83a); text-decoration: underline; }
 .credits strong { color: #cfd3da; font-weight: 600; }
-
-.boys-status { position:absolute; left:50%; top:112px; transform:translateX(-50%); padding:6px 12px; background:#111c; color:#efbe67; font-size:12px; white-space:nowrap; }
 
 /* Clear entry flow and high-contrast essentials. */
 .loading { z-index:100; background:radial-gradient(ellipse at 75% 15%,#343020 0,transparent 55%),#101317; }
@@ -584,14 +552,8 @@ button { font-family: inherit; }
 .enter-game { display:flex; justify-content:space-between; letter-spacing:.06em; }
 .loading-back { color:#c4ccd6; }
 .urgent { color:#ffbd70 !important; border-color:#ffbd70 !important; }
-.wallet { bottom:112px; gap:10px; }
-.wallet-money { font-size:30px; color:#c1ffd3; }
-.wallet-prompt { display:flex; align-items:center; gap:10px; padding:10px 12px; background:#111821ef; border:1px solid #90cda477; border-radius:8px; color:#fff; font-size:12px; letter-spacing:.04em; box-shadow:0 3px 14px #0005; }
-.wallet-prompt kbd { padding:4px 8px; border-radius:4px; background:#e8bd75; color:#141414; font:700 18px var(--font-mono); }
-.wallet-prompt strong { font:700 28px var(--font-mono); min-width:55px; text-align:right; }
 .health { padding:12px 16px; border-radius:8px; background:#10151edb; bottom:22px; }
 .health-bar { width:120px; height:8px; }
-.boys-status { top:auto; left:26px; bottom:195px; transform:none; max-width:300px; white-space:normal; border-radius:6px; }
 .shop-sub { line-height:1.4; }
 button:focus-visible { outline:2px solid #f4cf8e; outline-offset:3px; }
 @media(max-width:900px) {
@@ -600,8 +562,6 @@ button:focus-visible { outline:2px solid #f4cf8e; outline-offset:3px; }
 @media(max-height:600px) {
   .loading h1 { margin:10px 0 16px; font-size:36px; }
   .loading-controls { margin:14px 0; }
-  .boys-status { bottom:178px; }
-  .wallet { bottom:98px; }
 }
 @media(prefers-reduced-motion:reduce) { .loading-fill { transition:none; } }
 
@@ -627,47 +587,6 @@ button:focus-visible { outline:2px solid #f4cf8e; outline-offset:3px; }
 .teams-answer { margin: 2px 0 0; font-size: 11px; line-height: 1.4; }
 .teams-answer.ok { color: #7dff9a; }
 .teams-answer.err { color: #f0a49a; }
-
-/* ---------- The living arena (2.4) ---------- */
-/* Sits under the round timer during the buy window, where a player is already looking. Both teams
-   see it: a map change the defence cannot read would be a random event, not a tactic. */
-.plan { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); width: min(680px, 92vw);
-  background: rgba(11,11,13,.92); border: 1px solid var(--line); border-top: 2px solid var(--brass);
-  padding: 10px 12px; pointer-events: auto; animation: slide-in 180ms ease-out; }
-.plan-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
-.plan-title { font-family: var(--font-display); font-size: 16px; letter-spacing: 0.2em; color: var(--brass); }
-.plan-sub { font-size: 11px; color: var(--tx-2); }
-.plan-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.plan-option { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "key name" "gain gain" "cost cost" "votes votes";
-  gap: 3px 8px; text-align: left; padding: 8px 10px; cursor: pointer;
-  background: var(--bg-2); border: 1px solid var(--line); color: var(--tx); font-family: var(--font-ui); }
-.plan-option:hover:not(:disabled) { border-color: var(--brass); }
-.plan-option:disabled { cursor: default; opacity: .82; }
-.plan-option.chosen { border-color: var(--brass); background: #17150f; }
-.plan-key { grid-area: key; font-family: var(--font-mono); font-size: 10px; padding: 2px 5px; border: 1px solid var(--line); color: var(--tx-2); }
-.plan-option.chosen .plan-key { background: var(--brass); border-color: var(--brass); color: #141008; }
-.plan-name { grid-area: name; font-family: var(--font-display); font-size: 16px; letter-spacing: 0.12em; align-self: center; }
-.plan-gain { grid-area: gain; font-size: 11px; line-height: 1.35; color: var(--tx-2); }
-/* The cost is not small print: an option without one is not a choice. */
-.plan-cost { grid-area: cost; font-size: 11px; line-height: 1.35; color: #e0b07a; }
-.plan-votes { grid-area: votes; margin-top: 2px; font-size: 10px; letter-spacing: 0.14em; color: var(--brass); }
-.plan-foot { margin: 8px 0 0; font-size: 10px; letter-spacing: 0.06em; color: var(--tx-3); }
-.plan-active { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
-  background: rgba(11,11,13,.72); border-left: 2px solid var(--brass); padding: 4px 10px; font-size: 11px; }
-.plan-tag { font-size: 9px; letter-spacing: 0.2em; color: var(--tx-3); }
-.plan-active-name { font-family: var(--font-display); font-size: 14px; letter-spacing: 0.14em; color: var(--brass); }
-@media (max-width: 760px) { .plan-options { grid-template-columns: 1fr; } }
-
-/* ---------- First-run hints (2.4) ---------- */
-/* Bottom-centre, above the ammo block, out of the crosshair's way. `pointer-events: none` is not
-   decoration: a hint must never eat the click that was meant for the game. */
-.hint { position: absolute; left: 50%; bottom: 176px; transform: translateX(-50%); pointer-events: none;
-  background: rgba(11,11,13,.88); border-left: 2px solid var(--brass); padding: 7px 14px;
-  font-size: 13px; letter-spacing: 0.02em; color: var(--tx); white-space: nowrap; max-width: 92vw;
-  overflow: hidden; text-overflow: ellipsis; animation: slide-in 200ms ease-out; }
-@media (max-width: 700px) { .hint { font-size: 12px; bottom: 160px; } }
-
-.wallet-role { color:#edc078; font-size:12px; padding:5px 8px; border-radius:5px; background:#10151edb; max-width:300px; }
 
 /* ---------- Shop: role strip (merge with main #14) ---------- */
 /* "The Boys" roles as a strip above the aisles, not behind a tab: the whole point of this layout
@@ -718,7 +637,7 @@ button:focus-visible { outline:2px solid #f4cf8e; outline-offset:3px; }
    ========================================================================================== */
 .hud { --plate: #0d1117e8; --plate-line: #ffffff1f; --plate-pad: 10px 14px; --edge: 24px; }
 
-.health, .ammo, .gear-slot, .wallet-prompt {
+.health, .ammo, .gear-slot {
   background: var(--plate); border: 1px solid var(--plate-line); border-radius: 10px;
   box-shadow: 0 4px 18px rgba(0,0,0,.38);
 }
@@ -734,10 +653,6 @@ button:focus-visible { outline:2px solid #f4cf8e; outline-offset:3px; }
 .hp-ok      .health-num { color: #d8f5e0; } .hp-ok      .health-fill { background: #7dff9a; }
 .hp-hurt    .health-num { color: #ffd79a; } .hp-hurt    .health-fill { background: #e5ae52; }
 .hp-critical .health-num { color: #ff9a8c; } .hp-critical .health-fill { background: var(--red); }
-
-.wallet { left: var(--edge); bottom: calc(var(--edge) + 78px); gap: 8px; }
-/* Money is a PLAN, not a vital sign: it sits above health and reads a size down from it. */
-.wallet-money { font-size: 22px; letter-spacing: 0.06em; color: #7dff9a; }
 
 /* --- bottom right: the weapon, then its grenades above --- */
 .ammo { right: var(--edge); bottom: var(--edge); padding: var(--plate-pad); }
