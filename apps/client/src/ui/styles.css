@@ -91,15 +91,6 @@ button { font-family: inherit; }
 .ch-colors input[type="color"] { width: 26px; height: 22px; padding: 0; border: 1px solid var(--line); background: none; cursor: pointer; }
 @keyframes slide-in { from { transform: translateX(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 
-.center-msg { position: absolute; left: 50%; top: 32%; transform: translate(-50%, -50%); font-family: var(--font-display); font-size: 120px; color: var(--tx); text-shadow: 0 4px 24px rgba(0,0,0,.8); }
-.center-sub { position: absolute; left: 50%; top: 60px; transform: translateX(-50%); font-size: 12px; letter-spacing: 0.25em; color: var(--tx-2); }
-
-/* Preparation between respawn waves. Smaller than the match-start countdown on purpose: it comes
-   round every seventeen seconds, and a 120px number that often would be shouting. */
-.center-msg.prep { font-size: 0; text-align: center; }
-.prep-count { font-family: var(--font-display); font-size: 72px; line-height: 1; color: var(--brass); }
-.prep-sub { margin-top: 10px; font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.28em; color: var(--tx-2); white-space: nowrap; }
-
 /* Match summary (2.0): what the match paid, on the result screen. */
 .summary { display: flex; flex-direction: column; gap: 10px; margin: 0; text-align: left; }
 .summary-total { font-family: var(--font-display); font-size: 24px; color: var(--brass); font-weight: normal; margin-left: auto; }
@@ -161,20 +152,9 @@ button { font-family: inherit; }
 .result-next { font-size: 14px; color: var(--tx-2); letter-spacing: 0.04em; }
 .result-next b { color: var(--brass); font-family: var(--font-mono); font-weight: normal; }
 .result-foot .menu-btn { margin: 0; width: auto; min-width: 200px; }
-/* Between rounds. */
-.round-end { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); text-align: center; padding: 16px 36px; min-width: 360px;
-  background: rgba(10,10,12,.86); border: 1px solid var(--line); border-top: 2px solid var(--tx-2); animation: result-in 200ms ease-out; }
-.round-end.mine { border-top-color: var(--brass); } .round-end.theirs { border-top-color: var(--red); }
-.round-end-title { font-family: var(--font-display); font-size: 44px; letter-spacing: 0.16em; line-height: 1; color: var(--tx); }
-.round-end.mine .round-end-title { color: var(--brass); }
-.round-end-why { margin-top: 6px; font-size: 15px; color: var(--tx-2); }
-.round-end-carry { margin-top: 4px; font-size: 14px; color: var(--brass); }
-.round-end-score { margin-top: 8px; font-family: var(--font-mono); font-size: 18px; color: var(--tx-2); }
-.round-end-score b { color: var(--tx); font-weight: normal; }
-.round-end-next { margin-top: 6px; font-size: 13px; letter-spacing: 0.16em; color: var(--brass); }
 @media (max-height: 640px) { .result-card { padding: 12px 20px 10px; gap: 6px; } .result-title { font-size: 56px; } .result-stat b { font-size: 30px; } }
 @media (max-width: 760px) { .result-title { font-size: 48px; } .result-stats { grid-template-columns: 1fr 1fr 1fr; } .result-foot { flex-direction: column; align-items: stretch; } }
-@media (prefers-reduced-motion: reduce) { .result-card, .round-end { animation: none; } .summary-bar-fill { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .result-card { animation: none; } .summary-bar-fill { transition: none; } }
 
 .scoreboard-wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 /* An open-lobby deathmatch can hold forty bodies, so the board has to survive a roster that is
@@ -218,7 +198,6 @@ button { font-family: inherit; }
 .telemetry td { padding: 1px 8px 1px 0; color: var(--tx-2); font-variant-numeric: tabular-nums; }
 .telemetry td:last-child { color: var(--tx); text-align: right; }
 .wordmark { font-variant-numeric: tabular-nums; }
-.reconnect { position: absolute; left: 50%; top: 96px; transform: translateX(-50%); padding: 8px 14px; background: rgba(10,10,12,.85); border-left: 3px solid var(--red); font-size: 12px; letter-spacing: 0.2em; color: var(--tx); animation: pulse 1s ease-in-out infinite; }
 @keyframes toast-rise { 0% { opacity: 0; transform: translateY(6px); } 12% { opacity: 1; transform: translateY(0); } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px); } }
 
 .shop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(6,6,8,.78); pointer-events: auto; }
@@ -397,8 +376,6 @@ button { font-family: inherit; }
   .shop-aisle-head { padding-bottom: 3px; margin-bottom: 4px; }
 }
 .shop-glyph { margin-right: 8px; }
-.flag-notice { position: absolute; left: 50%; top: 112px; transform: translateX(-50%); font-family: var(--font-display); font-size: 20px; letter-spacing: .2em; padding: 6px 14px; background: rgba(10,10,12,.7); animation: slide-in 160ms ease-out; white-space: nowrap; }
-.flag-notice.t0 { color: var(--team0); } .flag-notice.t1 { color: var(--team1); }
 
 .sb-team.ffa th.sb-name { color: var(--red); }
 .result-score b { color: var(--brass); font-weight: normal; }

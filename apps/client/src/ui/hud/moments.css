@@ -1,0 +1,28 @@
+/* ui/hud/moments.css — countdown, prep, reconnect, round end and the flag notice (seeded by P0 for P5).
+   Drop U P0 0e moved these rules VERBATIM from ui/styles.css and then ui/cinematic.css, each in
+   its original order, without collapsing the later layer into the earlier one. index.css imports
+   the hud/*.css files between styles.css and cinematic.css, so the cascade is the one they had. */
+
+.center-msg { position: absolute; left: 50%; top: 32%; transform: translate(-50%, -50%); font-family: var(--font-display); font-size: 120px; color: var(--tx); text-shadow: 0 4px 24px rgba(0,0,0,.8); }
+.center-sub { position: absolute; left: 50%; top: 60px; transform: translateX(-50%); font-size: 12px; letter-spacing: 0.25em; color: var(--tx-2); }
+
+/* Preparation between respawn waves. Smaller than the match-start countdown on purpose: it comes
+   round every seventeen seconds, and a 120px number that often would be shouting. */
+.center-msg.prep { font-size: 0; text-align: center; }
+.prep-count { font-family: var(--font-display); font-size: 72px; line-height: 1; color: var(--brass); }
+.prep-sub { margin-top: 10px; font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.28em; color: var(--tx-2); white-space: nowrap; }
+/* Between rounds. */
+.round-end { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); text-align: center; padding: 16px 36px; min-width: 360px;
+  background: rgba(10,10,12,.86); border: 1px solid var(--line); border-top: 2px solid var(--tx-2); animation: result-in 200ms ease-out; }
+.round-end.mine { border-top-color: var(--brass); } .round-end.theirs { border-top-color: var(--red); }
+.round-end-title { font-family: var(--font-display); font-size: 44px; letter-spacing: 0.16em; line-height: 1; color: var(--tx); }
+.round-end.mine .round-end-title { color: var(--brass); }
+.round-end-why { margin-top: 6px; font-size: 15px; color: var(--tx-2); }
+.round-end-carry { margin-top: 4px; font-size: 14px; color: var(--brass); }
+.round-end-score { margin-top: 8px; font-family: var(--font-mono); font-size: 18px; color: var(--tx-2); }
+.round-end-score b { color: var(--tx); font-weight: normal; }
+.round-end-next { margin-top: 6px; font-size: 13px; letter-spacing: 0.16em; color: var(--brass); }
+@media (prefers-reduced-motion: reduce) { .round-end { animation: none; } }
+.reconnect { position: absolute; left: 50%; top: 96px; transform: translateX(-50%); padding: 8px 14px; background: rgba(10,10,12,.85); border-left: 3px solid var(--red); font-size: 12px; letter-spacing: 0.2em; color: var(--tx); animation: pulse 1s ease-in-out infinite; }
+.flag-notice { position: absolute; left: 50%; top: 112px; transform: translateX(-50%); font-family: var(--font-display); font-size: 20px; letter-spacing: .2em; padding: 6px 14px; background: rgba(10,10,12,.7); animation: slide-in 160ms ease-out; white-space: nowrap; }
+.flag-notice.t0 { color: var(--team0); } .flag-notice.t1 { color: var(--team1); }
