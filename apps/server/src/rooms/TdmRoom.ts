@@ -3,8 +3,8 @@ import { Room, type Client } from "@colyseus/core";
 import {
   Btn, C2S, S2C, DEFAULT_WEAPON, HEADSHOT_MULTIPLIER, LAG_COMP_MAX_MS, MATCH, MAX_INPUT_BATCH, MAX_INPUT_DT_MS,
   MAX_INPUT_QUEUE, MAX_INPUT_RATE, MAX_OTHER_MSG_RATE, MAX_PLAYERS, MAX_SPECTATORS, MatchPhase, MAPS, DEFAULT_MAP_ID, PLAYER,
-  RESPAWN_DELAY_MS, SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER, DUEL_MAP_ID,
-  isLive, isFrozen, maskInput, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
+  SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER, DUEL_MAP_ID,
+  isLive, isFrozen, maskInput, respawnDelayMs, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
   BOMB, bombBreakMs, sitesOf, bombAttackTeam, bombSpawnSide, resetBomb, stepBomb, type BombPlayer,
   createBody, quantAngle, quantVel, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
   makeRayHit, mulberry32, pickSpawn, sanitizeName, simulateBody, spreadDirection, traceBullet, unpackInput,
@@ -14,7 +14,7 @@ import {
   perkSpeedScale, splitDamage, isPerkId, isArmorId,
   BTN_MASK, DOM, MODES, isGameMode, leanOf, tacActive, leanEye, inFlagZone, stepFlag, domTick, neutralFlag,
   CHAT, MARK, MAX_BOTS, BOT_NAMES, botId, isBotLevel,
-  GUN_GAME, MELEE_WEAPON, ladderAfterKill, ladderDone, ladderWeapon,
+  MELEE_WEAPON, ladderAfterKill, ladderDone, ladderWeapon,
   OSTRZYZENI, PERK_ARMED_MS, convertsOnKill, infectionRoundWinner, pickFirstShaved,
   DUEL, duelRoundWinner, duelSpawnSide, duelPurseAfter, duelStartMoney, duelHalfStart, freshDuelPurse,
   TOURNAMENT, seedBracket, currentMatch, reportWinner, withdraw, isDone, champion, bracketString, type Bracket,
@@ -287,15 +287,12 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   /** The same clock for Bomb: when its round's buy window shuts. 0 outside a live round. */
   private bombBuyEndsAt = 0;
   /**
-   * How long a casualty waits. Gun Game has its own short timer (a party mode: no waves, no shop to
-   * spend the wait in) and no perks, so the fade never applies there. A shaved chaser (infection)
-   * is back on a short timer too; an unshaved survivor is not respawned by the timer at all during a
-   * round (see `step`), so their value only matters in the warm-up.
+   * How long a casualty waits: the shared `respawnDelayMs`, which the client's death card reads too.
+   * An unshaved survivor in infection is not respawned by the timer at all during a round (see
+   * `step`), so their value only matters in the warm-up.
    */
   private respawnDelay(p: PlayerState, fade = false): number {
-    if (this.ladder) return GUN_GAME.respawnMs;
-    if (this.infection && p.shaved) return OSTRZYZENI.shavedRespawnMs;
-    return RESPAWN_DELAY_MS - (fade ? PERK_EFFECT.fadeRespawnMs : 0);
+    return respawnDelayMs(this.mode, { shaved: p.shaved, fade });
   }
 
   /**

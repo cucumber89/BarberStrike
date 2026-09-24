@@ -1,4 +1,7 @@
-import { Btn, MatchPhase } from "./types";
+import { RESPAWN_DELAY_MS } from "./constants";
+import { GUN_GAME, OSTRZYZENI } from "./modes";
+import { PERK_EFFECT } from "./perks";
+import { Btn, MatchPhase, type GameMode } from "./types";
 
 /**
  * Respawn waves and the frozen preparation window (1.1 drop 7).
@@ -84,3 +87,22 @@ export const frozenAt = (phase: MatchPhase, phaseEndsAt: number, serverNow: numb
  */
 export const respawnInMs = (phase: MatchPhase, phaseEndsAt: number, now: number): number =>
   phase === MatchPhase.Playing || phase === MatchPhase.Prep ? Math.max(0, phaseEndsAt - now) : 0;
+
+/**
+ * How long a casualty waits before the room stands them back up — the server's rule, in the one
+ * place both ends read it. `TdmRoom.respawnDelay` delegates here, and the client's death card counts
+ * down from the same number, so the card reaches 0 on the frame the server revives (it used to
+ * count 3.2 s for everyone, and was wrong in Gun Game, for a shaved chaser and with the fade perk).
+ *
+ *  - Gun Game: its own short timer (a party mode, no shop to spend the wait in), and no perks, so
+ *    the fade never applies.
+ *  - Ostrzyżeni, shaved: back on the chasers' short timer. An UNSHAVED survivor is not respawned by
+ *    the timer during a round at all — they wait for the next round — so for them this number only
+ *    matters in the warm-up; that wait, like the round modes' own, is the caller's to show.
+ *  - Everyone else: `RESPAWN_DELAY_MS`, less the fade perk's head start.
+ */
+export const respawnDelayMs = (mode: GameMode, { shaved = false, fade = false }: { shaved?: boolean; fade?: boolean } = {}): number => {
+  if (mode === "gungame") return GUN_GAME.respawnMs;
+  if (mode === "ostrzyzeni" && shaved) return OSTRZYZENI.shavedRespawnMs;
+  return RESPAWN_DELAY_MS - (fade ? PERK_EFFECT.fadeRespawnMs : 0);
+};
