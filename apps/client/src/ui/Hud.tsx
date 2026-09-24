@@ -1,6 +1,6 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { GAME_VERSION, GRENADES } from "@frankibarber/shared";
-import { useHudSlice } from "../game/store";
+import { hud, useHudSlice } from "../game/store";
 import type { HudProps } from "./hud/types";
 import { endedStage, usePhaseModel } from "./hud/phase";
 import { overlayAttr, useUiFlags } from "./hud/uiFlags";
@@ -25,20 +25,17 @@ import { PauseMenu } from "./hud/PauseMenu";
 
 /**
  * The in-match HUD: the zone components of `ui/hud/` (drop U, docs/UI_U_SPEC.md §7 P0 0d), each
- * gated by the condition it had here and reading its own slice of the store. They mount in the old
- * order: nothing here has a z-index, so DOM order IS paint order (smoke under all, flash over the
- * corners, cards and menus over the flash). The root computes the phase model once for every zone,
- * runs the clock, keeps `low-health`, `dormant` and the frame counter, and carries the §4.5
- * attributes and the class `entering`, which nothing reads yet.
+ * gated as it was here and reading its own store slice, mounted in the old order (no z-index here:
+ * DOM order IS paint order). The root makes the phase model once, runs the clock, and keeps
+ * `low-health`, `dormant`, the frame counter, the §4.5 attributes and `entering` (unread yet).
  */
 export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, onChooseTeam, onVotePlan, shop, chat, radar, dormant = false, entering = false }: HudProps) {
   const model = usePhaseModel();
   const alive = useHudSlice((s) => s.alive);
   const lowHealth = useHudSlice((s) => s.alive && s.health <= 30);
   const flashUntil = useHudSlice((s) => s.flashUntil);
-  // Rule G9 (Crosshair.tsx): only the frag cooks, and only its ring replaces the crosshair.
+  // The flash and the frag's cook ring (Rule G9, Crosshair.tsx) need a smooth clock; the rest 4 Hz.
   const cookRing = useHudSlice((s) => s.cookingKind !== "" && GRENADES[s.cookingKind].cookable);
-  // The flash overlay and cook ring need a smooth clock; everything else is fine at 4 Hz.
   const now = useClock(flashUntil > performance.now() || cookRing ? 33 : 250);
   const stage = useHudSlice((s) => endedStage(model, s.serverNow));
   const overlay = useUiFlags((f) => f.overlay);
@@ -76,14 +73,21 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   );
 }
 
-/** Re-renders on a timer so countdowns tick without the game loop pushing state. */
+/**
+ * Re-renders so countdowns tick, never staler than `intervalMs`. A tick due as the store notifies
+ * joins that batch (both external stores: one commit), as a whole-HUD re-render used to absorb it.
+ */
 function useClock(intervalMs: number): number {
-  const [t, setT] = useState(() => performance.now());
+  const [c] = useState(() => ({ t: performance.now(), ls: new Set<() => void>() }));
+  const sub = useCallback((l: () => void) => { c.ls.add(l); return () => { c.ls.delete(l); }; }, [c]);
   useEffect(() => {
-    const id = window.setInterval(() => setT(performance.now()), intervalMs);
-    return () => window.clearInterval(id);
-  }, [intervalMs]);
-  return t;
+    let timer = 0;
+    const tick = () => { c.t = performance.now(); c.ls.forEach((l) => l()); window.clearTimeout(timer); timer = window.setTimeout(tick, intervalMs); };
+    timer = window.setTimeout(tick, intervalMs);
+    const off = hud.subscribe(() => { if (performance.now() - c.t >= intervalMs * 0.75) tick(); });
+    return () => { window.clearTimeout(timer); off(); };
+  }, [c, intervalMs]);
+  return useSyncExternalStore(sub, () => c.t);
 }
 
 /** Frame counter: the player's own fps setting in a build (it was DEV-only); F3's table stays DEV. */
