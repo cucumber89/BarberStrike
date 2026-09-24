@@ -102,15 +102,25 @@ const roundState = { ...resultBase, mode: "bomb", phase: MatchPhase.Prep, roundW
   roundResult: "BOMB DEFUSED",
   bomb: { attackTeam: 1, stage: "resolved", endsAt: 0, roundEndsAt: 0, x: 0, y: 0, z: 0, result: "BOMB DEFUSED", round: 5 } } as unknown as HudState;
 
+/**
+ * Drop U P0 0f: EVERY mount sits in a `.hud`, as it does in the game. The §3 tokens are scoped to
+ * `:where(.hud, .loading)` (ui/hud/hud.css), so a panel mounted bare — the plan and the shop were,
+ * until now — would measure a page where the tokens resolve to nothing. The mounts are the frozen
+ * standalone signatures of docs/UI_U_SPEC.md §7.0: `PlanPanel({h, onVote})` (P3),
+ * `RoundBanner({h, model?, standalone?})` (P5), `MatchResult({h, now, onLeave})` (P6) and
+ * `Shop({h, api, now})` (P7).
+ */
 createRoot(document.getElementById("root")!).render(
   <div className="app" style={{ background: "#0b0b0d" }}>
-    {which === "plan"
-      ? <PlanPanel h={planState} onVote={(id) => console.log("vote", id)} />
-      : which === "result"
-        ? <div className="hud"><MatchResult h={resultState} now={100000} onLeave={() => console.log("leave")} /></div>
-        : which === "round"
-          ? <div className="hud"><RoundBanner h={roundState} standalone /></div>
-          : <Shop h={shopState} api={api as never} now={100000} />}
+    <div className="hud">
+      {which === "plan"
+        ? <PlanPanel h={planState} onVote={(id) => console.log("vote", id)} />
+        : which === "result"
+          ? <MatchResult h={resultState} now={100000} onLeave={() => console.log("leave")} />
+          : which === "round"
+            ? <RoundBanner h={roundState} standalone />
+            : <Shop h={shopState} api={api as never} now={100000} />}
+    </div>
   </div>,
 );
 void PLANS;

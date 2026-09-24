@@ -2,7 +2,9 @@
    variables, the shared keyframes, the debug readout and .urgent, which three packages read.
    Drop U P0 0e moved these rules VERBATIM from ui/styles.css and then ui/cinematic.css, each in
    its original order, without collapsing the later layer into the earlier one. index.css imports
-   the hud/*.css files between styles.css and cinematic.css, so the cascade is the one they had. */
+   the hud/*.css files between styles.css and cinematic.css, so the cascade is the one they had.
+   P0 0f then appended, at the end, the §3 tokens, the .hud-hidden rule and the inert .hud.entering
+   stagger — all unused in P0, so not a pixel moves. */
 
 /* ---------- HUD ---------- */
 .hud { position: absolute; inset: 0; z-index: 1; pointer-events: none; user-select: none; font-family: var(--font-ui); }
@@ -44,3 +46,114 @@
 /* ---------------------------------------- from ui/cinematic.css, which loaded after styles.css */
 /* -------------------------------- in-match UI */
 .hud { --plate: rgba(5, 15, 20, .88); --plate-line: rgba(178, 201, 210, .2); }
+
+/* ==========================================================================================
+   Drop U tokens (docs/UI_U_SPEC.md §3), added by P0 0f. DEFINED HERE AND USED BY NOBODY until
+   wave 2: a package's CSS may only read them, and a literal font-size outside this file fails G4.
+   Scoped with :where() — zero specificity, and only on the HUD and the loading card — so the
+   menu and :root are untouched and no rule anywhere can lose to a token block.
+   ========================================================================================== */
+:where(.hud, .loading) {
+  /* §3.1 type scale (px at 576 / 720 / 900 / 1080 high: t1 14/14/14/16.7 · t2 17/17/17.1/20.5 ·
+     t3 28/28/28.8/34 · t4 40/40/45/54 · t5 64/64.8/81/97.2). --hud-key is keycap letters only. */
+  --hud-t1: clamp(14px, 1.55vh, 17px);
+  --hud-t2: clamp(17px, 1.9vh, 21px);
+  --hud-t3: clamp(28px, 3.2vh, 34px);
+  --hud-t4: clamp(40px, 5vh, 60px);
+  --hud-t5: clamp(64px, 9vh, 112px);
+  --hud-key: 13px;
+  /* §3.2 tracking, the only two values: numbers, and uppercase labels. The faces are :root's
+     --font-display (Bebas Neue 400: t3–t5), --font-ui (Inter 600: t1/t2) and --font-mono
+     (JetBrains Mono 500, tabular: the clock and money). Weight 700 is never used. */
+  --hud-track-num: .04em;
+  --hud-track-label: .12em;
+  /* §3.4 colours */
+  --hud-team0: #e7b62e;
+  --hud-team1: #8f76e0;
+  --hud-accent: #e7b62e;
+  --hud-ok: #7dff9a;
+  --hud-warn: #e5ae52;
+  --hud-danger: #df4938;
+  --hud-money: #9fe0a8;
+  --hud-tx: #f4f0e7;
+  --hud-tx2: #afc0ca;
+  /* §3.5 plate (--hud-blur on small plates only) */
+  --hud-plate: rgba(5,15,20,.82);
+  --hud-plate-line: 1px solid rgba(178,201,210,.2);
+  --hud-radius: 2px;
+  --hud-blur: 8px;
+  --hud-pad: 8px 14px;
+  /* §3.6 geometry: the shared boxes every package positions its zone with, so the cross-package
+     apart pairs (§4.3) hold by construction. Widths at 1600 / 1280 / 1024: feed 460 / 320 / 195.5,
+     banner 608 / 568 / 561, strip 560 / 560 / 553, hint 560 / 560 / 344. */
+  --hud-edge: 24px;
+  --hud-strip-top: 16px;
+  --hud-strip-h: 56px;
+  --hud-strip-w: min(560px, 54vw);
+  --hud-topline-top: 80px;
+  --hud-alert-top: 116px;
+  --hud-feed-w: min(460px, calc(50vw - min(280px, 27vw) - 40px));
+  --hud-banner-top: clamp(120px, 20vh, 216px);
+  --hud-banner-w: min(900px, 56vw, calc(100vw - 2 * (var(--hud-feed-w) + 36px)));
+  --hud-radar: clamp(144px, 19.5vh, 176px);
+  --hud-chat-w: min(420px, calc(50vw - 256px));
+  --hud-chat-bottom: 148px;
+  --hud-hint-w: min(560px, calc(100vw - 680px));
+  --hud-card-w: 440px;
+  --hud-card-bottom: 128px;
+  --hud-action-y: 60%;
+  --hud-intro-left: 8vw;
+  --hud-intro-top: max(calc(50% - 40px), 264px);
+  --hud-intro-w: 360px;
+  --hud-row2-bottom: 100px;
+  --hud-weapon-bottom: 148px;
+  /* §3.8 motion */
+  --hud-fast: 120ms;
+  --hud-base: 200ms;
+  --hud-in: 320ms;
+  --hud-out: 240ms;
+  --hud-phase: 600ms;
+  --hud-ease: cubic-bezier(.2,.8,.2,1);
+  --hud-ease-in: cubic-bezier(.4,0,1,1);
+  /* §3.9 stacking. The fade (150) sits above .loading (100); the scoreboard above the shop, since
+     Tab works while buying; the reconnect alert above everything but the fade. */
+  --z-strip: 10;
+  --z-alert: 15;
+  --z-banner: 20;
+  --z-death: 30;
+  --z-shop: 40;
+  --z-scoreboard: 45;
+  --z-result: 50;
+  --z-pause: 60;
+  --z-reconnect: 70;
+  --z-fade: 150;
+}
+/* §3.8: under reduced motion every duration token is 0 ms. */
+@media (prefers-reduced-motion: reduce) {
+  :where(.hud, .loading) { --hud-fast: 0ms; --hud-base: 0ms; --hud-in: 0ms; --hud-out: 0ms; --hud-phase: 0ms; }
+}
+
+/* §3.8: the one hide rule every §4.5 row uses (the result card alone hides by opacity only).
+   Nothing carries the class in P0. */
+.hud-hidden { opacity: 0; visibility: hidden; transition: opacity var(--hud-fast), visibility 0s linear var(--hud-fast); }
+
+/* §6.1 Loading → match: the zone stagger. INERT in P0 — nothing passes `entering` to <Hud> until
+   P7 does, as the black starts to leave, and P7 drops it again once the last zone is in (~420 ms),
+   because while it is on it stands in for a zone root's own animation. Each zone comes in over
+   240 ms from 12 px out (the top half from above, the bottom half from below, the aim point in
+   place): the strip at 0 ms; radar, wallet and feed at 60; the bottom corners and chat at 120; the
+   rest at 180. `translate` (not `transform`) composes with the centring transforms the zones
+   already carry; `backwards` holds the start while a zone waits and releases the zone's own values
+   at the end; the keyframe has no `to`, so a zone that is hidden stays hidden. The veils and the
+   modal layers are not zones that enter. Under reduced motion the rule does not exist (§3.8). */
+@keyframes hud-enter { from { opacity: 0; translate: 0 var(--hud-enter-dy, -12px); } }
+@media (prefers-reduced-motion: no-preference) {
+  .hud.entering [data-zone]:not([data-zone="veil"], [data-zone="scoreboard"], [data-zone="result"], [data-zone="shop"], [data-zone="pause"], [data-zone="settings"], [data-zone="loading"], [data-zone="fade"]) {
+    animation: hud-enter 240ms var(--hud-ease) var(--hud-enter-at, 180ms) backwards;
+  }
+  .hud.entering [data-zone="top"] { --hud-enter-at: 0ms; }
+  .hud.entering :is([data-zone="radar"], [data-zone="wallet"], [data-zone="feed"]) { --hud-enter-at: 60ms; }
+  .hud.entering :is([data-zone="vitals"], [data-zone="perks"], [data-zone="inv"], [data-zone="gear"], [data-zone="weapon"], [data-zone="chat"]) { --hud-enter-at: 120ms; }
+  .hud.entering :is([data-zone="vitals"], [data-zone="perks"], [data-zone="inv"], [data-zone="gear"], [data-zone="weapon"], [data-zone="chat"], [data-zone="hint"], [data-zone="death"], [data-zone="prompt"], [data-zone="action"]) { --hud-enter-dy: 12px; }
+  .hud.entering [data-zone="crosshair"] { --hud-enter-dy: 0px; }
+}
