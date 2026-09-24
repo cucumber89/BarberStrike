@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { boysClass, BOMB, DUEL, GAME_VERSION, scoreLimitFor, GRENADES, GUN_GAME, MATCH, MODES, MatchPhase, OSTRZYZENI, PERKS, PERK_EFFECT, PERK_ORDER, PLAYER, SPAWN_PROTECTION_MS, TEAM_NAMES, WEAPONS, killerName, ladderDone, ladderWeapon, perkActive, perkTimed, type GameMode, type WeaponId } from "@frankibarber/shared";
+import { boysClass, DUEL, GAME_VERSION, scoreLimitFor, GRENADES, GUN_GAME, MATCH, MODES, MatchPhase, OSTRZYZENI, TEAM_NAMES, WEAPONS, killerName, ladderDone, ladderWeapon } from "@frankibarber/shared";
 import { useHud } from "../game/store";
-import { pelletRing } from "../game/combat/weaponFeel";
 import { TeamPicker } from "./TeamPicker";
 import { PlanPanel } from "./PlanPanel";
 import { Hints } from "./Hints";
@@ -9,11 +8,16 @@ import { SettingsPanel } from "./SettingsPanel";
 import { Shop } from "./Shop";
 import { Chat } from "./Chat";
 import { Minimap } from "./Minimap";
-import { HeadShot, Razor, Scoreboard } from "./Scoreboard";
+import { Scoreboard } from "./Scoreboard";
 import { MatchResult, RoundBreak } from "./MatchResult";
 import { BracketPanel, bracketLine, pairNames, standing } from "./Bracket";
 import { OSTRZYZENI_SIDES, roundReasonText } from "./resultText";
 import type { HudProps } from "./hud/types";
+import { usePhaseModel } from "./hud/phase";
+import { Crosshair, FlashVeil, SmokeVeil } from "./hud/Crosshair";
+import { Vitals } from "./hud/Vitals";
+import { Inventory } from "./hud/Inventory";
+import { KillFeed } from "./hud/KillFeed";
 
 /** The props are the drop-U contract (`hud/types.ts`): today's, plus the inert `entering`. */
 type Props = HudProps;
@@ -39,6 +43,7 @@ const REASON_SHORT: Record<string, string> = { kill: "ZABÓJSTWO", headshot: "W 
 
 export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, onChooseTeam, onVotePlan, shop, chat, radar, dormant = false }: Props) {
   const h = useHud();
+  const model = usePhaseModel();
   const ended = h.phase === MatchPhase.Ended;
   // The break after a round is the FIRST Prep window after Playing; the buy window that follows
   // is a second Prep with a new deadline. Remembering the break's deadline is what tells them apart.
@@ -118,56 +123,18 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
     if (h.pointerLocked || h.shopOpen || h.chatOpen) setPaused(false);
   }, [dormant, h.pointerLocked, h.connected, h.phase, h.shopOpen, h.chatOpen]);
 
-  const w = WEAPONS[h.weapon as WeaponId];
   const timeLeft = h.phaseEndsAt ? h.phaseEndsAt - h.serverNow : 0;
   // The match deadline stays fixed through every individual death and respawn.
   const matchLeft = h.bomb && h.phase === MatchPhase.Playing
     ? (h.bomb.stage === "planted" ? h.bomb.endsAt : h.bomb.roundEndsAt) - h.serverNow
     : h.matchEndsAt ? h.matchEndsAt - h.serverNow : 0;
-  const hitAge = performance.now() - h.hitAt;
-  const dmgAge = performance.now() - h.damageAt;
   const lowHealth = h.alive && h.health <= 30;
-  // Crosshair gap grows with the effective spread (radians → px at the current FOV). Clamped for readability.
-  const ch = settings.hud.crosshair;
-  // The gap is the player's own resting gap, opened by the real spread when they asked for that.
-  const gap = ch.dynamic ? Math.round(Math.min(34, ch.gap + h.crosshairSpread * 900)) : ch.gap;
-  // C1 (matrix): pellet weapons show the true cone as a ring, uncapped — the gap above stops at
-  // 34 px, and the S12's cone is roughly 50.
-  const spreadRing = pelletRing(h.weapon as WeaponId) ? Math.round(h.crosshairSpread * 900) : null;
-  const protectedNow = h.alive && h.spawnProtectedUntil > h.serverNow;
-  const reloadMs = w.reloadMs;
-  // Flash: full white, then a fade whose length scales with the strength (the last third is a haze).
-  const flashLeft = h.flashUntil - now;
-  const flashTotal = Math.max(1, h.flashUntil - h.flashAt);
-  const flashOpacity = flashLeft > 0 ? Math.min(1, (flashLeft / flashTotal) * 1.6) * (0.35 + 0.65 * h.flashStrength) : 0;
   const windowSecs = h.buyWindowLeft === Infinity ? null : Math.ceil(h.buyWindowLeft / 1000);
   const shopHint = h.shopResult && !h.shopOpen && h.shopResult.reason === "closed" && now - h.shopResult.at < 1800;
   const toasts = useMemo(() => h.moneyToasts.filter((t) => t.reason !== "reset" && t.reason !== "buy"), [h.moneyToasts]);
   // Drop T: playing this pair, waiting for yours, or out — read off the bracket, not a new field.
   const myName = h.players.find((r) => r.id === h.myId)?.name ?? "";
   const tourStanding = h.bracket ? standing(h.bracket, myName) : "";
-  const activePerks = PERK_ORDER.filter((id) => perkActive(h.perks, id, h.serverNow));
-  /**
-   * Rule P2: the steroids' two-second gate, in words. Regeneration only starts after
-   * `PERK_EFFECT.roidsDelayMs` without a hit, and nothing on the screen said so — so a player who
-   * bought the perk, traded shots, and watched their health sit at 40 concluded the perk was
-   * broken. The row now reads either the gate counting down or the rate it is actually healing at.
-   */
-  const roidsHeldMs = Math.max(0, PERK_EFFECT.roidsDelayMs - (performance.now() - h.damageAt));
-  /**
-   * Rule P5 / the fade receipt: a fade is spent at the instant you respawn, so it never appears in
-   * the perk list and the only thing the player gets for their 300 zł is a shield twice as long as
-   * everyone else's. `protectedUntil` is the only evidence, and it cannot simply be compared with
-   * SPAWN_PROTECTION_MS: a shield granted inside a freeze starts counting from the RELEASE, so the
-   * remaining time is the whole freeze plus the shield. Hence both guards — not in Prep, and the
-   * remainder inside the band only a fade can produce — and a latch on the deadline itself, so the
-   * badge stays up for the full three seconds rather than the first part of them.
-   */
-  const fadeSeen = useRef(0);
-  if (h.phase !== MatchPhase.Prep && h.spawnProtectedUntil - h.serverNow > SPAWN_PROTECTION_MS + 400
-      && h.spawnProtectedUntil - h.serverNow <= PERK_EFFECT.fadeShieldMs + 400) fadeSeen.current = h.spawnProtectedUntil;
-  const fadeShield = protectedNow && fadeSeen.current === h.spawnProtectedUntil;
-  const brokeAge = now - h.armorBrokeAt;
   // Drop 4: mode-aware scoring. FFA shows my kills against the leader; Domination adds the flag row.
   const teams = MODES[h.mode].teams;
   const meRow = h.players.find((r) => r.id === h.myId);
@@ -189,11 +156,6 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   const infection = h.mode === "ostrzyzeni";
   // GÓRA's 1 v 1: the round number, the score, the clock; one life a round.
   const duel = h.mode === "duel";
-  // The bar is a fraction of what THIS player can hold: a Boys class, an Ostrzyżony's bigger pool,
-  // or the ordinary hundred. Without this a 220 HP chaser draws a bar twice the width of its box.
-  const maxHealth = h.mode === "boys" ? boysClass(h.boysClass).health
-    : infection && !!h.players.find((r) => r.id === h.myId)?.shaved ? OSTRZYZENI.shavedHealth
-    : PLAYER.maxHealth;
   // Drop T: in a tournament the two sides are two people, so the bar carries their nicknames.
   const sideNames = infection ? OSTRZYZENI_SIDES : (h.bracket ? pairNames(h.bracket) : null) ?? TEAM_NAMES;
   const meShaved = !!meRow?.shaved;
@@ -209,7 +171,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
 
   return (
     <div className={`hud ${lowHealth ? "low-health" : ""} ${dormant ? "dormant" : ""}`} data-testid="hud" aria-hidden={dormant || undefined}>
-      {h.smokeOpacity > 0 && <div className="smoke-screen" data-testid="smoke-screen" style={{ opacity: h.smokeOpacity }} />}
+      <SmokeVeil model={model} />
       {h.bomb && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && <div className={`bomb-hud ${h.bomb.stage === "planted" ? "armed" : ""}`} data-testid="bomb-hud">
         <b>RUNDA {h.bomb.round} / 12 · {h.bomb.attackTeam === h.myTeam ? "ATAK" : "OBRONA"} · DO 7</b>
         {/* The objective ALWAYS, and while CS's buy tail runs it carries that too — the shop being
@@ -259,49 +221,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
           </div>
         );
       })()}
-      {/* Damage vignette / direction */}
-      {dmgAge < 600 && <div className="damage-dir" style={{ transform: `rotate(${h.damageAngle}rad)`, opacity: 1 - dmgAge / 600 }} />}
-
-      {/* Crosshair (hidden in ADS, and while a frag cooks: there the ring takes its place).
-          Shape, size, thickness, gap and colour come from the player's own settings — this is the
-          one piece of UI they look at every second of the match. */}
-      {h.alive && h.pointerLocked && !h.aiming && !cookRing && (
-        <div
-          className={`crosshair ch-${ch.style} ${ch.outline ? "outlined" : ""} ${hitAge < 180 ? (h.hitKill ? "kill" : h.hitHead ? "head" : h.hitArmor ? "armor" : "hit") : ""} ${protectedNow ? "shield" : ""}`}
-          data-testid="crosshair"
-          style={{ "--gap": `${gap}px`, "--len": `${ch.size}px`, "--gap-n": gap, "--len-n": ch.size, "--w": `${ch.thickness}px`, "--ch-color": ch.color } as React.CSSProperties}
-        >
-          {ch.style !== "dot" && ch.style !== "circle" && <><span className="ch-top" /><span className="ch-bottom" /><span className="ch-left" /><span className="ch-right" /></>}
-          {ch.style === "circle" && <span className="ch-circle" />}
-          {(ch.style === "dot" || ch.style === "cross-dot") && <span className="ch-dot" />}
-          {/* C1: a pellet gun's cone is far wider than the 34 px the four lines can open to, so the
-              S12 draws the real radius as a ring. Four lines that stopped growing told the player
-              nothing about where nine pellets were actually going. */}
-          {spreadRing !== null && <span className="ch-ring" style={{ "--r": `${spreadRing}px` } as React.CSSProperties} />}
-          {hitAge < 180 && <span className="hitmarker" />}
-          {protectedNow && <span className="ch-shield" />}
-        </div>
-      )}
-      {h.alive && cookRing && (
-        <div className="cook" data-testid="cook" style={{ "--p": `${Math.round(h.cooking * 100)}%` } as React.CSSProperties} />
-      )}
-      {/* Tactical sprint budget (drop 4): only while it is running or refilling */}
-      {h.alive && h.pointerLocked && (h.tacOn || h.tac < 0.98) && (
-        <div className={`tac-meter ${h.tacOn ? "on" : ""} ${h.tac <= 0.01 ? "empty" : ""}`} data-testid="tac"><div className="tac-fill" style={{ "--v": h.tac } as React.CSSProperties} /></div>
-      )}
-      {/* Scope (drop 3): black mask with a round window, a reticle, breath meter.
-          Drop B / D-B2: the SR-50 keeps the full tube; the M-1 gets a light ring that leaves most
-          of the view clear and has no breath to hold, so the two long rifles are not one weapon
-          shown twice. */}
-      {h.alive && h.scoped && (
-        <div className={`scope ${h.scopeStyle === "ring" ? "ring" : ""}`} data-testid="scope" data-style={h.scopeStyle ?? ""}>
-          <div className="scope-mask" />
-          <div className={`scope-reticle ${hitAge < 180 ? "hit" : ""}`}><span className="v" /><span className="hz" /><span className="dot" /></div>
-          {h.scopeStyle === "tube" && (
-            <div className="scope-breath"><div className="scope-breath-fill" style={{ "--v": h.breath } as React.CSSProperties} /><span>{h.breath <= 0 ? "ZADYSZKA" : "SHIFT · WSTRZYMAJ ODDECH"}</span></div>
-          )}
-        </div>
-      )}
+      <Crosshair model={model} settings={settings} now={now} />
 
 
       {/* Top: score + timer (team modes) or me vs the leader (FFA, drop 4) */}
@@ -354,74 +274,9 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {/* Chat (drop 5) */}
       {h.connected && <Chat lines={h.chat} open={h.chatOpen} teams={teams} myId={h.myId} api={chat} />}
 
-      {/* Kill feed */}
-      <ul className="killfeed" data-testid="killfeed">
-        {!ended && h.killFeed.map((k) => (
-          <li key={k.key} className={k.victim === h.myId ? "me-victim" : k.killer === h.myId ? "me-killer" : ""}>
-            <span className={`kf-name ${teams ? `t${k.killerTeam}` : "ffa"}`}>
-              {k.killer === k.victim ? "" : k.killerName}
-              {/* Assists: "KILLER + HELPER" before the weapon, because a kill somebody set up for you
-                  is not the same event as one you took alone, and the scoreboard's A column says it
-                  far too late to matter. The server names them on the Kill message; see KillEvent. */}
-              {k.assists?.length ? <span className="kf-assist"> + {k.assists.join(" + ")}</span> : null}
-            </span>
-            {/* Drop E: a shave gets the razor instead of the weapon's name. Nobody needs telling it
-                was the clippers — the icon IS the clippers, and what matters is that it was from
-                behind. A razor is drawn rather than spelled: it reads at a glance and at 1080p. */}
-            <span className="kf-weapon">
-              {k.killer === k.victim ? "poległ"
-                : k.shave ? <Razor className="kf-razor" title="OGOLENIE" />
-                : <>{killerName(k.weapon).split(" ")[0]}{k.headshot ? <HeadShot className="kf-head" title="W GŁOWĘ" /> : null}</>}
-            </span>
-            <span className={`kf-name ${teams ? `t${k.victimTeam}` : "ffa"}`}>{k.victimName}</span>
-          </li>
-        ))}
-      </ul>
+      <KillFeed model={model} />
 
-      {/* Bottom-left: health */}
-      <div className={`health hp-${h.health / maxHealth > 0.6 ? "ok" : h.health / maxHealth > 0.3 ? "hurt" : "critical"}`} data-testid="health">
-        <div className="health-num">{h.health}</div>
-        <div className="health-bars">
-          <div className="health-bar"><div className="health-fill" style={{ "--v": h.health / maxHealth } as React.CSSProperties} /></div>
-          {h.armor > 0 && <div className="armor-bar"><div className="armor-fill" style={{ "--v": h.armor / 100 } as React.CSSProperties} /></div>}
-        </div>
-        {(h.armor > 0 || brokeAge < 900) && <div className={`armor-num ${brokeAge < 900 ? "broke" : ""}`} data-testid="armor">🛡 {brokeAge < 900 && h.armor === 0 ? "ZNISZCZONA" : h.armor}</div>}
-      </div>
-      {(activePerks.length > 0 || fadeShield) && (
-        <div className="perk-list" data-testid="perks">
-          {activePerks.map((id) => {
-            const p = PERKS[id];
-            const leftMs = h.perks[id] - h.serverNow;
-            // Armed-for-the-round versus counting down: one rule, in `perkTimed`, because the shop
-            // row for the same perk has to read the same way and used to decide it separately.
-            const timed = perkTimed(id, h.perks[id], h.serverNow);
-            const frac = timed ? Math.max(0, Math.min(1, leftMs / p.durationMs)) : 1;
-            // Rule P1: the last five seconds are the ones worth knowing about — a flask running out
-            // in the middle of a fight changes what you can walk into. The bar shrank towards it
-            // and said nothing.
-            const ending = timed && leftMs <= 5000;
-            const note = id === "roids" ? (roidsHeldMs > 0 ? `CZEKA ${Math.ceil(roidsHeldMs / 1000)}s` : `+${PERK_EFFECT.roidsRegenPerSec}/s`) : "";
-            return (
-              <div key={id} className={`perk perk-${id} ${ending ? "ending" : ""} ${note && roidsHeldMs > 0 ? "held" : ""}`} title={p.blurb}>
-                <span className="perk-glyph">{p.glyph}</span>
-                <span className="perk-name">{p.name.toUpperCase()}</span>
-                {note && <span className="perk-note">{note}</span>}
-                <span className="perk-time">{timed ? `${Math.max(0, Math.ceil(leftMs / 1000))}s` : "UZBROJONE"}</span>
-                <span className="perk-bar" style={{ "--v": frac } as React.CSSProperties} />
-              </div>
-            );
-          })}
-          {fadeShield && (
-            <div className="perk perk-fade" data-testid="perk-shield" title={PERKS.fade.blurb}>
-              <span className="perk-glyph">🛡</span>
-              <span className="perk-name">ŚWIEŻY FADE</span>
-              <span className="perk-note">TARCZA</span>
-              <span className="perk-time">{Math.max(0, Math.ceil((h.spawnProtectedUntil - h.serverNow) / 1000))}s</span>
-              <span className="perk-bar" style={{ "--v": Math.max(0, Math.min(1, (h.spawnProtectedUntil - h.serverNow) / PERK_EFFECT.fadeShieldMs)) } as React.CSSProperties} />
-            </div>
-          )}
-        </div>
-      )}
+      <Vitals model={model} now={now} />
 
       {/* Wallet + buy prompt (drop 2) */}
       {h.connected && !noShop && !ended && (
@@ -442,22 +297,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       </div>
       {shopHint && !ended && <div className="shop-closed-hint" data-testid="shop-closed">{noShop ? `W TRYBIE ${MODES[h.mode].name} NIE MA SKLEPU · BROŃ DAJĄ ZABÓJSTWA` : "SKLEP ZAMKNIĘTY · PODEJDŹ DO LADY $"}</div>}
 
-      {/* Bottom-right: weapon + ammo, grenade slots above */}
-      {h.connected && !ended && (
-        <div className="gear" data-testid="gear">
-          <div className={`gear-slot ${h.lethal ? "" : "empty"} ${h.cookingKind && GRENADES[h.cookingKind].slot === "lethal" ? "cooking" : ""}`} data-testid="slot-lethal">
-            <span className="key">G</span><span>{h.lethal ? GRENADES[h.lethal].name.toUpperCase() : "BOJOWY"}</span><span className="count">{h.lethal ? h.lethalCount : "–"}</span>
-          </div>
-          <div className={`gear-slot ${h.tactical ? "" : "empty"}`} data-testid="slot-tactical">
-            <span className="key">4</span><span>{h.tactical ? GRENADES[h.tactical].name.toUpperCase() : "TAKTYCZNY"}</span><span className="count">{h.tactical ? h.tacticalCount : "–"}</span>
-          </div>
-        </div>
-      )}
-      {!ended && <div className="ammo" data-testid="ammo">
-        <div className="weapon-name">{w.name}<span className="slot">{w.slot}</span></div>
-        <div className={`ammo-num ${h.ammo === 0 && w.kind !== "melee" ? "empty" : ""}`}>{w.kind === "melee" ? <span className="mag">∞</span> : h.reloading ? <span className="reloading">PRZEŁADOWANIE</span> : <><span className="mag">{h.ammo}</span><span className="sep">/</span><span className="res">{h.reserve}</span></>}</div>
-        {h.reloading && <div className="reload-bar"><div className="reload-fill" key={h.weapon + String(h.reloading)} style={{ animationDuration: `${reloadMs}ms` }} /></div>}
-      </div>}
+      <Inventory model={model} />
 
       {h.reconnecting && <div className="reconnect" data-testid="reconnecting">UTRACONO POŁĄCZENIE · ŁĄCZĘ PONOWNIE…</div>}
 
@@ -474,15 +314,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
         </div>
       )}
 
-      {/* Flask (drop 3): the promised blurry edges. Rule P5: they used to switch off between two
-          frames, 25 s after the bottle — the screen cleared and nothing said the 20 % resistance
-          had gone with it. The haze now thins over the last four seconds, so the perk ending is
-          something the player SEES rather than something they find out by dying. */}
-      {h.alive && activePerks.includes("flask") && (
-        <div className="flask-haze" style={{ "--v": Math.max(0.15, Math.min(1, (h.perks.flask - h.serverNow) / 4000)) } as React.CSSProperties} />
-      )}
-      {/* Flash blindness (above everything but the menus) */}
-      {flashOpacity > 0.01 && <div className="flash-out" data-testid="flash" style={{ opacity: flashOpacity }} />}
+      <FlashVeil model={model} now={now} />
 
       {/* Death screen */}
       {!h.alive && h.connected && h.phase !== MatchPhase.Ended && (
