@@ -1874,7 +1874,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       (p, q) => !this.losBlocked(p.x, p.y + 1, p.z, q.x, q.y + 0.3, q.z), sitesOf(this.map));
     if (!plantedBefore && this.state.bomb.stage === "planted") {
       const planter = this.state.players.get(carrier);
-      if (planter) { this.pay(planter, CS_ECONOMY.plant, "capture"); planter.score += 200; }
+      // "round": not "capture", which is Dominacja's flag money, and no new "plant" reason either —
+      // `MoneyEvent` in shared `types.ts` is frozen for drop U.
+      if (planter) { this.pay(planter, CS_ECONOMY.plant, "round"); planter.score += 200; }
     }
     if (winner === null) return;
     if (this.state.bomb.result === "BOMB DETONATED") {
@@ -1889,11 +1891,13 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // CS's two payments: the round award to the winners, the loss ladder to the losers — plus the
     // planted-bomb bonus, which is the one that keeps a losing attack in the game. An attack that
     // got the bomb down and then lost the round did its job and is paid for it.
+    // Paid as the duel pays them — "round" to the winners, "loss" to the losers — never "capture",
+    // which is Dominacja's flag money and read "+$3,250 CAPTURE" on a Bomb round.
     const planted = this.state.bomb.result === "BOMB DEFUSED";
     for (const p of this.state.players.values()) if (p.connected && this.sessions.get(p.id)?.ready) this.pay(p,
       p.team === winner ? BOMB.winMoney
         : csLossBonus(this.bombLosses[loser] - 1) + (planted && p.team === this.state.bomb.attackTeam ? CS_ECONOMY.plantedLoss : 0),
-      "capture");
+      p.team === winner ? "round" : "loss");
     if (Math.max(this.state.scoreA, this.state.scoreB) >= BOMB.wins || this.state.bomb.round >= BOMB.maxRounds) { this.endMatch(); return; }
     this.state.phase = MatchPhase.Prep;
     this.state.phaseEndsAt = now + bombBreakMs(this.state.bomb.round); // halftime after BOMB.halfRounds

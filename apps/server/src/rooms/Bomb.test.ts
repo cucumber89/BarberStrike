@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { BOMB, BOMB_SITES, C2S, MATCH, MatchPhase, TICK_MS, bombBreakMs } from "@frankibarber/shared";
+import { BOMB, BOMB_SITES, C2S, CS_ECONOMY, MATCH, MatchPhase, S2C, TICK_MS, bombBreakMs, csLossBonus, type MoneyEvent } from "@frankibarber/shared";
 import { RoomHarness, type FakeClient } from "./testHarness";
 let h: RoomHarness;
 beforeEach(() => vi.useFakeTimers());
@@ -109,6 +109,32 @@ it("plants and defuses through actual network handlers, cancelling a stale hold"
   await h.place(b.sessionId, { ...site, x: site.x + 0.8, yaw: 0, team: 1 });
   await hold(b, BOMB.defuseMs + 300);
   expect(h.state.bomb.result).toBe("BOMB DEFUSED"); expect(h.state.scoreB).toBe(1);
+});
+it("round money arrives as round / loss, never capture", async () => {
+  // "capture" is Dominacja's flag money; on a Bomb round the toast read "+$3,250 CAPTURE". The round
+  // award and the plant bonus are "round", the loss ladder "loss" — the duel's own two reasons.
+  const { a, b, c } = await match(); const site = BOMB_SITES[0];
+  const money = (x: FakeClient) => h.sentOf(x, S2C.Money).map((m) => m.payload as MoneyEvent);
+  const last = (x: FakeClient) => money(x).at(-1);
+  await h.place(a.sessionId, { ...site, yaw: 0, team: 0 });
+  await hold(a, BOMB.plantMs + 300); expect(h.state.bomb.stage).toBe("planted");
+  expect(last(a), "the plant bonus").toMatchObject({ delta: CS_ECONOMY.plant, reason: "round" });
+  await h.place(b.sessionId, { ...site, x: site.x + 0.8, yaw: 0, team: 1 });
+  await hold(b, BOMB.defuseMs + 300);
+  expect(h.state.bomb.result).toBe("BOMB DEFUSED");
+  expect(last(b), "the round award").toMatchObject({ delta: BOMB.winMoney, reason: "round" });
+  // The attack lost with the bomb down: the loss ladder plus the planted-bomb bonus, still "loss".
+  for (const x of [a, c]) expect(last(x), "the loss ladder").toMatchObject({ delta: csLossBonus(0) + CS_ECONOMY.plantedLoss, reason: "loss" });
+  // A round won on eliminations pays the same two reasons.
+  await h.until(MatchPhase.Playing);
+  h.player(b.sessionId).alive = false; await h.tick();
+  expect(h.state.bomb.result).toBe("DEFENDERS ELIMINATED");
+  for (const x of [a, c]) expect(last(x)).toMatchObject({ delta: BOMB.winMoney, reason: "round" });
+  expect(last(b)).toMatchObject({ reason: "loss" });
+  const reasons = new Set([a, b, c].flatMap((x) => money(x).map((m) => m.reason)));
+  expect(reasons.has("capture"), `reasons seen: ${[...reasons].join(", ")}`).toBe(false);
+  reasons.delete("reset"); // the wallet written at the match start, not a payment
+  expect(reasons).toEqual(new Set(["round", "loss"]));
 });
 it("holds a mid-round join until the next round", async () => {
   await match(); const late = await h.join("Late");
