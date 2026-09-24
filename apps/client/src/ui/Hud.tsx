@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { boysClass, DUEL, GAME_VERSION, scoreLimitFor, GRENADES, GUN_GAME, MATCH, MODES, MatchPhase, OSTRZYZENI, TEAM_NAMES, WEAPONS, killerName, ladderDone, ladderWeapon } from "@frankibarber/shared";
+import { boysClass, GAME_VERSION, GRENADES, MODES, MatchPhase, killerName } from "@frankibarber/shared";
 import { useHud } from "../game/store";
 import { TeamPicker } from "./TeamPicker";
 import { PlanPanel } from "./PlanPanel";
@@ -10,22 +10,21 @@ import { Chat } from "./Chat";
 import { Minimap } from "./Minimap";
 import { Scoreboard } from "./Scoreboard";
 import { MatchResult, RoundBreak } from "./MatchResult";
-import { BracketPanel, bracketLine, pairNames, standing } from "./Bracket";
-import { OSTRZYZENI_SIDES, roundReasonText } from "./resultText";
+import { standing } from "./Bracket";
 import type { HudProps } from "./hud/types";
 import { usePhaseModel } from "./hud/phase";
 import { Crosshair, FlashVeil, SmokeVeil } from "./hud/Crosshair";
 import { Vitals } from "./hud/Vitals";
 import { Inventory } from "./hud/Inventory";
 import { KillFeed } from "./hud/KillFeed";
+import { TopStrip } from "./hud/TopStrip";
+import { ModeLine, Objective } from "./hud/ModeLine";
+import { FlagRow } from "./hud/FlagRow";
+import { ActionPrompt } from "./hud/ActionPrompt";
+import { BracketHud } from "./hud/BracketHud";
 
 /** The props are the drop-U contract (`hud/types.ts`): today's, plus the inert `entering`. */
 type Props = HudProps;
-
-const fmtTime = (ms: number): string => {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-};
 
 /** Re-renders on a timer so countdowns tick without the game loop pushing state. */
 function useClock(intervalMs: number): number {
@@ -124,10 +123,6 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   }, [dormant, h.pointerLocked, h.connected, h.phase, h.shopOpen, h.chatOpen]);
 
   const timeLeft = h.phaseEndsAt ? h.phaseEndsAt - h.serverNow : 0;
-  // The match deadline stays fixed through every individual death and respawn.
-  const matchLeft = h.bomb && h.phase === MatchPhase.Playing
-    ? (h.bomb.stage === "planted" ? h.bomb.endsAt : h.bomb.roundEndsAt) - h.serverNow
-    : h.matchEndsAt ? h.matchEndsAt - h.serverNow : 0;
   const lowHealth = h.alive && h.health <= 30;
   const windowSecs = h.buyWindowLeft === Infinity ? null : Math.ceil(h.buyWindowLeft / 1000);
   const shopHint = h.shopResult && !h.shopOpen && h.shopResult.reason === "closed" && now - h.shopResult.at < 1800;
@@ -137,135 +132,20 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   const tourStanding = h.bracket ? standing(h.bracket, myName) : "";
   // Drop 4: mode-aware scoring. FFA shows my kills against the leader; Domination adds the flag row.
   const teams = MODES[h.mode].teams;
-  const meRow = h.players.find((r) => r.id === h.myId);
-  const leader = h.players.find((r) => r.id !== h.myId) ?? null;
-  const myKills = meRow?.kills ?? 0;
-  const leading = !leader || myKills >= leader.kills;
-  // Drop D: Gun Game replicates the ladder rung as `score` (0..11; 11 = finished). The top bar shows
-  // the rung, the gun it hands you and the next one, against the leader's rung instead of kills.
-  const gunGame = h.mode === "gungame";
   const noShop = MODES[h.mode].shop === "none";
-  const myRung = meRow?.score ?? 0;
-  const leaderRung = leader?.score ?? 0;
-  const rungLabel = (rung: number) => `${Math.min(GUN_GAME.ladder.length, rung + 1)}/${GUN_GAME.ladder.length}`;
-  const rungGun = WEAPONS[ladderWeapon(myRung)].name;
-  const nextGun = myRung + 1 < GUN_GAME.ladder.length ? WEAPONS[ladderWeapon(myRung + 1)].name : null;
-  const ladderLeading = !leader || myRung >= leaderRung;
-  // Drop D: Ostrzyżeni. The sides are the teams, so the only new reads are who is still unshaved
-  // (counted from the scoreboard rows the HUD already has) and which side I am on.
-  const infection = h.mode === "ostrzyzeni";
-  // GÓRA's 1 v 1: the round number, the score, the clock; one life a round.
-  const duel = h.mode === "duel";
-  // Drop T: in a tournament the two sides are two people, so the bar carries their nicknames.
-  const sideNames = infection ? OSTRZYZENI_SIDES : (h.bracket ? pairNames(h.bracket) : null) ?? TEAM_NAMES;
-  const meShaved = !!meRow?.shaved;
-  const unshavedLeft = infection ? h.players.filter((r) => r.connected && r.alive && !r.shaved).length : 0;
-  const here = h.inFlag >= 0 ? h.flags[h.inFlag] : null;
-  const captureText = here
-    ? here.contested ? `SPORNY · ${here.id}`
-      : here.capTeam === h.myTeam ? `PRZEJMUJESZ ${here.id} · ${Math.round(here.cap * 100)}%`
-      : here.capTeam !== -1 ? `${TEAM_NAMES[here.capTeam as 0 | 1]} PRZEJMUJE ${here.id}`
-      : here.owner === h.myTeam ? `TRZYMASZ ${here.id}` : `FLAGA WROGA ${here.id}`
-    : "";
   const noticeAge = h.flagNotice ? now - h.flagNotice.at : Infinity;
 
   return (
     <div className={`hud ${lowHealth ? "low-health" : ""} ${dormant ? "dormant" : ""}`} data-testid="hud" aria-hidden={dormant || undefined}>
       <SmokeVeil model={model} />
-      {h.bomb && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && <div className={`bomb-hud ${h.bomb.stage === "planted" ? "armed" : ""}`} data-testid="bomb-hud">
-        <b>RUNDA {h.bomb.round} / 12 · {h.bomb.attackTeam === h.myTeam ? "ATAK" : "OBRONA"} · DO 7</b>
-        {/* The objective ALWAYS, and while CS's buy tail runs it carries that too — the shop being
-            open a few seconds into the round is no use to anybody who does not know it is, and the
-            first five seconds of a round is exactly when a player needs to be told their job. */}
-        <span>{h.bomb.stage === "buy" ? `${h.bomb.round === 7 ? "ZMIANA STRON · " : ""}B: SKLEP · START ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
-          : h.phase === MatchPhase.Prep ? `${roundReasonText(h.bomb.result)} · NASTĘPNA RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
-          : (h.bomb.stage === "planted" ? `ŁADUNEK NA ${h.bomb.site} · ${h.bomb.attackTeam === h.myTeam ? "PILNUJ ŁADUNKU" : "PRZYTRZYMAJ T, ŻEBY ROZBROIĆ"}`
-            : h.bomb.carrier === h.myId ? "MASZ ŁADUNEK · PRZYTRZYMAJ T NA A / B, ŻEBY PODŁOŻYĆ"
-            : h.bomb.attackTeam !== h.myTeam ? "BROŃ PUNKTÓW A / B"
-            : h.bomb.stage === "dropped" ? "ŁADUNEK UPUSZCZONY · PODEJDŹ, ŻEBY PODNIEŚĆ" : "OSŁANIAJ NIOSĄCEGO ŁADUNEK")
-            + (h.alive && h.buyWindowLeft > 0 ? ` · SKLEP (B) JESZCZE ${Math.max(0, Math.ceil(h.buyWindowLeft / 1000))}s` : "")}</span>
-        {h.bomb.actor && <><div className="bomb-progress"><i style={{ "--v": h.bomb.progress } as React.CSSProperties} /></div><small>{h.bomb.actor === h.myId ? "TRZYMAJ T · NIE RUSZAJ SIĘ" : h.bomb.stage === "planted" ? "ROZBRAJANIE" : "PODKŁADANIE"}</small></>}
-      </div>}
-      {/* Ostrzyżeni (drop D): the round, how many heads are left, and which side the clock favours. */}
-      {infection && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && (
-        <div className={`bomb-hud infection ${meShaved ? "shaved" : ""}`} data-testid="infection-line">
-          <b>RUNDA {Math.min(OSTRZYZENI.rounds, h.round + 1)} / {OSTRZYZENI.rounds} · {unshavedLeft} NIEOSTRZYŻONYCH · {fmtTime(timeLeft)}</b>
-          <span>{h.phase === MatchPhase.Prep
-            ? (meShaved ? "OSTRZYSZ ICH ZA CHWILĘ — maszynka w dłoni" : `PRZYGOTOWANIE · B: SKLEP · RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`)
-            : meShaved ? "JESTEŚ OSTRZYŻONY — goń ich z maszynką"
-            : "PRZEŻYJ — nie daj się ostrzyc"}</span>
-        </div>
-      )}
-      {/* The 1 v 1's line. Two different Preps run through here — the fifteen-second FREEZE you buy
-          in, and the three-second BREAK after a round — and they used to print the same words
-          ("B: SKLEP · RUNDA ZA 3s") while the shop was shut in one of them. What tells them apart
-          is the buy window itself, which the HUD already knows: `buyWindowLeft`. */}
-      {duel && (h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep) && (() => {
-        const secs = Math.max(0, Math.ceil(timeLeft / 1000));
-        const buying = h.buyWindowLeft > 0 && h.alive;
-        const buySecs = h.buyWindowLeft === Infinity ? null : Math.max(0, Math.ceil(h.buyWindowLeft / 1000));
-        const mine = h.myTeam === 0 ? h.scoreA : h.scoreB, theirs = h.myTeam === 0 ? h.scoreB : h.scoreA;
-        const matchPoint = Math.max(mine, theirs) === DUEL.wins - 1;
-        const swapping = h.round > 0 && h.round % DUEL.halfRounds === 0;
-        return (
-          <div className="bomb-hud duel" data-testid="duel-line">
-            <b>RUNDA {h.round + 1} · {sideNames[h.myTeam]} {mine} : {theirs} · DO {DUEL.wins}{matchPoint ? (mine > theirs ? " · MECZBOL" : " · BRONISZ MECZBOLU") : ""} · {fmtTime(timeLeft)}</b>
-            <span>{h.phase === MatchPhase.Prep
-              ? buying
-                ? `${swapping ? "ZMIANA STRON · " : ""}ZAMROŻENIE · B: SKLEP · START ZA ${secs}s`
-                : `${h.roundResult ? `${roundReasonText(h.roundResult)} · ` : ""}NASTĘPNA RUNDA ZA ${secs}s`
-              : buying
-                // CS's buy time runs past the freeze; say so, or nobody uses it.
-                ? `SKLEP OTWARTY JESZCZE ${buySecs}s · B, ŻEBY DOKUPIĆ`
-                : "JEDNO ŻYCIE · po czasie wygrywa więcej zdrowia"}</span>
-          </div>
-        );
-      })()}
+      <ModeLine model={model} />
       <Crosshair model={model} settings={settings} now={now} />
-
-
-      {/* Top: score + timer (team modes) or me vs the leader (FFA, drop 4) */}
-      {!ended && <div className="top-bar" data-mode={h.mode}>
-        {teams
-          ? <div className={`team-score t0 ${h.myTeam === 0 ? "mine" : ""}`}><span className="tname">{sideNames[0]}</span><span className="tscore" data-testid="score-a">{h.scoreA}</span></div>
-          : gunGame
-            ? <div className="ffa-score mine ladder"><span className="tname">BROŃ</span><span className="tscore" data-testid="ladder">{rungLabel(myRung)}</span>
-                <span className="ladder-gun" data-testid="ladder-gun">{ladderDone(myRung) ? <b>DRABINKA ZALICZONA</b> : <><b>{rungGun}</b>{nextGun && <small>NASTĘPNA: {nextGun}</small>}</>}</span></div>
-            : <div className="ffa-score mine"><span className="tname">TY</span><span className="tscore" data-testid="score-a">{myKills}</span></div>}
-        <div className={`timer ${matchLeft > 0 && matchLeft <= 30000 ? "urgent" : ""}`} data-testid="timer">
-          {h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep ? fmtTime(matchLeft)
-            : h.phase === MatchPhase.Countdown ? `START ${Math.max(0, Math.ceil(timeLeft / 1000))}`
-            : h.phase === MatchPhase.Waiting ? "ROZGRZEWKA" : "KONIEC"}
-          {/* TDM's target follows the size of the room (`scoreLimitFor`), so it is printed rather
-              than left to a mode blurb that would be wrong in half the rooms. */}
-          {h.mode === "tdm" && <small className="timer-goal" data-testid="score-goal">DO {scoreLimitFor("tdm", h.players.length)}</small>}
-        </div>
-        {teams
-          ? <div className={`team-score t1 ${h.myTeam === 1 ? "mine" : ""}`}><span className="tscore" data-testid="score-b">{h.scoreB}</span><span className="tname">{sideNames[1]}</span></div>
-          : gunGame
-            ? <div className={`ffa-score ${ladderLeading ? "" : "lead"}`}><span className="tscore" data-testid="score-b">{leader ? rungLabel(leaderRung) : "–"}</span><span className="tname">{leader?.name ?? "NIKT"}</span></div>
-            : <div className={`ffa-score ${leading ? "" : "lead"}`}><span className="tscore" data-testid="score-b">{leader?.kills ?? 0}</span><span className="tname">{leader?.name ?? "NIKT"}</span></div>}
-      </div>}
-      {/* Domination (drop 4): A / B / C with owner colour, capture bar, contested pulse */}
-      {(h.mode === "dom" || h.mode === "boys") && h.flags.length > 0 && (
-        <div className="flags" data-testid="flags">
-          {h.flags.map((f, i) => (
-            <div key={f.id} className={`flag own${f.owner} cap${f.capTeam} ${f.contested ? "contested" : ""} ${h.inFlag === i ? "here" : ""}`} title={f.name} data-testid={`flag-${f.id}`} data-owner={f.owner}>
-              {f.id}
-              {f.capTeam !== -1 && <span className="flag-cap" style={{ "--v": f.cap } as React.CSSProperties} />}
-            </div>
-          ))}
-        </div>
-      )}
+      <TopStrip model={model} />
+      <FlagRow model={model} />
       {h.flagNotice && noticeAge < 2600 && !ended && (
         <div className={`flag-notice t${h.flagNotice.team}`} data-testid="flag-notice" style={{ opacity: Math.min(1, (2600 - noticeAge) / 500) }}>{h.flagNotice.text}</div>
       )}
-      {h.alive && here && (
-        <div className={`capture ${here.contested ? "contested" : ""} ${here.capTeam !== -1 && here.capTeam !== h.myTeam ? "enemy" : ""}`} data-testid="capture">
-          {captureText}
-          {here.capTeam !== -1 && !here.contested && <div className="capture-bar"><div className="capture-fill" style={{ "--v": here.cap } as React.CSSProperties} /></div>}
-        </div>
-      )}
+      <ActionPrompt model={model} />
 
       {/* Minimap + compass (drop 5): hidden behind the scope and the result screen */}
       {/* The tube takes your surroundings away with it; the M-1's ring is the weapon that does NOT,
@@ -305,14 +185,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {h.phase === MatchPhase.Countdown && (
         <div className="center-msg countdown" data-testid="countdown">{Math.max(1, Math.ceil(timeLeft / 1000))}</div>
       )}
-      {/* The mode's goal in one sentence, while there is nothing else to read: the warm-up and the
-          countdown. Once the match runs, the mode's own line (bomb, rounds, flags) takes over. */}
-      {(h.phase === MatchPhase.Waiting || h.phase === MatchPhase.Countdown) && h.connected && (
-        <div className="center-sub objective" data-testid="objective">
-          {h.phase === MatchPhase.Waiting && <b>ROZGRZEWKA · czekamy na graczy (potrzeba {MATCH.minPlayers})</b>}
-          <span>{MODES[h.mode].objective}</span>
-        </div>
-      )}
+      <Objective model={model} />
 
       <FlashVeil model={model} now={now} />
 
@@ -335,15 +208,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       {/* Between rounds: who took it and why, from the round's real signals */}
       {inBreak && !h.shopOpen && <RoundBreak h={h} />}
 
-      {/* Drop T: the tournament's bracket. Full size between pairs — the one moment anybody has
-          time to read it — and one line in the corner while a pair is on, so you always know which
-          round of the draw you are in. On the result screen it is a TAB of the result card rather
-          than a card over it: floating, it covered the word PORAŻKA. */}
-      {h.bracket !== "" && !h.shopOpen && !ended && (
-        h.phase === MatchPhase.Prep
-          ? <div className="bracket-card" data-testid="bracket-card"><h3>DRABINKA</h3><BracketPanel bracket={h.bracket} /></div>
-          : <div className="bracket-strip" data-testid="bracket-strip">{bracketLine(h.bracket)}</div>
-      )}
+      <BracketHud model={model} />
 
       {/* Match end */}
       {ended && <MatchResult h={h} now={now} onLeave={onLeave} />}
