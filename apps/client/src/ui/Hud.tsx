@@ -5,8 +5,6 @@ import { PlanPanel } from "./PlanPanel";
 import { Hints } from "./Hints";
 import { Chat } from "./Chat";
 import { Minimap } from "./Minimap";
-import { Scoreboard } from "./Scoreboard";
-import { MatchResult } from "./MatchResult";
 import type { HudProps } from "./hud/types";
 import { usePhaseModel } from "./hud/phase";
 import { Crosshair, FlashVeil, SmokeVeil } from "./hud/Crosshair";
@@ -23,7 +21,9 @@ import { RoundBannerLayer } from "./hud/RoundBanner";
 import { DeathCard } from "./hud/DeathCard";
 import { PauseMenu } from "./hud/PauseMenu";
 import { ShopLayer } from "./hud/ShopLayer";
-import { uiFlags, useUiFlags } from "./hud/uiFlags";
+import { ScoreboardOverlay } from "./hud/ScoreboardOverlay";
+import { ResultLayer } from "./hud/ResultLayer";
+import { useUiFlags } from "./hud/uiFlags";
 
 /** The props are the drop-U contract (`hud/types.ts`): today's, plus the inert `entering`. */
 type Props = HudProps;
@@ -56,7 +56,6 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
   // The flash overlay and cook ring need a smooth clock; everything else is fine at 4 Hz.
   const fast = h.flashUntil > performance.now() || cookRing;
   const now = useClock(fast ? 33 : 250);
-  const [scoreboard, setScoreboard] = useState(false);
   const [telemetry, setTelemetry] = useState(false);
   // The pause card is PauseMenu's; it publishes whether it shows.
   const paused = useUiFlags((f) => f.overlay.pause);
@@ -65,15 +64,11 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
     if (dormant) return;
     const down = (e: KeyboardEvent) => {
       if (h.chatOpen) return; // the chat box owns the keyboard (drop 5)
-      // Tab is the scoreboard in play, but plain focus navigation inside the pause card / shop.
-      if (e.code === "Tab" && !uiFlags.get().overlay.pause && !h.shopOpen) { e.preventDefault(); setScoreboard(true); }
       if (e.code === "F3" && import.meta.env.DEV) { e.preventDefault(); setTelemetry((t) => !t); }
     };
-    const up = (e: KeyboardEvent) => { if (e.code === "Tab") setScoreboard(false); };
     window.addEventListener("keydown", down);
-    window.addEventListener("keyup", up);
-    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
-  }, [h.shopOpen, h.chatOpen, dormant]);
+    return () => window.removeEventListener("keydown", down);
+  }, [h.chatOpen, dormant]);
 
   const lowHealth = h.alive && h.health <= 30;
   const windowSecs = h.buyWindowLeft === Infinity ? null : Math.ceil(h.buyWindowLeft / 1000);
@@ -136,13 +131,8 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
 
       <BracketHud model={model} />
 
-      {/* Match end */}
-      {ended && <MatchResult h={h} now={now} onLeave={onLeave} />}
-
-      {/* Scoreboard (Tab) */}
-      {scoreboard && h.phase !== MatchPhase.Ended && (
-        <div className="scoreboard-wrap" data-testid="scoreboard"><Scoreboard rows={h.players} myId={h.myId} mode={h.mode} /></div>
-      )}
+      <ResultLayer model={model} now={now} onLeave={onLeave} />
+      <ScoreboardOverlay model={model} dormant={dormant} />
 
       {/* First-run hints: one short line, once each, never blocking (2.4) */}
       {/* NOT while dormant: a hint is shown once ever and then remembered, so letting the timer

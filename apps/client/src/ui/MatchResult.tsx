@@ -41,7 +41,7 @@ export function MatchResult({ h, now, onLeave }: Props) {
   }, []);
 
   return (
-    <div className="result" data-testid="result" data-outcome={outcome}>
+    <div className="result" data-zone="result" data-testid="result" data-outcome={outcome}>
       <div className="result-card" role="dialog" aria-label="Wynik meczu">
         <div className="result-top">
           <div className={`result-title ${outcome}`} data-testid="result-title">{OUTCOME_TITLE[outcome]}</div>
