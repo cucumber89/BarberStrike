@@ -1,6 +1,11 @@
-import { BOMB, DUEL, GUN_GAME, MODES, OSTRZYZENI, TEAM_NAMES, parseHaircut, scoreLimitFor, type GameMode, type Team } from "@frankibarber/shared";
+import { BOMB, DUEL, GUN_GAME, MODES, OSTRZYZENI, parseHaircut, scoreLimitFor, type GameMode, type Team } from "@frankibarber/shared";
 import type { MatchReward } from "../game/progression/profile";
 import type { ScoreRow } from "../game/store";
+import { sideNames } from "./hud/roundText";
+
+// The round's words (side names, round reasons, the round card) moved to `hud/roundText.ts` in
+// drop U; they are re-exported here so every caller reads them from where it always did.
+export { OSTRZYZENI_SIDES, roundEnd, roundReasonText, sideNames, type RoundEnd } from "./hud/roundText";
 
 /**
  * The words on the result screens, computed from the replicated state and nothing else. Pure so
@@ -27,10 +32,6 @@ export interface ResultCtx {
   scoreB: number;
   players: readonly ScoreRow[];
 }
-
-/** Ostrzyżeni's sides, in the team slots (see Hud.tsx). */
-export const OSTRZYZENI_SIDES = ["OCALENI", "OSTRZYŻENI"] as const;
-export const sideNames = (mode: GameMode): readonly [string, string] => (mode === "ostrzyzeni" ? OSTRZYZENI_SIDES : TEAM_NAMES);
 
 /** Win / loss / draw from the local player's seat; "over" for somebody with no row (a watcher). */
 export function matchOutcome(c: ResultCtx): Outcome {
@@ -107,47 +108,5 @@ export function topReward(r: MatchReward, names: { badge: (id: string) => string
   const badge = r.earned.map(names.badge).find(Boolean);
   if (badge) return `Odznaka: ${badge}`;
   if (r.levelsGained > 0) return `Awans na poziom ${r.after.level}`;
-  return null;
-}
-
-/** Polish for the server's bomb / duel round reasons (`bomb.result`). Unknown strings pass through. */
-const ROUND_REASON: Record<string, string> = {
-  "BOMB DETONATED": "Ładunek wybuchł",
-  "BOMB DEFUSED": "Ładunek rozbrojony",
-  "DEFENDERS ELIMINATED": "Obrońcy wyeliminowani",
-  "ATTACKERS ELIMINATED": "Atakujący wyeliminowani",
-  "SITE SECURED": "Czas minął, ładunku nie podłożono",
-  "TRADE": "Obaj padli — runda bez punktu",
-  "ELIMINATED": "Przeciwnik wyeliminowany",
-  "TIME · EVEN": "Czas minął przy równym zdrowiu",
-  "TIME · MORE HEALTH": "Czas minął — więcej zdrowia wygrywa",
-};
-export const roundReasonText = (result: string): string => ROUND_REASON[result] ?? result;
-
-export interface RoundEnd { title: string; why: string; mine: boolean | null }
-
-/**
- * The round card: who took the round and why, from the mode's real signals — the bomb's `result`
- * string (whose side follows from it and the attacking team), the duel's reason string plus the
- * winner the Prep event carried, Ostrzyżeni's winner alone. Null when the state does not say.
- */
-export function roundEnd(mode: GameMode, bombResult: string, roundWinner: Team | -1, attackTeam: Team | -1, myTeam: Team): RoundEnd | null {
-  const [a, b] = sideNames(mode);
-  const won = (t: Team) => ({ title: `RUNDA DLA ${t === 0 ? a : b}`, why: "", mine: t === myTeam });
-  if (mode === "bomb") {
-    if (!bombResult || attackTeam === -1) return null;
-    const attackers = bombResult === "BOMB DETONATED" || bombResult === "DEFENDERS ELIMINATED";
-    const t = (attackers ? attackTeam : 1 - attackTeam) as Team;
-    return { ...won(t), why: roundReasonText(bombResult) };
-  }
-  if (mode === "duel") {
-    if (!bombResult) return null;
-    if (roundWinner === -1) return { title: "RUNDA BEZ ROZSTRZYGNIĘCIA", why: roundReasonText(bombResult), mine: null };
-    return { ...won(roundWinner), why: roundReasonText(bombResult) };
-  }
-  if (mode === "ostrzyzeni") {
-    if (roundWinner === -1) return null;
-    return { ...won(roundWinner), why: roundWinner === OSTRZYZENI.survivorTeam ? "Ktoś dotrwał nieostrzyżony do końca czasu" : "Wszyscy ostrzyżeni" };
-  }
   return null;
 }
