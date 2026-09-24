@@ -1586,6 +1586,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
    */
   private beginDuelRound(): void {
     const st = this.state, now = this.now();
+    // The break signal (drop U, no new field): `bomb.result` holds the last round's reason through
+    // the break and is EMPTY through the freeze, so a client that joins or reconnects in a Prep can
+    // tell the two apart from the state alone (`Prep && result !== ""` is a break).
+    st.bomb.result = "";
     if (this.needPair) this.startPair();
     const round = st.bomb.round + 1; // 1-based: the round about to be played
     const half = duelHalfStart(round);
@@ -1695,6 +1699,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
    */
   private beginInfectionRound(): void {
     const st = this.state, now = this.now();
+    st.bomb.result = ""; // a freeze, not a break: see `beginDuelRound`
     st.phase = MatchPhase.Prep;
     st.phaseEndsAt = now + OSTRZYZENI.prepMs;
     this.infectionStage = "buy";
@@ -1743,6 +1748,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       st.scoreB++;
     }
     st.bomb.round++;
+    // The round's reason, for the break and for the result screen: written BEFORE the match-end
+    // check so the deciding round carries it too. Cleared by the next `beginInfectionRound`.
+    st.bomb.result = winner === "survivors" ? "SURVIVORS HELD" : "ALL SHAVED";
     this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
     if (st.bomb.round >= OSTRZYZENI.rounds) { this.endMatch(); return; }
     st.phase = MatchPhase.Prep;
