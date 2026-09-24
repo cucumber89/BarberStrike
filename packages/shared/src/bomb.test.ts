@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOMB, BOMB_SITES, bombAttackTeam, bombSpawnSide, resetBomb, stepBomb, type BombData, type BombPlayer } from "./bomb";
+import { BOMB, BOMB_SITES, bombAttackTeam, bombBreakMs, bombSpawnSide, resetBomb, stepBomb, type BombData, type BombPlayer } from "./bomb";
 const player = (id: string, team: number): BombPlayer => ({ ...BOMB_SITES[0], id, team, alive: true, connected: true, using: false });
 function setup() {
   const players = [player("a", 0), player("b", 1), player("c", 0)];
@@ -38,6 +38,29 @@ describe("bomb objective", () => {
     const { b, players } = setup(); expect(stepBomb(b, players, b.roundEndsAt, 100)).toBe(1);
     resetBomb(b, 100000, players); expect(b.round).toBe(2); expect(b.attackTeam).toBe(0); expect(b.carrier).toBe("a");
     b.round = BOMB.halfRounds; resetBomb(b, 200000, players); expect(b.attackTeam).toBe(1); expect(b.carrier).toBe("b");
+  });
+});
+
+/**
+ * The break is the time the round-end banner has to be read in, so drop U lengthened it (CS's
+ * 7 s `mp_round_restart_delay`, 15 s `mp_halftime_duration` at the half). It cannot grow freely.
+ */
+describe("bomb breaks", () => {
+  it("BOMB.breakMs stays ≤ 9000", () => {
+    // The ceiling is an e2e budget, not taste. `apps/client/e2e/multiplayer.spec.ts:165` defuses the
+    // bomb and then polls for `bomb.round === 2` with a 10 000 ms timeout, and round 2 only exists
+    // once this break has run out. Playwright's poll (`pollAgainstDeadline`, playwright-core 1.62.1
+    // `lib/coreBundle.js:4300`) will not start a 1 000 ms poll interval that ends past the deadline, so its
+    // last look can come a full second early: 10 000 − 1 000 = 9 000 is the longest break that poll
+    // is certain to see end. Raise that poll first (P1 takes it to 12 000), then this.
+    expect(BOMB.breakMs).toBeLessThanOrEqual(9000);
+    expect(BOMB.breakMs, "CS's mp_round_restart_delay").toBe(7000);
+  });
+
+  it("gives the half its own longer break, and every other round the plain one", () => {
+    expect(BOMB.halftimeMs, "CS's mp_halftime_duration").toBe(15000);
+    expect(bombBreakMs(BOMB.halfRounds)).toBe(BOMB.halftimeMs);
+    for (let r = 1; r <= BOMB.maxRounds; r++) if (r !== BOMB.halfRounds) expect(bombBreakMs(r), `after round ${r}`).toBe(BOMB.breakMs);
   });
 });
 

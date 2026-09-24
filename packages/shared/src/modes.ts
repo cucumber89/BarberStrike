@@ -196,11 +196,14 @@ export const OSTRZYZENI = {
   survivorTeam: 0 as const,
   shavedTeam: 1 as const,
   rounds: 5,
-  /** The buy window at the start of a round — survivors shop, the shaved one waits. */
-  prepMs: 8000,
+  /**
+   * The buy window at the start of a round — survivors shop, the shaved one waits. 10 s: the
+   * 2.5 s role card, and still time to buy after it (drop U; it was 8 s).
+   */
+  prepMs: 10000,
   roundMs: 90000,
-  /** Result pause between rounds. */
-  breakMs: 5000,
+  /** Result pause between rounds: the same 7 s round-end banner as Bomb's `BOMB.breakMs` (was 5 s). */
+  breakMs: 7000,
   /** Every survivor starts a round with this much; wallets do not carry over. */
   roundMoney: 3000,
   /** The shaved side is back on its feet on a short timer; survivors stay down until the round ends. */
@@ -316,8 +319,12 @@ export const DUEL = {
    * moving and the clock rule (more health wins) rarely decides anything.
    */
   roundMs: 60000,
-  /** Result pause between rounds. */
-  breakMs: 3000,
+  /**
+   * Result pause between rounds: 5 s, long enough to read the round's reason (drop U; it was 3 s).
+   * Not CS's 7: eleven decided rounds of 15 + 60 + 5 s are 880 s, inside `matchMs` — pinned by
+   * "the longest decided duel fits DUEL.matchMs" in `modes.test.ts`.
+   */
+  breakMs: 5000,
   wins: 6,
   /** Sides swap every this many rounds: 1–3 on the first set, 4–6 on the other, and so on. */
   halfRounds: 3,

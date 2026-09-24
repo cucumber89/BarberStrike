@@ -5,7 +5,7 @@ import {
   MAX_INPUT_QUEUE, MAX_INPUT_RATE, MAX_OTHER_MSG_RATE, MAX_PLAYERS, MAX_SPECTATORS, MatchPhase, MAPS, DEFAULT_MAP_ID, PLAYER,
   RESPAWN_DELAY_MS, SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER, DUEL_MAP_ID,
   isLive, isFrozen, maskInput, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
-  BOMB, sitesOf, bombAttackTeam, bombSpawnSide, resetBomb, stepBomb, type BombPlayer,
+  BOMB, bombBreakMs, sitesOf, bombAttackTeam, bombSpawnSide, resetBomb, stepBomb, type BombPlayer,
   createBody, quantAngle, quantVel, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
   makeRayHit, mulberry32, pickSpawn, sanitizeName, simulateBody, spreadDirection, traceBullet, unpackInput,
   ECONOMY, GRENADES, THROW_INTERVAL_MS, FIRE_DPS, applyBuy, applySell, buyWindowOpen, giveGrenade, takeGrenade, killReward, weaponForSlot, modeAllowsItem,
@@ -1528,7 +1528,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   /**
    * A pair is over. The winner goes through; the bracket decides whether that was the final.
    *
-   * The pause before the next pair is `TOURNAMENT.breakMs` rather than the duel's three seconds:
+   * The pause before the next pair is `TOURNAMENT.breakMs` rather than the duel's `DUEL.breakMs`:
    * it is the only moment anybody reads the bracket, and the two people who are up next need long
    * enough to notice that they are.
    */
@@ -1888,7 +1888,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       "capture");
     if (Math.max(this.state.scoreA, this.state.scoreB) >= BOMB.wins || this.state.bomb.round >= BOMB.maxRounds) { this.endMatch(); return; }
     this.state.phase = MatchPhase.Prep;
-    this.state.phaseEndsAt = now + BOMB.breakMs;
+    this.state.phaseEndsAt = now + bombBreakMs(this.state.bomb.round); // halftime after BOMB.halfRounds
     this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
     this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Prep, winner, endsAt: this.state.phaseEndsAt } satisfies MatchEventMessage);
   }

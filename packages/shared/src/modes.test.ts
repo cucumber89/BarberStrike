@@ -42,6 +42,19 @@ describe("1 v 1 (GÓRA tournament pass)", () => {
     for (let r = 1; r <= 2 * DUEL.wins; r++) expect(duelSpawnSide(0, r)).not.toBe(duelSpawnSide(1, r));
   });
 
+  it("the longest decided duel fits DUEL.matchMs", () => {
+    // First to `wins` with every round decided is 5–5 and an eleventh: 2 · wins − 1 rounds, each a
+    // freeze, a round and a break. 11 × (15 + 60 + 5) s = 880 s, 20 s inside the 900 s cap — which
+    // is why the duel's break is 5 s and not CS's 7 (11 × 82 = 902 would not fit). Drawn rounds
+    // can still run past it; that is what the cap is for.
+    const rounds = 2 * DUEL.wins - 1;
+    const longest = rounds * (DUEL.prepMs + DUEL.roundMs + DUEL.breakMs);
+    expect(rounds).toBe(11);
+    expect(DUEL.breakMs).toBe(5000);
+    expect(longest).toBe(880_000);
+    expect(longest).toBeLessThanOrEqual(DUEL.matchMs);
+  });
+
   it("ends a round on a kill, calls a trade a draw, and settles the clock on health", () => {
     const t = 10000;
     expect(duelRoundWinner([P(0, true, 100), P(1, true, 100)], 0, t)).toBeNull();

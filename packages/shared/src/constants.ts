@@ -130,8 +130,11 @@ export const MATCH = {
   countdownMs: 4000,
   durationMs: 7 * 60 * 1000,
   scoreLimit: 40,
-  /** Result screen duration before the room returns to WAITING/rematch. */
-  endedMs: 15000,
+  /**
+   * Result screen duration before the room returns to WAITING/rematch. 20 s (drop U; was 15 s): in
+   * the round modes the final round 3 s, the verdict 3 s, the card 14 s; elsewhere 3 s and 17 s.
+   */
+  endedMs: 20000,
   /**
    * Respawn waves (1.1 drop 7). A match alternates a LIVE window of `waveMs` with a frozen PREP
    * window of `prepMs`: everyone who died during the wave comes back at the start of prep, nobody
