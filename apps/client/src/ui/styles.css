@@ -117,12 +117,6 @@ button { font-family: inherit; }
 .summary-badge span { font-size: 11px; color: var(--tx-2); }
 @media (max-width: 720px) { .summary { grid-template-columns: 1fr; } }
 
-.death { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(6,6,8,.55); }
-.death-title { font-family: var(--font-display); font-size: 44px; letter-spacing: 0.15em; color: var(--tx); }
-.death-title b { color: var(--red); font-weight: normal; }
-.death-weapon { font-size: 12px; letter-spacing: 0.25em; color: var(--tx-2); margin-top: 6px; text-transform: uppercase; }
-.death-respawn { margin-top: 24px; font-family: var(--font-mono); font-size: 16px; letter-spacing: 0.2em; color: var(--brass); }
-
 /* Match end. A card with a fixed top (verdict, score, why), fixed tabs, a scrolling body and a
    fixed footer, so the verdict and LEAVE are on screen whatever the body holds: twelve players
    with long nicks, two level-ups, three badges. `e2e/tools/ui-fit.mjs` measures the cases. */
