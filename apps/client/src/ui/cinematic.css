@@ -57,11 +57,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); out
 .mm-title-grid { display: grid; grid-template-columns: minmax(420px, 640px); gap: clamp(12px, 2vh, 22px); align-items: center; width: min(640px, 49vw); }
 .mm-title-left { gap: clamp(15px, 2.5vh, 28px); }
 .mm-hero { display: block; }
-.mm-kicker, .loading-eyebrow {
+.mm-kicker {
   display: flex; align-items: center; gap: 11px; margin-bottom: 12px;
   color: var(--brass); font: 500 10px var(--font-mono); letter-spacing: .32em;
 }
-.mm-kicker span, .loading-eyebrow span { width: 34px; height: 2px; background: var(--brass); box-shadow: 0 0 12px var(--gold-glow); }
+.mm-kicker span { width: 34px; height: 2px; background: var(--brass); box-shadow: 0 0 12px var(--gold-glow); }
 .mm-hero .wordmark {
   display: flex; flex-wrap: nowrap; align-items: baseline;
   margin: 0; font-size: clamp(64px, 7.8vw, 126px); line-height: .76; letter-spacing: -.025em;
@@ -70,10 +70,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); out
 }
 .wordmark span { color: #f4f0e7; }
 .wordmark strong { color: var(--brass); font: inherit; }
-.mm-brand-rule, .loading-rule { display: flex; align-items: center; gap: 10px; margin: 13px 0 0; width: min(100%, 620px); }
-.mm-brand-rule i, .loading-rule i { height: 2px; flex: 1; background: linear-gradient(90deg, var(--brass), transparent); }
-.mm-brand-rule i:last-child, .loading-rule i:last-child { background: linear-gradient(90deg, transparent, var(--brass)); }
-.mm-brand-rule b, .loading-rule b { color: var(--brass); font-size: 17px; transform: rotate(-12deg); }
+.mm-brand-rule { display: flex; align-items: center; gap: 10px; margin: 13px 0 0; width: min(100%, 620px); }
+.mm-brand-rule i { height: 2px; flex: 1; background: linear-gradient(90deg, var(--brass), transparent); }
+.mm-brand-rule i:last-child { background: linear-gradient(90deg, transparent, var(--brass)); }
+.mm-brand-rule b { color: var(--brass); font-size: 17px; transform: rotate(-12deg); }
 .mm-tagline { margin: 12px 0 0; color: #c8d3d8; font-size: 13px; line-height: 1.6; letter-spacing: .04em; text-shadow: 0 2px 8px #000; }
 
 .mm-nav { width: 100%; gap: 6px; }
@@ -173,67 +173,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); out
 }
 .mm-field input, .row.tight input { background: rgba(2,9,13,.7); border-color: rgba(171,195,203,.23); }
 
-/* -------------------------------- loading */
-.loading {
-  z-index: 100; justify-content: flex-start; overflow: hidden;
-  background: #061015 url('/art/loading-keyart.webp') center center / cover no-repeat;
-}
-.loading::before {
-  content: ""; position: absolute; inset: 0;
-  background:
-    linear-gradient(90deg, rgba(3,10,14,.98) 0%, rgba(3,10,14,.79) 34%, rgba(3,10,14,.08) 67%),
-    linear-gradient(180deg, rgba(2,7,10,.1), transparent 65%, rgba(2,7,10,.68));
-}
-.loading-grain {
-  position: absolute; inset: 0; pointer-events: none; opacity: .2;
-  background-image: radial-gradient(circle, rgba(255,255,255,.2) 0 .7px, transparent 1px);
-  background-size: 7px 7px;
-  mask-image: linear-gradient(90deg, #000, transparent 70%);
-}
-.loading-card {
-  position: relative; z-index: 1; align-self: center;
-  width: min(590px, 43vw); margin-left: clamp(28px, 5vw, 82px); margin-right: auto;
-  padding: clamp(20px, 3vw, 42px) 0;
-}
-.loading h1 {
-  display: flex; align-items: baseline; margin: 13px 0 0;
-  font: 400 clamp(58px, 6.8vw, 108px)/.76 var(--font-display); letter-spacing: -.02em;
-  text-shadow: 0 7px 22px rgba(0,0,0,.7);
-}
-.loading h1 span { color: var(--tx); }
-.loading h1 strong { color: var(--brass); font: inherit; }
-.loading-rule { margin-bottom: clamp(26px, 5vh, 56px); }
-.loading-readout { display: flex; align-items: end; justify-content: space-between; margin-bottom: 9px; border-bottom: 1px solid rgba(174,197,205,.2); padding-bottom: 8px; }
-.loading-step { color: var(--brass); font: 500 10px var(--font-mono); letter-spacing: .25em; }
-.loading-readout b { color: var(--tx); font: 400 24px var(--font-display); letter-spacing: .12em; }
-.loading-stage { margin: 0 0 12px; font: 400 clamp(24px, 2.2vw, 34px) var(--font-display); letter-spacing: .05em; text-transform: uppercase; }
-.loading-bar { position: relative; height: 5px; overflow: visible; background: rgba(175,197,205,.18); }
-.loading-bar::after { content: ""; position: absolute; inset: -5px auto -5px 50%; width: 1px; background: rgba(255,255,255,.22); }
-.loading-fill { background: linear-gradient(90deg, #b67b0e, #f0c84b); box-shadow: 0 0 16px rgba(231,182,46,.5); }
-.loading-tip { max-width: 47ch; margin: 17px 0 22px; color: #b9c8ce; font-size: 13px; line-height: 1.55; }
-.enter-game {
-  min-height: 62px; display: flex; align-items: center; justify-content: space-between;
-  padding: 15px 23px; background: linear-gradient(105deg, #f0c84c, #dda51d); border-color: #f4d872;
-  color: #061015; font-size: 25px; box-shadow: 0 12px 34px rgba(231,182,46,.2);
-  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
-}
-.enter-game span { font: 34px/1 var(--font-ui); transition: transform .15s ease; }
-.enter-game:hover span { transform: translateX(5px); }
-.loading-controls { display: flex; flex-wrap: wrap; gap: 17px; margin: 24px 0 5px; color: #9fb0b8; font: 500 9px var(--font-mono); letter-spacing: .12em; }
-.loading-controls span { display: flex; align-items: center; gap: 7px; }
-.loading-controls kbd { min-width: 30px; padding: 5px 7px; border: 1px solid rgba(183,204,212,.38); color: #dce4e7; text-align: center; background: rgba(4,12,16,.68); box-shadow: inset 0 -2px 0 rgba(255,255,255,.08); }
-.loading-back { color: #aabac1; font-size: 13px; }
-.loading-corner { position: absolute; z-index: 2; width: 34px; height: 34px; pointer-events: none; }
-.loading-corner.tl { left: 24px; top: 24px; border-left: 2px solid var(--brass); border-top: 2px solid var(--brass); }
-.loading-corner.br { right: 24px; bottom: 24px; border-right: 2px solid var(--brass); border-bottom: 2px solid var(--brass); }
-
 /* -------------------------------- in-match UI */
 .hud { --plate: rgba(5, 15, 20, .88); --plate-line: rgba(178, 201, 210, .2); }
-.shop { background: radial-gradient(circle at 70% -20%, rgba(231,182,46,.12), transparent 38%), rgba(3,10,14,.96); }
-.shop-inner { border-top: 2px solid var(--brass); }
-.shop-row { background: rgba(13,28,35,.84); border-color: rgba(170,194,203,.18); }
-.shop-row:hover:not(.locked) { background: rgba(23,44,51,.94); border-color: rgba(231,182,46,.58); }
-.shop-row-art { color: var(--brass); background: rgba(231,182,46,.055); }
 
 @media (max-width: 1100px) {
   .mm-title-grid, .mm-title-foot { width: min(610px, 57vw); }
@@ -247,18 +188,13 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); out
   .mm-title-grid { grid-template-columns: minmax(0, 1fr); }
   .mm-title-grid, .mm-title-foot { width: 100%; max-width: 620px; }
   .mm-hero .wordmark { font-size: clamp(58px, 14vw, 92px); }
-  .loading { background-position: 62% center; }
-  .loading::before { background: rgba(3,10,14,.72); }
-  .loading-card { width: calc(100% - 48px); max-width: 590px; margin-inline: 24px; }
-  .loading h1 { font-size: clamp(54px, 13vw, 86px); }
 }
 @media (max-width: 560px) {
-  .mm-kicker, .loading-eyebrow { font-size: 8px; letter-spacing: .19em; }
+  .mm-kicker { font-size: 8px; letter-spacing: .19em; }
   .mm-nav-btn { grid-template-columns: 22px 30px minmax(0,1fr) 20px; gap: 1px 9px; }
   .mm-nav-btn em { display: none; }
   .mm-front { display: none; }
   .mm-title-foot { margin-top: 8px; }
-  .loading-controls { gap: 10px; }
 }
 @media (max-height: 720px) and (min-width: 801px) {
   .mm-title { padding-block: 18px; }
@@ -272,9 +208,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); out
   .mm-front { height: 212px; }
   .mm-live .srv-row { padding: 5px 8px; }
   .crate-panel.compact .crate-top div>b { font-size: 15px; }
-  .loading-rule { margin-bottom: 18px; }
-  .loading-tip { margin-block: 12px; }
-  .loading-controls { margin-top: 15px; }
 }
 /* Browser zoom shrinks the viewport rather than the page, so 1280x720 at 125 % arrives here as
    1024x576 — and at that height the 212 px strip pushed the status footer off the bottom edge.
@@ -287,7 +220,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); out
 @media (prefers-reduced-motion: reduce) {
   .mm-bg { animation: none; }
   .mm-nav-btn::before { display: none; }
-  .enter-game span { transition: none; }
 }
 
 /* -------------------------------- hair studio */
