@@ -4,3 +4,4 @@
    ui/cinematic.css: that is where these rules sat in the cascade before drop U P0 0e moved them. */
 @import "./top.css";
 @import "./left.css";
+@import "./corners.css";

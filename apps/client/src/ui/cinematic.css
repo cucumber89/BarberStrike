@@ -229,15 +229,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); out
 
 /* -------------------------------- in-match UI */
 .hud { --plate: rgba(5, 15, 20, .88); --plate-line: rgba(178, 201, 210, .2); }
-.health, .ammo, .gear-slot {
-  border-radius: 2px; backdrop-filter: blur(8px);
-  box-shadow: 0 8px 28px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.03);
-}
-.health { border-left: 3px solid #7dff9a; }
-.hp-hurt.health { border-left-color: #e5ae52; }
-.hp-critical.health { border-left-color: var(--red); }
-.ammo { border-right: 3px solid var(--brass); }
-.killfeed li { border-radius: 1px; backdrop-filter: blur(6px); }
 .shop { background: radial-gradient(circle at 70% -20%, rgba(231,182,46,.12), transparent 38%), rgba(3,10,14,.96); }
 .shop-inner { border-top: 2px solid var(--brass); }
 .shop-row { background: rgba(13,28,35,.84); border-color: rgba(170,194,203,.18); }
