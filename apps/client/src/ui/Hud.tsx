@@ -1,29 +1,80 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { GAME_VERSION, GRENADES } from "@frankibarber/shared";
-import { useHud } from "../game/store";
+import { useHudSlice } from "../game/store";
 import type { HudProps } from "./hud/types";
-import { usePhaseModel } from "./hud/phase";
+import { endedStage, usePhaseModel } from "./hud/phase";
+import { overlayAttr, useUiFlags } from "./hud/uiFlags";
 import { Crosshair, FlashVeil, SmokeVeil } from "./hud/Crosshair";
-import { Vitals } from "./hud/Vitals";
-import { Inventory } from "./hud/Inventory";
-import { KillFeed } from "./hud/KillFeed";
-import { TopStrip } from "./hud/TopStrip";
 import { ModeLine, Objective } from "./hud/ModeLine";
+import { TopStrip } from "./hud/TopStrip";
 import { FlagRow } from "./hud/FlagRow";
-import { ActionPrompt } from "./hud/ActionPrompt";
-import { BracketHud } from "./hud/BracketHud";
 import { FlagNotice, Moments } from "./hud/Moments";
-import { RoundBannerLayer } from "./hud/RoundBanner";
-import { DeathCard } from "./hud/DeathCard";
-import { PauseMenu } from "./hud/PauseMenu";
-import { ShopLayer } from "./hud/ShopLayer";
-import { ScoreboardOverlay } from "./hud/ScoreboardOverlay";
-import { ResultLayer } from "./hud/ResultLayer";
+import { ActionPrompt } from "./hud/ActionPrompt";
 import { HintLine, LeftColumn, PlanCard } from "./hud/LeftColumn";
+import { KillFeed } from "./hud/KillFeed";
+import { Vitals } from "./hud/Vitals";
 import { Wallet } from "./hud/Wallet";
+import { Inventory } from "./hud/Inventory";
+import { DeathCard } from "./hud/DeathCard";
+import { RoundBannerLayer } from "./hud/RoundBanner";
+import { BracketHud } from "./hud/BracketHud";
+import { ResultLayer } from "./hud/ResultLayer";
+import { ScoreboardOverlay } from "./hud/ScoreboardOverlay";
+import { ShopLayer } from "./hud/ShopLayer";
+import { PauseMenu } from "./hud/PauseMenu";
 
-/** The props are the drop-U contract (`hud/types.ts`): today's, plus the inert `entering`. */
-type Props = HudProps;
+/**
+ * The in-match HUD: the zone components of `ui/hud/` (drop U, docs/UI_U_SPEC.md §7 P0 0d), each
+ * gated by the condition it had here and reading its own slice of the store. They mount in the old
+ * order: nothing here has a z-index, so DOM order IS paint order (smoke under all, flash over the
+ * corners, cards and menus over the flash). The root computes the phase model once for every zone,
+ * runs the clock, keeps `low-health`, `dormant` and the frame counter, and carries the §4.5
+ * attributes and the class `entering`, which nothing reads yet.
+ */
+export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, onChooseTeam, onVotePlan, shop, chat, radar, dormant = false, entering = false }: HudProps) {
+  const model = usePhaseModel();
+  const alive = useHudSlice((s) => s.alive);
+  const lowHealth = useHudSlice((s) => s.alive && s.health <= 30);
+  const flashUntil = useHudSlice((s) => s.flashUntil);
+  // Rule G9 (Crosshair.tsx): only the frag cooks, and only its ring replaces the crosshair.
+  const cookRing = useHudSlice((s) => s.cookingKind !== "" && GRENADES[s.cookingKind].cookable);
+  // The flash overlay and cook ring need a smooth clock; everything else is fine at 4 Hz.
+  const now = useClock(flashUntil > performance.now() || cookRing ? 33 : 250);
+  const stage = useHudSlice((s) => endedStage(model, s.serverNow));
+  const overlay = useUiFlags((f) => f.overlay);
+  const bannerUp = useUiFlags((f) => f.bannerUp);
+  return (
+    <div className={`hud ${lowHealth ? "low-health" : ""} ${dormant ? "dormant" : ""}${entering ? " entering" : ""}`} data-testid="hud" aria-hidden={dormant || undefined}
+      data-alive={String(alive)} data-overlay={overlayAttr(overlay)} data-moment={model.moment} data-stage={stage ?? undefined} data-banner={bannerUp ? "1" : undefined}>
+      <SmokeVeil model={model} />
+      <ModeLine model={model} />
+      <Crosshair model={model} settings={settings} now={now} />
+      <TopStrip model={model} />
+      <FlagRow model={model} />
+      <FlagNotice model={model} now={now} />
+      <ActionPrompt model={model} />
+      <LeftColumn model={model} radar={radar} chat={chat} />
+      <KillFeed model={model} />
+      <Vitals model={model} now={now} />
+      <Wallet model={model} now={now} />
+      <Inventory model={model} />
+      <Moments model={model} />
+      <Objective model={model} />
+      <FlashVeil model={model} now={now} />
+      <DeathCard model={model} now={now} />
+      <RoundBannerLayer model={model} />
+      <BracketHud model={model} />
+      <ResultLayer model={model} now={now} onLeave={onLeave} />
+      <ScoreboardOverlay model={model} dormant={dormant} />
+      <HintLine model={model} dormant={dormant} />
+      <PlanCard model={model} onVote={onVotePlan} />
+      <ShopLayer model={model} api={shop} now={now} />
+      <PauseMenu model={model} settings={settings} onSettings={onSettings} onLeave={onLeave} onResume={onResume} onPause={onPause}
+        onFullscreen={onFullscreen} onChooseTeam={onChooseTeam} dormant={dormant} />
+      <FrameCounter show={settings.hud.fps || import.meta.env.DEV} dormant={dormant} />
+    </div>
+  );
+}
 
 /** Re-renders on a timer so countdowns tick without the game loop pushing state. */
 function useClock(intervalMs: number): number {
@@ -35,88 +86,31 @@ function useClock(intervalMs: number): number {
   return t;
 }
 
-export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, onChooseTeam, onVotePlan, shop, chat, radar, dormant = false }: Props) {
-  const h = useHud();
-  const model = usePhaseModel();
-  /**
-   * Rule G9: the cook ring belongs to the ONE grenade that cooks. A smoke, a flash, a molotov or a
-   * knife is in the hand for the 180 ms of the wind-up and never cooks, so the ring it used to draw
-   * was an empty circle — and it cost the crosshair for exactly the moment the throw is aimed. Only
-   * the frag replaces the crosshair now; everything else is thrown with the sight you aim with.
-   */
-  const cookRing = h.cookingKind !== "" && GRENADES[h.cookingKind].cookable;
-  // The flash overlay and cook ring need a smooth clock; everything else is fine at 4 Hz.
-  const fast = h.flashUntil > performance.now() || cookRing;
-  const now = useClock(fast ? 33 : 250);
+/** Frame counter: the player's own fps setting in a build (it was DEV-only); F3's table stays DEV. */
+const FrameCounter = memo(function FrameCounter({ show, dormant }: { show: boolean; dormant: boolean }) {
+  const fps = useHudSlice((s) => s.fps);
+  const ping = useHudSlice((s) => s.ping);
+  const rows = useHudSlice((s) => s.telemetry);
+  const chatOpen = useHudSlice((s) => s.chatOpen);
   const [telemetry, setTelemetry] = useState(false);
-
   useEffect(() => {
     if (dormant) return;
     const down = (e: KeyboardEvent) => {
-      if (h.chatOpen) return; // the chat box owns the keyboard (drop 5)
+      if (chatOpen) return; // the chat box owns the keyboard (drop 5)
       if (e.code === "F3" && import.meta.env.DEV) { e.preventDefault(); setTelemetry((t) => !t); }
     };
     window.addEventListener("keydown", down);
     return () => window.removeEventListener("keydown", down);
-  }, [h.chatOpen, dormant]);
-
-  const lowHealth = h.alive && h.health <= 30;
-
+  }, [chatOpen, dormant]);
+  if (!show) return null;
   return (
-    <div className={`hud ${lowHealth ? "low-health" : ""} ${dormant ? "dormant" : ""}`} data-testid="hud" aria-hidden={dormant || undefined}>
-      <SmokeVeil model={model} />
-      <ModeLine model={model} />
-      <Crosshair model={model} settings={settings} now={now} />
-      <TopStrip model={model} />
-      <FlagRow model={model} />
-      <FlagNotice model={model} now={now} />
-      <ActionPrompt model={model} />
-
-      <LeftColumn model={model} radar={radar} chat={chat} />
-
-      <KillFeed model={model} />
-
-      <Vitals model={model} now={now} />
-
-      <Wallet model={model} now={now} />
-
-      <Inventory model={model} />
-
-      <Moments model={model} />
-      <Objective model={model} />
-
-      <FlashVeil model={model} now={now} />
-
-      <DeathCard model={model} now={now} />
-
-      <RoundBannerLayer model={model} />
-
-      <BracketHud model={model} />
-
-      <ResultLayer model={model} now={now} onLeave={onLeave} />
-      <ScoreboardOverlay model={model} dormant={dormant} />
-
-      <HintLine model={model} dormant={dormant} />
-      <PlanCard model={model} onVote={onVotePlan} />
-
-      <ShopLayer model={model} api={shop} now={now} />
-      <PauseMenu model={model} settings={settings} onSettings={onSettings} onLeave={onLeave} onResume={onResume} onPause={onPause}
-        onFullscreen={onFullscreen} onChooseTeam={onChooseTeam} dormant={dormant} />
-
-      {/* Frame counter. The player can turn this on in a built game now — it used to be DEV-only,
-          so the one number anybody asks for ("what fps am I getting?") did not exist outside a dev
-          server. The F3 telemetry table stays a development thing. */}
-      {(settings.hud.fps || import.meta.env.DEV) && (
-        <div className="debug" data-testid="debug">
-          v{GAME_VERSION} · {h.fps} fps · {h.ping} ms{!telemetry && import.meta.env.DEV && " · F3"}
-          {telemetry && (
-            <table className="telemetry"><tbody>
-              {Object.entries(h.telemetry).map(([k, v]) => <tr key={k}><td>{k}</td><td>{v}</td></tr>)}
-            </tbody></table>
-          )}
-        </div>
+    <div className="debug" data-testid="debug">
+      v{GAME_VERSION} · {fps} fps · {ping} ms{!telemetry && import.meta.env.DEV && " · F3"}
+      {telemetry && (
+        <table className="telemetry"><tbody>
+          {Object.entries(rows).map(([k, v]) => <tr key={k}><td>{k}</td><td>{v}</td></tr>)}
+        </tbody></table>
       )}
     </div>
   );
-}
-
+});

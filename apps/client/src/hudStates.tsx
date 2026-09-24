@@ -30,7 +30,7 @@
  * when the player turns it on in the settings.
  *
  * A round BREAK is not a state but an edge: the HUD recognises it as "the first Prep after
- * Playing" (Hud.tsx, `breakEndsAt`), so those scenarios play the `before` state first and then
+ * Playing" (ui/hud/RoundBanner.tsx, `breakEndsAt`), so those scenarios play the `before` state first and then
  * the break, exactly as the network delivers it. A scenario photographed some time AFTER its edge
  * says so with `elapsed` (see `Scenario.elapsed`).
  */
@@ -312,7 +312,7 @@ async function main(): Promise<void> {
   }
   const anims = animSampler();
   for (const code of sc.keys ?? []) window.dispatchEvent(new KeyboardEvent("keydown", { code, key: code, bubbles: true, cancelable: true }));
-  // Longer than the HUD's 300 ms pause arming (Hud.tsx), so a scenario that would wrongly show the
+  // Longer than the HUD's 300 ms pause arming (ui/hud/PauseMenu.tsx), so a scenario that would wrongly show the
   // pause card shows it before it is checked, not after it is photographed.
   await sleep(ANIM_SAMPLE_MS);
   anims.sample();

@@ -247,7 +247,7 @@ export const bombState = (b: BombData, rest: Partial<HudState>): Partial<HudStat
 export const SITE_A = NIGHT_DISTRICT.sites?.[0] ?? { id: "A", x: -35, y: 0, z: 24 };
 /**
  * Bomb's match clock. The server gives a Bomb match thirty minutes up front (TdmRoom `startMatch`)
- * so it ends on rounds, and the HUD's top timer shows THAT clock in every Prep (Hud.tsx `matchLeft`)
+ * so it ends on rounds, and the HUD's top timer shows THAT clock in every Prep (ui/hud/TopStrip.tsx `matchLeftOf`)
  * — so it has to be the real one here too: 30:00 less ~100 s per round played (15 s freeze, a
  * typical 80 s round, the 5 s break) less how far into this round we are.
  */

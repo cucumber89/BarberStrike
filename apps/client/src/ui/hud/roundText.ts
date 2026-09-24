@@ -6,7 +6,7 @@ import { OSTRZYZENI, TEAM_NAMES, type GameMode, type Team } from "@frankibarber/
  * changed); owned by P5 from here (docs/UI_U_SPEC.md §5.4, §7.0).
  */
 
-/** Ostrzyżeni's sides, in the team slots (see Hud.tsx). */
+/** Ostrzyżeni's sides, in the team slots (see TopStrip.tsx `sideNamesOf`). */
 export const OSTRZYZENI_SIDES = ["OCALENI", "OSTRZYŻENI"] as const;
 export const sideNames = (mode: GameMode): readonly [string, string] => (mode === "ostrzyzeni" ? OSTRZYZENI_SIDES : TEAM_NAMES);
 
