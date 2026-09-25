@@ -8,6 +8,7 @@ import {
 import { BIPOD, bipodDeployed, feelOf, lookScale, type ScopeStyle } from "../combat/weaponFeel";
 import type { InputState } from "../input/InputState";
 import type { NetPlayer } from "../net/Connection";
+import type { Pose } from "./deathCam";
 
 interface PendingInput {
   input: PlayerInput;
@@ -122,6 +123,14 @@ export class LocalPlayer {
   private wasTac = false;
   /** Called when the tactical sprint starts / stops (feel hooks). */
   onTac: ((on: boolean) => void) | null = null;
+  /**
+   * Drop U (P1): while dead, the pose the camera shows instead of the corpse's eye — the death cam
+   * (`deathCam.ts`), then the eye of the player being spectated. Written by `Game` every frame the
+   * player is dead, applied only on the dead branch of `update`, and dropped by `spawnAt`: it never
+   * touches `yaw`, `pitch` or the body, so the pose after a spawn is exactly the one the camera
+   * would have had without it.
+   */
+  deadView: Pose | null = null;
 
   constructor(scene: Scene, private world: CollisionWorld, private input: InputState, public settings: LookSettings) {
     this.camera = new TargetCamera("fpsCam", new Vector3(0, PLAYER.eyeHeight, 0), scene);
@@ -148,6 +157,7 @@ export class LocalPlayer {
     this.breathLeft = 1;
     this.windedUntil = 0;
     this.clearWeaponState(); // a bolt owed by the body that just died is not owed by this one
+    this.deadView = null; // the death cam and the spectated eye end with the death
     this.alive = true;
   }
 
@@ -189,7 +199,7 @@ export class LocalPlayer {
    */
   update(dtMs: number): PlayerInput | null {
     this.applyLook();
-    if (!this.alive) { this.updateCamera(dtMs); return null; }
+    if (!this.alive) { this.updateCamera(dtMs); this.applyDeadView(); return null; }
     // Tactical latch hygiene (drop 4): never start on a nearly empty budget, and drop the latch the
     // moment the budget is dry so the Tac bit clears and the refill can begin.
     if (this.input.tacLatched && this.body.tac < (this.wasTac ? 1 : TAC.minToStart)) this.input.tacLatched = false;
@@ -425,6 +435,14 @@ export class LocalPlayer {
     const side = bobX + LEAN.offset * this.leanBlend;
     cam.position.set(b.x + this.errX + Math.cos(this.yaw) * side, b.y + this.errY + this.eyeBlend + bobY - this.landDip - LEAN.drop * Math.abs(this.leanBlend) - 0.06 * this.slideBlend, b.z + this.errZ - Math.sin(this.yaw) * side);
     cam.rotation.set(this.pitch + this.recoilPitch + this.swayPitch + shakePitch, this.yaw + this.recoilYaw + this.swayYaw, Math.sin(this.bobPhase) * 0.004 * bobAmt + shakeRoll + LEAN.roll * this.leanBlend + 0.025 * this.slideBlend * this.settings.shakeScale);
+  }
+
+  /** Dead: the camera shows `deadView` when there is one — level, with no roll (veto). */
+  private applyDeadView(): void {
+    const v = this.deadView;
+    if (!v) return;
+    this.camera.position.set(v.x, v.y, v.z);
+    this.camera.rotation.set(v.pitch, v.yaw, 0);
   }
 
   /** World-space eye position for shooting (without bob, with the lean — the server validates the same offset). */
