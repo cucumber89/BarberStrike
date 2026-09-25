@@ -44,8 +44,8 @@ export interface HintContext {
   connected: boolean;
   shopOpen: boolean;
   /**
-   * Something hides the hint zone right now — the shop, Tab or the pause card (§4.5's hide row in
-   * `left.css`). A hint is shown once EVER, so picking one under a cover would spend it unseen.
+   * Something hides the hint zone right now — the shop, Tab, the pause card or death (§4.5's hide
+   * rows in `left.css`). A hint is shown once EVER, so picking one under a cover would spend it unseen.
    */
   covered: boolean;
   /** Ms of buy window left; > 0 means buying is possible right now. */
@@ -67,18 +67,19 @@ export function nextHint(ctx: HintContext, seen: ReadonlySet<string>): HintDef |
   if (!ctx.connected) return null;
   // Nothing is picked while the zone is hidden — not even the plan hint: the vote runs on under
   // the shop or Tab, and a hint picked there is remembered as seen but never read. It waits for
-  // the overlay to close (the vote usually outlasts a quick buy).
-  if (ctx.covered || ctx.shopOpen) return null;
+  // the overlay to close (the vote usually outlasts a quick buy). Death is a cover too: §4.5 hides
+  // the hint zone under `data-alive=false`, so a pick while dead would be spent unseen.
+  if (ctx.covered || ctx.shopOpen || !ctx.alive) return null;
   const pick = (id: string) => (seen.has(id) ? null : byId.get(id) ?? null);
 
   // Something is on screen asking for a decision: that hint first.
   if (ctx.planVoteMine) { const h = pick("plan"); if (h) return h; }
-  if (ctx.buyWindowLeft > 0 && ctx.alive) { const h = pick("buy"); if (h) return h; }
+  if (ctx.buyWindowLeft > 0) { const h = pick("buy"); if (h) return h; }
   // A side two or more bodies short is worth mentioning once.
   const other = ctx.myTeam === 0 ? 1 : 0;
   if (ctx.teamTotals[ctx.myTeam] - ctx.teamTotals[other] >= 2) { const h = pick("team"); if (h) return h; }
   // The two general ones, and only after the player has had a moment to look around.
-  if (ctx.alive && ctx.elapsedMs > 1500) { const h = pick("move"); if (h) return h; }
+  if (ctx.elapsedMs > 1500) { const h = pick("move"); if (h) return h; }
   if (ctx.elapsedMs > 25_000) { const h = pick("pause"); if (h) return h; }
   return null;
 }

@@ -98,13 +98,14 @@ export const HintLine = memo(function HintLine({ dormant }: ZoneProps & { dorman
 });
 
 /**
- * The hint zone is hidden under the shop and Tab (§4.5, `left.css`); `covered` tells Hints so it
- * picks nothing there — a hint shown once ever must not be spent behind an overlay.
+ * The hint zone is hidden under the shop, Tab and the pause card, and while the player is dead
+ * (§4.5 rows, `left.css`); `covered` tells Hints so it picks nothing there and gives back a hint
+ * that such a cover cut before it was read — a hint shown once ever must not be spent unseen.
  */
 function HintsMount() {
   const h = useHud();
   const covered = useUiFlags((f) => f.overlay.tab || f.overlay.shop || f.overlay.pause);
-  return <Hints h={h} covered={covered || h.shopOpen} />;
+  return <Hints h={h} covered={covered || h.shopOpen || !h.alive} />;
 }
 
 /**

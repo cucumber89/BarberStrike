@@ -45,7 +45,8 @@ export function Hints({ h, covered = false }: { h: HudState; covered?: boolean }
   // Unmounted (pause card, dormant HUD, the match's end) while a hint is up: same rule.
   useEffect(() => { const r = release.current; return () => r(); }, []);
 
-  // Pick: only while nothing is up AND the zone is visible — never under the shop, Tab or pause.
+  // Pick: only while nothing is up AND the zone is visible — never under the shop, Tab, pause or
+  // death (HintsMount folds `!alive` into `covered`; `nextHint` checks `alive` again itself).
   useEffect(() => {
     if (current || covered) return;
     const t = window.setInterval(() => {

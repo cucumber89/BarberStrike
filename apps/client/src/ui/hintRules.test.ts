@@ -50,6 +50,16 @@ describe("first-run hints", () => {
     expect(nextHint(ctx({ planVoteMine: true }), none)?.id).toBe("plan");
   });
 
+  it("never spends a one-time hint while the player is dead (the hint zone is hidden, §4.5)", () => {
+    // ULTRON P3 defect (dead hint): the plan, team and pause picks had no alive check, and
+    // `.hud[data-alive="false"] [data-zone="hint"]` is hidden — so the hint was saved as seen unread.
+    for (const o of [{ planVoteMine: true }, { teamTotals: [5, 2] as [number, number] }, { buyWindowLeft: 5000 }, {}])
+      expect(nextHint(ctx({ ...o, alive: false }), none), JSON.stringify(o)).toBeNull();
+    // The pause hint the probe caught (dead-next-round, t = 26 s) waits for the respawn.
+    expect(nextHint(ctx({ alive: false, elapsedMs: 60_000 }), new Set(["move"]))).toBeNull();
+    expect(nextHint(ctx({ alive: true, elapsedMs: 60_000 }), new Set(["move"]))?.id).toBe("pause");
+  });
+
   it("gives back a hint that a cover cut before it could be read", () => {
     expect(cutBeforeRead(0, 8000)).toBe(true);
     expect(cutBeforeRead(HINT_READ_MS - 1, 8000)).toBe(true);
