@@ -55,7 +55,19 @@
    question a player opens the game with. */
 .mm-title-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(268px, 350px); gap: clamp(20px, 4vw, 56px); align-items: center; }
 .mm-title-left { display: flex; flex-direction: column; gap: clamp(16px, 3vh, 32px); min-width: 0; }
-.mm-hero { display: flex; align-items: stretch; gap: clamp(16px, 2vw, 26px); }
+.mm-hero { position: relative; display: flex; align-items: stretch; gap: clamp(16px, 2vw, 26px); }
+/* A quiet backdrop behind the wordmark: a warm brass wash off the top-left, a cool night to the
+   right, and the faint diagonal of a shuttered street. It stays behind the text (`z-index: 0` on
+   the content is implicit; the layer is absolutely positioned and does not take pointer events). */
+.mm-hero-bg {
+  position: absolute; inset: -8px -16px; z-index: 0; pointer-events: none; border-radius: 6px;
+  background:
+    radial-gradient(120% 90% at 8% 0%, rgba(217, 164, 65, .16), transparent 60%),
+    radial-gradient(120% 120% at 100% 100%, rgba(30, 44, 60, .35), transparent 55%),
+    repeating-linear-gradient(122deg, rgba(255, 255, 255, .022) 0 2px, transparent 2px 22px);
+  mask-image: linear-gradient(180deg, #000 0%, #000 70%, transparent 100%);
+}
+.mm-hero > div { position: relative; z-index: 1; }
 /* The pole. One object says what the game is before a word is read. */
 .mm-pole {
   flex: 0 0 9px; min-height: 96px; border-radius: 5px;

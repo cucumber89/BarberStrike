@@ -96,6 +96,8 @@
 .ammo-art { flex: 1 1 auto; min-width: 0; display: grid; justify-items: start; align-items: center; color: var(--hud-tx2); }
 .ammo-gun { grid-area: 1 / 1; display: block; }
 .ammo-gun svg { display: block; height: 26px; width: auto; max-width: 92px; }
+/* The weapon portrait is a square PNG (P8a); give it a wider box than the flat SVG so it reads. */
+.ammo-gun img.art-img { display: block; height: 40px; width: auto; max-width: 92px; object-fit: contain; }
 .ammo-gun .art-name { font: 600 var(--hud-t1)/1 var(--font-ui); letter-spacing: var(--hud-track-label); }
 /* A switch cross-fades the two silhouettes in 120 ms (§5.2 row 45). */
 .ammo-gun.in { animation: p4-fade-in var(--hud-fast) linear; }
@@ -121,6 +123,7 @@
 .gear[data-none], .gear-item[data-empty] { display: none; }
 .gear-item { display: flex; align-items: center; gap: 6px; color: var(--hud-tx); }
 .gear-art svg { display: block; height: 20px; width: auto; }
+.gear-art img.art-img { display: block; height: 30px; width: auto; object-fit: contain; }
 .gear-n { font-family: var(--font-display); font-size: var(--hud-t2); line-height: 1; letter-spacing: var(--hud-track-num); }
 .gear-item[data-cooking] { color: var(--hud-danger); }
 .gear-item[data-cooking] .p4-key { border-color: var(--hud-danger); color: var(--hud-danger); }
@@ -174,6 +177,7 @@
 .kf-plus { color: var(--hud-tx2); }
 .kf-weapon { display: inline-flex; align-items: center; gap: 5px; color: var(--hud-tx); }
 .kf-art svg { display: block; height: 15px; width: auto; }
+.kf-art img.art-img { display: block; height: 22px; width: auto; object-fit: contain; }
 .kf-art-name { font: 600 var(--hud-t1)/1 var(--font-ui); color: var(--hud-tx2); }
 .kf-head { flex: none; color: var(--hud-tx); }
 .kf-razor { flex: none; }
@@ -181,6 +185,7 @@
 @container p4-feed (max-width: 260px) {
   .kf-row { column-gap: 5px; padding: 0 7px; }
   .kf-art svg { height: 12px; }
+  .kf-art img.art-img { height: 18px; }
 }
 
 /* ---------------------------------------------------------------- the aim point

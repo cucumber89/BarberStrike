@@ -219,12 +219,13 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
         <div className="mm-title">
           <div className="mm-title-grid">
             <div className="mm-title-left">
-              <header className="mm-hero">
+              <header className="mm-hero" data-testid="mm-hero">
+                <div className="mm-hero-bg" data-testid="mm-hero-bg" aria-hidden="true" />
                 <div>
-                  <div className="mm-kicker"><span /> NIGHT DISTRICT / AFTER HOURS</div>
+                  <div className="mm-kicker"><span /> NOCNA DZIELNICA / PO GODZINACH</div>
                   <h1 className="wordmark"><span>BARBER</span><strong>STRIKE</strong></h1>
                   <div className="mm-brand-rule" aria-hidden="true"><i /><b>✂</b><i /></div>
-                  <p className="mm-tagline">The district is closed. The chairs are empty.<br />Nobody is here for a haircut.</p>
+                  <p className="mm-tagline">Dzielnica zamknięta. Fotele puste.<br />Nikt tu nie przyszedł się ostrzyc.</p>
                 </div>
               </header>
 
