@@ -35,6 +35,11 @@ process.env.ACCOUNTS_DB = ":memory:";
 
 const { accountRoutes } = await import(pathToFileURL(path.join(serverSrc, "accounts/routes.ts")).href);
 const { openDb, getDb } = await import(pathToFileURL(path.join(serverSrc, "accounts/db.ts")).href);
+// P7: the tournament finish write (trophies + hall of fame) and the account store it writes through.
+const { planFinish, persistFinish } = await import(pathToFileURL(path.join(serverSrc, "rooms/tournamentFinish.ts")).href);
+const { createAccount } = await import(pathToFileURL(path.join(serverSrc, "accounts/store.ts")).href);
+const { hashPassword } = await import(pathToFileURL(path.join(serverSrc, "accounts/hash.ts")).href);
+const shared = req("@frankibarber/shared");
 
 openDb();
 
@@ -133,6 +138,44 @@ try {
   check("GET /api/tournaments 200", hof.status === 200 && Array.isArray(hof.json?.tournaments), `status=${hof.status}`);
   const tro = await c("GET", "/api/trophies?login=smoke_user");
   check("GET /api/trophies 200", tro.status === 200 && Array.isArray(tro.json?.trophies), `status=${tro.status}`);
+
+  // ---------------------------------------------------------------- P7: tournament save contract
+  // A finished 4-player bracket is written through the finish planner/persister (the same path the
+  // lobby room hooks on `phase="koniec"`), then the public reads confirm the contract from V_SPEC P7:
+  // GET /api/tournaments gains a row, and GET /api/trophies?login=<winner> shows place=1.
+  {
+    const { seedBracket, reportWinner, bracketString, mulberry32 } = shared;
+    const winnerId = createAccount("p7_winner", hashPassword("hunter2xx"));
+    createAccount("p7_runner", hashPassword("hunter2xx"));
+
+    const before = await c("GET", "/api/tournaments?limit=50");
+    const beforeN = before.json?.tournaments?.length ?? 0;
+
+    // Draw four, then play `p1` (login p7_winner) through every pair to the title.
+    const ids = ["p1", "p2", "p3", "p4"];
+    const names = ["p7_winner", "p7_runner", "C", "D"];
+    let b = seedBracket(ids.map((id, i) => ({ id, name: names[i] })), 4, mulberry32(1));
+    let guard = 0;
+    while (b.at < b.matches.length && guard++ < 20) {
+      const m = b.matches[b.at];
+      const through = m.a === "p1" || m.b === "p1" ? "p1" : m.a || m.b;
+      b = reportWinner(b, through, 6, 0);
+    }
+    const identities = new Map([["p1", { login: "p7_winner", accountId: winnerId }]]);
+    const plan = planFinish("p7-tourn-1", b, identities, bracketString(b));
+    check("planFinish returns a plan for a finished draw", !!plan, `plan=${!!plan}`);
+    persistFinish(plan);
+
+    const after = await c("GET", "/api/tournaments?limit=50");
+    const afterN = after.json?.tournaments?.length ?? 0;
+    check("GET /api/tournaments +1 after finish", afterN === beforeN + 1, `before=${beforeN} after=${afterN}`);
+    const row = (after.json?.tournaments ?? []).find((t) => t.id === "p7-tourn-1");
+    check("hall-of-fame row winner = p7_winner", row?.winner === "p7_winner", `winner=${row?.winner}`);
+
+    const win = await c("GET", "/api/trophies?login=p7_winner");
+    const champTrophy = (win.json?.trophies ?? []).find((t) => t.tournamentId === "p7-tourn-1");
+    check("GET /api/trophies?login=p7_winner place=1", champTrophy?.place === 1, `place=${champTrophy?.place}`);
+  }
 } finally {
   server.close();
 }

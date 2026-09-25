@@ -13,12 +13,25 @@ const rarityLabel: Record<SkinDef["rarity"], string> = {
   pospolity: "POSPOLITY", rzadki: "RZADKI", epicki: "EPICKI", legendarny: "LEGENDARNY", zloty: "ZŁOTY",
 };
 
+/** A short Polish date for the trophy shelf (P7); an unreadable timestamp shows a dash rather than NaN. */
+const fmtTrophyDate = (ms: number): string => {
+  if (!Number.isFinite(ms) || ms <= 0) return "—";
+  try {
+    return new Date(ms).toLocaleDateString("pl-PL", { year: "numeric", month: "short", day: "numeric" });
+  } catch {
+    return "—";
+  }
+};
+
 export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: string) => void; onBuild?: (id: string) => void; onOutfit?: (id: string) => void }) {
   const initial = useMemo(() => ensureStarterSkins(), []);
   const [weapon, setWeapon] = useState<WeaponId>("rifle");
   const [equip, setEquip] = useState(initial.equip);
   const [owned, setOwned] = useState(() => new Set(initial.skins.map(instance => instance.skin)));
-  const [section, setSection] = useState<"skins" | "haircuts" | "body" | "outfits" | "crates">("skins");
+  const [section, setSection] = useState<"skins" | "haircuts" | "body" | "outfits" | "crates" | "trophies">("skins");
+  // Drop V (P7): the tournament shelf from the profile (D7). Read once on mount — it only grows at the
+  // end of a tournament, which cannot happen while the Armoury is open.
+  const tournaments = useMemo(() => [...initial.tournaments].sort((a, b) => b.endedAt - a.endedAt), [initial.tournaments]);
   const [haircut, setHaircut] = useState(initial.haircut);
   const [hairPreview, setHairPreview] = useState(initial.haircut);
   const [build, setBuild] = useState(initial.build);
@@ -107,6 +120,7 @@ export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: str
           <button className={section === "body" ? "on" : ""} onClick={() => setSection("body")} data-testid="armoury-body">SYLWETKA</button>
           <button className={section === "outfits" ? "on" : ""} onClick={() => setSection("outfits")} data-testid="armoury-outfits">STRÓJ</button>
           <button className={section === "crates" ? "on" : ""} onClick={() => setSection("crates")} data-testid="armoury-crates">SKRZYNKI</button>
+          <button className={section === "trophies" ? "on" : ""} onClick={() => setSection("trophies")} data-testid="armoury-trophies">TROFEA</button>
         </div>
         {section === "skins" && (
           <>
@@ -210,6 +224,24 @@ export function Armoury({ onHaircut, onBuild, onOutfit }: { onHaircut?: (id: str
             setOwned(new Set(nextProfile.skins.map((instance) => instance.skin)));
             setFits(new Set(nextProfile.fits));
           }} />
+        )}
+        {section === "trophies" && (
+          <div className="armoury-trophies" data-testid="trofeum">
+            <div className="armoury-heading"><span>03</span><div><b>TROFEA</b><small>Turnieje · {tournaments.length}</small></div></div>
+            {tournaments.length === 0 && (
+              <p className="armoury-note">Jeszcze żadnego turnieju. Wygraj jeden w poczekalni, a stanie tu twój puchar.</p>
+            )}
+            <div className="armoury-trophy-list">
+              {tournaments.map((t) => (
+                <div className="trophy-item" key={t.id} data-testid="trophy-item">
+                  <span className="trophy-medal" aria-hidden="true">🏆</span>
+                  <b className="trophy-winner">{t.winner || "gość"}</b>
+                  <small className="trophy-size">Turniej na {t.size} osób</small>
+                  <small className="trophy-date">{fmtTrophyDate(t.endedAt)}</small>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
         {section === "haircuts" && <p className="armoury-note">Kliknij każdą fryzurę, żeby zobaczyć ją na postaci. Zablokowane modele wypadają ze Skrzynki Dzielnicy.</p>}
         {(section === "body" || section === "outfits") && <p className="armoury-note">Sylwetka i strój nie ruszają hitboxa, wzrostu ani strefy głowy — zmienia się wygląd, nie trafienia. Barwy drużyny zostają na piersi i na opasce, cokolwiek nosisz.</p>}

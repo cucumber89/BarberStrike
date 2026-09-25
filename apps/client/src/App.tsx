@@ -17,6 +17,7 @@ import { useHudSlice } from "./game/store";
 import { enterFullscreen, exitImmersion, isFullscreen, lockKeyboard } from "./game/input/immersion";
 import { hud } from "./game/store";
 import { installProfileSync, refreshMe } from "./net/accountApi";
+import { installTournamentSave } from "./net/tournamentSave";
 
 /**
  * The screens, in the order a match goes through them. `entering` is the click on WEJDŹ DO MECZU
@@ -56,6 +57,8 @@ export function App() {
   useEffect(() => {
     installProfileSync();
     void refreshMe();
+    // Drop V (P7): persist a TournamentRecord to the profile's shelf when a lobby reports „koniec”.
+    return installTournamentSave();
   }, []);
   const canvasHost = useRef<HTMLDivElement>(null);
   /**
