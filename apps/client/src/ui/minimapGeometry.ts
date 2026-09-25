@@ -1,7 +1,9 @@
 import type { Box } from "@frankibarber/shared";
 
 /**
- * Minimap maths (drop 5), kept pure so it can be unit-tested without a canvas.
+ * Minimap maths (drop 5), kept pure so it can be unit-tested without a canvas. Drop U (P3) removed
+ * the 240×20 compass strip and its bearings: north and every objective beyond the radar's range
+ * now sit ON the radar's rim (`rimPin`), where the eye already is.
  *
  * Named `minimapGeometry`, not `minimap`: the component beside it is `Minimap.tsx`, and on a
  * case-insensitive filesystem (Windows, macOS) `import { Minimap } from "./Minimap"` resolves to
@@ -15,36 +17,18 @@ import type { Box } from "@frankibarber/shared";
 export const MINIMAP = {
   /** Pixels per metre of the pre-rendered map image. */
   scale: 6,
-  /** Canvas size (px) and world radius shown (m). */
+  /** Canvas size at 1600×900 (px; the CSS box is `--hud-radar`, 144–176) and world radius shown (m). */
   size: 176,
   range: 24,
-  /** Compass strip: half the field shown (radians) and its width (px). */
-  compassHalf: Math.PI / 2,
-  compassWidth: 240,
+  /** Canvas letters (the rim's „N”, sites, flags, marks): the HUD's 14 px floor (§2 Principle 2). */
+  letterPx: 14,
+  /** How far inside the edge a rim pin's centre sits (px): a 14 px letter clears the 2 px ring. */
+  rimInset: 11,
 } as const;
 
 /** World → map-image pixel. */
 export function toMap(x: number, z: number, bounds: Box, scale: number = MINIMAP.scale): [number, number] {
   return [(x - bounds.minX) * scale, (bounds.maxZ - z) * scale];
-}
-
-/** Compass bearing of a world point from the viewer (0 = north, clockwise). */
-export function bearingTo(fromX: number, fromZ: number, toX: number, toZ: number): number {
-  return Math.atan2(toX - fromX, toZ - fromZ);
-}
-
-/** Signed angle of `bearing` relative to `yaw`, wrapped to −π..π (negative = to the left). */
-export function relativeAngle(bearing: number, yaw: number): number {
-  let d = (bearing - yaw) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d < -Math.PI) d += Math.PI * 2;
-  return d;
-}
-
-/** Position on the compass strip (px from its centre) for a relative angle, or null when off the strip. */
-export function compassX(rel: number, half: number = MINIMAP.compassHalf, width: number = MINIMAP.compassWidth): number | null {
-  if (Math.abs(rel) > half) return null;
-  return (rel / half) * (width / 2);
 }
 
 /** Minimap canvas offset of a world point relative to the viewer, in a facing-up frame (px). */
@@ -66,4 +50,19 @@ export function radarOffsetTo(out: [number, number], vx: number, vz: number, cos
   // Rotate the world by −yaw so the facing direction lands on −Y (up on screen).
   out[0] = (dx * cosYaw - dz * sinYaw) * pxPerM;
   out[1] = -(dx * sinYaw + dz * cosYaw) * pxPerM;
+}
+
+/**
+ * Where a radar mark goes (drop U, P3): in place while it lies within `rim` px of the centre,
+ * otherwise ON the rim, in its own direction — so a site 60 m away still says which way it is,
+ * as the compass strip used to, without a second instrument. Writes the canvas offset into `out`
+ * (no allocation: the radar calls it for every objective, every frame) and returns whether the
+ * mark was pinned to the rim.
+ */
+export function rimPin(out: [number, number], ox: number, oy: number, rim: number): boolean {
+  const d = Math.hypot(ox, oy);
+  if (d <= rim) { out[0] = ox; out[1] = oy; return false; }
+  const k = rim / d;
+  out[0] = ox * k; out[1] = oy * k;
+  return true;
 }
