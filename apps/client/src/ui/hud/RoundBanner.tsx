@@ -22,8 +22,8 @@ import type { ZoneProps } from "./types";
 /**
  * A title longer than this does not fit the banner box at t5 in Bebas Neue (measured at 1600×900:
  * „RUNDA DLA OCALENI”, 17, is 543 of the box's 576 px), so it is set at t4 instead. Wide glyphs can
- * overflow sooner („RUNDA DLA WWWWWWW” is 658 px): the frame measures its title once, before the
- * paint, and drops to t4 whenever it does not fit.
+ * overflow sooner („RUNDA DLA WWWWWWW” is 658 px): the frame measures its title once the display
+ * face is loaded, and drops to t4 whenever it does not fit.
  */
 const LONG_TITLE = 17;
 
@@ -33,7 +33,14 @@ export function BannerFrame({ copy, testid, className, glow }: { copy: BannerCop
   const long = copy.title.length > LONG_TITLE || overflows === copy.title;
   useLayoutEffect(() => {
     const el = titleRef.current;
-    if (el && !long && el.scrollWidth > el.clientWidth + 1) setOverflows(copy.title);
+    if (!el || long) return;
+    const check = () => { if (el.isConnected && el.scrollWidth > el.clientWidth + 1) setOverflows(copy.title); };
+    // Measured in Bebas Neue only: a fallback face is wider, and would drop a title that fits.
+    const fonts = typeof document !== "undefined" ? document.fonts : undefined;
+    if (!fonts || fonts.status === "loaded") { check(); return; }
+    let live = true;
+    void fonts.ready.then(() => { if (live) check(); });
+    return () => { live = false; };
   }, [copy.title, long]);
   return (
     <div className="moment-stage">
