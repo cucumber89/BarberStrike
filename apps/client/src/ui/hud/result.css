@@ -327,6 +327,12 @@
 /* The draw under the pair (turniej), and the result's DRABINKA tab: P2's BracketPanel, set in this
    zone's type (t1, no text under 14 px) — its own sheet sizes it for the pair card. */
 .sb-bracket { display: grid; justify-items: center; padding-top: 4px; border-top: var(--hud-plate-line); }
+/* Layout of the draw (drop V, P1): the rounds sit left to right, each round stacks its pairs, and a
+   pair stacks its two players. Without these the two <span> (Bracket.tsx:31-36) fall inline and the
+   nicks glue together — the font/size rules below never gave the boxes a `display`. */
+:is(.sb-bracket, .result-bracket) .bracket { display: flex; gap: 16px; }
+:is(.sb-bracket, .result-bracket) .bracket-round { display: flex; flex-direction: column; gap: 6px; }
+:is(.sb-bracket, .result-bracket) .bracket-pair { display: flex; flex-direction: column; gap: 2px; }
 :is(.sb-bracket, .result-bracket) .bracket-round h4 { font-family: var(--font-ui); font-size: var(--hud-t1); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
 :is(.sb-bracket, .result-bracket) .bracket-pair span { font-size: var(--hud-t1); }
 :is(.sb-bracket, .result-bracket) .bracket-pair b { font-family: var(--font-ui); font-size: var(--hud-t1); font-weight: 600; letter-spacing: 0; }
