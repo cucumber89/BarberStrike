@@ -150,11 +150,22 @@
 .kf-row[data-me="killer"] { border-color: var(--hud-accent); }
 .kf-row[data-me="victim"] { border-color: var(--hud-danger); }
 .kf-row[data-out] { opacity: 0; }
-/* A row wider than the column is cut with an ellipsis, the assist first: its shrink factor dwarfs the
-   nicks' (their share rounds to 0 px while it has width left), and once it is gone the killer and
-   the victim share the rest. Any fraction of a pixel taken from a nick would already cut it. */
+/* A row wider than the column gives up width in a fixed order, and only what it must: the assist
+   first, then the killer down to its first letters, the victim last — the row is about who died.
+   Proportional shrinking cut both nicks at once (1024: „xXPiotrek… Ko…” for one pixel too many).
+   - The victim is an ordinary item (0 1 auto): it shrinks only when nothing else can.
+   - The killer and the assist start at zero (basis 0) and GROW into what the victim and the weapon
+     leave, each up to its own width (max-width: max-content). The killer's grow factor dwarfs the
+     assist's, so the assist gets width only once the killer is whole. Their floors are their
+     min-widths: none for the assist, 3.2em (three letters and „…”) for a long killer, its whole
+     nick for a short one (KillFeed.tsx CUTTABLE_NICK).
+   While the floors fit, the row is in the grow case and the victim is never touched; past them, the
+   frozen floors leave the whole overflow to the victim. */
 .kf-nick, .kf-assist { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.kf-assist { flex-shrink: 100000; }
+.kf-victim { flex: 0 1 auto; }
+.kf-killer { flex: 1000000 1 0; max-width: max-content; min-width: max-content; }
+.kf-killer.kf-long { min-width: 3.2em; }
+.kf-assist { flex: 1 1 0; max-width: max-content; }
 .kf-nick.t0, .kf-assist.t0 { color: var(--hud-team0); }
 .kf-nick.t1, .kf-assist.t1 { color: var(--hud-team1); }
 .kf-nick.ffa, .kf-assist.ffa { color: var(--hud-tx); }
