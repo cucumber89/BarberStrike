@@ -14,6 +14,8 @@ export * from "./grenades";
 export * from "./economy";
 export * from "./perks";
 export * from "./tournament";
+export * from "./lobbyProtocol";
+export * from "./account";
 export * from "./dom";
 export * from "./cs";
 export * from "./modes";

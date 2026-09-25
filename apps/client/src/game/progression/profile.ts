@@ -6,6 +6,7 @@ import {
 import { DEFAULT_BUILD, isBuildId } from "@frankibarber/shared";
 import { DEFAULT_OUTFIT, DROPPABLE_OUTFITS, isOutfitId, outfitDef, type OutfitDef, type OutfitRarity } from "@frankibarber/shared";
 import { WEAPON_ORDER, encodeCosmetics, type WeaponId } from "@frankibarber/shared";
+import type { TournamentRecord } from "@frankibarber/shared";
 import { catalog, fitsWeapon, skinById, type SkinInstance } from "@frankibarber/skins";
 
 /**
@@ -53,9 +54,14 @@ export interface Profile {
   crateCuts: string[];
   challengeClaims: string[];
   challengeBase: { matches: number; kills: number; headshots: number };
+  /**
+   * Drop V (D7): the tournaments this profile has finished — history for the trophy shelf. Cosmetic
+   * (L1). Written by P7; older profiles migrate to an empty list. Not a Colyseus schema field.
+   */
+  tournaments: TournamentRecord[];
 }
 
-export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT, build: DEFAULT_BUILD, outfit: DEFAULT_OUTFIT, fits: [], skins: [], equip: {}, crates: 0, crateDay: "", crateCuts: [], challengeClaims: [], challengeBase: { matches: 0, kills: 0, headshots: 0 } });
+export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT, build: DEFAULT_BUILD, outfit: DEFAULT_OUTFIT, fits: [], skins: [], equip: {}, crates: 0, crateDay: "", crateCuts: [], challengeClaims: [], challengeBase: { matches: 0, kills: 0, headshots: 0 }, tournaments: [] });
 
 /**
  * Reads the profile, repairing anything the shape has outgrown.
@@ -94,6 +100,13 @@ export function loadProfile(): Profile {
       crateCuts: Array.isArray(p.crateCuts) ? p.crateCuts.filter(id => typeof id === "string" && isHaircutId(id)) : [],
       challengeClaims: Array.isArray(p.challengeClaims) ? p.challengeClaims.filter(id => typeof id === "string") : [],
       challengeBase: { matches: Number(p.challengeBase?.matches) || 0, kills: Number(p.challengeBase?.kills) || 0, headshots: Number(p.challengeBase?.headshots) || 0 },
+      // Drop V (D7): a profile written before tournaments existed gets an empty shelf; each record is
+      // validated so an edited blob cannot poison the trophy list.
+      tournaments: Array.isArray(p.tournaments)
+        ? p.tournaments.filter((t): t is TournamentRecord =>
+            !!t && typeof t === "object" && typeof t.id === "string" && typeof t.winner === "string"
+            && Number.isFinite(t.endedAt) && Number.isFinite(t.size))
+        : [],
       xp: Number.isFinite(p.xp) ? Math.max(0, Math.floor(p.xp as number)) : 0,
       life,
       badges: Array.isArray(p.badges) ? p.badges.filter((b) => known.has(b)) : [],

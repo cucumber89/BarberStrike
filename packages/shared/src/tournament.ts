@@ -15,13 +15,23 @@ import type { GameMode } from "./types";
  * it with the code that already exists.
  */
 
-/** How many entrants a bracket is drawn for. Four is one evening; eight is the full night. */
-export type TournamentSize = 4 | 8;
-export const TOURNAMENT_SIZES: readonly TournamentSize[] = [4, 8];
+/**
+ * How many entrants a bracket is drawn for. Four is one evening; eight is the full night; sixteen
+ * and thirty-two are the parallel-arena tournament of drop V, where every pair is its own room.
+ */
+export type TournamentSize = 4 | 8 | 16 | 32;
+export const TOURNAMENT_SIZES: readonly TournamentSize[] = [4, 8, 16, 32];
 
-/** The rounds, largest first, as the screen names them. */
+/**
+ * The rounds, largest first, as the screen names them. The three names near the end stay the words a
+ * player reads (ĆWIERĆFINAŁ / PÓŁFINAŁ / FINAŁ); the earlier rounds of a large draw are the fractions
+ * a bracket is spoken with — "1/8" (round of sixteen), "1/16" (round of thirty-two).
+ */
 export const roundName = (roundsLeft: number): string =>
-  roundsLeft <= 1 ? "FINAŁ" : roundsLeft === 2 ? "PÓŁFINAŁ" : "ĆWIERĆFINAŁ";
+  roundsLeft <= 1 ? "FINAŁ"
+  : roundsLeft === 2 ? "PÓŁFINAŁ"
+  : roundsLeft === 3 ? "ĆWIERĆFINAŁ"
+  : `1/${2 ** (roundsLeft - 1)}`;
 
 export interface TourMatch {
   /** 0 = the first round played. */
@@ -46,8 +56,8 @@ export interface Bracket {
   names: Record<string, string>;
 }
 
-/** The number of rounds a bracket of this size has (4 → 2, 8 → 3). */
-export const roundsOf = (size: TournamentSize): number => (size === 4 ? 2 : 3);
+/** The number of rounds a bracket of this size has (4 → 2, 8 → 3, 16 → 4, 32 → 5). */
+export const roundsOf = (size: TournamentSize): number => Math.log2(size);
 
 /**
  * Draw the bracket.
@@ -203,7 +213,7 @@ export function parseBracket(s: string): BracketView | null {
   const parts = s.split(";");
   const head = parts[0]?.split("|") ?? [];
   const size = Number(head[0]), at = Number(head[1]);
-  if ((size !== 4 && size !== 8) || !Number.isFinite(at)) return null;
+  if (!TOURNAMENT_SIZES.includes(size as TournamentSize) || !Number.isFinite(at)) return null;
   const matches: BracketView["matches"] = [];
   let round = 0, left = size / 2, inRound = 0;
   for (const row of parts.slice(1)) {
@@ -216,7 +226,7 @@ export function parseBracket(s: string): BracketView | null {
     });
     if (++inRound >= left) { round++; left = Math.max(1, left / 2); inRound = 0; }
   }
-  return { size, at, matches };
+  return { size: size as TournamentSize, at, matches };
 }
 
 /** Is this the mode that runs a bracket? One place to ask, so nothing tests the string twice. */

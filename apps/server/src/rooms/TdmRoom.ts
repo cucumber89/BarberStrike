@@ -43,6 +43,12 @@ interface HistoryEntry { t: number; x: number; y: number; z: number; crouching: 
 const HISTORY_LEN = 30;
 /** Seconds a dropped (non-consented) client may reconnect before its player is removed. */
 const RECONNECT_GRACE_S = 15;
+/**
+ * Drop V: the longer grace for a tournament arena. A player mid-tournament gets a full minute to come
+ * back before the walkover is final (the lobby, not the arena's `onLeave`, times this out — see
+ * V_SPEC §5). P3 wires `onLeave` to choose between this and `RECONNECT_GRACE_S`; P0 only declares it.
+ */
+const TOURNAMENT_RECONNECT_GRACE_S = 60;
 /** Input `seq` travels back as a uint32 ack (S2C.Ack); anything beyond cannot be acknowledged. */
 const MAX_SEQ = 0xffffffff;
 
