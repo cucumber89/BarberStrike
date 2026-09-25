@@ -48,21 +48,23 @@ const REASONS: Record<string, string> = {
   shaved: "Ostrzyżeni nie kupują",
 };
 
-/** A refusal on the tile, in place of the price: one or two words (a tile is ≤ 6, §5.2 #49). */
+/** A refusal on the tile, as its one tag beside the price: one or two words (a tile is ≤ 6, §5.2 #49). */
 const BLOCKED_LABEL: Record<string, string> = {
   owned: "MASZ", full: "PEŁNO", slot: "SLOT ZAJĘTY", class: "NIE TA ROLA", mode: "NIE TU", "no-shop": "BRAK SKLEPU", shaved: "NIE TERAZ",
 };
 
 /**
- * The scoped rifle's mark: a reticle after its name (Principle 7, an icon where CS2 would use one),
- * with the word „LUNETA” kept as `sr-only` text for the e2e that reads it (`multiplayer.spec.ts:472`)
- * and for a screen reader. As a word chip it cut the name short on a 1024-wide screen.
+ * The scoped rifle's mark: a reticle after its name (Principle 7, an icon where CS2 would use one).
+ * It is an icon, not a word: its name „LUNETA” is the image's `aria-label` for a screen reader, and
+ * the same word sits in the tile's text undisplayed (`.tile-scope-word`, display none) for the e2e
+ * that reads the tile's textContent (`multiplayer.spec.ts:472`). As `sr-only` text it counted as a
+ * seventh word on a sniper that is also short of money (key, name ×2, price, „Brakuje $1,050”).
  */
 function Scope() {
   return (
-    <span className="tile-scope">
+    <span className="tile-scope" role="img" aria-label="LUNETA">
       <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" /><path d="M8 0v5M8 11v5M0 8h5M11 8h5" /></svg>
-      <span className="sr-only">LUNETA</span>
+      <span className="tile-scope-word" aria-hidden="true">LUNETA</span>
     </span>
   );
 }
@@ -82,7 +84,7 @@ interface TileState {
   /** On you now: the gun in its slot, the plate you wear, a running perk, a grenade in hand. */
   carried: boolean;
   v: Verdict;
-  /** What the price slot shows instead of a price when the item is carried (≤ 3 words). */
+  /** The tag a carried item shows beside its price (≤ 3 words): „MASZ”, „nosisz”, „działa jeszcze 12s”. */
   have?: string;
   /** What leaves the wallet: the price, or a swap's net after the old gun's refund. */
   price: number;
@@ -90,7 +92,7 @@ interface TileState {
   swapNet?: number;
   /** A small tag after the name: ×N on grenades you carry. */
   badge?: string;
-  /** The tube scope: a reticle after the name, read as „LUNETA” (the word e2e pins, sr-only). */
+  /** The tube scope: a reticle after the name, labelled „LUNETA” (the word the e2e pins). */
   scope?: boolean;
   sell?: WeaponId;
 }
@@ -99,7 +101,9 @@ interface TileState {
  * The buy menu, CS2's: the five aisles side by side as columns — pistols, the mid-tier, rifles,
  * gear, grenades — every item on one screen, nothing to scroll and nothing behind a tab. A tile is
  * the key („3·2”), the name, the price and at most one tag („MASZ”, „nosisz”, „działa jeszcze 12s”,
- * „LUNETA”, „Brakuje $1,400”): ≤ 6 words (docs/UI_U_SPEC.md §5.2 #49–50). The header is the three
+ * „Brakuje $1,400”) — the tag BESIDE the price, never in its place, so a gun you cannot afford
+ * still says what it costs: ≤ 6 words (docs/UI_U_SPEC.md §5.2 #49–50). A gun you carry and may
+ * sell shows SPRZEDAJ as its one tag. The header is the three
  * things a buyer checks — SKLEP · money · time left — and, in a plan round, the one-line vote
  * (`shop-plan`; F1 / F2 stay live through the plan card, P3). The strip under the shelf says what
  * the focused item is FOR and, in the Counter-Strike modes, what a kill with it pays.
@@ -194,16 +198,18 @@ export function Shop({ h, api, now, live = true }: Props) {
     // A closed shop greys the shelf and says so once, in the header; every tile keeps its price.
     const refusal = blocked && reason !== "closed" ? (short > 0 ? `Brakuje ${money(short)}` : BLOCKED_LABEL[reason] ?? "") : "";
     const buyable = s.v.ok && !busy;
+    // The price is ALWAYS printed (§5.2 #49: key, name, price, at most one tag), as one word: a free
+    // gun reads „$0” — „ZA DARMO” beside „MASZ” made „1·1 P9 Straight Razor MASZ ZA DARMO” seven
+    // words. A swap shows its net: the free P9 taken back for a carried revolver pays the revolver's
+    // refund, and a bare „$0” there would hide the $420 you get.
     const priceText = busy ? "…"
-      : s.carried && s.have && !s.v.ok ? s.have
-      : refusal ? refusal
-      // A swap first: the free P9 taken back for a carried revolver pays the revolver's refund,
-      // and „ZA DARMO” there hid the $420 you get.
       : s.swapNet !== undefined ? (s.swapNet >= 0 ? money(s.swapNet) : `+${money(-s.swapNet)}`)
-      : s.price === 0 ? "ZA DARMO"
       : money(s.price);
-    const tone = busy ? "" : s.carried && s.have && !s.v.ok ? "have" : refusal ? "no" : s.swapNet !== undefined ? "swap" : "";
-    const label = `${itemName(id)}, ${s.price === 0 ? "za darmo" : money(s.price)}${s.swapNet !== undefined ? `, z wymianą ${money(s.swapNet)}` : ""}${refusal ? ` — ${refusal}` : s.carried && s.have ? ` — ${s.have}` : ""}`;
+    // The one tag: a refusal the shelf can predict, or what a carried item is doing. A gun you
+    // carry and may sell shows SPRZEDAJ there instead (the tile's brass edge already says it is yours).
+    const have = s.carried && s.have && !s.v.ok ? s.have : "";
+    const tag = s.sell ? "" : refusal || have;
+    const label = `${itemName(id)}, ${s.price === 0 ? "za darmo" : money(s.price)}${s.swapNet !== undefined ? `, z wymianą ${money(s.swapNet)}` : ""}${tag ? ` — ${tag}` : ""}`;
     return (
       <div key={id}
         className={`shop-tile${s.carried ? " carried" : ""}${blocked ? " locked" : ""}${busy ? " pending" : ""}`}
@@ -213,22 +219,28 @@ export function Shop({ h, api, now, live = true }: Props) {
           onClick={() => request(id, () => api.buy(id))} onFocus={() => setFocus(id)} />
         <span className="tile-art" aria-hidden="true"><Art /></span>
         <span className="tile-name">{itemName(id)}{s.badge && <small className="tile-badge">{s.badge}</small>}{s.scope && <Scope />}</span>
+        {/* The foot: the one tag on its own line, then the key and the price — the tag beside the
+            price, never in its place (§5.2 #49). On a short tile (TDM's six rows on a small screen)
+            the lines tighten and SPRZEDAJ shrinks to its icon beside the key — `screens.css`. */}
         <span className="tile-foot">
           {/* One text node, so the key is one word („3·2”, §3.10) and `ui-fit.mjs` reads it whole. */}
           <span className="tile-key" aria-hidden="true">{`${cat}·${keyForPos(pos)}`}</span>
-          {/* A gun you carry and can sell shows SPRZEDAJ where the price was: the tile's brass edge
-              already says it is yours, and „MASZ” beside the button did not fit a 1024-wide column. */}
           {s.sell ? (
-            <button className="tile-sell" disabled={busy} onClick={() => request(id, () => api.sell(s.sell!))} data-testid={`sell-${id}`}
-              title={`Sprzedaj za ${money(Math.round(WEAPON_PRICES[s.sell] * ECONOMY.sellRatio))}`}>
-              SPRZEDAJ
-            </button>
-          ) : (
-            <span className={`tile-price${tone ? ` ${tone}` : ""}`} data-testid={refusal ? `why-${id}` : undefined}
-              title={s.swapNet !== undefined ? "Z wymianą: stara broń wraca za 70 % ceny" : undefined}>
-              {s.swapNet !== undefined && !refusal && !busy && <i className="tile-swap" aria-hidden="true">⇄</i>}{priceText}
+            <span className="tile-tag sell">
+              <button className="tile-sell" disabled={busy} onClick={() => request(id, () => api.sell(s.sell!))} data-testid={`sell-${id}`}
+                aria-label={`Sprzedaj za ${money(Math.round(WEAPON_PRICES[s.sell] * ECONOMY.sellRatio))}`}
+                title={`Sprzedaj za ${money(Math.round(WEAPON_PRICES[s.sell] * ECONOMY.sellRatio))}`}>
+                <svg className="tile-sell-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2v3h-3" /></svg>
+                <span className="tile-sell-word">SPRZEDAJ</span>
+              </button>
             </span>
-          )}
+          ) : tag ? (
+            <span className={`tile-tag ${refusal ? "no" : "have"}`} data-testid={refusal ? `why-${id}` : undefined}>{tag}</span>
+          ) : null}
+          <span className={`tile-price${s.swapNet !== undefined && !busy ? " swap" : ""}`}
+            title={s.swapNet !== undefined ? "Z wymianą: stara broń wraca za 70 % ceny" : undefined}>
+            {s.swapNet !== undefined && !busy && <i className="tile-swap" aria-hidden="true">⇄</i>}{priceText}
+          </span>
         </span>
       </div>
     );

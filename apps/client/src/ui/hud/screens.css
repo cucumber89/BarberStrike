@@ -210,11 +210,12 @@
 /* Every shelf has the same rows (`--rows`, the longest aisle's, set by Shop.tsx), so tiles line up
    across the aisles and the five columns fill the card to the detail strip, as CS2's grid does. */
 .shop-shelf { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: repeat(var(--rows, 6), minmax(0, 1fr)); gap: 6px; }
-/* A tile: the picture (when the tile is tall enough for one), the name, then the key and the
-   price or its one tag. The whole tile is the buy button (`.tile-hit` under the text); SPRZEDAJ
+/* A tile: the picture (when the tile is tall enough for one), the name, its one tag when it has
+   one, then the key and the price — the price is always there, the tag sits beside it and never in
+   its place (§5.2 #49). The whole tile is the buy button (`.tile-hit` under the text); SPRZEDAJ
    sits above it. A tile is a size container: its row decides its height, and a short row drops
    the picture instead of squeezing the words. */
-.shop-tile { position: relative; container-type: size; display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 0; padding: 6px 8px;
+.shop-tile { position: relative; container-type: size; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; padding: 6px 8px;
   background: rgba(244,240,231,.045); border: 1px solid rgba(178,201,210,.14); border-radius: var(--hud-radius); }
 .shop-tile:hover { background: rgba(244,240,231,.08); border-color: rgba(231,182,46,.55); }
 .shop-tile:has(.tile-hit:focus-visible) { border-color: var(--hud-accent); box-shadow: 0 0 0 1px var(--hud-accent); }
@@ -232,26 +233,43 @@
 .shop-tile.locked .tile-art { color: var(--hud-tx2); opacity: .45; }
 @container (max-height: 64px) { .tile-art { display: none; } }
 .tile-name { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; white-space: nowrap;
-  font: 600 var(--hud-t2)/1.2 var(--font-ui); color: var(--hud-tx); }
+  font: 600 var(--hud-t2)/1.1 var(--font-ui); color: var(--hud-tx); }
 .shop-tile.locked .tile-name { color: var(--hud-tx2); }
 .tile-badge { font: 500 var(--hud-t1)/1 var(--font-mono); letter-spacing: var(--hud-track-num); color: var(--hud-accent); }
 .tile-scope { flex: 0 0 auto; display: inline-flex; color: var(--hud-accent); }
 .tile-scope svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; }
-.shop .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.tile-foot { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
-.tile-key { flex: 0 0 auto; font: 500 var(--hud-key)/1 var(--font-mono); letter-spacing: var(--hud-track-num); color: var(--hud-tx2); }
+/* „LUNETA” is the icon's aria-label; the word stays in the tile's textContent for the e2e only. */
+.tile-scope-word { display: none; }
+/* The foot: the key and the price on one line and, on a tile tall enough for three lines, the one
+   tag („Brakuje $250”, „MASZ”, „nosisz”, „działa jeszcze 12s”) or SPRZEDAJ on its own line above
+   them — beside the price, never in its place (§5.2 #49). */
+.tile-foot { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; }
+.tile-key { order: 1; flex: 0 0 auto; font: 500 var(--hud-key)/1 var(--font-mono); letter-spacing: var(--hud-track-num); color: var(--hud-tx2); }
 .shop-aisle.armed .tile-key { color: var(--hud-accent); }
-.tile-price { margin-left: auto; min-width: 0; white-space: nowrap; font: 500 var(--hud-t2)/1.2 var(--font-mono); letter-spacing: var(--hud-track-num); color: var(--hud-money); }
-.tile-price.have, .tile-price.no { font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: normal; }
-.tile-price.have { color: var(--hud-accent); }
-.tile-price.no { color: var(--hud-danger); }
-.shop-tile.locked .tile-price:not(.no) { color: var(--hud-tx2); }
+.tile-price { order: 1; margin-left: auto; min-width: 0; white-space: nowrap; font: 500 var(--hud-t2)/1.1 var(--font-mono); letter-spacing: var(--hud-track-num); color: var(--hud-money); }
+.shop-tile.locked .tile-price { color: var(--hud-tx2); }
 .tile-swap { margin-right: 6px; font-style: normal; color: var(--hud-tx2); }
-.tile-sell { flex: 0 0 auto; padding: 2px 8px; cursor: pointer; pointer-events: auto;
+.tile-tag { order: 0; flex: 0 0 100%; min-width: 0; display: flex; white-space: nowrap; font: 600 var(--hud-t1)/1.1 var(--font-ui); }
+.tile-tag.have { color: var(--hud-accent); }
+.tile-tag.no { color: var(--hud-danger); }
+.tile-sell { display: inline-flex; align-items: center; padding: 0 8px; cursor: pointer; pointer-events: auto;
   background: rgba(244,240,231,.07); border: var(--hud-plate-line); border-radius: var(--hud-radius); color: var(--hud-tx2);
-  font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); }
+  font: 600 var(--hud-t1)/1.1 var(--font-ui); letter-spacing: var(--hud-track-label); }
 .tile-sell:hover:not(:disabled) { color: var(--hud-tx); border-color: var(--hud-accent); }
-.tile-foot .tile-sell { margin-left: auto; }
+.tile-sell-icon { display: none; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+/* A short tile (TDM's six rows at 1164×655 and below, 55 px at 1024×576): the three lines still fit
+   — the name, the one tag, the key and the price — once the padding, the gaps and the line boxes are
+   tightened (16 + 13 + 16 px of type). The tag stays on screen at every size (§5.2 #49); only
+   SPRZEDAJ, a button with a border, becomes its icon beside the key (its words stay its label). */
+@container (max-height: 57px) {
+  .shop-tile { padding-block: 2px; gap: 0; }
+  .tile-name, .tile-price, .tile-tag { line-height: 1; }
+  .tile-foot { row-gap: 0; }
+  .tile-tag.sell { order: 1; flex: 0 0 auto; }
+  .tile-sell { padding: 0 4px; }
+  .tile-sell-word { display: none; }
+  .tile-sell-icon { display: block; }
+}
 /* The strip under the shelf: what the focused item is for, and what a kill with it pays (CS). */
 .shop-detail { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; min-width: 0; padding: 6px 2px 0; white-space: nowrap;
   border-top: var(--hud-plate-line); }

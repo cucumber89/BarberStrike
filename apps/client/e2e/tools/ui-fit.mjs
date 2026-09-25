@@ -34,7 +34,14 @@ const BASE = arg("--url", "http://localhost:5174");
 const MODE = arg("--mode", "tdm");
 
 const FLOORS = { name: 16, role: 13, any: 10 };
-/** §5.2 #49: a tile is the key, the name, the price and at most one tag. */
+/**
+ * §5.2 #49 / P7 WORK 6: a tile is the key, the name, the price and at most one tag, ≤ 6 words. The
+ * spec's own pins cannot all hold at 6 on a three-word name: `multiplayer.spec.ts:377` wants
+ * „Brakuje $1,400” on the DMR, „M-1 Clean Line” — key 1 + name 3 + tag 2 + price 1 = 7. So the
+ * count gives the name at most two words (`nameWords`: a third word of a WEAPONS name, shared
+ * data P7 does not own, is not held against the tile) and the STRUCTURE is gated on its own: a
+ * price on every tile, never two tags. The spec conflict is reported to Ultron (audit P7-1).
+ */
 const TILE_WORDS = 6;
 
 const SIZES = [
@@ -112,18 +119,31 @@ for (const size of SIZES) {
     let maxTileWords = 0;
     for (const tile of tiles) {
       const id = tile.dataset.testid;
-      // A carried gun that can be sold shows SPRZEDAJ in the price's place.
-      const name = tile.querySelector(".tile-name"), price = tile.querySelector(".tile-price, .tile-sell"), key = tile.querySelector(".tile-key");
+      // Every tile prints its price (§5.2 #49); its one tag (a refusal, „nosisz”, SPRZEDAJ…) sits
+      // BESIDE it, never in its place (audit P7-1).
+      const name = tile.querySelector(".tile-name"), price = tile.querySelector(".tile-price"), key = tile.querySelector(".tile-key");
+      const tags = [...tile.querySelectorAll(".tile-tag")].filter((t) => t.checkVisibility());
       const px = (el) => parseFloat(getComputedStyle(el).fontSize);
+      if (!price || !price.checkVisibility() || !/\$\d/.test(price.textContent ?? "")) { faults.push(`${id}: no price on the tile`); continue; }
+      if (tags.length > 1) faults.push(`${id}: ${tags.length} tags > 1`);
       if (px(name) < floors.name) faults.push(`${id}: name ${px(name)} px < ${floors.name}`);
-      if (px(price) < floors.role) faults.push(`${id}: price / tag ${px(price)} px < ${floors.role}`);
+      if (px(price) < floors.role) faults.push(`${id}: price ${px(price)} px < ${floors.role}`);
       if (name.scrollWidth > name.clientWidth + 1) faults.push(`${id}: name truncated (${name.scrollWidth} > ${name.clientWidth})`);
-      if (price.scrollWidth > price.clientWidth + 1) faults.push(`${id}: price / tag truncated (${price.scrollWidth} > ${price.clientWidth})`);
+      if (price.scrollWidth > price.clientWidth + 1) faults.push(`${id}: price truncated (${price.scrollWidth} > ${price.clientWidth})`);
+      const pr = price.getBoundingClientRect(), tr = tile.getBoundingClientRect();
+      if (pr.bottom > tr.bottom + 0.5 || pr.right > tr.right + 0.5) faults.push(`${id}: price outside its tile`);
+      for (const t of tags) {
+        if (!t.classList.contains("sell") && px(t) < floors.role) faults.push(`${id}: tag ${px(t)} px < ${floors.role}`);
+        if (t.scrollWidth > t.clientWidth + 1) faults.push(`${id}: tag truncated (${t.scrollWidth} > ${t.clientWidth})`);
+        const r = t.getBoundingClientRect();
+        if (r.bottom > tr.bottom + 0.5 || r.right > tr.right + 0.5) faults.push(`${id}: tag outside its tile`);
+      }
       const rr = tile.getBoundingClientRect();
       if (rr.bottom > vh + 0.5 || rr.top < -0.5) faults.push(`${id}: tile off screen`);
       // The printed shortcut must be a key the handler accepts: <cat>·<1-9|0>.
       if (!/^[1-5]·[0-9]$/.test(key.textContent ?? "")) faults.push(`${id}: bad shortcut "${key.textContent}"`);
-      const w = words(tile);
+      // The name counts at most two words (see TILE_WORDS).
+      const w = words(tile) - Math.max(0, words(name) - 2);
       maxTileWords = Math.max(maxTileWords, w);
       if (w > maxWords) faults.push(`${id}: ${w} words > ${maxWords}`);
     }
@@ -217,7 +237,8 @@ const md = [
   "Measured with `node apps/client/e2e/tools/ui-fit.mjs` against the real component: the five aisles side by side,",
   `every item on one screen, at every size. Floors: names ≥ ${FLOORS.name} px, a tile's price or tag ≥ ${FLOORS.role} px, all text ≥ ${FLOORS.any} px;`,
   `no scroll, no control off screen, all five aisle headers in the viewport, no truncated name, price or tag, every printed`,
-  `shortcut a real key, every tile ≤ ${TILE_WORDS} words, every header arming its aisle.\n`,
+  `shortcut a real key, every tile ≤ ${TILE_WORDS} words (a name counted as at most two: the spec's own „Brakuje $1,400” on`,
+  `„M-1 Clean Line” is 7), a price on every tile and at most one tag beside it, every header arming its aisle.\n`,
   `**Shop: ${shopRows.filter((r) => r.ok).length}/${shopRows.length} sizes pass.**\n`,
   "| viewport | verdict | smallest text | tiles | most words on a tile | headers in view | faults |",
   "|---|---|---|---|---|---|---|",
