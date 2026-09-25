@@ -19,6 +19,7 @@ import {
   type TournamentSize,
 } from "@frankibarber/shared";
 import { Arena, Entrant, TournamentLobbyState } from "./LobbyState";
+import { persistFinish, planFinish, resolveClaim, resolveIdentity, type LobbyIdentity } from "./tournamentFinish";
 
 /**
  * The tournament waiting-room (`tournament-lobby`, drop V, D1). A light coordinator on the
@@ -77,6 +78,14 @@ export class TournamentLobbyRoom extends Room<{ state: TournamentLobbyState; met
   private subscribed = new Set<number>();
   private askedSize: number | undefined;
   private seed = 0;
+  /**
+   * P7: the account behind each signed-in entrant, keyed by `sessionId` (the same id the bracket
+   * carries in every slot). Filled by the `lobby:identify` handler from a session token; used at the
+   * finish to record the champion's login and to award trophies. A guest never appears here.
+   */
+  private identities = new Map<string, LobbyIdentity>();
+  /** P7: guard so the finish write happens exactly once, even if `advanceRounds` is re-entered. */
+  private finished = false;
 
   override onCreate(options: LobbyJoinOptions): void {
     this.map = typeof options?.map === "string" ? options.map : "";
@@ -89,6 +98,23 @@ export class TournamentLobbyRoom extends Room<{ state: TournamentLobbyState; met
     this.onMessage("lobby:chat", (client, msg: LobbyChatMsg) => this.onChat(client, msg));
     this.onMessage("lobby:start", (client) => this.onStart(client));
     this.onMessage("lobby:spectate", (client, msg: LobbySpectateMsg) => this.onSpectate(client, msg));
+    // P7: a signed-in player identifies itself so its win/run earns a trophy. Additive — it touches
+    // neither the roster nor the start/arena flow; a guest simply never sends it.
+    this.onMessage("lobby:identify", (client, msg: { session?: string; login?: string }) => this.onIdentify(client, msg));
+  }
+
+  /**
+   * P7: remember the account behind this client, keyed by its `sessionId`. A session token is verified
+   * (the strong path); failing that a claimed login is looked up (the browser only holds an HttpOnly
+   * cookie it cannot read, so it claims its login — enough for a cosmetic trophy, L1). Nothing to
+   * resolve clears any prior identity (the client is a guest). Never errors, never replies.
+   */
+  private onIdentify(client: Client, msg: { session?: string; login?: string }): void {
+    const who =
+      resolveIdentity(typeof msg?.session === "string" ? msg.session : "") ??
+      resolveClaim(typeof msg?.login === "string" ? msg.login : "");
+    if (who) this.identities.set(client.sessionId, who);
+    else this.identities.delete(client.sessionId);
   }
 
   override onJoin(client: Client, options: LobbyJoinOptions): void {
@@ -114,6 +140,9 @@ export class TournamentLobbyRoom extends Room<{ state: TournamentLobbyState; met
     if (this.state.phase === "poczekalnia") {
       this.state.entrants.delete(client.sessionId);
       this.lastChatAt.delete(client.sessionId);
+      // P7: drop the identity only before START — after the draw an entrant stays on the bracket, and
+      // must keep its identity so a champion who disconnects still earns their trophy.
+      this.identities.delete(client.sessionId);
       if (this.state.hostId === client.sessionId) {
         const next = this.state.entrants.keys().next();
         this.state.hostId = next.done ? "" : next.value;
@@ -183,7 +212,14 @@ export class TournamentLobbyRoom extends Room<{ state: TournamentLobbyState; met
       if (m.round !== round) break;
       if (!m.a || !m.b || m.winner) continue;      // byes/settled pairs never get an arena
       if (this.state.arenas.has(String(i))) continue;
-      await this.raiseArena(i, m.a, m.b);
+      // P7 (Ultron's P2 note): isolate each arena's creation. A `matchMaker.createRoom` that throws
+      // for one pair (a transient matchmaker error) must not abort the whole round — the other pairs
+      // still get their arena, and the failed one can be re-raised on the next `advanceRounds` pass.
+      try {
+        await this.raiseArena(i, m.a, m.b);
+      } catch (err) {
+        console.warn(`[tournament-lobby] arena create failed for match ${i} in ${this.roomId}:`, err);
+      }
     }
   }
 
@@ -257,11 +293,32 @@ export class TournamentLobbyRoom extends Room<{ state: TournamentLobbyState; met
     if (!cur) {
       // The final has been played: the tournament is over. P7 hooks the champion write here.
       this.state.phase = "koniec";
+      this.finishTournament();
       return;
     }
     // Only raise the next round once no arena of the previous front is still live.
     const anyLive = [...this.state.arenas.values()].some((x) => x.live);
     if (anyLive) return;
     await this.raiseRoundArenas();
+  }
+
+  // ------------------------------------------------------------------ P7: the finish write
+
+  /**
+   * The tournament reached `phase="koniec"`: record the hall-of-fame row and every signed-in placer's
+   * trophy through the account store. Runs exactly once (`finished` guard) and never throws into the
+   * room — a failed persist must not take down the lobby, and the bracket already stands in the state.
+   * A guest champion is still recorded under their nick; only signed-in entrants earn a trophy row.
+   */
+  private finishTournament(): void {
+    if (this.finished || !this.bracket) return;
+    this.finished = true;
+    try {
+      const plan = planFinish(this.roomId, this.bracket, this.identities, bracketString(this.bracket));
+      if (plan) persistFinish(plan);
+    } catch (err) {
+      // The finish is history, not a gate (L1): a store hiccup must never crash the coordinator.
+      console.warn(`[tournament-lobby] finish write failed for ${this.roomId}:`, err);
+    }
   }
 }

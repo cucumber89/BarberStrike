@@ -4,6 +4,7 @@ import { useLobby } from "../../net/lobbyStore";
 import { copyText, lobbyLink } from "../invite";
 import { BracketPanel } from "../Bracket";
 import { LobbyConnection, type LobbyJoinOptions } from "./lobbyNet";
+import { identifyLobby } from "../../net/tournamentSave";
 import {
   amReady, canStart, isHost, LOBBY_SIZES, rosterSummary, warmupOptions, watchRows,
 } from "./lobbyLogic";
@@ -53,7 +54,7 @@ export function Lobby({ name, size, map, room, roomId, onWarmup, onLeave }: Lobb
     let live: LobbyConnection | null = null;
     const opts: LobbyJoinOptions = { name, map, room, roomId };
     const p = size ? LobbyConnection.create({ ...opts, size }) : LobbyConnection.join(opts);
-    p.then((c) => { live = c; setConn(c); }).catch(() => setError("Nie udało się wejść do poczekalni. Sprawdź, czy serwer działa."));
+    p.then((c) => { live = c; setConn(c); identifyLobby(c.room); }).catch(() => setError("Nie udało się wejść do poczekalni. Sprawdź, czy serwer działa."));
     return () => { void live?.leave(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
