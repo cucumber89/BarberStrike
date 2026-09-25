@@ -9,7 +9,7 @@
  *                            `settings` event does it)
  *   primeAudio()           — optional explicit resume from a button handler
  */
-import { MATCH, WEAPONS, MatchPhase, isPerkId, type WeaponId } from "@frankibarber/shared";
+import { WEAPONS, MatchPhase, isPerkId, parseBracket, type GameMode, type Team, type WeaponId } from "@frankibarber/shared";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { GameContext, GameModule } from "../context";
 import { loadSettings, type Settings } from "../../settings";
@@ -20,6 +20,8 @@ import { Ambience } from "./ambience";
 import { Music } from "./music";
 import { RemoteAudio } from "./remotes";
 import { runSelfTest, type SelfTestReport } from "./selftest";
+import { beepTimes, bombBeepInterval } from "./beeps";
+import { hud, type HudState } from "../store";
 import * as sfx from "./sfx";
 import type { UiSoundKind } from "./sfx";
 
@@ -60,6 +62,23 @@ export function primeAudio(): void {
 
 const fwd = new Vector3();
 const up = new Vector3();
+
+/** The modes played in rounds (`ui/hud/phase.ts` `isRoundMode`): they end on a final round (stage A). */
+const ROUND_MODES: ReadonlySet<GameMode> = new Set<GameMode>(["bomb", "duel", "turniej", "ostrzyzeni"]);
+/** §6.1: the round banner comes in 250 ms into the break, and the match's end holds stage A for 3 s. */
+const ROUND_END_DELAY_MS = 250;
+const STAGE_A_MS = 3000;
+
+/**
+ * Turniej: am I one of the pair on the board? Everyone else is watching it, and a watcher's round
+ * has no verdict. (The Prep event lands before the 10 Hz state moves the bracket on.)
+ */
+function inPairOnBoard(h: HudState): boolean {
+  const view = parseBracket(h.bracket);
+  const pair = view?.matches[view.at];
+  const me = h.players.find((p) => p.id === h.myId)?.name;
+  return !!pair && !!me && (pair.a === me || pair.b === me);
+}
 
 export const installAudio: GameModule = (ctx) => {
   const eng = getEngine();
@@ -211,32 +230,73 @@ export const installAudio: GameModule = (ctx) => {
   // ---- drop 5: chat tick, mark blip (a spot is sharper).
   on("chat", (e) => { if (e.id !== ctx.connection.sessionId) play(sfx.ui("hover"), Priority.ui, 0.6); });
   on("mark", (e) => play(sfx.ui(e.kind === "spot" ? "open" : "hover"), Priority.ui, 0.7));
+  // ---- drop U (P5): the match's beeps, each round's verdict and the planted bomb (§6.1, §6.4).
+  /**
+   * The phase the last match event opened; at install, the phase the room is already in (its
+   * replicated state — the HUD store is synced later, on the frame loop), so the first event of a
+   * player who joined mid-round is judged against the round they joined, not against the warm-up.
+   */
+  let prevPhase: MatchPhase | null = ctx.connection.state?.phase ?? null;
+  const beep = (at: number, final: boolean) =>
+    countdownTimers.push(window.setTimeout(() => play(sfx.countdownBeep(final), Priority.ui, 0.7), Math.max(0, at - ctx.serverNow())));
+  /** The round's verdict as the round banner comes in: won or lost — nothing for a trade, or for a pair I only watch. */
+  const verdict = (winner: Team | -1): void => {
+    const h = hud.get();
+    if (winner === -1 || (h.mode === "turniej" && !inPairOnBoard(h))) return;
+    countdownTimers.push(window.setTimeout(() => play(sfx.roundStinger(winner === h.myTeam), Priority.ui, 0.8), ROUND_END_DELAY_MS));
+  };
   on("matchPhase", (m) => {
     clearCountdown();
+    // The beeps count down to the phase's own deadline — the countdown's and a freeze's, never a
+    // break's (`beeps.ts`). They used to be `MATCH.prepMs − i·1000` after every Prep: 11 s early.
+    const endsAt = typeof m.endsAt === "number" ? m.endsAt : hud.get().phaseEndsAt;
+    for (const b of beepTimes(m.phase, prevPhase, endsAt, ctx.serverNow())) beep(b.at, b.final);
     switch (m.phase) {
-      case MatchPhase.Countdown: {
-        // Server countdown is 4 s: three soft beeps, the start stinger arrives with `Playing`.
-        for (let i = 1; i <= 3; i++) countdownTimers.push(window.setTimeout(() => play(sfx.countdownBeep(i === 3), Priority.ui, 0.7), i * 1000));
-        setMusic(false);
-        break;
-      }
+      case MatchPhase.Countdown: setMusic(false); break;
       case MatchPhase.Prep: {
-        // The last three seconds of the preparation window, so the release is never a surprise.
-        // Derived from MATCH.prepMs rather than written out, because that constant is meant to be
-        // tuned by playing and a hard-coded 3/2/1 would drift away from it silently.
-        for (let i = 3; i >= 1; i--) {
-          const at = MATCH.prepMs - i * 1000;
-          if (at > 0) countdownTimers.push(window.setTimeout(() => play(sfx.countdownBeep(i === 1), Priority.ui, 0.7), at));
-        }
+        // The Prep after Playing is the round's end (the one after a break is the next freeze).
+        if (prevPhase === MatchPhase.Playing) verdict(m.winner);
         setMusic(false);
         break;
       }
-      // Also every wave release, not just the match start: it is the cue that the freeze is over.
+      // Every release, not just the match start: the cue that the freeze is over — at the release.
       case MatchPhase.Playing: play(sfx.stinger("start"), Priority.ui, 0.9); setMusic(false); break;
-      case MatchPhase.Ended: play(sfx.stinger("end"), Priority.ui, 0.9); setMusic(true); break;
+      case MatchPhase.Ended: {
+        // A round mode ends on its deciding round: its verdict under the final-round banner (stage A),
+        // then the match's stinger with the verdict screen (stage B, 3 s on). Elsewhere stage B is now.
+        if (ROUND_MODES.has(hud.get().mode) && prevPhase === MatchPhase.Playing) {
+          verdict(m.winner);
+          countdownTimers.push(window.setTimeout(() => play(sfx.stinger("end"), Priority.ui, 0.9), STAGE_A_MS));
+        } else play(sfx.stinger("end"), Priority.ui, 0.9);
+        setMusic(true);
+        break;
+      }
       case MatchPhase.Waiting: setMusic(false); break;
     }
+    prevPhase = m.phase;
   });
+  // The planted bomb beeps where it lies, 1000 ms apart at the plant and 150 ms at the end
+  // (`bombBeepInterval`). The fuse is read from the store, so a defuse or the round's end stops it.
+  let bombTimer = 0;
+  let bombFuse = 0;
+  const bombTick = (): void => {
+    bombTimer = 0;
+    const b = hud.get().bomb;
+    if (!b || b.stage !== "planted" || b.endsAt !== bombFuse) return;
+    const left = b.endsAt - ctx.serverNow();
+    if (left <= 0) return;
+    eng.play(sfx.bombBeep, { priority: Priority.ui, gain: 0.7, position: at(b.x, b.y + 0.2, b.z), maxDistance: 70 });
+    bombTimer = window.setTimeout(bombTick, bombBeepInterval(left));
+  };
+  const stopBomb = (): void => { window.clearTimeout(bombTimer); bombTimer = 0; bombFuse = 0; };
+  unsubs.push(hud.subscribe(() => {
+    const b = hud.get().bomb;
+    const fuse = b && b.stage === "planted" ? b.endsAt : 0;
+    if (fuse === bombFuse) return;
+    stopBomb();
+    if (fuse > 0) { bombFuse = fuse; bombTick(); }
+  }));
+  unsubs.push(stopBomb);
 
   const cam = ctx.camera;
   unsubs.push(ctx.onFrame((dtMs) => {

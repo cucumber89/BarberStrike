@@ -795,3 +795,48 @@ export function stinger(kind: "start" | "end"): SoundFn {
     return 2.2;
   };
 }
+
+/**
+ * Drop U (P5): a round's verdict, under the round banner (§6.1 "Round end"). Shorter and lighter
+ * than the match stingers, because it comes every round: two plucked notes, a rising fifth for a
+ * round won, a falling minor third for a round lost.
+ */
+export function roundStinger(win: boolean): SoundFn {
+  return (g) => {
+    const t = g.t;
+    const m = gain(g, 0.42);
+    m.connect(g.out);
+    send(g, m, 0.45);
+    const lp = filter(g, "lowpass", 1600, 0.8);
+    lp.connect(m);
+    const notes: [number, number][] = win ? [[196, 0], [293.7, 0.13]] : [[196, 0], [164.8, 0.16]];
+    for (const [f, at] of notes) {
+      for (const [type, det, level] of [["triangle", 0, 0.34], ["sawtooth", 5, 0.08]] as const) {
+        const o = g.ctx.createOscillator();
+        o.type = type;
+        o.frequency.setValueAtTime(f, t + at);
+        o.detune.value = det;
+        o.start(t + at); o.stop(t + at + 1.1);
+        const oG = gain(g, 0);
+        o.connect(oG);
+        oG.connect(lp);
+        env(oG.gain, t + at, level, 0.008, win ? 0.5 : 0.7);
+      }
+    }
+    return 1.3;
+  };
+}
+
+/**
+ * Drop U (P5): the planted bomb's beep — CS's C4, a short bright chirp. The audio module repeats it
+ * ever faster over the fuse (`bombBeepInterval`, `beeps.ts`), placed where the bomb lies.
+ */
+export const bombBeep: SoundFn = (g) => {
+  const t = g.t;
+  const o = osc(g, "square", 2200, 0.09);
+  const bp = filter(g, "bandpass", 2400, 3);
+  const oG = gain(g, 0);
+  o.connect(bp); bp.connect(oG); oG.connect(g.out);
+  env(oG.gain, t, 0.22, 0.002, 0.05, 0.03);
+  return 0.15;
+};
