@@ -11,9 +11,9 @@ import type { ZoneProps } from "./types";
  * - at most 5 rows, in a column exactly `--hud-feed-w` wide (460 / 320 / 195.5 px at 1600 / 1280 /
  *   1024), so it keeps 16 px from the strip and 12 px from the banner by construction (§3.6);
  * - the weapon is its silhouette (`SHOP_ART`), the headshot and the shave are icons, so a row is at
- *   most three words: two nicks and one assist (§5.1). Nicks keep their own case, and every nick
- *   stays readable: a row too wide for the column breaks into two lines — who killed (and who
- *   helped) over what and whom — instead of cutting a name (`Row`, corners.css);
+ *   most three words: two nicks and one assist (§5.1). Nicks keep their own case. A row is always
+ *   one 30 px line, so five rows are 166 px at every width (§4.2); a row too wide for the column
+ *   shares the room fairly between its nicks (`Row`, corners.css);
  * - a 1 px brass rule when I am the killer, 1 px red when I am the victim;
  * - a row slides in over 160 ms and fades over its last 400 ms (§6.1 "Kill feed row"). The store
  *   drops a row at 6000 ms (`Game.syncHud`); the fade is started by a timer, not by a 6-second CSS
@@ -32,13 +32,13 @@ function Gun({ weapon }: { weapon: string }) {
 }
 
 /**
- * One row, as two halves: „killer + assist” (`kf-who`) and „weapon victim” (`kf-what`). On one line
- * when it fits — always at 1600, the gallery's rows at 1280. When it does not (the 195.5 px column at
- * 1024 holds about 180 px of row: two long nicks and a silhouette are 250+), the row wraps between
- * the halves instead of cutting names: each half has the whole line, so a 16-letter victim
- * (`MAX_NAME_LENGTH`) with the rifle is whole, and a 16-letter killer is whole. Only a half that is
- * wider than a line on its own is cut, and then fairly (corners.css): the killer and the assist
- * share the line, the shorter one whole, never one of them down to „+ …”.
+ * One row, one line: „killer + assist ⌐╦ ✹ victim”. The halves (`kf-who`, `kf-what`) are kept in the
+ * DOM for the selectors that name them, but corners.css flattens them (display: contents) so the
+ * names and the weapon are the columns of one grid line. When the row fits it is whole — every
+ * gallery row at 1600 and 1280. When it does not (the 195.5 px column at 1024 holds about 180 px of
+ * row), the names share what the weapon leaves in equal parts, each stopping at its own width: a
+ * short name stays whole, the long ones end in „…”. The weapon never shrinks. The row never wraps,
+ * so the zone keeps its §4.2 box (≤ 5 rows × 30 + 4, 166 px) on every screen.
  */
 function Row({ k, myId, teams, out }: { k: KillFeedEntry; myId: string; teams: boolean; out: boolean }) {
   const self = k.killer === k.victim;

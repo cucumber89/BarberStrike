@@ -54,8 +54,8 @@ export const scenarios: Scenario[] = [
 export const pins: PinSet = {
   // Row 5: health, armour „50”, ammo „19 / 120” with the rifle's silhouette, the frag and the flash
   // as icons with their keys, the feed's rows at ≤ 3 words with the assist and the headshot icon.
-  // A row is two halves, „killer + assist” and „weapon victim”, so a row too wide for the 195.5 px
-  // column wraps between them instead of cutting a nick (KillFeed.tsx `Row`).
+  // A row is one 30 px line at every size (§4.2: ≤ 5 rows × 30 + 4): `noScroll` on every row fails
+  // the moment a row needs a second line (a too-wide row shares its width, KillFeed.tsx `Row`).
   "tdm-live": {
     expect: ["[data-testid=crosshair]", "[data-testid=killfeed] li", "[data-testid=killfeed] li[data-me=killer]", "[data-testid=killfeed] .kf-head",
       "[data-testid=killfeed] li .kf-who .kf-killer + .kf-assist .kf-plus", "[data-testid=killfeed] li .kf-what .kf-weapon + .kf-victim",
@@ -64,6 +64,7 @@ export const pins: PinSet = {
     caseText: ["Kowal", "+ Młody_Tomek", "JANUSZ"],
     textAbsent: [{ text: "AR-31", zone: "feed" }, { text: "FRAG", zone: "gear" }, { text: "BOJOWY", zone: "gear" }, { text: "AR-31", zone: "inv" }],
     zoneWords: { vitals: 2, inv: 2, gear: 2 },
+    noScroll: ["[data-testid=killfeed] li"],
   },
   // Row 11: the C4 with its [T] keycap in the gear row, beside the frag and the smoke. Whether it
   // blinks follows `siteHere` in P2's fixture, so it is not pinned here.
@@ -115,5 +116,6 @@ export const pins: PinSet = {
   "dead-next-round": {
     invisible: DEAD_HIDDEN,
     expect: ["[data-testid=killfeed] li[data-me=victim]"],
+    noScroll: ["[data-testid=killfeed] li"],
   },
 };
