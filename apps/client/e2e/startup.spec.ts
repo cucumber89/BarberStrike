@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test"; import { mkdirSync, writeFileSync } from "node:fs"; import { fileURLToPath } from "node:url";
 const low = JSON.stringify({ graphics: { preset: "low", renderer: "webgl2", renderScale: .5, shadows: "off", postProcessing: false, effects: .3, antialiasing: false, importedModels: false } });
 test("clean entry, deferred spawn, visible buy timer and shop categories", async ({ page }, info) => {
   const errors: string[] = [];
@@ -165,4 +165,88 @@ test("the front page joins a match and opens a crate", async ({ page }) => {
   await expect(page.getByTestId("crate-opening")).toBeVisible();
   await expect(page.getByTestId("crate-prize")).toBeVisible({ timeout: 8000 });
   await expect(page.getByTestId("crate-count")).toHaveText(/^MASZ0$/);
+});
+
+/**
+ * Drop U (P7, docs/UI_U_SPEC.md §6.1): every screen change goes through black. These two enter a
+ * match and watch the black from inside the page.
+ */
+const P7_OUT = fileURLToPath(new URL("./out/u/p7/", import.meta.url));
+
+/** Menu → a fresh room with no bots → the READY card; the fade is back to clear before we go on. */
+async function toReady(page: Page, name: string): Promise<void> {
+  await page.addInitScript(value => { localStorage.setItem("fb_settings_v1", value); localStorage.setItem("fb_bots", "0"); }, low);
+  await page.goto("/");
+  await page.getByTestId("btn-play").click();
+  await page.getByTestId("input-name").fill(name);
+  await page.getByTestId("input-room").fill(`fade-${Date.now()}`);
+  await page.getByTestId("btn-create").click();
+  await expect(page.getByTestId("enter-game")).toBeVisible({ timeout: 75000 });
+  await expect.poll(() => fadeOpacity(page)).toBe(0);
+}
+
+const fadeOpacity = (page: Page): Promise<number> =>
+  page.evaluate(() => { const f = document.querySelector('[data-testid="fade"]'); return f ? Number(getComputedStyle(f).opacity) : -1; });
+
+/** One animation frame as the probe saw it. */
+interface ProbeFrame { t: number; fade: number; loading: boolean; canvas: boolean; dormant: boolean }
+
+test("fade on enter", async ({ page }) => {
+  await toReady(page, "Fade test");
+  await page.getByTestId("enter-game").click();
+  // The black comes in over 200 ms and holds while the server spawns us… (the generous timeout is
+  // headless Chromium's: entering fullscreen it draws no frame for seconds, measured up to 6 s)
+  await expect.poll(() => fadeOpacity(page), { timeout: 10000 }).toBeGreaterThanOrEqual(0.99);
+  // …the loading card leaves under it…
+  await expect(page.getByTestId("loading")).toHaveCount(0, { timeout: 30000 });
+  // …and from there the black is gone within 1200 ms (400 ms out, plus two frames on SwiftShader).
+  await expect.poll(() => fadeOpacity(page), { timeout: 1200, intervals: [50] }).toBe(0);
+  await expect(page.getByTestId("hud")).toBeVisible();
+});
+
+test("no shared frame", async ({ page }) => {
+  await toReady(page, "Probe test");
+  // Per animation frame: the fade's opacity, whether the loading card, the game canvas and a
+  // dormant HUD are on screen. A frame that shows the loading card and the live canvas together,
+  // or the canvas under a HUD that is not awake yet, must be black.
+  await page.evaluate(() => {
+    const log: ProbeFrame[] = [];
+    const w = window as unknown as { __enterProbe: { log: ProbeFrame[]; stop: boolean } };
+    w.__enterProbe = { log, stop: false };
+    const t0 = performance.now();
+    const tick = () => {
+      const fade = document.querySelector('[data-testid="fade"]');
+      const loading = document.querySelector('[data-testid="loading"]');
+      const host = document.querySelector(".game-canvas-host");
+      const hud = document.querySelector(".hud");
+      log.push({
+        t: Math.round(performance.now() - t0),
+        fade: fade ? Number(getComputedStyle(fade).opacity) : 0,
+        loading: !!loading && loading.checkVisibility(),
+        canvas: !!host && getComputedStyle(host).visibility === "visible" && !!host.querySelector("canvas"),
+        dormant: !!hud && hud.classList.contains("dormant"),
+      });
+      if (!w.__enterProbe.stop && log.length < 20000) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await page.getByTestId("enter-game").click();
+  await expect(page.getByTestId("loading")).toHaveCount(0, { timeout: 30000 });
+  await expect.poll(() => fadeOpacity(page), { timeout: 10000 }).toBe(0);
+  // Two more frames of the match in the clear: SwiftShader draws a few a second, so time alone
+  // (the first draft waited 200 ms) can end the log before the probe has seen one.
+  const seen = await page.evaluate(() => (window as unknown as { __enterProbe: { log: ProbeFrame[] } }).__enterProbe.log.length);
+  await page.waitForFunction((n) => (window as unknown as { __enterProbe: { log: ProbeFrame[] } }).__enterProbe.log.length >= n + 2, seen, { timeout: 10000 });
+  const log = await page.evaluate(() => {
+    const w = window as unknown as { __enterProbe: { log: ProbeFrame[]; stop: boolean } };
+    w.__enterProbe.stop = true;
+    return w.__enterProbe.log;
+  });
+  const shared = log.filter((f) => f.fade < 0.99 && ((f.loading && f.canvas) || (f.canvas && f.dormant)));
+  mkdirSync(P7_OUT, { recursive: true });
+  writeFileSync(`${P7_OUT}enter-probe.json`, JSON.stringify({ frames: log.length, shared: shared.length, sharedFrames: shared, log }, null, 2) + "\n");
+  expect(log.some((f) => f.fade >= 0.99), "the screen went black on the way in").toBe(true);
+  expect(log.some((f) => f.loading && f.fade < 0.01), "the probe saw the loading card before the black").toBe(true);
+  expect(log.some((f) => f.canvas && !f.dormant && !f.loading && f.fade < 0.01), "…and the match after it").toBe(true);
+  expect(shared, `${shared.length} of ${log.length} frames showed two screens at once`).toEqual([]);
 });

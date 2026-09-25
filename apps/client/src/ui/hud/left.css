@@ -1,0 +1,193 @@
+/* ui/hud/left.css — P3: the CS2 left column (radar, wallet, plan), the chat and the first-run hints
+   (docs/UI_U_SPEC.md §7 P3, §4.1, §4.2). Seeded by P0 with the pre-drop rules moved verbatim; drop U
+   rebuilt it on the §3 tokens only: sizes t1–t3 and the keycap, the two trackings, the HUD's
+   colours, its plate and its geometry — no literal type size and no CSS case change (G4). */
+
+/* ---------------------------------------------------------------- the column (§4.1)
+   Radar, 12 px, wallet (money, 6 px, buy row), 10 px, plan: one flex column from the corner. The
+   column and its two slots are layout only; each zone root is a flex item of its own. */
+.left-col { position: absolute; left: var(--hud-edge); top: var(--hud-edge); display: flex; flex-direction: column; align-items: flex-start; }
+.left-slot { display: contents; }
+.radar-spacer { flex: none; width: var(--hud-radar); height: var(--hud-radar); }
+
+/* ---------------------------------------------------------------- radar (zone `radar`)
+   The canvas paints the disc, the plate off the map and the rim; see Minimap.tsx. */
+.minimap { flex: none; width: var(--hud-radar); height: var(--hud-radar); }
+.minimap .radar { display: block; width: 100%; height: 100%; border-radius: 50%; }
+
+/* ---------------------------------------------------------------- wallet (zone `wallet`) */
+/* The wallet never reaches into the banner's column (`banner` × `wallet` ≥ 12 px, §4.3): at
+   1024 px wide a rich „$16,000” with a „+$3,250” is wider than the 195 px left of it, so there the
+   toast wraps under the money instead. */
+.wallet {
+  margin-top: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  max-width: calc((100vw - var(--hud-banner-w)) / 2 - 14px - var(--hud-edge));
+}
+.wallet-cash { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; }
+/* Money: t3 in JetBrains Mono, CS2's green, no plate — the number is the whole readout. Its line
+   is 1.25 em, a hair under the face's own 1.32: the column stays short enough that the countdown's
+   intro block keeps its 12 px at 1024×576 (wallet ends at y 249, the intro starts at 264). */
+.wallet-money {
+  font-family: var(--font-mono); font-weight: 500; font-size: var(--hud-t3); line-height: 1.25;
+  letter-spacing: var(--hud-track-num); font-variant-numeric: tabular-nums; color: var(--hud-money);
+  text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 10px rgba(0,0,0,.55);
+}
+/* The one merged „+$N”: rises 8 px in 120 ms, fades over its last 500 ms (the `leaving` class). */
+.wallet-toast {
+  font-family: var(--font-mono); font-weight: 500; font-size: var(--hud-t2); line-height: 1.1;
+  letter-spacing: var(--hud-track-num); font-variant-numeric: tabular-nums; color: var(--hud-money);
+  text-shadow: 0 1px 2px rgba(0,0,0,.9);
+  animation: left-rise var(--hud-fast) var(--hud-ease) both;
+}
+.wallet-toast.leaving { opacity: 0; transition: opacity 500ms linear; }
+/* The buy row: a small plate with the cart, the B keycap and the seconds. */
+.wallet-buy {
+  display: flex; align-items: center; gap: 8px; min-height: 28px; box-sizing: border-box; padding: 3px 10px 3px 8px;
+  background: var(--hud-plate); border: var(--hud-plate-line); border-radius: var(--hud-radius);
+  backdrop-filter: blur(var(--hud-blur)); color: var(--hud-tx);
+}
+.wallet-buy.shut { animation: left-in var(--hud-fast) var(--hud-ease) both; }
+.wallet-cart { position: relative; display: inline-flex; flex: none; color: var(--hud-money); }
+.wallet-buy.shut .wallet-cart { color: var(--hud-tx2); }
+.wallet-cart-x { position: absolute; inset: 0; fill: none; stroke: var(--hud-danger); stroke-width: 2.6; stroke-linecap: round; }
+.wallet-key, .plan-key {
+  display: inline-grid; place-items: center; flex: none; min-width: 22px; height: 20px; padding: 0 4px; box-sizing: border-box;
+  font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-key); line-height: 1; letter-spacing: 0;
+  color: var(--hud-tx); background: color-mix(in srgb, var(--hud-tx) 10%, transparent); border: 1px solid color-mix(in srgb, var(--hud-tx) 55%, transparent); border-radius: var(--hud-radius);
+}
+.wallet-secs {
+  font-family: var(--font-mono); font-weight: 500; font-size: var(--hud-t2); line-height: 1;
+  letter-spacing: var(--hud-track-num); font-variant-numeric: tabular-nums; color: var(--hud-tx);
+}
+.wallet-buy.warn .wallet-secs { color: var(--hud-warn); }
+/* Within the wallet's width it wraps rather than run into the banner's column (1024 px wide). */
+.wallet-shut { font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); line-height: 1.2; letter-spacing: var(--hud-track-label); color: var(--hud-tx); }
+
+/* ---------------------------------------------------------------- plan (zone `plan`)
+   300 wide and at most 200 high (§4.2) for every offer the rounds make: the tallest real card —
+   a two-line name, its gain and cost on two lines each, the other option on one — is measured
+   at 1600, 1280 and 1024 (P3 report). The words are `planCard`'s (walletToasts.ts). */
+.plan {
+  margin-top: 10px; width: 300px; box-sizing: border-box; padding: 6px 8px;
+  background: var(--hud-plate); border: var(--hud-plate-line); border-top: 2px solid var(--hud-accent); border-radius: var(--hud-radius);
+  backdrop-filter: blur(var(--hud-blur)); pointer-events: auto;
+  animation: left-in var(--hud-base) var(--hud-ease) both;
+}
+.plan-head { margin: 0 2px 4px; font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); line-height: 1.2; letter-spacing: var(--hud-track-label); color: var(--hud-accent); }
+.plan-secs { font-family: var(--font-mono); font-weight: 500; letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
+.plan-option {
+  display: flex; align-items: center; gap: 6px; width: 100%; margin: 0; padding: 3px 4px; box-sizing: border-box;
+  background: transparent; border: 0; border-left: 2px solid transparent; border-radius: var(--hud-radius);
+  font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t2); line-height: 1.15; letter-spacing: var(--hud-track-label);
+  color: var(--hud-tx); text-align: left; cursor: pointer;
+}
+.plan-option:disabled { cursor: default; }
+.plan-option:hover:not(:disabled) { background: color-mix(in srgb, var(--hud-accent) 8%, transparent); }
+.plan-option.chosen { border-left-color: var(--hud-accent); background: color-mix(in srgb, var(--hud-accent) 14%, transparent); }
+/* Both keycaps one width, so the two names start on one line and the detail under them. */
+.plan-key { width: 24px; }
+.plan-option.chosen .plan-key { background: var(--hud-accent); border-color: var(--hud-accent); color: #141008; }
+/* The name and its count are one run of text: the count sits after the last word and wraps with it. */
+.plan-name { flex: 1; min-width: 0; }
+.plan-votes { font-family: var(--font-mono); font-weight: 500; letter-spacing: var(--hud-track-num); color: var(--hud-tx2); }
+.plan-option.leading .plan-votes { color: var(--hud-accent); }
+/* The gain and the cost of ONE option, under it. The cost is not small print. Flush with the
+   keycap (the row's 2 px rule + 4 px), so a line keeps the card's whole width. */
+.plan-detail { margin: 0 0 2px; padding: 1px 4px 2px 6px; }
+.plan-gain, .plan-cost { margin: 0; font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); line-height: 1.25; letter-spacing: 0; }
+.plan-gain { color: var(--hud-tx); }
+.plan-cost { color: var(--hud-warn); }
+/* The live chip: „PLAN: OTWÓRZ ROLETĘ”. */
+.plan-active {
+  margin-top: 10px; display: flex; align-items: baseline; gap: 6px; padding: 5px 10px;
+  background: var(--hud-plate); border-left: 2px solid var(--hud-accent); border-radius: var(--hud-radius);
+  font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); line-height: 1.2; letter-spacing: var(--hud-track-label);
+  animation: left-in var(--hud-base) var(--hud-ease) both;
+}
+.plan-tag { color: var(--hud-tx2); }
+.plan-active-name { color: var(--hud-accent); }
+/* §4.2: at 600 px high and less the card is its header and its option rows, ≤ 100 px, and the
+   rows carry the two-word names (PlanPanel `compact`), one line each. */
+.plan.compact { padding: 5px 8px; }
+.plan.compact .plan-option { padding: 2px 4px; }
+
+/* ---------------------------------------------------------------- chat (zone `chat`)
+   Bottom left, 12 px over the perks. §4.2 caps the BOX in visual lines × 22: 6 lines, 4 at
+   ≤ 760 px high, 3 at ≤ 600 and 2 there while the plan shows (`--chat-lines`, which `Chat.tsx`
+   reads); a one-line message is 20 px on a 22 px pitch, a wrapped one counts every line. The
+   nick is whole and the text wraps; older messages give way — `Chat.tsx` hides, whole, the ones
+   over the line cap or nearer than 12 px to the left column (`data-over`). The message caps
+   below are the same caps before `Chat.tsx` has measured (a message is at least one line). */
+.chat { --chat-lines: 6; position: absolute; left: var(--hud-edge); bottom: var(--hud-chat-bottom); width: var(--hud-chat-w); display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+.chat-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.chat-lines > li {
+  flex: none; padding: 0 8px; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere;
+  font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); line-height: 20px; letter-spacing: 0;
+  background: color-mix(in srgb, var(--hud-plate) 73%, transparent); border-radius: var(--hud-radius); color: var(--hud-tx);
+  animation: left-in 160ms var(--hud-ease) both;
+}
+.chat-lines > li.me { box-shadow: inset 2px 0 0 var(--hud-accent); }
+.chat-lines > li:nth-last-child(n+7), .chat-lines > li[data-over] { display: none; }
+/* Only when the newest message alone is longer than the box: cut after its last whole line, with an
+   ellipsis (`Chat.tsx` sets the clamp to the lines that fit; the full text is the line's title). */
+.chat-lines > li[data-clip] { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+.chat-tag { color: var(--hud-tx2); letter-spacing: var(--hud-track-label); white-space: nowrap; }
+/* A nick is at most 16 characters (MAX_NAME_LENGTH): it stays whole, on one line. */
+.chat-name { white-space: nowrap; } .chat-name.t0 { color: var(--hud-team0); } .chat-name.t1 { color: var(--hud-team1); } .chat-name.ffa { color: var(--hud-tx); }
+.chat-text { color: var(--hud-tx); }
+.chat.open .chat-lines > li { animation: none; }
+.chat-form {
+  display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; box-sizing: border-box; pointer-events: auto;
+  background: var(--hud-plate); border: 1px solid var(--hud-accent); border-radius: var(--hud-radius);
+}
+.chat-kind { flex: none; font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); letter-spacing: var(--hud-track-label); color: var(--hud-accent); }
+.chat-form input { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: var(--hud-tx); font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); }
+.chat-form input::placeholder { color: var(--hud-tx2); }
+@media (max-height: 760px) {
+  .chat { --chat-lines: 4; }
+  .chat-lines > li:nth-last-child(n+5) { display: none; }
+}
+@media (max-height: 600px) {
+  .chat { --chat-lines: 3; }
+  .chat.with-plan { --chat-lines: 2; }
+  .chat-lines > li:nth-last-child(n+4) { display: none; }
+  .chat.with-plan .chat-lines > li:nth-last-child(n+3) { display: none; }
+}
+
+/* ---------------------------------------------------------------- hints (zone `hint`)
+   Bottom centre between the health and the ammo plates, two lines of t1 at most, never cut. A hint
+   must never eat a click meant for the game: pointer-events none. */
+.hint {
+  position: absolute; left: 50%; bottom: var(--hud-edge); transform: translateX(-50%);
+  width: max-content; max-width: var(--hud-hint-w); box-sizing: border-box; padding: 6px 14px;
+  background: var(--hud-plate); border-left: 2px solid var(--hud-accent); border-radius: var(--hud-radius);
+  font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); line-height: 1.35; letter-spacing: 0;
+  color: var(--hud-tx); text-align: center; white-space: normal; overflow-wrap: break-word; pointer-events: none;
+  animation: left-rise var(--hud-base) var(--hud-ease) both;
+}
+
+/* ---------------------------------------------------------------- motion (§3.8, all ≤ 600 ms) */
+@keyframes left-in { from { opacity: 0; transform: translateX(-8px); } }
+@keyframes left-rise { from { opacity: 0; translate: 0 8px; } }
+
+/* ---------------------------------------------------------------- §4.5 visibility rows
+   The one hide rule (§3.8), on P3's zones: every overlay (Tab, the shop, ESC) and the match's end
+   hide all five; a banner, a break and the bracket card hide the plan, which waits; death hides the
+   hint. The plan stays MOUNTED under the shop, so F1 / F2 still vote. The wallet stays while dead. */
+[data-zone="radar"], [data-zone="wallet"], [data-zone="plan"], [data-zone="chat"], [data-zone="hint"] {
+  transition: opacity var(--hud-fast), visibility 0s;
+}
+.hud:is([data-overlay~="tab"], [data-overlay~="shop"], [data-overlay~="pause"], [data-moment="ended"]) :is([data-zone="radar"], [data-zone="wallet"], [data-zone="plan"], [data-zone="chat"], [data-zone="hint"]),
+.hud:is([data-banner="1"], [data-moment="break"], [data-moment="halftime"], [data-moment="betweenPairs"]) [data-zone="plan"],
+.hud[data-alive="false"] [data-zone="hint"] {
+  opacity: 0; visibility: hidden; transition: opacity var(--hud-fast), visibility 0s linear var(--hud-fast);
+}
+
+/* ---------------------------------------------------------------- reduced motion (§3.8, R3)
+   No animation at all in P3's zones. Nothing here conveys progress by moving: the toast simply
+   stays until it leaves, and the seconds are digits. */
+@media (prefers-reduced-motion: reduce) {
+  .wallet-toast, .wallet-buy.shut, .plan, .plan-active, .chat-lines > li, .hint { animation: none; }
+  .wallet-toast.leaving { opacity: 1; transition: none; }
+  [data-zone="radar"], [data-zone="wallet"], [data-zone="plan"], [data-zone="chat"], [data-zone="hint"] { transition: none; }
+}

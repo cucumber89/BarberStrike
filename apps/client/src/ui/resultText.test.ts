@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { BOMB, GUN_GAME, MATCH, OSTRZYZENI } from "@frankibarber/shared";
+import { BOMB, DUEL, GUN_GAME, MATCH, OSTRZYZENI, encodeHaircut, type GameMode, type Team } from "@frankibarber/shared";
 import type { ScoreRow } from "../game/store";
-import { keyStats, matchOutcome, matchWhy, roundEnd, scoreLine, topReward, type ResultCtx } from "./resultText";
+import type { MatchReward } from "../game/progression/profile";
+import { keepMountedState } from "./hud/useKeepMounted";
+import {
+  BOARD_DENSITY_MAX, RESULT_EXIT_MS, RESULT_VIEW0, STAGE_SECONDS, boardSides, boardSplit, keyStats, matchOutcome, matchWhy, nextDensity, placement, podium,
+  historySlots, resultInput, resultStage, resultWhy, scoreLine, splitColumns, stageC, stageCWords, topReward, verdict, verdictWhy, verdictWords,
+  type BoardDensity, type Outcome, type ResultCtx,
+} from "./resultText";
 
 const row = (id: string, team: 0 | 1, over: Partial<ScoreRow> = {}): ScoreRow => ({
   id, name: id.toUpperCase(), team, kills: 0, deaths: 0, assists: 0, score: 0, ping: 20, alive: true, connected: true, money: 0, bot: false, shaved: false, haircut: "", ...over,
@@ -24,63 +30,289 @@ describe("match outcome and why", () => {
     expect(matchOutcome(base({ mode: "ostrzyzeni", winner: 1, myTeam: 0, winnerId: "me" }))).toBe("win");
   });
 
+  it("titles the verdict ZWYCIĘSTWO / PORAŻKA exactly (multiplayer.spec.ts:871-872)", () => {
+    expect(verdict(base()).title).toBe("ZWYCIĘSTWO");
+    expect(verdict(base({ winner: 1 })).title).toBe("PORAŻKA");
+    expect(stageC(base(), null, 0).title).toBe("ZWYCIĘSTWO");
+    expect(stageC(base({ winner: 1 }), null, 0).title).toBe("PORAŻKA");
+  });
+
   it("names the rule that ended the match, never a cause the state does not carry", () => {
-    expect(matchWhy(base({ scoreA: MATCH.scoreLimit }))).toMatch(new RegExp(`do ${MATCH.scoreLimit} zabójstw`));
-    expect(matchWhy(base({ scoreA: 12, scoreB: 9 }))).toMatch(/Czas minął/);
+    expect(matchWhy(base({ scoreA: MATCH.scoreLimit }))).toBe(`Pierwsi do ${MATCH.scoreLimit} zabójstw`);
+    // TDM on time (drop U, P6 WORK 3): „Wyższy wynik po czasie”, not a sentence about the unit.
+    expect(matchWhy(base({ scoreA: 12, scoreB: 9 }))).toBe("Wyższy wynik po czasie");
     expect(matchWhy(base({ scoreA: 9, scoreB: 9, winner: -1 }))).toMatch(/równym/);
     expect(matchWhy(base({ scoreA: 3, scoreB: 1, players: [row("me", 0)] }))).toMatch(/opuściła/);
     expect(matchWhy(base({ mode: "bomb", scoreA: BOMB.wins, scoreB: 4 }))).toMatch(new RegExp(`${BOMB.wins} wygranymi`));
-    expect(matchWhy(base({ mode: "gungame", winnerId: "me", winnerName: "ME", players: [row("me", 0, { score: GUN_GAME.ladder.length })] }))).toMatch(/drabinkę/);
+    expect(matchWhy(base({ mode: "gungame", winnerId: "me", winnerName: "ME", players: [row("me", 0, { score: GUN_GAME.ladder.length })] }))).toContain(`drabinkę ${GUN_GAME.ladder.length} broni`);
     expect(matchWhy(base({ mode: "gungame", winnerId: "me", winnerName: "ME", players: [row("me", 0, { score: 3 })] }))).toMatch(/Czas minął/);
     expect(matchWhy(base({ mode: "ostrzyzeni", scoreA: 3, scoreB: 2, winnerName: "ME" }))).toMatch(new RegExp(`Po ${OSTRZYZENI.rounds} rundach.*ME`));
     expect(matchWhy(base({ mode: "ffa", winnerId: "me", players: [row("me", 0, { kills: 30 })] }))).toMatch(/do 30 zabójstw/);
   });
 
-  it("puts the sides or the named winner on the score line", () => {
+  it("ostrzyżeni prints its score once: on the score line, not again in the why", () => {
+    const c = base({ mode: "ostrzyzeni", scoreA: 3, scoreB: 2, winnerName: "ALPHA" });
+    expect(scoreLine(c)).toBe("OCALENI 3 — 2 OSTRZYŻENI");
+    expect(matchWhy(c)).not.toMatch(/\b3\b|\b2\b/);
+  });
+
+  it("puts the sides, the final or the named winner on the score line", () => {
     expect(scoreLine(base())).toBe("FADE 40 — 31 TAPER");
     expect(scoreLine(base({ mode: "ffa", winnerName: "ALPHA" }))).toMatch(/ALPHA/);
     expect(scoreLine(base({ mode: "ffa", winnerName: "" }))).toMatch(/Nikt/);
-    expect(scoreLine(base({ mode: "ostrzyzeni", scoreA: 3, scoreB: 2, winnerName: "ALPHA" }))).toMatch(/OCALENI 3 — 2 OSTRZYŻENI · ALPHA/);
+    expect(scoreLine(base({ mode: "turniej", winnerName: "ZDZICHU", bracket: FINISHED }))).toBe("Kowal 4 — 6 ZDZICHU");
   });
 
-  it("picks three stats that fit the mode, with the objective ahead of kills where there is one", () => {
-    const me = row("me", 0, { kills: 8, deaths: 5, assists: 2, score: 140, haircut: "" });
-    expect(keyStats("tdm", me).map((s) => s.label)).toEqual(["Zabójstwa", "Zgony", "Asysty"]);
-    expect(keyStats("dom", me).map((s) => s.label)).toEqual(["Punkty", "Zabójstwa", "Asysty"]);
-    expect(keyStats("gungame", { ...me, score: 5 })[0].value).toBe(`5 / ${GUN_GAME.ladder.length}`);
-    expect(keyStats("ostrzyzeni", me).map((s) => s.label)).toContain("Razy ogolony");
-    expect(keyStats("tdm", undefined)).toEqual([]);
+  it("round-mode why names the deciding round", () => {
+    expect(resultWhy(base({ mode: "bomb", scoreA: 4, scoreB: 7, winner: 1, roundResult: "ATTACKERS ELIMINATED" }))).toBe("Atak wybity w ostatniej rundzie");
+    expect(resultWhy(base({ mode: "duel", scoreA: 6, scoreB: 4, roundResult: "TIME · MORE HEALTH" }))).toBe("Czas — więcej zdrowia w ostatniej rundzie");
+    expect(resultWhy(base({ mode: "ostrzyzeni", roundResult: "SURVIVORS HELD" }))).toBe("Ocaleni dotrwali w ostatniej rundzie");
+    // The state holds no reason (a duel capped during a freeze: P-SRV clears it at every freeze):
+    // the match's own rule, long in the card and short in the verdict.
+    const capped = base({ mode: "duel", scoreA: 4, scoreB: 3, roundResult: "" });
+    expect(resultWhy(capped)).toBe("Wyższy wynik po czasie");
+    expect(verdictWhy(capped)).toBe("Wynik po czasie");
+    // Continuous modes keep the match's rule.
+    expect(resultWhy(base({ scoreA: MATCH.scoreLimit, roundResult: "BOMB DEFUSED" }))).toBe(`Pierwsi do ${MATCH.scoreLimit} zabójstw`);
   });
 
-  it("headlines a haircut over a badge over a level, and nothing when there is nothing", () => {
-    const names = { badge: (id: string) => (id === "b" ? "ODZNAKA" : undefined), haircut: (id: string) => (id === "h" ? "Irokez" : undefined) };
-    const r = { lines: [], total: 0, before: { level: 1, into: 0, need: 100, total: 0 }, after: { level: 2, into: 0, need: 100, total: 100 }, levelsGained: 1, earned: ["b"], haircuts: ["h"], title: "" };
-    expect(topReward(r, names)).toBe("Nowa fryzura: Irokez");
-    expect(topReward({ ...r, haircuts: [] }, names)).toBe("Odznaka: ODZNAKA");
-    expect(topReward({ ...r, haircuts: [], earned: [] }, names)).toBe("Awans na poziom 2");
-    expect(topReward({ ...r, haircuts: [], earned: [], levelsGained: 0 }, names)).toBeNull();
+  it("a tournament's why names its final, whatever reason the final's last round left", () => {
+    // The server leaves the final's deciding-round reason in `bomb.result` at the end
+    // (TdmRoom.ts:1655 → :1659 finishPair → :1539 endMatch, which never clears it), so a decided
+    // tournament always carries one; a walkover final (decided in a freeze, :1560) carries "".
+    // Every one of them reads the bracket's words: §5.2 #63 and §7 P6 WORK 2.
+    for (const roundResult of ["ELIMINATED", "TRADE", "TIME · MORE HEALTH", "TIME · EVEN", ""]) {
+      const c = base({ mode: "turniej", winner: 1, winnerId: "foe", winnerName: "ZDZICHU", bracket: FINISHED, scoreA: 4, scoreB: 6, roundResult });
+      expect(resultWhy(c), roundResult).toBe("ZDZICHU wygrał finał drabinki");
+      expect(verdictWhy(c), roundResult).toBe("Finał drabinki");
+      expect(verdict(c).why, roundResult).toBe("Finał drabinki");
+      expect(resultWhy(c)).not.toMatch(/w ostatniej rundzie/);
+    }
+    // The duel it is built on still names its deciding round.
+    expect(resultWhy(base({ mode: "duel", scoreA: 4, scoreB: 6, winner: 1, roundResult: "ELIMINATED" }))).toBe("Przeciwnik wyeliminowany w ostatniej rundzie");
   });
 });
 
-describe("round end", () => {
-  it("bomb: the side follows from the result string and who was attacking", () => {
-    expect(roundEnd("bomb", "BOMB DETONATED", -1, 1, 0)).toEqual({ title: "RUNDA DLA TAPER", why: "Ładunek wybuchł", mine: false });
-    expect(roundEnd("bomb", "BOMB DEFUSED", -1, 1, 0)).toEqual({ title: "RUNDA DLA FADE", why: "Ładunek rozbrojony", mine: true });
-    expect(roundEnd("bomb", "ATTACKERS ELIMINATED", -1, 0, 0)?.title).toBe("RUNDA DLA TAPER");
-    expect(roundEnd("bomb", "SITE SECURED", -1, 0, 1)?.mine).toBe(true);
-    expect(roundEnd("bomb", "", -1, 0, 0)).toBeNull(); // the first buy window: no round yet
+/** A finished bracket of four: Kowal beat xXPiotrekXx 6:3, ZDZICHU beat RYSIEK 6:4, ZDZICHU took the final 6:4. */
+const FINISHED = "4|3;Kowal|xXPiotrekXx|6|3|a;ZDZICHU|RYSIEK|6|4|a;Kowal|ZDZICHU|4|6|b";
+
+describe("stage C: podium, placement, stats", () => {
+  it("stat order is objective, then K/A/D in every mode", () => {
+    // Drop U changes this test's old line 48 (TDM read K, D, A; Bomb K, A, D; Ostrzyżeni points,
+    // shaves, kills): one order everywhere, so a number never moves box between matches.
+    const me = row("me", 0, { kills: 8, deaths: 5, assists: 2, score: 140, haircut: "" });
+    const modes: GameMode[] = ["tdm", "ffa", "dom", "boys", "bomb", "gungame", "ostrzyzeni", "duel", "turniej"];
+    for (const m of modes) {
+      const ids = keyStats(m, me).map((s) => s.id);
+      expect(ids, m).toHaveLength(3);
+      const kad = ids.filter((id) => id !== "objective");
+      expect(["kills", "assists", "deaths"].slice(0, kad.length), m).toEqual(kad);
+      if (ids.includes("objective")) expect(ids[0], m).toBe("objective");
+    }
+    expect(keyStats("tdm", me).map((s) => s.label)).toEqual(["ZABÓJSTWA", "ASYSTY", "ZGONY"]);
+    expect(keyStats("dom", me).map((s) => s.label)).toEqual(["PUNKTY", "ZABÓJSTWA", "ASYSTY"]);
+    expect(keyStats("gungame", { ...me, score: 5 })[0].value).toBe(`5 / ${GUN_GAME.ladder.length}`);
+    // multiplayer.spec.ts:874 reads „14 / 14” in result-stats at the end of a gun game.
+    expect(keyStats("gungame", { ...me, score: GUN_GAME.ladder.length })[0].value).toBe(`${GUN_GAME.ladder.length} / ${GUN_GAME.ladder.length}`);
+    expect(keyStats("tdm", undefined)).toEqual([]);
   });
-  it("duel: the winner comes from the Prep event, a trade has none", () => {
-    expect(roundEnd("duel", "ELIMINATED", 1, -1, 1)).toEqual({ title: "RUNDA DLA TAPER", why: "Przeciwnik wyeliminowany", mine: true });
-    expect(roundEnd("duel", "TRADE", -1, -1, 0)?.mine).toBeNull();
-    expect(roundEnd("duel", "TIME · MORE HEALTH", 0, -1, 1)?.why).toMatch(/więcej zdrowia/);
+
+  it("podium ranks by score / kills / rung", () => {
+    const players = [
+      row("me", 0, { kills: 20, score: 900 }), row("a", 1, { kills: 5, score: 1500 }), row("b", 0, { kills: 12, score: 1200 }), row("c", 1, { kills: 30, score: 400 }),
+    ];
+    expect(podium(base({ players })).map((p) => p.id)).toEqual(["a", "b", "me"]); // team modes: points
+    expect(podium(base({ players })).map((p) => p.team)).toEqual([1, 0, 0]); // each step on its side's colour
+    expect(podium(base({ mode: "ffa", players })).every((p) => p.team === null)).toBe(true);
+    expect(podium(base({ mode: "ffa", players })).map((p) => p.id)).toEqual(["c", "me", "b"]); // ffa: kills
+    expect(podium(base({ mode: "ffa", players }))[0]).toMatchObject({ rank: 1, value: "30" });
+    const rungs = players.map((p, i) => ({ ...p, score: [3, 14, 9, 1][i] }));
+    expect(podium(base({ mode: "gungame", players: rungs })).map((p) => `${p.id}:${p.value}`)).toEqual(["a:14", "b:9", "me:3"]); // gun game: rung
+    // The tournament: the champion, the finalist, then the best knocked out earlier — off the bracket.
+    const entrants = [row("me", 0, { name: "Kowal", score: 2000 }), row("p5", 1, { name: "xXPiotrekXx" }), row("z", 0, { name: "ZDZICHU" }), row("r", 1, { name: "RYSIEK", score: 3000 })];
+    expect(podium(base({ mode: "turniej", players: entrants, bracket: FINISHED })).map((p) => `${p.name}:${p.value}`)).toEqual(["ZDZICHU:6", "Kowal:4", "RYSIEK:4"]);
+    expect(podium(base({ players: players.slice(0, 2) }))).toHaveLength(2);
   });
-  it("ostrzyżeni: survivors or shaved, and nothing before a round has ended", () => {
-    expect(roundEnd("ostrzyzeni", "", OSTRZYZENI.survivorTeam, -1, 0)).toEqual({ title: "RUNDA DLA OCALENI", why: "Ktoś dotrwał nieostrzyżony do końca czasu", mine: true });
-    expect(roundEnd("ostrzyzeni", "", OSTRZYZENI.shavedTeam, -1, 0)?.why).toBe("Wszyscy ostrzyżeni");
-    expect(roundEnd("ostrzyzeni", "", -1, -1, 0)).toBeNull();
-    expect(roundEnd("tdm", "", 0, -1, 0)).toBeNull();
+
+  it("placement line only outside the top 3", () => {
+    const ten = Array.from({ length: 10 }, (_, i) => row(i === 6 ? "me" : `p${i}`, 0, { kills: 30 - i * 3 }));
+    expect(placement(base({ mode: "ffa", players: ten }))).toBe("MIEJSCE #7 Z 10");
+    const third = ten.map((r, i) => ({ ...r, id: i === 2 ? "me" : i === 6 ? "p6" : r.id }));
+    expect(placement(base({ mode: "ffa", players: third }))).toBeNull();
+    expect(placement(base({ mode: "gungame", players: ten.map((r, i) => ({ ...r, score: 14 - i })) }))).toBe("MIEJSCE #7 Z 10");
+    // Team modes have a score line and no placement.
+    expect(placement(base({ players: ten }))).toBeNull();
   });
+});
+
+describe("the podium follows the server's ruling (TdmRoom.endMatch)", () => {
+  // A kills tie at time-out: the server's FFA order is kills, then SCORE (TdmRoom.ts:1938) — not deaths.
+  const tie = [
+    row("me", 0, { name: "Kowal", kills: 12, score: 1300, deaths: 9 }),
+    row("z", 0, { name: "ZDZICHU", kills: 12, score: 1100, deaths: 2 }),
+    row("r", 0, { name: "RYSIEK", kills: 8, score: 900 }),
+  ];
+  const ffa = (over: Partial<ResultCtx> = {}) => base({ mode: "ffa", winnerId: "me", winnerName: "Kowal", players: tie, ...over });
+
+  it("an FFA kills tie goes to the higher score, as the server rules it: verdict, title and ★ #1 agree", () => {
+    const c = ffa();
+    expect(verdict(c)).toMatchObject({ title: "ZWYCIĘSTWO", score: "★ Kowal" });
+    expect(stageC(c, null, 0).title).toBe("ZWYCIĘSTWO");
+    expect(podium(c).map((p) => [p.rank, p.name, p.value, p.star])).toEqual([[1, "Kowal", "12", true], [2, "ZDZICHU", "12", false], [3, "RYSIEK", "8", false]]);
+    // The same order places me off the podium: ZDZICHU's fewer deaths do not lift him over me.
+    const crowd = [...tie, row("a", 0, { kills: 20 }), row("b", 0, { kills: 15 }), row("c", 0, { kills: 14 })];
+    expect(placement(ffa({ winnerId: "a", winnerName: "A", players: crowd }))).toBe("MIEJSCE #4 Z 6");
+    expect(placement(ffa({ winnerId: "a", winnerName: "A", myId: "z", players: crowd }))).toBe("MIEJSCE #5 Z 6");
+  });
+
+  it("the ★ stands on whoever the server named, even when the rows would say otherwise", () => {
+    const c = ffa({ winnerId: "z", winnerName: "ZDZICHU" });
+    expect(podium(c)[0]).toMatchObject({ name: "ZDZICHU", rank: 1, star: true });
+    expect(podium(c)[1]).toMatchObject({ name: "Kowal", rank: 2, star: false });
+  });
+
+  it("a draw the server ruled (level on kills AND score, winnerId '') shares first place and crowns nobody", () => {
+    const level = tie.map((r) => (r.id === "r" ? r : { ...r, score: 1200 }));
+    const c = ffa({ winnerId: "", winnerName: "", players: level });
+    expect(verdict(c).title).toBe("REMIS");
+    expect(podium(c).map((p) => [p.rank, p.value, p.star])).toEqual([[1, "12", false], [1, "12", false], [3, "8", false]]);
+    const gun = base({ mode: "gungame", winnerId: "", winnerName: "", players: level.map((r) => ({ ...r, score: r.id === "r" ? 7 : 10, kills: r.id === "r" ? 7 : 12 })) });
+    expect(stageC(gun, null, 0).title).toBe("REMIS");
+    expect(podium(gun).map((p) => [p.rank, p.value, p.star])).toEqual([[1, "10", false], [1, "10", false], [3, "7", false]]);
+    // Ostrzyżeni names a player too: level on points and kills, no ★.
+    expect(podium(base({ mode: "ostrzyzeni", winnerId: "", players: level })).some((p) => p.star)).toBe(false);
+    // A sole winner keeps it: team modes crown the best player of the match.
+    expect(podium(base({ players: tie }))[0]).toMatchObject({ name: "Kowal", rank: 1, star: true });
+    // The tournament's champion comes off the bracket.
+    const entrants = [row("me", 0, { name: "Kowal" }), row("p5", 1, { name: "xXPiotrekXx" }), row("z", 0, { name: "ZDZICHU" }), row("r", 1, { name: "RYSIEK" })];
+    expect(podium(base({ mode: "turniej", winnerId: "z", winnerName: "ZDZICHU", players: entrants, bracket: FINISHED })).map((p) => p.star)).toEqual([true, false, false]);
+  });
+});
+
+describe("the Tab board header names, scores and rounds one pair", () => {
+  const TO_FINAL = "4|2;Kowal|xXPiotrekXx|6|3|a;ZDZICHU|RYSIEK|6|4|a;Kowal|ZDZICHU|0|0|-";
+  const SEMI2 = "4|1;Kowal|xXPiotrekXx|6|3|a;ZDZICHU|RYSIEK|4|3|-;Kowal||0|0|-";
+  it("between pairs it reads the pair now up at 0 : 0 and no round (the state still holds the last pair's 6 : 4, round 10)", () => {
+    expect(boardSides("turniej", TO_FINAL, true, 6, 4)).toEqual({ names: ["Kowal", "ZDZICHU"], score: [0, 0], round: false });
+  });
+  it("while a pair plays it reads the live score and round", () => {
+    expect(boardSides("turniej", SEMI2, false, 5, 4)).toEqual({ names: ["ZDZICHU", "RYSIEK"], score: [5, 4], round: true });
+    expect(boardSides("turniej", FINISHED, false, 4, 6)).toEqual({ names: ["Kowal", "ZDZICHU"], score: [4, 6], round: true });
+    expect(boardSides("bomb", "", false, 3, 2)).toMatchObject({ score: [3, 2], round: true });
+  });
+});
+
+// ---------------------------------------------------------------- the reading budget (§6.5)
+
+const OUTCOMES: Outcome[] = ["win", "loss", "draw", "over"];
+const ROUND_REASONS = ["BOMB DETONATED", "BOMB DEFUSED", "DEFENDERS ELIMINATED", "ATTACKERS ELIMINATED", "SITE SECURED", "TRADE", "ELIMINATED", "TIME · EVEN", "TIME · MORE HEALTH", "SURVIVORS HELD", "ALL SHAVED", ""];
+const MODES_ALL: GameMode[] = ["tdm", "ffa", "dom", "boys", "bomb", "gungame", "ostrzyzeni", "duel", "turniej"];
+const ROUND: ReadonlySet<GameMode> = new Set(["bomb", "duel", "turniej", "ostrzyzeni"]);
+const LEVEL = { level: 4, into: 1340, need: 1750, total: 5090 };
+const REWARDS: (MatchReward | null)[] = [
+  null,
+  { lines: [], total: 790, before: LEVEL, after: LEVEL, levelsGained: 0, earned: [], haircuts: [], title: "CZELADNIK" },
+  { lines: [], total: 12_450, before: LEVEL, after: { ...LEVEL, level: 12 }, levelsGained: 8, earned: ["b"], haircuts: ["h"], title: "MISTRZ" },
+];
+
+/** Every ending the server produces for a mode: at the limit, on time, tied, a side gone; every round reason. */
+function endings(mode: GameMode): ResultCtx[] {
+  const out: ResultCtx[] = [];
+  const twelve = Array.from({ length: 12 }, (_, i) => row(i === 7 ? "me" : `p${i}`, (i % 2) as Team, {
+    name: i === 7 ? "Kowal" : `Gracz_${i}`, kills: 40 - i * 3, score: 3000 - i * 200, assists: i, deaths: i + 2, haircut: encodeHaircut("mohawk", i === 3 ? 7 : 0),
+  }));
+  const scores: [number, number][] = [[40, 31], [7, 5], [6, 4], [12, 9], [9, 9], [3, 1]];
+  for (const outcome of OUTCOMES) {
+    for (const [scoreA, scoreB] of scores) {
+      for (const reason of ROUND.has(mode) ? ROUND_REASONS : [""]) {
+        for (const gone of [false, true]) {
+          const players = gone ? twelve.filter((p) => p.team === 0) : twelve;
+          const me = outcome === "over" ? "ghost" : "me";
+          const winner: Team | -1 = outcome === "draw" ? -1 : outcome === "win" ? 1 : 0; // I am on team 1 (index 7)
+          const winnerId = outcome === "draw" ? "" : outcome === "win" ? "me" : "p0";
+          out.push({
+            mode, myId: me, myTeam: 1, scoreA, scoreB, winner, winnerId, winnerName: winnerId === "me" ? "Kowal" : winnerId ? "Gracz_0" : "",
+            players, roundResult: reason, bracket: mode === "turniej" ? FINISHED : "",
+          });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+describe("the reading budget: at most three words per second on screen (§6.5)", () => {
+  it("stage B verdict ≤ 9 words for every outcome × reason", () => {
+    let worst = 0;
+    for (const mode of MODES_ALL) {
+      for (const c of endings(mode)) {
+        const v = verdict(c);
+        const n = verdictWords(v);
+        worst = Math.max(worst, n);
+        expect(n, `${mode} ${matchOutcome(c)} ${c.roundResult} → ${v.title} / ${v.score} / ${v.why}`).toBeLessThanOrEqual(3 * STAGE_SECONDS.verdict);
+        // Every player with a row (a one-word title) also fits the zone budget, stage B ≤ 8 (§5.1).
+        if (matchOutcome(c) !== "over") expect(n, `${mode} ${c.roundResult}`).toBeLessThanOrEqual(8);
+        expect(v.why.split(" ").filter((w) => /[\p{L}\p{N}]/u.test(w)).length, v.why).toBeLessThanOrEqual(3);
+      }
+    }
+    expect(worst).toBeGreaterThan(0);
+  });
+
+  it("stage C words ≤ 3 × 14 s in round modes and ≤ 3 × 17 s in continuous modes", () => {
+    expect(STAGE_SECONDS.cardRound).toBe(14);
+    expect(STAGE_SECONDS.cardContinuous).toBe(17);
+    for (const mode of MODES_ALL) {
+      const cap = ROUND.has(mode) ? 42 : 48; // §5.1's zone budget, inside 3 × 14 = 42 and 3 × 17 = 51
+      expect(cap).toBeLessThanOrEqual(3 * (ROUND.has(mode) ? STAGE_SECONDS.cardRound : STAGE_SECONDS.cardContinuous));
+      for (const c of endings(mode)) {
+        for (const reward of REWARDS) {
+          const s = stageC(c, reward, 12_000);
+          expect(stageCWords(s), `${mode} ${matchOutcome(c)} ${c.roundResult} ${reward?.total ?? "no reward"}: ${JSON.stringify(s)}`).toBeLessThanOrEqual(cap);
+        }
+      }
+    }
+  });
+});
+
+describe("stages", () => {
+  it("resultStage jumps to C on Tab or a tab click", () => {
+    expect(resultStage("A", false)).toBe("A");
+    expect(resultStage("B", false)).toBe("B");
+    expect(resultStage("A", true)).toBe("C");
+    expect(resultStage("B", true)).toBe("C");
+    expect(resultStage(null, false)).toBe("C"); // Ended → Waiting: the card fades out as it was
+    // Tab before the card: straight to it, on the summary.
+    const tabbed = resultInput(RESULT_VIEW0, { kind: "tabKey" }, "B");
+    expect(tabbed).toEqual({ skipped: true, tab: "summary" });
+    expect(resultStage("B", tabbed.skipped)).toBe("C");
+    expect(resultStage("A", resultInput(RESULT_VIEW0, { kind: "tabKey" }, "A").skipped)).toBe("C");
+    // A tab click: that tab, on the card.
+    expect(resultInput(RESULT_VIEW0, { kind: "tabClick", tab: "table" }, "B")).toEqual({ skipped: true, tab: "table" });
+    // On the card, Tab flips the table in and out as it does in play.
+    expect(resultInput(RESULT_VIEW0, { kind: "tabKey" }, "C").tab).toBe("table");
+    expect(resultInput({ skipped: false, tab: "table" }, { kind: "tabKey" }, "C").tab).toBe("summary");
+  });
+
+  it("the card stays mounted 400 ms after Ended → Waiting: there at +200 ms, gone at +600 ms", () => {
+    const t0 = 100_000;
+    expect(RESULT_EXIT_MS).toBe(400);
+    expect(keepMountedState(false, t0, t0 + 200, RESULT_EXIT_MS)).toBe("closing");
+    expect(keepMountedState(false, t0, t0 + 600, RESULT_EXIT_MS)).toBe("closed");
+  });
+
+  it("the continuous stages are B then C, round modes A, B, C (§6.2) — timed by MATCH.endedMs", () => {
+    expect(MATCH.endedMs).toBe(20_000);
+    expect(DUEL.wins).toBeGreaterThan(0);
+  });
+});
+
+it("headlines a haircut over a badge over a level, and nothing when there is nothing", () => {
+  const names = { badge: (id: string) => (id === "b" ? "ODZNAKA" : undefined), haircut: (id: string) => (id === "h" ? "Irokez" : undefined) };
+  const r = { lines: [], total: 0, before: { level: 1, into: 0, need: 100, total: 0 }, after: { level: 2, into: 0, need: 100, total: 100 }, levelsGained: 1, earned: ["b"], haircuts: ["h"], title: "" };
+  expect(topReward(r, names)).toBe("Nowa fryzura: Irokez");
+  expect(topReward({ ...r, haircuts: [] }, names)).toBe("Odznaka: ODZNAKA");
+  expect(topReward({ ...r, haircuts: [], earned: [] }, names)).toBe("Awans na poziom 2");
+  expect(topReward({ ...r, haircuts: [], earned: [], levelsGained: 0 }, names)).toBeNull();
 });
 
 it("a tournament is decided by its final, not by a points limit", () => {
@@ -90,4 +322,88 @@ it("a tournament is decided by its final, not by a points limit", () => {
   expect(matchWhy(ctx as never)).toBe("ZDZICHU wygrał finał drabinki");
   expect(matchWhy(ctx as never)).not.toContain("drużyna");
   expect(scoreLine(ctx as never)).toContain("ZDZICHU");
+});
+
+describe("the Tab board never scrolls (held with the pointer locked: a hidden row is unreachable)", () => {
+  /** The board's fit loop (ScoreboardOverlay `useBoardFit`) against a board whose height per density is known. */
+  const fit = (heights: readonly number[], room: number): BoardDensity => {
+    let d: BoardDensity = 0;
+    for (let step = 0; step < 10; step++) {
+      const next = nextDensity(d, heights[d] > room + 1);
+      if (next === null) return d;
+      d = next;
+    }
+    throw new Error("the fit loop did not settle");
+  };
+
+  it("climbs one density at a time while the board overflows, and keeps the first that fits", () => {
+    // Measured (board-probe, 1024x576, room 459 px): a full 6 v 6 bomb board is 526 px roomy, 385 px tight.
+    expect(fit([526, 385, 300, 280], 459)).toBe(1);
+    // A 5 v 5 TDM board at 1600x900 fits as the spec draws it: nothing changes.
+    expect(fit([441, 330, 260, 240], 718)).toBe(0);
+    // An open lobby of 20 v 20 at 1024x576 (measured: 1302 px roomy, 492 side by side, 418 at the floor).
+    expect(fit([1302, 900, 492, 418], 459)).toBe(3);
+    // Past the densest layout there is nothing to try: it stays at the floor (and keeps my row in view).
+    expect(fit([2000, 1500, 900, 800], 459)).toBe(BOARD_DENSITY_MAX);
+    expect(nextDensity(BOARD_DENSITY_MAX, true)).toBeNull();
+    expect(nextDensity(0, false)).toBeNull();
+  });
+
+  it("the sides stand side by side only from density 2 (0 and 1 keep my side above theirs)", () => {
+    expect([0, 1, 2, 3].map((d) => boardSplit(d as BoardDensity))).toEqual([false, false, true, true]);
+  });
+
+  it("a split ranking reads down the left column, then the right: #1 heads the left, ⌈n/2⌉ on the left", () => {
+    const ranked = Array.from({ length: 7 }, (_, i) => i + 1);
+    expect(splitColumns(ranked)).toEqual([[1, 2, 3, 4], [5, 6, 7]]);
+    expect(splitColumns(Array.from({ length: 40 }, (_, i) => i)).map((c) => c.length)).toEqual([20, 20]);
+    expect(splitColumns([1])).toEqual([[1], []]);
+    // Nobody is dropped or repeated.
+    expect(splitColumns(ranked).flat()).toEqual(ranked);
+  });
+});
+
+describe("the Tab board's round history: a slot for every round, however long the match runs", () => {
+  const played = (n: number, drawn: number[] = []) =>
+    Array.from({ length: n }, (_, i) => ({ round: i + 1, winner: (drawn.includes(i + 1) ? -1 : (i % 2) as Team) as Team | -1, reason: drawn.includes(i + 1) ? "TRADE" : "ELIMINATED" }));
+
+  it("draws the planned length of each round mode, and none in the continuous modes or the tournament", () => {
+    expect(historySlots("bomb", [], 1)).toHaveLength(BOMB.maxRounds);
+    expect(historySlots("duel", [], 1)).toHaveLength(2 * DUEL.wins - 1);
+    expect(historySlots("ostrzyzeni", [], 1)).toHaveLength(OSTRZYZENI.rounds);
+    for (const m of ["tdm", "ffa", "gungame", "turniej"] as GameMode[]) expect(historySlots(m, [], 3), m).toBeNull();
+  });
+
+  it("a duel that drew a round runs past 2·wins−1: round 12 has its slot, marked now (audit a3)", () => {
+    const s = historySlots("duel", played(11, [4]), 12)!;
+    expect(s).toHaveLength(12);
+    expect(s[11]).toMatchObject({ n: 12, now: true, winner: null });
+    expect(s.filter((x) => x.now).map((x) => x.n)).toEqual([12]);
+    expect(s.filter((x) => x.winner === -1).map((x) => x.n)).toEqual([4]);
+    expect(s.slice(0, 11).every((x) => x.winner !== null)).toBe(true);
+  });
+
+  it("every round seen is drawn, even past the plan and past the current round", () => {
+    const s = historySlots("duel", played(15, [2, 7, 9, 13]), 15)!;
+    expect(s).toHaveLength(15);
+    expect(s.map((x) => x.n)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
+    expect(s.filter((x) => x.winner === -1).map((x) => x.n)).toEqual([2, 7, 9, 13]);
+    expect(s.some((x) => x.now)).toBe(false); // round 15 is seen: it is over, not being played
+    const t = historySlots("duel", played(15), 16)!;
+    expect(t).toHaveLength(16);
+    expect(t[15]).toMatchObject({ n: 16, now: true });
+  });
+
+  it("the duel's side swaps keep their gap every DUEL.halfRounds past the plan, and the last slot has none", () => {
+    const s = historySlots("duel", played(13), 14)!;
+    expect(s.filter((x) => x.gapAfter).map((x) => x.n)).toEqual([3, 6, 9, 12].filter((n) => n % DUEL.halfRounds === 0 && n < 14));
+    expect(s[s.length - 1].gapAfter).toBe(false);
+  });
+
+  it("the bomb strip keeps its halftime gap and its length within the cap", () => {
+    const s = historySlots("bomb", played(BOMB.halfRounds + 1), BOMB.halfRounds + 2)!;
+    expect(s).toHaveLength(BOMB.maxRounds);
+    expect(s.filter((x) => x.gapAfter).map((x) => x.n)).toEqual([BOMB.halfRounds]);
+    expect(s[BOMB.halfRounds + 1].now).toBe(true);
+  });
 });

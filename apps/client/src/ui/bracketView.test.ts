@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { bracketString, currentMatch, reportWinner, seedBracket } from "@frankibarber/shared";
+import { DUEL, bracketString, currentMatch, reportWinner, seedBracket, withdraw, type Bracket } from "@frankibarber/shared";
 import { mulberry32 } from "@frankibarber/shared";
-import { bracketLine, pairNames, standing } from "./Bracket";
+import { bracketLine, bracketStage, pairCard, pairNames, standing, stripPair } from "./Bracket";
+import { countWords } from "./hud/format";
 
 /**
  * The one line the HUD carries while a pair is being played. The bracket itself is drawn from
@@ -84,5 +85,124 @@ describe("the two on the board", () => {
     for (let i = 0; i < 3; i++) b = reportWinner(b, currentMatch(b)!.a, 6, 0);
     expect(pairNames(bracketString(b))).toBeNull();
     expect(pairNames("")).toBeNull();
+  });
+});
+
+describe("the pair card and the strip's stage (drop U, P2)", () => {
+  const draw = (names: string[], size: 4 | 8, seed = 3) =>
+    seedBracket(names.map((n, i) => ({ id: `p${i}`, name: n })), size, mulberry32(seed));
+  const FOUR = ["ALFA", "BRAVO", "CEZAR", "DAWID"];
+  // The longest nicks the bracket keeps (`clean` cuts at 16). Each is one word, as the spec's worst
+  // case counts them (§6.5: „xXPiotrekXx”); a nick with spaces in it (`sanitizeName` allows them)
+  // adds its extra words to the eyebrow and the next-pair line.
+  const EIGHT = ["xXPiotrekXx_1234", "Kasia_Brzytwa", "Jan_Kowalski", "ZDZICHU", "RYSIEK", "Gruby_Wojtek", "Młody_Tomek", "GRAZYNA"];
+
+  it("stripPair: the pair on the board, and after the final the final's pair (the strip's stage A)", () => {
+    // Driven through the room's own bracket functions, the way the string reaches the client.
+    let b = draw(FOUR, 4);
+    const side = (i: number) => [b.names[b.matches[i].a], b.names[b.matches[i].b]];
+    expect(stripPair(bracketString(b)), "semi-final 1, a is team 0").toEqual(side(0));
+    b = reportWinner(b, currentMatch(b)!.a, 6, 2);
+    expect(stripPair(bracketString(b)), "semi-final 2").toEqual(side(1));
+    b = reportWinner(b, currentMatch(b)!.b, 3, 6);
+    const final = side(2);
+    expect(stripPair(bracketString(b)), "the final on the board").toEqual(final);
+    b = reportWinner(b, currentMatch(b)!.b, 4, 6);
+    // Nobody is on the board any more (pairNames, frozen for P6, says so), but the room still holds
+    // the final's 4 : 6, and the strip names the two who played it — never FADE / TAPER.
+    expect(pairNames(bracketString(b))).toBeNull();
+    expect(stripPair(bracketString(b))).toEqual(final);
+    // A walkover in the final names the final's pair the same way.
+    let w = draw(FOUR, 4);
+    w = reportWinner(w, currentMatch(w)!.a, 6, 0);
+    w = reportWinner(w, currentMatch(w)!.a, 6, 1);
+    const wFinal = [w.names[w.matches[2].a], w.names[w.matches[2].b]];
+    w = withdraw(w, w.matches[2].a);
+    expect(stripPair(bracketString(w))).toEqual(wFinal);
+    // No bracket: nothing to name.
+    expect(stripPair("")).toBeNull();
+  });
+
+  it("bracketStage names the round without the pair", () => {
+    let b = draw(FOUR, 4);
+    const m = currentMatch(b)!;
+    expect(bracketStage(bracketString(b))).toBe("PÓŁFINAŁ");
+    expect(bracketStage(bracketString(b))).not.toContain(b.names[m.a]);
+    expect(bracketStage(bracketString(b))).not.toContain("vs");
+    b = reportWinner(b, currentMatch(b)!.a, DUEL.wins, 1);
+    b = reportWinner(b, currentMatch(b)!.a, DUEL.wins, 2);
+    expect(bracketStage(bracketString(b))).toBe("FINAŁ");
+    expect(bracketStage(bracketString(draw(EIGHT, 8)))).toBe("ĆWIERĆFINAŁ");
+    b = reportWinner(b, currentMatch(b)!.a, DUEL.wins, 0);
+    expect(bracketStage(bracketString(b)), "the final is over").toBe("");
+    expect(bracketStage("")).toBe("");
+    expect(bracketStage("rubbish")).toBe("");
+  });
+
+  it("pairCard names who went through, how, and who is up next", () => {
+    let b = draw(FOUR, 4);
+    const first = currentMatch(b)!;
+    b = reportWinner(b, first.b, 4, DUEL.wins);
+    const s = bracketString(b);
+    const next = currentMatch(b)!;
+    const card = pairCard(s, b.names[first.a], "ELIMINATED")!;
+    expect(card.eyebrow).toBe(`${b.names[first.b]} PRZECHODZI DALEJ`);
+    expect(card.verdict, "the winner's score first, then the short reason").toBe(`${DUEL.wins} : 4 · Przeciwnik wyeliminowany`);
+    expect(card.title).toBe("NASTĘPNA PARA · PÓŁFINAŁ");
+    expect(card.next).toBe(`${b.names[next.a]} vs ${b.names[next.b]}`);
+    expect(card.standing, "the loser").toBe("ODPADŁEŚ Z TURNIEJU");
+    expect(pairCard(s, b.names[next.a], "ELIMINATED")!.standing).toBe("GRASZ TERAZ");
+    expect(pairCard(s, b.names[first.b], "ELIMINATED")!.standing, "through, waiting for the final").toBe("CZEKASZ NA SWOJĄ PARĘ");
+    expect(pairCard(s, "", "ELIMINATED")!.standing).toBe("");
+    // The short reason (§5.4), never the long one: „Czas — więcej zdrowia”, not „Czas minął — więcej zdrowia wygrywa”.
+    expect(pairCard(s, "", "TIME · MORE HEALTH")!.verdict).toBe(`${DUEL.wins} : 4 · Czas — więcej zdrowia`);
+    // Nothing decided yet, or no bracket at all: no card rather than half a card.
+    expect(pairCard(bracketString(draw(FOUR, 4)), "ALFA", "")).toBeNull();
+    expect(pairCard("", "ALFA", "ELIMINATED")).toBeNull();
+  });
+
+  it("walkover eyebrow", () => {
+    // Somebody left in the freeze at 2 : 1: the room withdraws them, the bracket moves on with the
+    // scores as they stood, and the freeze had already cleared the round reason.
+    let b = draw(FOUR, 4);
+    const m = currentMatch(b)!;
+    b = withdraw({ ...b, matches: b.matches.map((x, i) => (i === b.at ? { ...x, scoreA: 2, scoreB: 1 } : x)) }, m.b);
+    const card = pairCard(bracketString(b), b.names[m.a], "")!;
+    expect(card.walkover).toBe(true);
+    expect(card.eyebrow).toBe(`WALKOWER · ${b.names[m.a]} DALEJ`);
+    expect(card.verdict, "a walkover has no score").toBeNull();
+    // The gallery's own walkover (gallery/fixtures.ts TOUR.walkover).
+    const tour = pairCard("4|2;Kowal|xXPiotrekXx|6|3|a;ZDZICHU|RYSIEK|2|1|a;Kowal|ZDZICHU|0|0|-", "Kowal", "")!;
+    expect([tour.eyebrow, tour.verdict, tour.title, tour.next, tour.standing]).toEqual(["WALKOWER · ZDZICHU DALEJ", null, "NASTĘPNA PARA · FINAŁ", "Kowal vs ZDZICHU", "GRASZ TERAZ"]);
+    // A pair capped by the match clock below DUEL.wins still carries its last round's reason: a result, not a walkover.
+    const capped = pairCard("4|2;Kowal|xXPiotrekXx|6|3|a;ZDZICHU|RYSIEK|4|3|a;Kowal|ZDZICHU|0|0|-", "Kowal", "TIME · MORE HEALTH")!;
+    expect([capped.walkover, capped.eyebrow, capped.verdict]).toEqual([false, "ZDZICHU PRZECHODZI DALEJ", "4 : 3 · Czas — więcej zdrowia"]);
+  });
+
+  it("pairCard ≤ 18 words for every fixture", () => {
+    // Every decided pair of a four and an eight (each pair won by either side, at the closest
+    // score), every round reason the server writes, each entrant's standing, and a walkover.
+    const reasons = ["", "BOMB DETONATED", "BOMB DEFUSED", "DEFENDERS ELIMINATED", "ATTACKERS ELIMINATED", "SITE SECURED", "TRADE",
+      "ELIMINATED", "TIME · EVEN", "TIME · MORE HEALTH", "SURVIVORS HELD", "ALL SHAVED"];
+    const cards: string[] = [];
+    for (const [names, size] of [[FOUR, 4], [EIGHT, 8]] as const) {
+      for (const side of ["a", "b"] as const) {
+        let b: Bracket = draw([...names], size);
+        while (currentMatch(b)) {
+          const m = currentMatch(b)!;
+          const after = reportWinner(b, m[side], side === "a" ? DUEL.wins : DUEL.wins - 1, side === "a" ? DUEL.wins - 1 : DUEL.wins);
+          const gone = withdraw(b, side === "a" ? m.b : m.a);
+          for (const me of [...names, ""]) {
+            for (const r of reasons) { const c = pairCard(bracketString(after), me, r); if (c) cards.push([c.eyebrow, c.verdict ?? "", c.title, c.next, c.standing].join(" ")); }
+            const w = pairCard(bracketString(gone), me, "");
+            if (w) cards.push([w.eyebrow, w.verdict ?? "", w.title, w.next, w.standing].join(" "));
+          }
+          b = after;
+        }
+      }
+    }
+    expect(cards.length).toBeGreaterThan(500);
+    const worst = cards.reduce((a, c) => (countWords(c) > countWords(a) ? c : a), "");
+    expect(countWords(worst), worst).toBeLessThanOrEqual(18);
   });
 });

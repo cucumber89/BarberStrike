@@ -9,6 +9,8 @@ import "@fontsource/inter/600.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "./ui/styles.css";
+// The HUD's own sheets (ui/hud/*.css, drop U) sit between the two, where their rules always were.
+import "./ui/hud/index.css";
 import "./ui/cinematic.css";
 
 /**

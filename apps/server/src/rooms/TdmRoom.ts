@@ -3,9 +3,9 @@ import { Room, type Client } from "@colyseus/core";
 import {
   Btn, C2S, S2C, DEFAULT_WEAPON, HEADSHOT_MULTIPLIER, LAG_COMP_MAX_MS, MATCH, MAX_INPUT_BATCH, MAX_INPUT_DT_MS,
   MAX_INPUT_QUEUE, MAX_INPUT_RATE, MAX_OTHER_MSG_RATE, MAX_PLAYERS, MAX_SPECTATORS, MatchPhase, MAPS, DEFAULT_MAP_ID, PLAYER,
-  RESPAWN_DELAY_MS, SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER, DUEL_MAP_ID,
-  isLive, isFrozen, maskInput, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
-  BOMB, sitesOf, bombAttackTeam, bombSpawnSide, resetBomb, stepBomb, type BombPlayer,
+  SNAPSHOT_MS, SPAWN_PROTECTION_MS, TICK_MS, WEAPONS, WEAPON_ORDER, DUEL_MAP_ID,
+  isLive, isFrozen, maskInput, respawnDelayMs, smokeBlocks, MAX_SMOKE_CLOUDS, type SmokeCloud,
+  BOMB, bombBreakMs, sitesOf, bombAttackTeam, bombSpawnSide, resetBomb, stepBomb, type BombPlayer,
   createBody, quantAngle, quantVel, effectiveSpread, fireIntervalMs, isFiniteNumber, isVec3, isWeaponId, aimDirection,
   makeRayHit, mulberry32, pickSpawn, sanitizeName, simulateBody, spreadDirection, traceBullet, unpackInput,
   ECONOMY, GRENADES, THROW_INTERVAL_MS, FIRE_DPS, applyBuy, applySell, buyWindowOpen, giveGrenade, takeGrenade, killReward, weaponForSlot, modeAllowsItem,
@@ -14,7 +14,7 @@ import {
   perkSpeedScale, splitDamage, isPerkId, isArmorId,
   BTN_MASK, DOM, MODES, isGameMode, leanOf, tacActive, leanEye, inFlagZone, stepFlag, domTick, neutralFlag,
   CHAT, MARK, MAX_BOTS, BOT_NAMES, botId, isBotLevel,
-  GUN_GAME, MELEE_WEAPON, ladderAfterKill, ladderDone, ladderWeapon,
+  MELEE_WEAPON, ladderAfterKill, ladderDone, ladderWeapon,
   OSTRZYZENI, PERK_ARMED_MS, convertsOnKill, infectionRoundWinner, pickFirstShaved,
   DUEL, duelRoundWinner, duelSpawnSide, duelPurseAfter, duelStartMoney, duelHalfStart, freshDuelPurse,
   TOURNAMENT, seedBracket, currentMatch, reportWinner, withdraw, isDone, champion, bracketString, type Bracket,
@@ -287,15 +287,12 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   /** The same clock for Bomb: when its round's buy window shuts. 0 outside a live round. */
   private bombBuyEndsAt = 0;
   /**
-   * How long a casualty waits. Gun Game has its own short timer (a party mode: no waves, no shop to
-   * spend the wait in) and no perks, so the fade never applies there. A shaved chaser (infection)
-   * is back on a short timer too; an unshaved survivor is not respawned by the timer at all during a
-   * round (see `step`), so their value only matters in the warm-up.
+   * How long a casualty waits: the shared `respawnDelayMs`, which the client's death card reads too.
+   * An unshaved survivor in infection is not respawned by the timer at all during a round (see
+   * `step`), so their value only matters in the warm-up.
    */
   private respawnDelay(p: PlayerState, fade = false): number {
-    if (this.ladder) return GUN_GAME.respawnMs;
-    if (this.infection && p.shaved) return OSTRZYZENI.shavedRespawnMs;
-    return RESPAWN_DELAY_MS - (fade ? PERK_EFFECT.fadeRespawnMs : 0);
+    return respawnDelayMs(this.mode, { shaved: p.shaved, fade });
   }
 
   /**
@@ -1528,7 +1525,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   /**
    * A pair is over. The winner goes through; the bracket decides whether that was the final.
    *
-   * The pause before the next pair is `TOURNAMENT.breakMs` rather than the duel's three seconds:
+   * The pause before the next pair is `TOURNAMENT.breakMs` rather than the duel's `DUEL.breakMs`:
    * it is the only moment anybody reads the bracket, and the two people who are up next need long
    * enough to notice that they are.
    */
@@ -1586,6 +1583,10 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
    */
   private beginDuelRound(): void {
     const st = this.state, now = this.now();
+    // The break signal (drop U, no new field): `bomb.result` holds the last round's reason through
+    // the break and is EMPTY through the freeze, so a client that joins or reconnects in a Prep can
+    // tell the two apart from the state alone (`Prep && result !== ""` is a break).
+    st.bomb.result = "";
     if (this.needPair) this.startPair();
     const round = st.bomb.round + 1; // 1-based: the round about to be played
     const half = duelHalfStart(round);
@@ -1695,6 +1696,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
    */
   private beginInfectionRound(): void {
     const st = this.state, now = this.now();
+    st.bomb.result = ""; // a freeze, not a break: see `beginDuelRound`
     st.phase = MatchPhase.Prep;
     st.phaseEndsAt = now + OSTRZYZENI.prepMs;
     this.infectionStage = "buy";
@@ -1743,6 +1745,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       st.scoreB++;
     }
     st.bomb.round++;
+    // The round's reason, for the break and for the result screen: written BEFORE the match-end
+    // check so the deciding round carries it too. Cleared by the next `beginInfectionRound`.
+    st.bomb.result = winner === "survivors" ? "SURVIVORS HELD" : "ALL SHAVED";
     this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
     if (st.bomb.round >= OSTRZYZENI.rounds) { this.endMatch(); return; }
     st.phase = MatchPhase.Prep;
@@ -1866,7 +1871,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       (p, q) => !this.losBlocked(p.x, p.y + 1, p.z, q.x, q.y + 0.3, q.z), sitesOf(this.map));
     if (!plantedBefore && this.state.bomb.stage === "planted") {
       const planter = this.state.players.get(carrier);
-      if (planter) { this.pay(planter, CS_ECONOMY.plant, "capture"); planter.score += 200; }
+      // "round": not "capture", which is Dominacja's flag money, and no new "plant" reason either —
+      // `MoneyEvent` in shared `types.ts` is frozen for drop U.
+      if (planter) { this.pay(planter, CS_ECONOMY.plant, "round"); planter.score += 200; }
     }
     if (winner === null) return;
     if (this.state.bomb.result === "BOMB DETONATED") {
@@ -1881,14 +1888,16 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     // CS's two payments: the round award to the winners, the loss ladder to the losers — plus the
     // planted-bomb bonus, which is the one that keeps a losing attack in the game. An attack that
     // got the bomb down and then lost the round did its job and is paid for it.
+    // Paid as the duel pays them — "round" to the winners, "loss" to the losers — never "capture",
+    // which is Dominacja's flag money and read "+$3,250 CAPTURE" on a Bomb round.
     const planted = this.state.bomb.result === "BOMB DEFUSED";
     for (const p of this.state.players.values()) if (p.connected && this.sessions.get(p.id)?.ready) this.pay(p,
       p.team === winner ? BOMB.winMoney
         : csLossBonus(this.bombLosses[loser] - 1) + (planted && p.team === this.state.bomb.attackTeam ? CS_ECONOMY.plantedLoss : 0),
-      "capture");
+      p.team === winner ? "round" : "loss");
     if (Math.max(this.state.scoreA, this.state.scoreB) >= BOMB.wins || this.state.bomb.round >= BOMB.maxRounds) { this.endMatch(); return; }
     this.state.phase = MatchPhase.Prep;
-    this.state.phaseEndsAt = now + BOMB.breakMs;
+    this.state.phaseEndsAt = now + bombBreakMs(this.state.bomb.round); // halftime after BOMB.halfRounds
     this.projectiles.length = 0; this.fires.length = 0; this.smokes.length = 0;
     this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Prep, winner, endsAt: this.state.phaseEndsAt } satisfies MatchEventMessage);
   }

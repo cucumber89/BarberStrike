@@ -25,6 +25,11 @@ export interface ScoreRow {
   shaved: boolean;
   /** Drop E: the haircut field as replicated. The scoreboard's shave column is parsed from it. */
   haircut: string;
+  /**
+   * Drop U: the player's health, for the spectate bar (`schema.ts:28`). Optional: P0 adds the type
+   * only, and a row without it (no producer yet, P1 writes it at `Game.ts:635`) reads as unknown.
+   */
+  health?: number;
 }
 
 /** Drop 5: a chat line as shown (server time `at`, local `seen` for the fade). */
@@ -33,6 +38,37 @@ export interface ChatLine { key: number; id: string; name: string; team: Team; t
 export interface HudMark { key: number; id: string; name: string; team: Team; x: number; y: number; z: number; kind: "go" | "spot"; target?: string; at: number; until: number }
 
 export interface KillFeedEntry extends KillEvent { at: number; key: number }
+
+/**
+ * Drop U: who killed me, as the death card reads it (§5.2 rows 33–36). `hp` / `armor` are the
+ * killer's at the moment of the kill; `dealt` / `taken` sum this life's hits both ways, with their
+ * hit counts; `at` is `performance.now()` of the kill.
+ */
+export interface HudKiller {
+  id: string;
+  name: string;
+  team: Team;
+  weapon: KillEvent["weapon"];
+  headshot: boolean;
+  /** Names credited with an assist (`KillEvent.assists`). */
+  assists: string[];
+  hp: number;
+  armor: number;
+  dealt: number;
+  dealtHits: number;
+  taken: number;
+  takenHits: number;
+  at: number;
+}
+
+/** Drop U: the player the camera follows while I am dead (the spectate bar). */
+export interface HudSpectating { id: string; name: string; health: number }
+
+/** Drop U: the round's MVP in bomb (the round banner): the defuser, the planter, or the most kills. */
+export interface HudRoundMvp { id: string; name: string; kills: number; why: "plant" | "defuse" | "kills" }
+
+/** Drop U: one OBSERVED round (the scoreboard's history strip): its number, who took it and why. */
+export interface HudRoundRecord { round: number; winner: Team | -1; reason: string }
 
 export interface HudState {
   smokeOpacity: number;
@@ -154,8 +190,11 @@ export interface HudState {
   /** FFA winner (session id / name) once the match ended. */
   winnerId: string;
   winnerName: string;
-  /** Last flag change: text + team + time, for the centre notice. */
-  flagNotice: { text: string; team: Team; at: number } | null;
+  /**
+   * Last flag change: text + team + time, for the centre notice. Drop U adds the structured `flag`
+   * id („A”) and its `name`, optional until P1's producer (`Game.ts:396`) writes them.
+   */
+  flagNotice: { text: string; team: Team; at: number; flag?: string; name?: string } | null;
   /** Tactical sprint budget 0..1 and whether it runs now. */
   tac: number;
   tacOn: boolean;
@@ -164,6 +203,27 @@ export interface HudState {
   /** Chat box open for all / team, or closed. */
   chatOpen: "all" | "team" | null;
   marks: HudMark[];
+  // ---- drop U (P0 declares these with their defaults; P1 produces them)
+  /** The map being played (`MapDef.id`); "" until the room is joined. */
+  mapId: string;
+  /** `performance.now()` of my last death; 0 while I have not died in this life. */
+  diedAt: number;
+  /** Who killed me last, or null (alive, never killed, or a self-kill). */
+  killer: HudKiller | null;
+  /** Whom the camera follows while I am dead; null when nobody (or alive). */
+  spectating: HudSpectating | null;
+  /** Joined a round mode mid-round: dead with no kill seen since the last spawn. */
+  lateJoin: boolean;
+  /** The bomb site I am standing on, if any. */
+  siteHere: "" | "A" | "B";
+  /** A defender close enough to the planted bomb to defuse it. */
+  nearBomb: boolean;
+  /** The last round's MVP (bomb only); null when the round start was not observed. */
+  roundMvp: HudRoundMvp | null;
+  /** The rounds this client saw end, oldest first. Rounds it did not observe are absent. */
+  roundHistory: HudRoundRecord[];
+  /** `performance.now()` of the last weapon switch, for the weapon-name moment; 0 = none. */
+  lastSwitchAt: number;
 }
 
 export const initialHud: HudState = {
@@ -182,6 +242,8 @@ export const initialHud: HudState = {
   armor: 0, perks: { flask: 0, roids: 0, energy: 0, fade: 0 }, armorBrokeAt: 0, scoped: false, scopeStyle: null, breath: 0, hitArmor: false,
   boysClass: 1, nextClass: 1, mode: "tdm", smokeOpacity: 0, bomb: null, round: 0, roundResult: "", bracket: "", flags: [], inFlag: -1, winnerId: "", winnerName: "", flagNotice: null, tac: 1, tacOn: false,
   chat: [], chatOpen: null, marks: [],
+  mapId: "", diedAt: 0, killer: null, spectating: null, lateJoin: false, siteHere: "", nearBomb: false,
+  roundMvp: null, roundHistory: [], lastSwitchAt: 0,
 };
 
 type Listener = () => void;
@@ -215,7 +277,7 @@ class HudStore {
     }
   }
 
-  reset(): void { this.set({ ...initialHud, killFeed: [], players: [], teamResult: null, plan: null, planId: 0, moneyToasts: [], chat: [], marks: [] }); }
+  reset(): void { this.set({ ...initialHud, killFeed: [], players: [], teamResult: null, plan: null, planId: 0, moneyToasts: [], chat: [], marks: [], roundHistory: [] }); }
 
   subscribe = (l: Listener): (() => void) => {
     this.listeners.add(l);

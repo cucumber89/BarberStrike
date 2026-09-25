@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BOYS_CLASSES, GRENADES, MODES, PERK_EFFECT, PERK_ORDER, PRIMARY_ORDER, boysAllows, type GameMode } from "@frankibarber/shared";
-import { CAT_INFO, ITEM_ROLE, MAX_PER_CAT, SHOP_CATS, catForCode, itemName, itemStats, keyForPos, posForCode, shopCatalog } from "./shopCatalog";
+import { BOYS_CLASSES, ECONOMY, GRENADES, MODES, MatchPhase, PERK_EFFECT, PERK_ORDER, PRIMARY_ORDER, boysAllows, buyShortfall, canBuy, freshWallet,
+  type BuyContext, type GameMode, type ShopItemId, type Wallet } from "@frankibarber/shared";
+import { CAT_INFO, ITEM_ROLE, MAX_PER_CAT, SHOP_CATS, catForCode, itemName, itemStats, keyForPos, posForCode, shopCatalog, tileTag } from "./shopCatalog";
 
 describe("shop catalogue", () => {
   it("every position printed in an aisle is a key the handler accepts", () => {
@@ -98,5 +99,48 @@ describe("shop catalogue", () => {
       expect(itemStats(id).length, id).toBeGreaterThan(0);
     }
     for (const c of SHOP_CATS) expect(CAT_INFO[c].label).toMatch(/\S/);
+  });
+});
+
+describe("the tile's one tag (§5.2 #49)", () => {
+  // The shop's own composition (Shop.tsx `verdict` + `tile`): a shut window is "closed" before
+  // canBuy is asked; a grenade's "have" is „PEŁNO” only at the slot's max.
+  const ctx: BuyContext = { now: 0, spawnedAt: 0, phase: MatchPhase.Prep, alive: true, nearStation: true, mode: "bomb" };
+  const tagOf = (w: Wallet, id: ShopItemId, o: { open?: boolean; carried: boolean; have: string }) => {
+    const v = o.open === false ? { ok: false as const, reason: "closed" as const } : canBuy(w, id, ctx);
+    const reason = v.ok ? "" : v.reason;
+    return tileTag({ reason, carried: o.carried, have: o.have, short: reason === "money" ? buyShortfall(w, id, ctx) : 0 });
+  };
+  const frags = (n: number, cash: number): Wallet => ({ ...freshWallet(), money: cash, lethal: "frag", lethalCount: n });
+  const fragHave = (n: number) => (n >= ECONOMY.lethalMax ? "PEŁNO" : "");
+
+  it("one Frag of two, short of money: the refusal with its amount, not „PEŁNO”", () => {
+    const t = tagOf(frags(1, 100), "frag", { carried: true, have: fragHave(1) });
+    expect(t).toEqual({ text: `Brakuje $${GRENADES.frag.price - 100}`, tone: "no", locked: true });
+  });
+
+  it("one Frag of two, window shut: no „PEŁNO” (the header says ZAMKNIĘTY once)", () => {
+    const t = tagOf(frags(1, 5_000), "frag", { open: false, carried: true, have: fragHave(1) });
+    expect(t.text).toBe("");
+    expect(t.text).not.toBe("PEŁNO");
+  });
+
+  it("two Frags of two: „PEŁNO”, open or shut", () => {
+    expect(ECONOMY.lethalMax).toBe(2);
+    expect(tagOf(frags(2, 5_000), "frag", { carried: true, have: fragHave(2) })).toEqual({ text: "PEŁNO", tone: "have", locked: false });
+    expect(tagOf(frags(2, 5_000), "frag", { open: false, carried: true, have: fragHave(2) }).text).toBe("PEŁNO");
+  });
+
+  it("one Frag of two with the money: no tag, it sells", () => {
+    expect(tagOf(frags(1, 5_000), "frag", { carried: true, have: fragHave(1) })).toEqual({ text: "", tone: "", locked: false });
+  });
+
+  it("what you carry reads as yours: MASZ on the gun, nosisz on the plate; a refusal on the rest", () => {
+    const w = { ...freshWallet(), money: 100 };
+    expect(tagOf(w, "pistol", { carried: true, have: "MASZ" })).toEqual({ text: "MASZ", tone: "have", locked: false });
+    expect(tagOf({ ...w, armor: 100 }, "light", { carried: true, have: "nosisz" }).text).toBe("nosisz");
+    expect(tagOf(w, "rifle", { carried: false, have: "MASZ" }).text).toMatch(/^Brakuje \$[\d,]+$/);
+    expect(tagOf({ ...w, money: 5_000 }, "smoke", { carried: false, have: "" }).text).toBe("");
+    expect(tagOf({ ...w, money: 5_000, tactical: "flash", tacticalCount: 1 }, "smoke", { carried: false, have: "" })).toEqual({ text: "SLOT ZAJĘTY", tone: "no", locked: true });
   });
 });

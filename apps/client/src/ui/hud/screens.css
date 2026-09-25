@@ -1,0 +1,356 @@
+/* ui/hud/screens.css — P7's screens (docs/UI_U_SPEC.md §7 P7): the fade between screens, the
+   loading card, the ESC column with the team picker and the settings beside it, the resume
+   prompt, and the five-aisle shop. P0 moved the pre-drop rules here verbatim; drop U replaced them.
+
+   Rules of the file (§3, §7.0):
+   - sizes are the §3.1 tokens only (`--hud-t1`…`--hud-t5`, `--hud-key` for keycaps), faces and
+     weights are §3.2's (Bebas 400 for t3+, Inter 600 for labels, JetBrains Mono 500 for money and
+     clocks; never 700), tracking is `--hud-track-num` or `--hud-track-label`;
+   - nothing is uppercased here: every uppercase string is uppercase in the source;
+   - every selector hangs off one of P7's roots: `.fade`, `.loading`, `.pause-layer`, `.pause`,
+     `.resume-prompt`, `.teams`, `.shop` (and `.shop-enter` / `.shop-exit`, the shop's mount);
+   - every animation is ≤ 600 ms and none exists under reduced motion (the last block). */
+
+/* ============================================================================ fade (§6.1) */
+/* App-level, outside `.hud` and `.loading`, so the tokens do not reach it: its values are
+   literal. z 150 is §3.9's `--z-fade`, above the loading card (100). It takes the clicks only
+   while it is going black; the transition length is set inline by `useFade`. */
+.fade { position: absolute; inset: 0; z-index: 150; background: #000; opacity: 0; pointer-events: none;
+  transition-property: opacity; transition-timing-function: cubic-bezier(.2,.8,.2,1); }
+.fade.on { opacity: 1; pointer-events: auto; transition-timing-function: cubic-bezier(.4,0,1,1); }
+
+/* ============================================================================ loading (§5.2 #64–65) */
+.loading { position: absolute; inset: 0; z-index: 100; display: flex; align-items: flex-start; overflow: hidden;
+  background: #061015 url('/art/loading-keyart.webp') center center / cover no-repeat;
+  color: var(--hud-tx); font-family: var(--font-ui); }
+.loading::before { content: ""; position: absolute; inset: 0;
+  background:
+    linear-gradient(90deg, rgba(3,10,14,.98) 0%, rgba(3,10,14,.84) 38%, rgba(3,10,14,.1) 70%),
+    linear-gradient(180deg, rgba(2,7,10,.1), transparent 65%, rgba(2,7,10,.7)); }
+.loading-grain { position: absolute; inset: 0; pointer-events: none; opacity: .18;
+  background-image: radial-gradient(circle, rgba(255,255,255,.2) 0 .7px, transparent 1px); background-size: 7px 7px;
+  mask-image: linear-gradient(90deg, #000, transparent 70%); }
+.loading-card { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start;
+  width: min(560px, 46vw); margin-left: clamp(28px, 6.5vw, 104px); margin-top: clamp(64px, 24vh, 260px); }
+.loading-eyebrow { display: flex; align-items: center; gap: 12px; margin: 0 0 10px;
+  font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-accent); }
+.loading-eyebrow::before { content: ""; width: 32px; height: 2px; background: var(--hud-accent); }
+.loading-title { margin: 0; font: 400 var(--hud-t5)/.92 var(--font-display); letter-spacing: var(--hud-track-num);
+  color: var(--hud-tx); text-shadow: 0 6px 22px rgba(0,0,0,.6); }
+.loading-objective { margin: 12px 0 0; font: 600 var(--hud-t2)/1.3 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx); }
+.loading-step { align-self: stretch; display: flex; justify-content: space-between; align-items: baseline; margin-top: clamp(28px, 7vh, 64px);
+  font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+.loading-step b { font: 500 var(--hud-t1)/1.2 var(--font-mono); letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
+.loading-bar { align-self: stretch; height: 4px; margin-top: 8px; overflow: hidden; background: rgba(175,192,202,.18); }
+.loading-fill { height: 100%; width: 100%; background: var(--hud-accent); transform-origin: left; transform: scaleX(var(--v, 0));
+  transition: transform var(--hud-base) var(--hud-ease); }
+.loading-side { margin: 22px 0 0; font: 600 var(--hud-t2)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+.loading-side b { font-weight: 600; color: var(--hud-team0); }
+.loading-side[data-team="1"] b { color: var(--hud-team1); }
+.loading .enter-game { align-self: stretch; margin-top: 14px; min-height: 64px; padding: 0 24px; display: flex; align-items: center;
+  border: 0; cursor: pointer; background: var(--hud-accent); color: #061015; box-shadow: 0 12px 34px rgba(231,182,46,.2);
+  font: 400 var(--hud-t3)/1 var(--font-display); letter-spacing: var(--hud-track-num);
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px); }
+.loading .enter-game:hover { background: #f0c84c; }
+.loading-keys { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 16px 0 0;
+  font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+.loading-keys span { display: inline-flex; align-items: center; gap: 8px; }
+.loading kbd { min-width: 26px; padding: 4px 6px; text-align: center; font: 500 var(--hud-key)/1 var(--font-mono); letter-spacing: var(--hud-track-num);
+  color: var(--hud-tx); background: rgba(4,12,16,.7); border: var(--hud-plate-line); border-bottom-width: 2px; border-radius: var(--hud-radius); }
+.loading-back { margin-top: 20px; padding: 6px 0; background: none; border: 0; cursor: pointer;
+  font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+.loading-back:hover { color: var(--hud-tx); }
+@media (max-width: 800px) {
+  .loading::before { background: rgba(3,10,14,.8); }
+  .loading-card { width: calc(100% - 48px); margin-inline: 24px; }
+}
+
+/* ============================================================================ ESC column (§4.4, §5.2 #54–57) */
+/* The layer: the dim (no blur — Principle 15), the column at x 0, 380 wide, and the settings
+   panel beside it at x 380. `.hud > *` takes the pointer away from every HUD child; this one
+   wants it back, so a click beside the column lands on the dim and not on the game. */
+.pause-layer { position: absolute; inset: 0; z-index: var(--z-pause); pointer-events: auto; }
+.pause-dim { position: absolute; inset: 0; background: rgba(3,8,11,.55); animation: p7-fade-in 160ms var(--hud-ease) both; }
+.pause { position: absolute; left: 0; top: 0; bottom: 0; width: 380px; display: flex; flex-direction: column;
+  padding: clamp(24px, 9vh, 96px) 24px 20px; overflow-y: auto;
+  background: rgba(5,15,20,.94); border-right: var(--hud-plate-line); color: var(--hud-tx); font-family: var(--font-ui);
+  animation: p7-slide-in var(--hud-base) var(--hud-ease) both; }
+.pause-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.pause-title { margin: 0; font: 400 var(--hud-t3)/1 var(--font-display); letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
+.pause-version { font: 500 var(--hud-t1)/1 var(--font-mono); letter-spacing: var(--hud-track-num); color: var(--hud-tx2); opacity: .6; }
+.pause-live { margin: 6px 0 0; font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-warn); }
+.pause-objective { margin: 4px 0 0; font: 600 var(--hud-t1)/1.3 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+.pause-objective span { white-space: nowrap; }
+.pause-warn { margin: 14px 0 0; padding: 8px 10px; border-left: 2px solid var(--hud-warn); background: rgba(229,174,82,.1);
+  font: 600 var(--hud-t1)/1.3 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-warn); }
+.pause-nav { display: flex; flex-direction: column; gap: 4px; margin-top: clamp(16px, 4vh, 36px); }
+.pause-btn { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 44px; padding: 0 16px;
+  background: transparent; border: 0; border-left: 3px solid transparent; border-radius: var(--hud-radius); cursor: pointer; text-align: left;
+  font: 600 var(--hud-t2)/1.1 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx); }
+.pause-btn:hover, .pause-btn:focus-visible { background: rgba(244,240,231,.07); border-left-color: var(--hud-accent); outline: none; }
+.pause-btn[aria-pressed="true"], .pause-btn[aria-expanded="true"] { border-left-color: var(--hud-accent); color: var(--hud-accent); background: rgba(231,182,46,.07); }
+.pause-btn.primary { background: var(--hud-accent); color: #0b1216; border-left-color: var(--hud-accent); }
+.pause-btn.primary:hover, .pause-btn.primary:focus-visible { background: #f0c84c; }
+.pause-btn.leave { color: var(--hud-tx2); }
+.pause-btn.leave.primary { background: var(--hud-danger); border-left-color: var(--hud-danger); color: var(--hud-tx); }
+.pause-btn.leave.primary:hover, .pause-btn.leave.primary:focus-visible { background: #ea5a48; }
+/* PEŁNY EKRAN is a switch: its state is the knob, not a word. */
+.pause-switch { position: relative; flex: 0 0 auto; width: 36px; height: 20px; border-radius: 10px; background: rgba(175,192,202,.25); }
+.pause-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--hud-tx2);
+  transition: translate var(--hud-fast) var(--hud-ease); }
+.pause-btn[aria-pressed="true"] .pause-switch { background: var(--hud-accent); }
+.pause-btn[aria-pressed="true"] .pause-switch::after { translate: 16px 0; background: #0b1216; }
+.pause-btn.switch[aria-pressed="true"] { color: var(--hud-tx); background: transparent; border-left-color: transparent; }
+.pause-confirm { margin: 4px 0 6px 3px; padding: 12px; border-left: 3px solid var(--hud-danger); background: rgba(223,73,56,.08);
+  animation: p7-fade-in 160ms var(--hud-ease) both; }
+.pause-confirm p { margin: 0 0 10px; font: 600 var(--hud-t2)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx); }
+.pause-confirm-row { display: grid; grid-template-columns: 1.3fr 1fr; gap: 8px; }
+.pause-confirm-row .pause-btn { justify-content: center; padding: 0 10px; white-space: nowrap; }
+/* Short screens (1024×576): the column keeps every button on screen with the picker open. */
+@media (max-height: 700px) {
+  .pause { padding-top: 24px; }
+  .pause-settings { padding-top: 12px; }
+  .pause-nav { margin-top: 14px; gap: 2px; }
+  .pause-btn { min-height: 38px; }
+  .teams { gap: 6px; padding: 8px 10px; }
+  .team-card { padding: 6px 10px; }
+}
+/* Settings beside the column (zone `settings`): the panel is SettingsPanel, untouched and out of
+   scope (§9); only its box is P7's. The wrapper is the one scroll — the panel's own cap and inner
+   scroll are lifted here, so nothing scrolls inside something that scrolls. It starts BELOW the
+   strip (§4.5: under pause the strip stays visible — the match runs on): `max(10vh, 96px)` clears
+   today's strip (bottom 91 px) and §4.1's (16 + 56 = 72 px), as the Tab board's top does (§4.4). */
+.pause-settings { --set-top: max(10vh, 96px); position: absolute; left: 380px; top: var(--set-top); width: min(760px, calc(100vw - 420px));
+  max-height: calc(100% - var(--set-top)); overflow-y: auto;
+  padding: 16px 28px 24px; background: rgba(5,15,20,.94); border: var(--hud-plate-line); border-left: 0;
+  animation: p7-slide-in-short 160ms var(--hud-ease) both; }
+.pause-settings .settings { max-height: none; }
+.pause-settings .set-body { overflow: visible; padding-right: 0; }
+.pause-settings.closing, .pause-layer.closing { animation: p7-fade-out 120ms var(--hud-ease-in) forwards; pointer-events: none; }
+.pause-layer.closing { animation-duration: 160ms; }
+
+/* ============================================================================ resume prompt (zone `prompt`) */
+/* After a new match: the death card's box (§4.2), one line, until a click or Escape (§6.1). */
+.resume-prompt { position: absolute; left: 50%; bottom: var(--hud-card-bottom); z-index: var(--z-death); translate: -50% 0; width: var(--hud-card-w);
+  margin: 0; padding: 12px 16px; text-align: center; background: var(--hud-plate); border: var(--hud-plate-line); border-top: 2px solid var(--hud-accent); border-radius: var(--hud-radius);
+  font: 600 var(--hud-t2)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx);
+  animation: p7-fade-in var(--hud-base) var(--hud-ease) both; }
+
+/* ============================================================================ team picker (§5.6) */
+.teams { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 6px 3px; padding: 12px; border-left: 3px solid var(--hud-accent);
+  background: rgba(244,240,231,.04); animation: p7-fade-in 160ms var(--hud-ease) both; }
+.teams-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px;
+  font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+.teams-note { color: var(--hud-warn); }
+.teams-row { display: grid; gap: 6px; }
+/* One side per row: the name, its size on the right, and under them what choosing it does. */
+.team-card { --team: var(--hud-team0); position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "name count" "state state";
+  align-items: baseline; gap: 2px 12px; min-width: 0; padding: 8px 12px;
+  background: rgba(5,15,20,.7); border: var(--hud-plate-line); border-left: 4px solid var(--team); border-radius: var(--hud-radius); }
+.team-card[data-team="1"] { --team: var(--hud-team1); }
+.team-card.mine { background: color-mix(in srgb, var(--team) 16%, rgba(5,15,20,.7)); }
+.team-card:has(.team-hit:not(:disabled)):hover { border-color: var(--team); }
+.team-card.refused .team-name, .team-card.refused .team-count { opacity: .6; }
+.team-hit { position: absolute; inset: 0; z-index: 1; padding: 0; background: transparent; border: 0; cursor: pointer; }
+.team-hit:disabled { cursor: default; }
+.team-name { grid-area: name; font: 400 var(--hud-t3)/1 var(--font-display); letter-spacing: var(--hud-track-num); color: var(--team); }
+.team-count { grid-area: count; justify-self: end; white-space: nowrap; font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+.team-state { grid-area: state; font: 600 var(--hud-t1)/1.25 var(--font-ui); color: var(--hud-tx); }
+.team-card.mine .team-state { color: var(--team); }
+.team-card.refused .team-state { color: var(--hud-tx2); }
+.teams-answer { margin: 0; font: 600 var(--hud-t1)/1.35 var(--font-ui); color: var(--hud-ok); }
+.teams-answer.err { color: var(--hud-danger); }
+
+/* ============================================================================ shop (§4.4, §5.2 #49–50) */
+/* One card, no scroll (PLAN_2_1.md:238-239): the header, the five aisles side by side, the detail
+   strip and the key line. `e2e/tools/ui-fit.mjs` measures it at eight sizes and fails on a scroll,
+   a control off screen, a cut name, or text under its floor. Adjust the layout, never the type. */
+.shop { position: absolute; inset: 0; z-index: var(--z-shop); display: flex; align-items: center; justify-content: center;
+  background: rgba(3,8,11,.84); pointer-events: auto; color: var(--hud-tx); font-family: var(--font-ui); }
+.shop-card { width: min(1360px, 96vw); height: min(93vh, 860px); display: flex; flex-direction: column; gap: 10px; padding: 14px 20px 12px; overflow: hidden;
+  background: rgba(5,15,20,.95); border: var(--hud-plate-line); border-top: 2px solid var(--hud-accent); border-radius: var(--hud-radius); }
+.shop kbd { display: inline-block; min-width: 22px; padding: 3px 5px; text-align: center; font: 500 var(--hud-key)/1 var(--font-mono); letter-spacing: var(--hud-track-num);
+  color: var(--hud-tx); background: rgba(244,240,231,.07); border: var(--hud-plate-line); border-bottom-width: 2px; border-radius: var(--hud-radius); }
+/* Head: SKLEP · $4,100 · 12s, and the plan vote in the same line. */
+.shop-head { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 20px; min-width: 0; }
+.shop-headline { display: flex; align-items: baseline; gap: 16px; white-space: nowrap; }
+.shop-title { font: 400 var(--hud-t3)/1 var(--font-display); letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
+.shop-wallet, .shop-countdown { font: 500 var(--hud-t3)/1 var(--font-mono); letter-spacing: var(--hud-track-num); }
+.shop-wallet { color: var(--hud-money); }
+.shop-countdown { color: var(--hud-tx); }
+.shop-wallet::before, .shop-countdown::before { content: "·"; margin-right: 16px; color: var(--hud-tx2); }
+.shop-countdown.warn { color: var(--hud-warn); }
+.shop-countdown.shut { color: var(--hud-tx2); }
+.shop-plan { display: flex; align-items: center; gap: 16px; min-width: 0; white-space: nowrap;
+  font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+.shop-plan-opt { display: inline-flex; align-items: center; gap: 8px; color: var(--hud-tx); }
+.shop-plan-opt + .shop-plan-opt::before { content: "·"; margin-right: 8px; color: var(--hud-tx2); }
+.shop-plan-opt b { font: 500 var(--hud-t1)/1 var(--font-mono); letter-spacing: var(--hud-track-num); color: var(--hud-accent); }
+/* The Boys' role picker stays a strip above the aisles (PLAN_2_1.md:238-239). */
+.boys-strip { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; }
+.boys-strip-label { font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-accent); }
+.boys-strip-row { flex: 1 1 auto; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; min-width: 0; }
+.shop .boys-chip { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; padding: 5px 8px; cursor: pointer; text-align: left;
+  background: rgba(244,240,231,.04); border: var(--hud-plate-line); border-radius: var(--hud-radius); box-shadow: none; color: var(--hud-tx); }
+.shop .boys-chip:hover { border-color: var(--hud-accent); background: rgba(244,240,231,.07); }
+.shop .boys-chip.on { border-color: var(--hud-accent); background: rgba(231,182,46,.12); box-shadow: inset 3px 0 0 var(--hud-accent); }
+.shop .boys-chip b { font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); }
+.shop .boys-chip span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+.shop .boys-chip.on span { color: var(--hud-accent); }
+/* The five aisles: a column each, the header is the aisle's key and name (`shop-tab-N`). */
+.shop-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.shop-aisle { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
+.shop-tab { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 4px 2px 6px; cursor: pointer; text-align: left; white-space: nowrap;
+  background: transparent; border: 0; border-bottom: 2px solid rgba(178,201,210,.2); color: var(--hud-tx2);
+  font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); }
+.shop-tab:hover { color: var(--hud-tx); }
+.shop-aisle.armed .shop-tab { color: var(--hud-accent); border-bottom-color: var(--hud-accent); }
+.shop-aisle.armed .shop-tab kbd { background: var(--hud-accent); color: #0b1216; border-color: var(--hud-accent); }
+/* Every shelf has the same rows (`--rows`, the longest aisle's, set by Shop.tsx), so tiles line up
+   across the aisles and the five columns fill the card to the detail strip, as CS2's grid does. */
+.shop-shelf { flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: repeat(var(--rows, 6), minmax(0, 1fr)); gap: 6px; }
+/* A tile: the picture (when the tile is tall enough for one), the name, its one tag when it has
+   one, then the key and the price — the price is always there, the tag sits beside it and never in
+   its place (§5.2 #49). The whole tile is the buy button (`.tile-hit` under the text); SPRZEDAJ
+   sits above it. A tile is a size container: its row decides its height, and a short row drops
+   the picture instead of squeezing the words. */
+.shop-tile { position: relative; container-type: size; font-size: var(--hud-t2); display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; padding: 6px 8px;
+  background: rgba(244,240,231,.045); border: 1px solid rgba(178,201,210,.14); border-radius: var(--hud-radius); }
+.shop-tile:hover { background: rgba(244,240,231,.08); border-color: rgba(231,182,46,.55); }
+.shop-tile:has(.tile-hit:focus-visible) { border-color: var(--hud-accent); box-shadow: 0 0 0 1px var(--hud-accent); }
+.shop-tile.carried { box-shadow: inset 3px 0 0 var(--hud-accent); background: rgba(231,182,46,.07); }
+.shop-tile.locked { background: rgba(244,240,231,.02); border-color: rgba(178,201,210,.08); }
+.shop-tile.pending { opacity: .5; }
+.tile-hit { position: absolute; inset: 0; z-index: 0; padding: 0; background: transparent; border: 0; cursor: pointer; }
+.tile-hit:disabled { cursor: default; }
+.shop-tile > :not(.tile-hit) { position: relative; z-index: 1; pointer-events: none; }
+/* The silhouettes are ivory, as CS2's are white; the gun you carry and the one under the mouse
+   light up in the house brass. */
+.tile-art { flex: 1 1 0; min-height: 0; display: flex; align-items: center; justify-content: center; color: var(--hud-tx); opacity: .82; }
+.shop-tile.carried .tile-art, .shop-tile:hover .tile-art { color: var(--hud-accent); opacity: 1; }
+.tile-art svg { display: block; width: 100%; height: 100%; max-height: 52px; }
+.shop-tile.locked .tile-art { color: var(--hud-tx2); opacity: .45; }
+@container (max-height: 64px) { .tile-art { display: none; } }
+.tile-name { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; white-space: nowrap;
+  font: 600 var(--hud-t2)/1.1 var(--font-ui); color: var(--hud-tx); }
+.shop-tile.locked .tile-name { color: var(--hud-tx2); }
+.tile-badge { font: 500 var(--hud-t1)/1 var(--font-mono); letter-spacing: var(--hud-track-num); color: var(--hud-accent); }
+.tile-scope { flex: 0 0 auto; display: inline-flex; color: var(--hud-accent); }
+.tile-scope svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+/* „LUNETA” is the icon's aria-label; the word stays in the tile's textContent for the e2e only. */
+.tile-scope-word { display: none; }
+/* The foot: the key and the price, and the one tag („Brakuje $250”, „MASZ”, „nosisz”, „działa
+   jeszcze 12s”) or SPRZEDAJ beside the price, never in its place (§5.2 #49). A tag must never
+   change the picture's size: every tile of a shelf draws its art at ONE size (audit P7-2, the
+   rifles at 1280×720 shrank to thumbnails beside an untagged C-20). So the foot has one shape per
+   shelf, never per tile — see the two container rules below the tag. */
+.tile-foot { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; }
+.tile-key { order: 1; flex: 0 0 auto; font: 500 var(--hud-key)/1 var(--font-mono); letter-spacing: var(--hud-track-num); color: var(--hud-tx2); }
+.shop-aisle.armed .tile-key { color: var(--hud-accent); }
+.tile-price { order: 1; margin-left: auto; min-width: 0; white-space: nowrap; font: 500 var(--hud-t2)/1.1 var(--font-mono); letter-spacing: var(--hud-track-num); color: var(--hud-money); }
+.shop-tile.locked .tile-price { color: var(--hud-tx2); }
+.tile-swap { margin-right: 6px; font-style: normal; color: var(--hud-tx2); }
+.tile-tag { order: 0; flex: 0 0 100%; min-width: 0; display: flex; white-space: nowrap; font: 600 var(--hud-t1)/1.1 var(--font-ui); }
+/* Wide tiles (1280×720 to 1600×900; 1920×1080 is narrow: its t2 grows faster than its tiles):
+   key · tag · price on ONE line on every tile. The widest foot is
+   „3·5” (25 px) + „Brakuje $1,050” or SPRZEDAJ (≈ 7.45 t1) + „$4,750” (≈ 3.85 t2) + two 6 px gaps;
+   with t1 ≤ .824 t2 (hud.css clamps) that is ≤ 37 px + 9.99 t2, inside 12.2 em of t2 for any
+   t2 ≥ 16.3 px — and t2 never goes under 17. The tile's font-size is t2, so `em` here is t2. */
+@container (min-width: 12.2em) {
+  .tile-foot { flex-wrap: nowrap; column-gap: 6px; }
+  .tile-tag { order: 1; flex: 0 0 auto; }
+}
+/* Narrow tiles: the tag keeps its own line, and a tile without a tag keeps that line empty, so
+   the art is the same size on every tile of the shelf. That line costs the art ~17 px, so a narrow
+   tile draws art only from 80 px of height (≥ 20 px of picture, not a 7 px sliver at 1093×614). */
+@container (width < 12.2em) and (height <= 80px) { .tile-art { display: none; } }
+@container (width < 12.2em) and (height > 80px) {
+  .tile-foot:not(:has(.tile-tag))::before { content: "\00a0"; order: 0; flex: 0 0 100%; font: 600 var(--hud-t1)/1.1 var(--font-ui); }
+}
+.tile-tag.have { color: var(--hud-accent); }
+.tile-tag.no { color: var(--hud-danger); }
+/* Its line is as tall as a text tag's (1.1 em with the 1 px borders), so SPRZEDAJ moves no picture either. */
+.tile-sell { display: inline-flex; align-items: center; padding: 0 8px; cursor: pointer; pointer-events: auto;
+  background: rgba(244,240,231,.07); border: var(--hud-plate-line); border-radius: var(--hud-radius); color: var(--hud-tx2);
+  font: 600 var(--hud-t1)/calc(1.1em - 2px) var(--font-ui); letter-spacing: var(--hud-track-label); }
+.tile-sell:hover:not(:disabled) { color: var(--hud-tx); border-color: var(--hud-accent); }
+.tile-sell-icon { display: none; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+/* A short tile (TDM's six rows at 1164×655 and below, 55 px at 1024×576): the three lines still fit
+   — the name, the one tag, the key and the price — once the padding, the gaps and the line boxes are
+   tightened (16 + 13 + 16 px of type). The tag stays on screen at every size (§5.2 #49); only
+   SPRZEDAJ, a button with a border, becomes its icon beside the key (its words stay its label). */
+@container (max-height: 57px) {
+  .shop-tile { padding-block: 2px; gap: 0; }
+  .tile-name, .tile-price, .tile-tag { line-height: 1; }
+  .tile-foot { row-gap: 0; }
+  .tile-tag.sell { order: 1; flex: 0 0 auto; }
+  .tile-sell { padding: 0 4px; }
+  .tile-sell-word { display: none; }
+  .tile-sell-icon { display: block; }
+}
+/* The strip under the shelf: what the focused item is for, and what a kill with it pays (CS). */
+.shop-detail { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; min-width: 0; padding: 6px 2px 0; white-space: nowrap;
+  border-top: var(--hud-plate-line); }
+.shop-detail-art { flex: 0 0 64px; height: 26px; color: var(--hud-accent); }
+.shop-detail-art svg { display: block; width: 100%; height: 100%; }
+.shop-detail-name { flex: 0 0 auto; font: 600 var(--hud-t2)/1.2 var(--font-ui); color: var(--hud-tx); }
+.shop-detail-role { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 500 var(--hud-t1)/1.2 var(--font-ui); color: var(--hud-tx2); }
+.shop-detail-pay { flex: 0 0 auto; font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-money); }
+/* The foot: the result or the armed aisle on the left, the keys on the right. */
+.shop-foot { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; padding-top: 8px;
+  border-top: var(--hud-plate-line); }
+.shop-result { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 var(--hud-t1)/1.3 var(--font-ui); color: var(--hud-tx2); }
+.shop-result.ok { color: var(--hud-ok); }
+.shop-result.err { color: var(--hud-danger); }
+.shop-result.armed { color: var(--hud-accent); }
+.shop-keys { flex: 0 0 auto; display: flex; align-items: center; gap: 18px; white-space: nowrap;
+  font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+.shop-keys kbd { margin-right: 6px; }
+.shop-close { padding: 4px 0; background: none; border: 0; cursor: pointer; color: inherit; font: inherit; letter-spacing: inherit; }
+.shop-close:hover { color: var(--hud-tx); }
+/* Short screens (1024×576): tighter gaps, so six tiles of the TDM gear aisle still fit. */
+@media (max-height: 640px) {
+  .shop-card { gap: 6px; padding: 10px 16px 8px; }
+  .shop-grid { gap: 8px; }
+  .shop-shelf, .shop-aisle { gap: 4px; }
+  .shop-tile { padding: 4px 8px; gap: 2px; }
+  .shop-foot { padding-top: 5px; }
+}
+@media (max-width: 1100px) {
+  .shop-card { padding-inline: 16px; }
+  .shop-grid { gap: 8px; }
+  .shop-tab { gap: 6px; }
+}
+
+/* ============================================================================ enter and exit (§6.1) */
+@keyframes p7-fade-in { from { opacity: 0; } }
+@keyframes p7-fade-out { to { opacity: 0; } }
+@keyframes p7-slide-in { from { opacity: 0; translate: -24px 0; } }
+@keyframes p7-slide-in-short { from { opacity: 0; translate: -12px 0; } }
+@keyframes p7-rise-in { from { opacity: 0; translate: 0 8px; } }
+@keyframes p7-sink-out { to { opacity: 0; translate: 0 8px; } }
+/* The shop: fade with a rise of 8 px in 160 ms, and back out; on the way out it takes no clicks. */
+.shop-enter > .shop { animation: p7-fade-in 160ms var(--hud-ease) both; }
+.shop-enter .shop-card { animation: p7-rise-in 160ms var(--hud-ease) both; }
+.shop-exit > .shop { animation: p7-fade-out 160ms var(--hud-ease-in) forwards; pointer-events: none; }
+.shop-exit .shop-card { animation: p7-sink-out 160ms var(--hud-ease-in) forwards; }
+
+/* ============================================================================ §4.5 rows for P7's zones */
+/* The one hide rule (§3.8), on P7's zones: the shop card hides under Tab (the board opens over it,
+   and the shop stays mounted with its keys live); the ESC column hides under Tab too; the resume
+   prompt hides while dead, under every overlay, and in the final stage of a match. */
+.hud[data-overlay~="tab"] :is(.shop-enter, .pause-layer),
+.hud[data-alive="false"] [data-zone="prompt"],
+.hud:is([data-overlay~="tab"], [data-overlay~="shop"], [data-overlay~="pause"], [data-moment="ended"]) [data-zone="prompt"] {
+  opacity: 0; visibility: hidden; transition: opacity var(--hud-fast), visibility 0s linear var(--hud-fast);
+}
+
+/* ============================================================================ reduced motion (R3) */
+/* No animation at all (Principle 11): every screen above appears and leaves as a cut. The loading
+   bar still shows its step — its fill is a width, not a movement. */
+@media (prefers-reduced-motion: reduce) {
+  .fade, .loading-fill, .pause-switch::after { transition: none; }
+  .pause-dim, .pause, .pause-settings, .pause-settings.closing, .pause-layer.closing, .pause-confirm, .teams, .resume-prompt,
+  .shop-enter > .shop, .shop-enter .shop-card, .shop-exit > .shop, .shop-exit .shop-card { animation: none; }
+}

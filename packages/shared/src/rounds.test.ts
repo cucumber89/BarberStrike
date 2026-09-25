@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Btn, MatchPhase } from "./types";
-import { MOVEMENT_BUTTONS, frozenAt, isFrozen, isLive, maskInput, respawnInMs } from "./rounds";
+import { GAME_MODES } from "./types";
+import { MOVEMENT_BUTTONS, frozenAt, isFrozen, isLive, maskInput, respawnDelayMs, respawnInMs } from "./rounds";
 
 describe("respawn waves", () => {
   it("calls warm-up and a live wave playable, and the freeze and the result screen not", () => {
@@ -62,5 +63,22 @@ describe("respawn waves", () => {
     expect(respawnInMs(MatchPhase.Waiting, 5000, 1000)).toBe(0);
     expect(respawnInMs(MatchPhase.Countdown, 5000, 1000)).toBe(0);
     expect(respawnInMs(MatchPhase.Ended, 5000, 1000)).toBe(0);
+  });
+});
+
+describe("the respawn timer, one rule for the room and the death card", () => {
+  it("respawnDelayMs matches the server rule: gungame 3000, shaved 3000, fade 2200, default 3200", () => {
+    expect(respawnDelayMs("gungame")).toBe(3000);
+    expect(respawnDelayMs("gungame", { fade: true }), "Gun Game has no perks").toBe(3000);
+    expect(respawnDelayMs("ostrzyzeni", { shaved: true })).toBe(3000);
+    expect(respawnDelayMs("ostrzyzeni", { shaved: true, fade: true }), "the chasers' timer is flat").toBe(3000);
+    expect(respawnDelayMs("tdm", { fade: true })).toBe(2200);
+    expect(respawnDelayMs("ostrzyzeni", { shaved: false, fade: true }), "an unshaved warm-up death").toBe(2200);
+    expect(respawnDelayMs("tdm", { shaved: true }), "shaved means something only in Ostrzyżeni").toBe(3200);
+    for (const mode of [...GAME_MODES, "ffa" as const]) {
+      if (mode === "gungame") continue;
+      expect(respawnDelayMs(mode), mode).toBe(3200);
+      expect(respawnDelayMs(mode, { shaved: false, fade: false }), mode).toBe(3200);
+    }
   });
 });

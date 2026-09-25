@@ -2,11 +2,12 @@ import { Scene } from "@babylonjs/core/scene";
 import type { AssetContainer } from "@babylonjs/core/assetContainer";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import type { Material } from "@babylonjs/core/Materials/material";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { type GameMode, MODES,
-  dequantAngle, boysClass, Btn, C2S, S2C, CHAT, ECONOMY, INTERP_DELAY_MS, MAPS, MARK, DEFAULT_MAP_ID, PERK_ORDER, RESPAWN_DELAY_MS, TEAM_NAMES, MatchPhase, buildCollisionWorld, rebuildWorldInto, applyPlan, planById, PLANS, buyWindowLeft, inFlagZone, isShopItemId, isWeaponId, makeRayHit, noPerks, packInput, perkSpeedScale,
+  dequantAngle, boysClass, Btn, C2S, S2C, CHAT, ECONOMY, INTERP_DELAY_MS, MAPS, MARK, DEFAULT_MAP_ID, PERK_ORDER, MatchPhase, buildCollisionWorld, rebuildWorldInto, applyPlan, planById, PLANS, buyWindowLeft, inFlagZone, isShopItemId, isWeaponId, makeRayHit, noPerks, packInput, perkActive, perkSpeedScale, sitesOf, wrapAngle,
   type BoomEvent, type ChatEvent, type CollisionWorld, type DamagedEvent, type FlagEvent, type FlashedEvent, type GrenadeId, type HitEvent, type KillEvent, type MapDef, type MarkEvent, type MarkMessage, type MatchEventMessage, type MoneyEvent,
   type PerkTimes, type PlanEvent, type ShopItemId, type ShopResult, type ShotEvent, type SpawnEvent, type Team, type TeamResult, type ThrowEvent, type WeaponId,
 } from "@frankibarber/shared";
@@ -31,7 +32,11 @@ import { installView } from "./view";
 import { installAudio } from "./audio";
 import { installPostFx } from "./world/postfx";
 import { installPerf } from "./perf";
-import { hud, type ChatLine, type HudFlag, type HudMark, type HudState, type ScoreRow } from "./store";
+import { hud, type ChatLine, type HudFlag, type HudMark, type HudSpectating, type HudState, type ScoreRow } from "./store";
+import { LifeDamage, LifeSync, RoundWatch, buyContextFor, flagNoticeFor, killerFrom, lateJoinFor, nearBombFor, respawnAtFor, shavedAfterKill, siteAt, spawnHealthFor } from "./hudFeed";
+import { BLINK_MS, NO_SPECTATE, cycle, spectating, stepSpectate, type SpectateCtx, type SpectateState } from "./spectate";
+import { deathCamPose, startDeathCam, type DeathCam, type Pose } from "./player/deathCam";
+import { ERR } from "../ui/hud/copy";
 import type { Settings } from "../settings";
 
 /**
@@ -144,6 +149,27 @@ export class Game {
   private chatKey = 0;
   private markKey = 0;
   private readonly radarSnap: RadarSnapshot = { x: 0, z: 0, yaw: 0, alive: false, map: null, mates: [], spotted: [] };
+  // ---- drop U (P1): the HUD's live state and death as in CS2 (docs/UI_U_SPEC.md §7 P1)
+  /** This life's damage with each opponent, for the killer card's damage line. */
+  private readonly lifeDamage = new LifeDamage();
+  /** The rounds this client sees: kills from an observed release, the MVP and the history. */
+  private readonly rounds = new RoundWatch();
+  /** An `S2C.Kill` with me as the victim since my last spawn (a late joiner has none). */
+  private killSeen = false;
+  /** Alive as the spawn, the kill and the patches say it together (`hudFeed.LifeSync`). */
+  private life = new LifeSync();
+  /** The death cam of this death, and where its killer was last seen (they may leave the room). */
+  private deathCam: DeathCam | null = null;
+  private deathKillerId = "";
+  private readonly deathKillerAt = { x: 0, y: 0, z: 0 };
+  private readonly deadPose: Pose = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
+  /** The spectator (`spectate.ts`): whom the bar names, and whom the camera shows (it cuts mid-blink). */
+  private spec: SpectateState = NO_SPECTATE;
+  private specShown: string | null = null;
+  private specCutAt = 0;
+  private hiddenRemote: RemotePlayer | null = null;
+  private deadButtons = 0;
+  private readonly specEye = new Vector3();
 
   constructor(private opts: GameOptions) {
     this.conn = opts.connection;
@@ -193,7 +219,7 @@ export class Game {
     this.weapons.onDryFire = () => this.events.emit("dryFire", { weapon: this.weapons.weapon });
     this.weapons.onReload = (weapon, shells, empty) => this.events.emit("reloadStart", { weapon, shells, empty });
     this.weapons.onReloadEnd = (weapon) => this.events.emit("reloadEnd", { weapon });
-    this.weapons.onEquip = (weapon) => this.events.emit("weaponEquip", { weapon });
+    this.weapons.onEquip = (weapon) => { hud.set({ lastSwitchAt: performance.now() }); this.events.emit("weaponEquip", { weapon }); };
     this.weapons.beforeFire = () => this.flushInputs(performance.now());
     this.local.speedScale = (sprinting) => perkSpeedScale(this.myPerks, this.conn.serverNow(), sprinting) * (this.conn.state.mode === "boys" ? boysClass(this.conn.me()?.boysClass).speed : 1);
     // Prediction freezes itself on the shared server clock; see `frozenAt`.
@@ -218,10 +244,11 @@ export class Game {
     if (me) {
       this.local.spawnAt(me.x, me.y, me.z, dequantAngle(me.yaw));
       this.local.alive = me.alive;
+      this.life = new LifeSync(me.alive);
       this.weapons.syncFrom(me);
       this.throwing.syncFrom(me);
     }
-    hud.set({ connected: true, myId: this.conn.sessionId, myTeam: (me?.team ?? 0) as Team, loadStage: "players", mode: this.conn.state.mode ?? "tdm" });
+    hud.set({ connected: true, myId: this.conn.sessionId, myTeam: (me?.team ?? 0) as Team, loadStage: "players", mode: this.conn.state.mode ?? "tdm", mapId: this.mapDef.id });
 
     const ctx: GameContext = {
       scene, engine, rendererKind: kind, camera: this.local.camera, events: this.events,
@@ -244,7 +271,7 @@ export class Game {
     hud.set({ loadStage: "finishing" });
     await new Promise<void>((resolve, reject) => {
       let frames = 0;
-      const timer = window.setTimeout(() => { scene.onAfterRenderObservable.remove(observer); reject(new Error("Scene startup timeout. Try lower graphics settings.")); }, 45000);
+      const timer = window.setTimeout(() => { scene.onAfterRenderObservable.remove(observer); reject(new Error(ERR.sceneTimeout)); }, 45000);
       this.cancelStartup = () => { window.clearTimeout(timer); scene.onAfterRenderObservable.remove(observer); reject(new Error("Startup cancelled")); };
       const observer = scene.onAfterRenderObservable.add(() => {
         if (++frames < 2 || !scene.isReady()) return;
@@ -302,7 +329,11 @@ export class Game {
         const me = c.me();
         if (me) { this.weapons.syncFrom(me); this.throwing.syncFrom(me); }
         this.throwing.cancel();
-        hud.set({ respawnAt: 0, killerName: "", flashUntil: 0, flashStrength: 0 });
+        this.endDeath();
+        // Alive NOW, in the same write that clears the death: the patch that says so comes later,
+        // and the card must fade its last frame, not redraw the dead copy (`LifeSync`).
+        this.life.spawned();
+        hud.set({ alive: true, health: spawnHealthFor((c.state.mode ?? "tdm") as GameMode, me), respawnAt: 0, killerName: "", flashUntil: 0, flashStrength: 0, diedAt: 0, killer: null, spectating: null, lateJoin: false });
         this.events.emit("localSpawn", e);
       } else {
         const r = this.remotes.get(e.id);
@@ -313,30 +344,30 @@ export class Game {
       this.events.emit("remoteShot", { player: this.remotes.get(e.id) ?? null, event: e });
     }));
     this.unsubs.push(c.onMessage<HitEvent>(S2C.Hit, (e) => {
+      this.lifeDamage.hit(e.victim, e.damage);
       hud.set({ hitAt: performance.now(), hitKill: e.kill, hitHead: e.headshot, hitArmor: !!e.armor });
       this.events.emit("localHit", e);
     }));
     this.unsubs.push(c.onMessage<DamagedEvent>(S2C.Damaged, (e) => {
       // Angle of the attacker relative to the view direction, for the directional indicator.
       const ang = Math.atan2(e.dx, e.dz) - this.local.yaw;
+      this.lifeDamage.damaged(e.from, e.amount);
       hud.set({ damageAt: performance.now(), damageAngle: ang, health: e.health, armor: e.armor ?? hud.get().armor, ...(e.broke ? { armorBrokeAt: performance.now() } : {}) });
       this.events.emit("localDamaged", e);
     }));
     this.unsubs.push(c.onMessage<KillEvent>(S2C.Kill, (e) => {
       this.tracker.onKill(e);
+      this.rounds.kill(e);
       const feed = [...hud.get().killFeed, { ...e, at: performance.now(), key: ++this.killFeedKey }].slice(-6);
       const patch: Partial<HudState> = { killFeed: feed };
       if (e.victim === c.sessionId) {
+        this.life.killed();
         this.local.alive = false;
         this.input.clearAll();
         this.throwing.cancel();
         this.weapons.cancel(); // a reload the corpse was halfway through is not the next life's problem
         if (this.shopOpen) this.setShopOpen(false, false);
-        Object.assign(patch, {
-          // Individual respawn countdown in both warm-up and the live match.
-          alive: false, health: 0, respawnAt: performance.now() + RESPAWN_DELAY_MS,
-          killerName: e.killer === e.victim ? "" : e.killerName, killerWeapon: e.weapon,
-        });
+        Object.assign(patch, this.beginDeath(e));
         this.events.emit("localDeath", e);
       }
       hud.set(patch);
@@ -366,7 +397,8 @@ export class Game {
       // the START of one — otherwise the second match pays for the first one's kills as well.
       if ((e.phase === MatchPhase.Playing && prevPhase !== MatchPhase.Prep) || (e.phase === MatchPhase.Prep && prevPhase === MatchPhase.Countdown)) {
         this.tracker.start(c.sessionId);
-        hud.set({ reward: null }); // the previous match's summary is not this match's news
+        this.rounds.reset();
+        hud.set({ reward: null, roundMvp: null, roundHistory: [] }); // the previous match's summary is not this match's news
       }
       this.tracker.onPhase(e.phase, hud.get().alive);
       if (e.phase === MatchPhase.Ended) this.payMatch(e);
@@ -393,7 +425,7 @@ export class Game {
     this.unsubs.push(c.onMessage<FlagEvent>(S2C.Flag, (e) => {
       const flag = this.mapDef.flags[e.flag];
       this.tracker.onFlag(e, this.settings.nickname);
-      hud.set({ flagNotice: { text: `${TEAM_NAMES[e.team]} TOOK ${flag?.id ?? "?"} · ${flag?.name ?? ""}`, team: e.team, at: performance.now() } });
+      hud.set({ flagNotice: flagNoticeFor(flag, e.team, performance.now()) });
       this.events.emit("flag", e);
     }));
     // ---- drop 2: grenades and the shop
@@ -423,9 +455,20 @@ export class Game {
     this.unsubs.push(c.onMessage<PlanEvent>(S2C.Plan, (e) => {
       if (!this.disposed) hud.set({ plan: { ...e, at: performance.now() } });
     }));
-    c.onReconnecting((active) => { if (!this.disposed) hud.set({ reconnecting: active }); });
-    c.onLeave((code) => { if (!this.disposed) this.opts.onLeave(code === 1000 ? "left" : "Connection to the server was lost."); });
-    c.onError((_code, message) => { if (!this.disposed) this.opts.onLeave(message ?? "Connection error."); });
+    c.onReconnecting((active) => {
+      if (this.disposed) return;
+      // Whatever happens in the gap is not seen: this round's MVP would be counted from half of it.
+      if (active) this.rounds.interrupt();
+      hud.set({ reconnecting: active });
+    });
+    // Codes, not English (§5.5): the menu maps them to Polish (`ERROR_TEXT`), and the server's own
+    // words go to the console only.
+    c.onLeave((code) => { if (!this.disposed) this.opts.onLeave(code === 1000 ? "left" : ERR.connectionLost); });
+    c.onError((code, message) => {
+      if (this.disposed) return;
+      console.warn("[net] connection error", code, message);
+      this.opts.onLeave(ERR.connectionError);
+    });
   }
 
   /**
@@ -511,6 +554,7 @@ export class Game {
   private onPlayerRemove(id: string): void {
     if (this.disposed) return;
     const r = this.remotes.get(id);
+    if (r === this.hiddenRemote) this.hiddenRemote = null;
     if (r) { r.dispose(); this.remotes.delete(id); this.events.emit("remoteLeave", { id }); }
   }
 
@@ -538,6 +582,7 @@ export class Game {
     const t = s.t;
     s.players.forEach((p, id) => {
       if (id === this.conn.sessionId) {
+        if (this.life.patch(p.alive)) this.silentDeath();
         this.local.reconcile(p, this.conn.ack);
         this.weapons.syncFrom(p);
         this.throwing.syncFrom(p);
@@ -574,6 +619,9 @@ export class Game {
     if (this.input.lethalReleased) { this.input.lethalReleased = false; this.throwing.releaseLethal(now); }
     if (this.input.tacticalRequested) { this.input.tacticalRequested = false; if (!this.weapons.busy(now)) this.throwing.pressTactical(now); }
     this.throwing.update(now);
+
+    // Drop U (P1): dead, the camera is the death cam or a spectated eye (applied by `local.update`).
+    this.updateDead(now, dtMs);
 
     // Prediction + network send (batched to ~60 msgs/s regardless of frame rate).
     const groundedBefore = this.local.body.grounded;
@@ -632,12 +680,29 @@ export class Game {
     const s = this.conn.state;
     const me = this.conn.me();
     const rows: ScoreRow[] = [];
-    s.players.forEach((p) => rows.push({ boysClass: s.mode === "boys" ? p.boysClass : undefined, id: p.id, name: p.name, team: p.team as Team, kills: p.kills, deaths: p.deaths, score: p.score, ping: p.ping, alive: p.alive, connected: p.connected, assists: p.assists ?? 0, money: p.money, bot: !!p.bot, shaved: !!p.shaved, haircut: p.haircut ?? "" }));
+    s.players.forEach((p) => rows.push({ boysClass: s.mode === "boys" ? p.boysClass : undefined, id: p.id, name: p.name, team: p.team as Team, kills: p.kills, deaths: p.deaths, score: p.score, ping: p.ping, alive: p.alive, connected: p.connected, assists: p.assists ?? 0, money: p.money, bot: !!p.bot, shaved: !!p.shaved, haircut: p.haircut ?? "", health: p.health }));
     rows.sort((a, b) => b.score - a.score || b.kills - a.kills);
     const near = this.nearStation();
-    const windowLeft = me ? buyWindowLeft({ now: this.conn.serverNow(), spawnedAt: me.spawnedAt ?? 0, phase: s.phase, alive: me.alive, nearStation: near,
-      bombBuying: s.mode === "bomb" ? s.phase === MatchPhase.Prep && s.bomb.stage === "buy" : s.mode === "duel" ? s.phase === MatchPhase.Prep : undefined, releaseAt: s.phaseEndsAt, mode: (s.mode ?? "tdm") as GameMode, shaved: !!me.shaved }) : 0;
+    const mode = (s.mode ?? "tdm") as GameMode;
+    // Drop U (P1): the round modes' buy window as the server decides it — shut in a break, open for
+    // the 5 s tail after the release, and turniej buying like the duel it is (`hudFeed.roundBuy`).
+    const windowLeft = me ? buyWindowLeft(this.buyContext(me, near)) : 0;
     const cur = hud.get();
+    const alive = me ? this.life.alive(me.alive) : false;
+    const myTeam = (me?.team ?? 0) as Team;
+    const b = this.local.body;
+    const players = samePlayers(cur.players, rows) ? cur.players : rows;
+    // The rounds this client sees: the MVP and the history change only on the edges.
+    const roundsMoved = this.rounds.step({
+      mode, phase: s.phase as MatchPhase, round: s.bomb?.round ?? 0, result: s.bomb?.result ?? "", scoreA: s.scoreA, scoreB: s.scoreB,
+      bomb: mode === "bomb" && s.bomb ? { stage: s.bomb.stage, actor: s.bomb.actor, carrier: s.bomb.carrier } : null, players: rows,
+    });
+    // The killer's HP on the card is live while they live (§3.10): a teammate's trade shows.
+    let killer = cur.killer;
+    if (killer && !alive) {
+      const k = s.players.get(killer.id);
+      if (k?.alive && (k.health !== killer.hp || (k.armor ?? 0) !== killer.armor)) killer = { ...killer, hp: k.health, armor: k.armor ?? 0 };
+    }
     const scope = this.local.scopeState();
     // Drop 4: flags (Domination) and which zone we stand in.
     let flags = cur.flags;
@@ -657,7 +722,8 @@ export class Game {
     this.local.phaseEndsAt = s.phaseEndsAt;
     hud.set({
       boysClass: me?.boysClass ?? 1, nextClass: me?.nextClass ?? 1,
-      health: me?.health ?? 0, alive: me?.alive ?? false, myTeam: (me?.team ?? 0) as Team,
+      // Until the spawn's patch lands, the spawn's own health (`spawnHealthFor`), not the corpse's 0.
+      health: this.life.pending ? cur.health : me?.health ?? 0, alive, myTeam,
       weapon: this.weapons.weapon, ammo: this.weapons.ammo, reserve: this.weapons.reserve, reloading: this.weapons.reloading,
       phase: s.phase, phaseEndsAt: s.phaseEndsAt, matchEndsAt: s.matchEndsAt, scoreA: s.scoreA, scoreB: s.scoreB, winner: s.winner as Team | -1,
       mode: s.mode ?? "tdm", flags, inFlag, winnerId: s.winnerId ?? "", winnerName: s.winnerName ?? "",
@@ -669,7 +735,7 @@ export class Game {
       // Drop 5: expired chat lines (unless the box is open) and marks drop out here.
       chat: !cur.chatOpen && cur.chat.some((l) => now - l.seen > CHAT.showMs) ? cur.chat.filter((l) => now - l.seen <= CHAT.showMs) : cur.chat,
       marks: cur.marks.some((m) => now > m.until) ? cur.marks.filter((m) => now <= m.until) : cur.marks,
-      players: samePlayers(cur.players, rows) ? cur.players : rows, ping: Math.round(this.conn.rtt), pointerLocked: this.input.pointerLocked,
+      players, ping: Math.round(this.conn.rtt), pointerLocked: this.input.pointerLocked,
       crosshairSpread: this.weapons.effectiveSpread(),
       aiming: this.local.aimBlend > 0.6,
       serverNow: this.conn.serverNow(), spawnProtectedUntil: me?.protectedUntil ?? 0,
@@ -680,10 +746,161 @@ export class Game {
       buyWindowLeft: windowLeft, nearStation: near, shopOpen: this.shopOpen,
       cookingKind: this.throwing.state.kind ?? "", cooking: this.throwing.state.cook,
       moneyToasts: cur.moneyToasts.some((t) => now - t.at >= 2500) ? cur.moneyToasts.filter((t) => now - t.at < 2500) : cur.moneyToasts,
+      // ---- drop U (P1)
+      siteHere: mode === "bomb" && alive ? siteAt(sitesOf(this.mapDef), b) : "",
+      nearBomb: mode === "bomb" && nearBombFor(s.bomb ?? null, myTeam, alive, b),
+      lateJoin: lateJoinFor(mode, s.phase as MatchPhase, alive, this.killSeen),
+      killer,
+      ...(roundsMoved ? { roundMvp: this.rounds.mvp, roundHistory: this.rounds.history } : {}),
     });
     // The window shut while the menu was open: close it so the player is not stuck reading "closed".
     if (this.shopOpen && windowLeft <= 0 && s.mode !== "boys") this.setShopOpen(false);
     if (s.phase === MatchPhase.Ended && this.input.pointerLocked) this.input.exitPointerLock();
+  }
+
+  /** The buy rules' context, as the server builds it (`hudFeed.buyContextFor`): the HUD and the B key. */
+  private buyContext(me: NetPlayer, nearStation: boolean): ReturnType<typeof buyContextFor> {
+    const s = this.conn.state;
+    return buyContextFor(
+      { mode: (s.mode ?? "tdm") as GameMode, phase: s.phase as MatchPhase, phaseEndsAt: s.phaseEndsAt,
+        bomb: s.bomb ? { stage: s.bomb.stage, roundEndsAt: s.bomb.roundEndsAt, result: s.bomb.result } : null },
+      { spawnedAt: me.spawnedAt ?? 0, alive: me.alive, shaved: !!me.shaved }, this.conn.serverNow(), nearStation);
+  }
+
+  // ---------------------------------------------------------------- death (drop U, P1)
+
+  /**
+   * My death (`S2C.Kill`, victim = me): the killer card's facts and the death cam's first pose —
+   * what the player was looking at, exactly. Returns the store patch.
+   */
+  private beginDeath(e: KillEvent): Partial<HudState> {
+    const now = performance.now();
+    const s = this.conn.state;
+    const me = this.conn.me();
+    const k = e.killer && e.killer !== e.victim ? s.players.get(e.killer) : undefined;
+    const killer = killerFrom(e, this.conn.sessionId, k ? { health: k.health, armor: k.armor ?? 0 } : null, this.lifeDamage, now);
+    // The shaved come back on the short timer; any clippers kill converts before the server sets
+    // it (`hudFeed.shavedAfterKill`), frontal or backstab, and my `shaved` is not replicated yet.
+    const mode = (s.mode ?? "tdm") as GameMode;
+    const respawnAt = respawnAtFor(mode, s.phase as MatchPhase, now,
+      { shaved: shavedAfterKill(mode, s.phase as MatchPhase, e, !!me?.shaved), fade: perkActive(this.myPerks, "fade", this.conn.serverNow()) });
+    this.killSeen = true;
+    const cam = this.local.camera;
+    this.deathCam = startDeathCam({ x: cam.position.x, y: cam.position.y, z: cam.position.z, yaw: cam.rotation.y, pitch: cam.rotation.x }, this.local.body.y, now);
+    this.deathKillerId = killer?.id ?? "";
+    const at = (killer && this.remotes.get(killer.id)) || k;
+    if (at) { this.deathKillerAt.x = at.x; this.deathKillerAt.y = at.y; this.deathKillerAt.z = at.z; }
+    this.resetSpectate();
+    return {
+      alive: false, health: 0, respawnAt, diedAt: now, killer, spectating: null, lateJoin: false,
+      killerName: killer ? e.killerName : "", killerWeapon: e.weapon,
+    };
+  }
+
+  /**
+   * A death no `S2C.Kill` announced (`LifeSync.patch`): the late joiner the room spawns and puts
+   * down in one tick, a tournament bystander. The body stops, the card stays away (no killer, no
+   * `diedAt`), and `lateJoin` — dead with no kill seen — hands the frame loop to the spectator.
+   */
+  private silentDeath(): void {
+    this.local.alive = false;
+    this.input.clearAll();
+    this.throwing.cancel();
+    this.weapons.cancel();
+    if (this.shopOpen) this.setShopOpen(false, false);
+    this.deathCam = null;
+    this.deathKillerId = "";
+    this.resetSpectate();
+    hud.set({ alive: false, health: 0, respawnAt: 0, diedAt: 0, killer: null, spectating: null });
+  }
+
+  /** A spawn ends the death: the cam, the spectator and this life's ledger. */
+  private endDeath(): void {
+    this.deathCam = null;
+    this.deathKillerId = "";
+    this.resetSpectate();
+    this.lifeDamage.reset();
+    this.killSeen = false;
+  }
+
+  private resetSpectate(): void {
+    this.spec = NO_SPECTATE;
+    this.specShown = null;
+    this.specCutAt = 0;
+    this.deadButtons = 0;
+    this.hideSpectated(null);
+  }
+
+  /** The spectated body is not drawn: the camera is inside its head. One at a time. */
+  private hideSpectated(r: RemotePlayer | null): void {
+    if (this.hiddenRemote === r) return;
+    this.hiddenRemote?.setHidden(false);
+    this.hiddenRemote = r;
+    r?.setHidden(true);
+  }
+
+  /**
+   * Every frame while dead: whom to watch (LPM next, PPM previous, a dead target held for a
+   * second) and what the camera shows — the death cam, or the watched player's eye, smoothed, cut
+   * to inside the black blink the HUD draws when the target changes. The pose goes to
+   * `LocalPlayer.deadView`, which only the dead branch of its update applies.
+   */
+  private updateDead(now: number, dtMs: number): void {
+    if (this.local.alive) return;
+    const h = hud.get();
+    // The break signal without a new field (P-SRV): bomb's round is resolved; the others keep the
+    // round's reason up through the break and clear it for the freeze.
+    const st = this.conn.state;
+    const inBreak = st.phase === MatchPhase.Prep && (st.mode === "bomb" ? st.bomb?.stage === "resolved" : (st.bomb?.result ?? "") !== "");
+    const watch = spectating({ mode: h.mode, phase: h.phase, alive: false, respawnAt: h.respawnAt, diedAt: h.diedAt, now, noCard: h.lateJoin, inBreak });
+    if (!watch) {
+      if (this.spec.targetId || h.spectating) { this.resetSpectate(); hud.set({ spectating: null }); }
+      if (this.deathCam) {
+        const r = this.deathKillerId ? this.remotes.get(this.deathKillerId) : undefined;
+        if (r) { this.deathKillerAt.x = r.x; this.deathKillerAt.y = r.y; this.deathKillerAt.z = r.z; }
+        this.local.deadView = deathCamPose(this.deathCam, this.deathKillerId ? this.deathKillerAt : null, now, this.deadPose);
+      }
+      return;
+    }
+    const ctx: SpectateCtx = { myId: h.myId, myTeam: h.myTeam, mode: h.mode, players: h.players, bracket: h.bracket };
+    // LPM / PPM move the view; nothing is fired — a dead player sends no input at all.
+    const btn = this.input.buttons();
+    const rise = btn & ~this.deadButtons;
+    this.deadButtons = btn;
+    let next = this.spec;
+    if (rise & Btn.Fire) next = { targetId: cycle(ctx, next.targetId, 1), lostAt: 0 };
+    else if (rise & Btn.Aim) next = { targetId: cycle(ctx, next.targetId, -1), lostAt: 0 };
+    next = stepSpectate(next, ctx, now);
+    if (next.targetId !== this.spec.targetId) this.specCutAt = now + BLINK_MS / 2;
+    this.spec = next;
+    this.publishSpectating(h);
+    let cut = false;
+    if (this.spec.targetId !== this.specShown && now >= this.specCutAt) { this.specShown = this.spec.targetId; cut = true; }
+    // Nobody left to watch: the last view stays (§6.1).
+    const r = this.specShown ? this.remotes.get(this.specShown) : undefined;
+    if (!r) return;
+    this.hideSpectated(r);
+    r.eye(this.specEye);
+    const p = this.deadPose;
+    if (cut || !this.local.deadView) {
+      p.x = this.specEye.x; p.y = this.specEye.y; p.z = this.specEye.z; p.yaw = r.yaw; p.pitch = r.pitch;
+    } else {
+      // Smoothed: the remote is already interpolated, this only takes the edge off a quantised turn.
+      const kp = 1 - Math.exp(-dtMs / 40), kr = 1 - Math.exp(-dtMs / 50);
+      p.x += (this.specEye.x - p.x) * kp; p.y += (this.specEye.y - p.y) * kp; p.z += (this.specEye.z - p.z) * kp;
+      p.yaw = wrapAngle(p.yaw + wrapAngle(r.yaw - p.yaw) * kr);
+      p.pitch += (r.pitch - p.pitch) * kr;
+    }
+    this.local.deadView = p;
+  }
+
+  /** The bar's line: the watched player's name and HP, written only when it changes. */
+  private publishSpectating(h: HudState): void {
+    const id = this.spec.targetId;
+    const row = id ? h.players.find((p) => p.id === id) : undefined;
+    const want: HudSpectating | null = row ? { id: row.id, name: row.name, health: row.alive ? row.health ?? -1 : 0 } : null;
+    const cur = h.spectating;
+    if (want ? !cur || cur.id !== want.id || cur.name !== want.name || cur.health !== want.health : cur !== null) hud.set({ spectating: want });
   }
 
   /** Within ECONOMY.stationRadius of a buy station (horizontal, same floor). */
@@ -704,9 +921,7 @@ export class Game {
     if (!me) return;
     if (this.conn.state.mode === "boys") { this.setShopOpen(true); return; }
     if (!me.alive) return;
-    const state = this.conn.state;
-    const left = buyWindowLeft({ now: this.conn.serverNow(), spawnedAt: me.spawnedAt ?? 0, phase: state.phase, alive: me.alive, nearStation: this.nearStation(),
-      bombBuying: state.mode === "bomb" ? state.phase === MatchPhase.Prep && state.bomb.stage === "buy" : state.mode === "duel" ? state.phase === MatchPhase.Prep : undefined, releaseAt: state.phaseEndsAt, mode: (state.mode ?? "tdm") as GameMode, shaved: !!me.shaved });
+    const left = buyWindowLeft(this.buyContext(me, this.nearStation()));
     if (left <= 0) { hud.set({ shopResult: { ok: false, item: "", reason: "closed", at: performance.now() } }); return; }
     this.setShopOpen(true);
   }
@@ -839,7 +1054,7 @@ export class Game {
     return new Promise((resolve, reject) => {
       let frames = 0;
       const stop = () => { window.clearTimeout(timer); this.scene.onAfterRenderObservable.remove(observer); this.cancelStartup = null; };
-      const timer = window.setTimeout(() => { stop(); reject(new Error("Deployment timeout. Please reconnect.")); }, 10000);
+      const timer = window.setTimeout(() => { stop(); reject(new Error(ERR.deployTimeout)); }, 10000);
       const observer = this.scene.onAfterRenderObservable.add(() => {
         if (!((this.conn.me()?.spawnedAt ?? 0) > 0) || ++frames < 2) return;
         stop(); this.syncHud(performance.now()); resolve();
@@ -916,7 +1131,7 @@ function samePlayers(a: readonly ScoreRow[], b: readonly ScoreRow[]): boolean {
     const x = a[i], y = b[i];
     if (x.id !== y.id || x.name !== y.name || x.team !== y.team || x.kills !== y.kills || x.deaths !== y.deaths
       || x.score !== y.score || x.ping !== y.ping || x.alive !== y.alive || x.connected !== y.connected
-      || x.assists !== y.assists || x.money !== y.money || x.bot !== y.bot || x.boysClass !== y.boysClass) return false;
+      || x.assists !== y.assists || x.money !== y.money || x.bot !== y.bot || x.boysClass !== y.boysClass || x.health !== y.health) return false;
   }
   return true;
 }

@@ -1,0 +1,217 @@
+/* ui/hud/top.css — P2: the top strip, the mode line, the flags, the action slot and the pair card
+   (docs/UI_U_SPEC.md §4.2, §5.2, §6.1). Rewritten in drop U wave 2 on the §3 tokens only: every
+   size is a --hud-t* token, every text colour a --hud-* one, and no case change in CSS (pinned words are
+   uppercased in JS). Each zone is positioned with the shared geometry tokens (§3.6), which is what
+   keeps the cross-package gaps (§4.3) true at 1600, 1280 and 1024 wide:
+     top       --hud-strip-top / -h / -w          → feed × top ≥ 16 by construction
+     top-line  --hud-topline-top, ≤ --hud-banner-w → top × top-line = 8, top-line × feed ≥ 12
+     action    --hud-action-y, ≤ 420 wide          → action × chat ≥ 12
+     bracket   the banner box (§3.7)              → bracket × top / crosshair / feed ≥ 16 / 16 / 12 */
+
+/* ============================================================== the strip (zone top) */
+.top-bar {
+  position: absolute; top: var(--hud-strip-top); left: 50%; transform: translateX(-50%); z-index: var(--z-strip);
+  box-sizing: border-box; width: var(--hud-strip-w); height: var(--hud-strip-h);
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(104px, auto) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto;
+  align-items: center; column-gap: 10px; padding: 3px 12px 4px;
+  background: var(--hud-plate); border: var(--hud-plate-line); border-radius: var(--hud-radius);
+  backdrop-filter: blur(var(--hud-blur));
+  color: var(--hud-tx); white-space: nowrap;
+  transition: opacity var(--hud-fast);
+}
+/* Ostrzyżeni has the longest side names (OCALENI / OSTRZYŻENI) and never a bomb, so its clock track
+   is only as wide as its m:ss digits: the 104 px floor exists to keep the sides still when a bomb
+   icon joins the digits. That gives each side the room to print OSTRZYŻENI whole on its chip beside
+   five pips at 553 px (1024 wide), with the gap to spare. */
+.top-bar[data-mode="ostrzyzeni"] { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.top-bar .t0 { --ts-team: var(--hud-team0); }
+.top-bar .t1 { --ts-team: var(--hud-team1); }
+
+/* One side: pips at the outer edge, then the role icon, the name and the score beside the clock.
+   The right side is the same row mirrored; which side is left is the CSS `order` (stripSides). */
+.top-bar .ts-side { grid-row: 1; display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
+.top-bar .ts-side.r { flex-direction: row-reverse; }
+/* A team name is printed whole, always (Principle 9): it never shrinks, so OSTRZYŻENI beside five
+   pips is never „OSTRZYŻ…”. Only a player's nick (a tournament pair, the FFA leader), already cut at
+   12 characters in JS, may still end in „…” when its letters are wide. */
+.top-bar .ts-name {
+  flex: none;
+  font: 600 var(--hud-t1)/1.15 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--ts-team, var(--hud-tx2));
+}
+.top-bar .ts-name.nick { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; letter-spacing: var(--hud-track-num); }
+/* My side's name sits on a filled chip (Principle 9). */
+.top-bar .ts-side.mine .ts-name { padding: 2px 6px 1px; border-radius: var(--hud-radius); background: var(--ts-team); color: var(--hud-plate); }
+.top-bar .ts-side.me .ts-name { color: var(--hud-tx); }
+.top-bar .ts-score {
+  font: 400 var(--hud-t3)/1 var(--font-display); letter-spacing: var(--hud-track-num); font-variant-numeric: tabular-nums;
+  min-width: .8em; text-align: center; color: var(--hud-tx);
+}
+.top-bar .ts-side.mine .ts-score { box-shadow: inset 0 -2px 0 var(--ts-team); }
+.top-bar .ts-side.best.lead .ts-score { color: var(--hud-danger); }
+.top-bar .ts-role { flex: none; color: var(--ts-team); }
+
+/* Pips: 8 × 14, 3 px apart — filled alive, a 30 % outline dead, none for a player who left. The
+   living sit nearest the clock. Above five a side collapses into one pip and its count, which is
+   `data-count` drawn by CSS: the count is never a text node (§5.1).
+   If a side ever holds more than its cell (not in a round at the gate sizes, where the widest side
+   fits with room to spare), the pips give way before the name: they narrow (never below 3 px), and
+   past that the row is cut from the outer edge in, the dead first and the living nearest the clock
+   last. Their count stays in `aria-label` / `data-count`. */
+.top-bar .ts-pips { display: flex; flex-direction: row-reverse; align-items: center; gap: 3px; flex: 0 1 auto; min-width: 0; overflow: hidden; }
+.top-bar .ts-side.r .ts-pips { flex-direction: row; }
+.top-bar .ts-pip { box-sizing: border-box; flex: 0 1 auto; width: 8px; min-width: 3px; height: 14px; border-radius: 1px; background: var(--ts-team); }
+.top-bar .ts-pip.dead { background: none; border: 1px solid var(--ts-team); opacity: .3; }
+.top-bar .ts-pips.many::after {
+  content: attr(data-count); padding: 0 2px;
+  font: 400 var(--hud-t1)/1 var(--font-display); letter-spacing: var(--hud-track-num); color: var(--ts-team);
+}
+
+/* The clock (Principle 8): the word in the warm-up, dim in the countdown and a break, amber in a
+   freeze, white live, red in the last 10 s of a round (30 s of a match), and after a plant the
+   bomb icon with red fuse digits pulsing at 1 Hz, 2 Hz under BOMB.defuseMs. */
+.top-bar .ts-clock {
+  grid-row: 1; grid-column: 2; display: flex; align-items: center; justify-content: center; gap: 6px;
+  font: 500 var(--hud-t3)/1 var(--font-mono); letter-spacing: var(--hud-track-num); font-variant-numeric: tabular-nums;
+  color: var(--hud-tx); transition: color var(--hud-base);
+}
+.top-bar .ts-digits { display: inline-block; }
+.top-bar .ts-clock:is([data-kind="warmup"], [data-kind="none"]) { font: 600 var(--hud-t2)/1 var(--font-ui); letter-spacing: var(--hud-track-label); }
+.top-bar .ts-clock:is([data-kind="countdown"], [data-kind="break"], [data-kind="none"]) { color: var(--hud-tx2); }
+.top-bar .ts-clock[data-kind="freeze"] { color: var(--hud-warn); }
+.top-bar .ts-clock[data-urgent], .top-bar .ts-clock[data-kind="bomb"] { color: var(--hud-danger); }
+/* The digits stay solid (they are read mid-fight); the icon and a red glow beat with the fuse. */
+.top-bar .ts-clock[data-kind="bomb"] :is(.ts-bomb, .ts-digits) { animation: ts-fuse 1s ease-in-out infinite; }
+.top-bar .ts-clock[data-kind="bomb"][data-fast] :is(.ts-bomb, .ts-digits) { animation-duration: .5s; }
+.top-bar .ts-bomb { flex: none; }
+/* The last 3 s of a freeze: each second the digits pop 1.08 → 1 (the element is re-keyed on the
+   second, in step with the beeps at endsAt − 3000 / − 2000 / − 1000). */
+.top-bar .ts-digits.tick { animation: ts-tick var(--hud-base) var(--hud-ease); }
+/* Freeze release: the strip brightens 1.4 → 1 as the round goes live (§6.1). */
+.top-bar[data-round][data-moment="live"] > :is(.ts-side, .ts-clock:not([data-kind="bomb"])) { animation: ts-flash 150ms var(--hud-ease); }
+@keyframes ts-fuse { 50% { opacity: .35; } }
+.top-bar .ts-clock[data-kind="bomb"] .ts-digits { animation-name: ts-glow; }
+@keyframes ts-glow { 50% { text-shadow: 0 0 12px var(--hud-danger); } }
+@keyframes ts-tick { from { transform: scale(1.08); } }
+@keyframes ts-flash { from { filter: brightness(1.4); } }
+
+/* Row 2: the round, the goal, the ladder or the bracket stage under the clock, and my role badge
+   under my side. It is its own grid of three tracks across the strip: the badge in the first, the
+   line in the middle. A `1fr` track is never narrower than what it holds, so the line is centred
+   while the badge leaves it room and is pushed right when not (ostrzyżeni's long line beside
+   „OSTRZYŻONY”) — always 12 px apart, never „OSTRZYŻONYRUNDA 2 / 5”. */
+.top-bar .ts-row2 {
+  grid-row: 2; grid-column: 1 / -1; min-width: 0;
+  display: grid; grid-template-columns: 1fr auto 1fr; column-gap: 12px; align-items: baseline;
+  font: 600 var(--hud-t1)/1.15 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx2);
+}
+.top-bar .ts-row2 > .ts-line { grid-column: 2; }
+.top-bar .ts-row2 [data-testid="ladder-gun"] { letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
+.top-bar .ts-row2 > .ts-badge { grid-column: 1; justify-self: start; color: var(--ts-team); }
+/* Between pairs the strip is the break clock and „DRABINKA” alone, on a plate its own size. */
+.top-bar.between { width: auto; min-width: 200px; grid-template-columns: auto; justify-items: center; padding: 3px 32px 4px; }
+.top-bar.between .ts-clock, .top-bar.between .ts-row2 { grid-column: 1; }
+
+/* ============================================================== the mode line (zone top-line) */
+.mode-line {
+  position: absolute; top: var(--hud-topline-top); left: 50%; transform: translateX(-50%); z-index: var(--z-strip);
+  max-width: var(--hud-banner-w); display: grid; justify-items: center; gap: 3px;
+  font: 600 var(--hud-t2)/1.15 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx); white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 10px rgba(0,0,0,.55);
+  transition: opacity var(--hud-fast);
+}
+.mode-line.warn { color: var(--hud-warn); }
+.mode-line.armed { color: var(--hud-danger); }
+.mode-line .ml-text { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.mode-line .ml-nick { letter-spacing: var(--hud-track-num); }
+/* Somebody else's plant or defuse: 3 px, in the colour of whose hands the bomb is in. */
+.mode-line .ml-bar { position: relative; display: block; width: 200px; height: 3px; background: rgba(244,240,231,.2); }
+.mode-line .ml-bar::before {
+  content: ""; position: absolute; inset: 0; background: var(--hud-tx);
+  transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform var(--hud-fast) linear;
+}
+.mode-line .ml-bar.t0::before { background: var(--hud-team0); }
+.mode-line .ml-bar.t1::before { background: var(--hud-team1); }
+
+/* ============================================================== the flags (zone top-line) */
+.flags { position: absolute; top: var(--hud-topline-top); left: 50%; transform: translateX(-50%); z-index: var(--z-strip); display: flex; gap: 6px; transition: opacity var(--hud-fast); }
+.flags .flag {
+  position: relative; box-sizing: border-box; width: 36px; height: 28px; display: grid; place-items: center; overflow: hidden;
+  background: var(--hud-plate); border: var(--hud-plate-line); border-radius: var(--hud-radius); color: var(--hud-tx2);
+}
+.flags .flag b { font: 600 var(--hud-t2)/1 var(--font-ui); }
+.flags .flag.own0 { --fl: var(--hud-team0); }
+.flags .flag.own1 { --fl: var(--hud-team1); }
+.flags .flag:is(.own0, .own1) { color: var(--fl); border-color: var(--fl); background: color-mix(in srgb, var(--fl) 24%, var(--hud-plate)); }
+.flags .flag.contested {
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--hud-team0) 34%, transparent) 0 5px, color-mix(in srgb, var(--hud-team1) 34%, transparent) 5px 10px), var(--hud-plate);
+}
+.flags .flag.here { box-shadow: 0 0 0 2px var(--hud-tx); }
+.flags .flag-cap {
+  position: absolute; left: 0; bottom: 0; width: 100%; height: 3px; background: var(--hud-tx);
+  transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform var(--hud-fast) linear;
+}
+.flags .flag.cap0 .flag-cap { background: var(--hud-team0); }
+.flags .flag.cap1 .flag-cap { background: var(--hud-team1); }
+
+/* ============================================================== the action slot (zone action) */
+.action {
+  position: absolute; top: var(--hud-action-y); left: 50%; transform: translateX(-50%); z-index: var(--z-strip);
+  max-width: 420px; display: grid; justify-items: center; gap: 6px;
+  font: 600 var(--hud-t2)/1.15 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx); white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 10px rgba(0,0,0,.55);
+  transition: opacity var(--hud-fast);
+}
+.action .act-key { font: 500 var(--hud-t2)/1 var(--font-mono); letter-spacing: var(--hud-track-num); color: var(--hud-accent); }
+.action .act-bar { position: relative; display: block; width: 200px; height: 4px; background: rgba(244,240,231,.2); }
+.action:is(.plant, .defuse) .act-bar { width: 240px; height: 6px; }
+.action .act-bar > i {
+  position: absolute; inset: 0; background: var(--hud-accent);
+  transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform var(--hud-fast) linear;
+}
+.action.enemy { color: var(--hud-danger); }
+.action.enemy .act-bar > i { background: var(--hud-danger); }
+.action.contested { color: var(--hud-warn); }
+
+/* ============================================================== the pair card (zone bracket) */
+.bracket-card {
+  position: absolute; top: var(--hud-banner-top); left: 0; right: 0; margin: 0 auto; z-index: var(--z-banner);
+  box-sizing: border-box; width: var(--hud-banner-w); display: grid; justify-items: center; gap: 3px; padding: 9px 16px 10px;
+  background: linear-gradient(90deg, transparent, rgba(5,15,20,.86) 14%, rgba(5,15,20,.86) 86%, transparent);
+  border-top: 2px solid var(--hud-accent); border-bottom: 2px solid var(--hud-accent);
+  text-align: center; white-space: nowrap;
+  animation: bc-in var(--hud-in) var(--hud-ease) both;
+  transition: opacity var(--hud-fast);
+}
+.bracket-card.closing { animation: bc-out var(--hud-out) var(--hud-ease-in) both; }
+.bracket-card p, .bracket-card h3 { margin: 0; }
+.bracket-card .bc-eyebrow { font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-accent); }
+.bracket-card.walkover .bc-eyebrow { color: var(--hud-warn); }
+.bracket-card .bc-verdict { font: 600 var(--hud-t2)/1.2 var(--font-ui); letter-spacing: var(--hud-track-num); color: var(--hud-tx2); }
+.bracket-card .bc-title { font: 400 var(--hud-t3)/1 var(--font-display); letter-spacing: var(--hud-track-label); color: var(--hud-tx); margin-top: 2px; }
+.bracket-card .bc-next { font: 600 var(--hud-t2)/1.2 var(--font-ui); letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
+.bracket-card .bc-standing { font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+.bracket-card .bc-standing.playing { color: var(--hud-ok); }
+.bracket-card .bc-standing.out { color: var(--hud-danger); }
+@keyframes bc-in { from { opacity: 0; transform: scale(.96); } }
+@keyframes bc-out { to { opacity: 0; transform: scale(.96); } }
+
+/* ============================================================== §4.5, the rows for these zones
+   One hide rule (§3.8). The strip stays under Tab and ESC and through a break, and shows in
+   Ended's stage A only. The flag row stays under ESC: `multiplayer.spec.ts:523` asserts it
+   visible before the pointer is locked, which is when the ESC column is up. */
+.hud:is([data-alive="false"], [data-overlay~="tab"], [data-overlay~="shop"], [data-moment="break"], [data-moment="halftime"], [data-moment="betweenPairs"], [data-moment="ended"]) :is([data-zone="top-line"], [data-zone="action"]),
+.hud[data-overlay~="pause"] :is(.mode-line, [data-zone="action"]),
+.hud:is([data-overlay~="tab"], [data-overlay~="shop"], [data-overlay~="pause"], [data-moment="ended"]) [data-zone="bracket"],
+.hud:is([data-overlay~="shop"], [data-stage="B"], [data-stage="C"]) [data-zone="top"],
+.hud[data-banner="1"] [data-zone="action"]:not([data-progress]) {
+  opacity: 0; visibility: hidden; transition: opacity var(--hud-fast), visibility 0s linear var(--hud-fast);
+}
+
+/* §3.8 / R3: no animation and no transition in these zones under reduced motion. The bars still
+   stand at their value (`--v`), and the fuse is a static red. */
+@media (prefers-reduced-motion: reduce) {
+  :is(.top-bar, .mode-line, .flags, .action, .bracket-card), :is(.top-bar, .mode-line, .flags, .action, .bracket-card) *,
+  :is(.top-bar, .mode-line, .flags, .action, .bracket-card) *::before, :is(.top-bar, .mode-line, .flags, .action, .bracket-card) *::after {
+    animation: none !important; transition: none !important;
+  }
+}

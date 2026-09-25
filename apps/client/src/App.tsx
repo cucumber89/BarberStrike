@@ -8,12 +8,43 @@ import { Menu } from "./ui/Menu";
 import { Hud } from "./ui/Hud";
 import type { ShopApi } from "./ui/Shop";
 import type { ChatApi } from "./ui/Chat";
-import { Loading } from "./ui/Loading";
+import { Loading, pickedMap } from "./ui/Loading";
+import { Fade, useFade } from "./ui/Fade";
+import { errorCode, humanError } from "./ui/errors";
+import { ERR } from "./ui/hud/copy";
+import { uiFlags } from "./ui/hud/uiFlags";
 import { useHudSlice } from "./game/store";
 import { enterFullscreen, exitImmersion, isFullscreen, lockKeyboard } from "./game/input/immersion";
 import { hud } from "./game/store";
 
-type Screen = { kind: "menu"; error?: string } | { kind: "connecting" } | { kind: "ready" } | { kind: "entering" } | { kind: "game" };
+/**
+ * The screens, in the order a match goes through them. `entering` is the click on WEJDŹ DO MECZU
+ * while the black comes in (the loading card still shows, the canvas stays hidden); `deploying` is
+ * UNDER the black (the canvas is shown, the loading card is still mounted but covered, the HUD is
+ * still dormant) until the server has spawned us and the camera has rendered; `game` is play.
+ */
+type Screen = { kind: "menu"; error?: string } | { kind: "connecting" } | { kind: "ready" } | { kind: "entering" } | { kind: "deploying" } | { kind: "game" };
+
+/** What the loading card is told about the match before the room itself says (§5.2 #64). */
+interface Picked { gameMode?: GameMode; mapId?: string }
+
+/** §6.1: the transition lengths, in ms. */
+const FADE = {
+  /** Menu → loading: black in, the loading card mounts under it, black out. */
+  toLoading: { in: 240, out: 200 },
+  /**
+   * Loading → match: black in, held ≥ `hold` until deployed, then out (the zones stagger in). The
+   * black is held at most `cap`: a server that stops answering between READY and the spawn would
+   * otherwise leave the player on pure black for the whole deploy timeout (10 s, `Game.ts:842`) with
+   * no word and no way out. After `cap` the black clears back to the loading card („WCHODZISZ”,
+   * its WRÓĆ DO MENU live), and the match comes in through a second black once the spawn arrives.
+   */
+  toMatch: { in: 200, hold: 100, cap: 1200, out: 400 },
+  /** Match / loading / error → menu: black in, then the menu keyart's own `mm-keyart-in` (1100). */
+  toMenu: { in: 240, out: 240 },
+  /** The zone stagger (`hud.css` `.hud.entering`): the last zone starts at 180 and runs 240. */
+  stagger: 420,
+} as const;
 
 export function App() {
   const [screen, setScreen] = useState<Screen>({ kind: "menu" });
@@ -32,6 +63,12 @@ export function App() {
   const attempt = useRef(0);
   const starting = useRef(false);
   const connectionRef = useRef<Connection | null>(null);
+  const { state: fadeState, ref: fadeRef, through } = useFade();
+  /** The menu's pick for the match being loaded: undefined when joining a room by its id. */
+  const [picked, setPicked] = useState<Picked>({});
+  /** The HUD's zone stagger is running (§6.1): on as the black starts to leave, off ~420 ms later. */
+  const [entering, setEntering] = useState(false);
+  const enteringTimer = useRef(0);
 
   /**
    * A canvas can hold only one kind of context for its whole life: once WebGPU has claimed it,
@@ -56,35 +93,66 @@ export function App() {
     gameRef.current?.applySettings(s);
   }, []);
 
-  const leave = useCallback(async (reason?: string) => {
+  /**
+   * Back to the menu, through black (§6.1 match → menu, loading → menu, error → menu). `reason` is
+   * "left" when the player chose it; anything else is an error — a code (`ERR.*`) or whatever was
+   * thrown — and the menu shows its Polish text (`ui/errors.ts`), never the raw message.
+   *
+   * The attempt is cancelled at once, so a start still in flight can no longer replace the menu;
+   * the teardown itself waits for the black.
+   */
+  const leave = useCallback(async (reason?: unknown) => {
     attempt.current++;
     starting.current = false;
-    const g = gameRef.current, c = connectionRef.current;
-    gameRef.current = null; connectionRef.current = null;
-    // Leaving the match gives the keyboard and the screen back to the browser. Without this the
-    // player lands in the menu still fullscreen with Escape captured, which reads as a hang.
-    exitImmersion();
-    canvasHost.current?.replaceChildren();
-    // The e2e harness hook holds the WHOLE previous generation: the Game, its Scene, its disposed
-    // engine with the WebGL context behind it, the Connection with the full room state, every
-    // RemotePlayer and the local player's 240-entry input history. Leaving it set meant a stale
-    // generation stayed reachable for as long as the tab lived — the view and audio modules already
-    // delete their own globals on teardown, and this one was simply missed.
-    delete (window as unknown as { __fb?: unknown }).__fb;
-    hud.reset();
-    setScreen({ kind: "menu", error: reason && reason !== "left" ? reason : undefined });
-    try { if (g) await g.dispose(); else await c?.leave(); } catch (error) { console.warn("[app] cleanup", error); }
-  }, []);
+    const error = reason === undefined || reason === "left" ? undefined : humanError(reason);
+    if (error) console.warn("[app] back to the menu:", reason);
+    await through({
+      inMs: FADE.toMenu.in, outMs: FADE.toMenu.out,
+      swap: async () => {
+        const g = gameRef.current, c = connectionRef.current;
+        gameRef.current = null; connectionRef.current = null;
+        // Leaving the match gives the keyboard and the screen back to the browser. Without this the
+        // player lands in the menu still fullscreen with Escape captured, which reads as a hang.
+        exitImmersion();
+        canvasHost.current?.replaceChildren();
+        // The e2e harness hook holds the WHOLE previous generation: the Game, its Scene, its disposed
+        // engine with the WebGL context behind it, the Connection with the full room state, every
+        // RemotePlayer and the local player's 240-entry input history. Leaving it set meant a stale
+        // generation stayed reachable for as long as the tab lived — the view and audio modules already
+        // delete their own globals on teardown, and this one was simply missed.
+        delete (window as unknown as { __fb?: unknown }).__fb;
+        hud.reset();
+        window.clearTimeout(enteringTimer.current);
+        setEntering(false);
+        uiFlags.set({ entering: false });
+        setScreen((s) => (s.kind === "menu" && !error ? s : { kind: "menu", error }));
+        try { if (g) await g.dispose(); else await c?.leave(); } catch (err) { console.warn("[app] cleanup", err); }
+      },
+    });
+  }, [through]);
 
   const play = useCallback(async (name: string, roomName: string, mode: "auto" | "create" | "join", roomId: string | undefined, gameMode: GameMode, bots: { count: number; level: BotLevel }, mapId: string) => {
     if (starting.current || gameRef.current) return;
     starting.current = true;
     const token = ++attempt.current;
     hud.reset();
-    setScreen({ kind: "connecting" });
-    const timeout = window.setTimeout(() => { if (attempt.current === token) void leave("Loading took too long. Please try again or lower graphics settings."); }, 90000);
+    // Joining a room by its id: the room has its own mode and map, and the menu's pick is not them
+    // (§5.2 #64) — the loading card says „DOŁĄCZANIE DO POKOJU” until the room itself tells us.
+    // A duel and a tournament are always played on the 1 v 1 arena, whatever the menu's map says:
+    // the server overrides the lobby's map for them (`TdmRoom.ts` `duel`, `MAPS[DUEL_MAP_ID]`).
+    setPicked(mode === "join" ? {} : { gameMode, mapId: pickedMap(gameMode, mapId) });
+    // The connection starts now; the screen changes under the black (§6.1 menu → loading). The
+    // ENGINE waits for the loading card to be on screen (`shown`): building the scene holds the
+    // main thread for seconds, and started under the black it froze the black in place — the card
+    // then appeared only once the heavy part was over (measured: black for 10 s+ on SwiftShader).
+    const shown = through({
+      inMs: FADE.toLoading.in, outMs: FADE.toLoading.out,
+      swap: () => { if (attempt.current === token) setScreen((s) => (s.kind === "menu" ? { kind: "connecting" } : s)); },
+    });
+    const timeout = window.setTimeout(() => { if (attempt.current === token) void leave(ERR.loadTimeout); }, 90000);
     const startWith = async (s: Settings): Promise<void> => {
       const connection = await Connection.connect({ url: defaultServerUrl(), name, roomName, mode, roomId, gameMode, mapId, bots: bots.count, botLevel: bots.level });
+      await shown;
       if (attempt.current !== token) { await connection.leave(); return; }
       connectionRef.current = connection;
       const game = new Game({ canvas: freshCanvas(), connection, settings: s, onLeave: reason => { if (attempt.current === token) void leave(reason); } });
@@ -111,32 +179,78 @@ export function App() {
         await startWith(forced);
       }
     } catch (err) {
-      if (attempt.current === token) { console.error(err); await leave(humanError(err)); }
+      if (attempt.current === token) { console.error(err); await leave(err); }
     } finally {
       window.clearTimeout(timeout);
       if (attempt.current === token) starting.current = false;
     }
-  }, [settings, leave, updateSettings]);
+  }, [settings, leave, updateSettings, through]);
 
+  /**
+   * WEJDŹ DO MECZU (§6.1 loading → match). The black comes in over 200 ms; under it the canvas is
+   * shown and we wait for the server's spawn plus two rendered frames (`waitForDeployment`), held at
+   * least 100 ms; then the loading card unmounts, the HUD wakes, and the black leaves over 400 ms
+   * while the zones stagger in. No frame shows the loading card and the live canvas together, or
+   * the canvas with a dormant HUD, unless it is black (`startup.spec.ts` "no shared frame").
+   */
   const enter = async () => {
     const game = gameRef.current, connection = connectionRef.current, token = attempt.current;
     if (!game || !connection || screen.kind !== "ready") return;
     setScreen({ kind: "entering" });
-    if (canvasHost.current) canvasHost.current.style.visibility = "visible";
     // THIS CLICK is the user gesture fullscreen, Keyboard Lock and pointer lock all require, and
     // it is the last one before play starts — asking earlier (before `connect`) would spend the
     // gesture on an await and have every request refused. Fullscreen first: Keyboard Lock, which
     // is what puts Escape and Ctrl+W in the game's hands, only works inside it and only on
     // Chromium, so its failure is normal and silent. The pointer is asked for last; if the browser
-    // refuses it, the pause card is already the retry surface and says so.
+    // refuses it, the pause card is already the retry surface and says so. The black starts with
+    // the click, so the fullscreen resize happens behind it. `deployed` exists before the black is
+    // queued (the swap under it awaits it) and starts waiting once Ready is sent.
+    let waitFor!: (p: Promise<void>) => void;
+    const deployed = new Promise<void>((resolve, reject) => { waitFor = (p) => { p.then(resolve, reject); }; });
+    deployed.catch(() => undefined); // observed through `black` / the second pass below
+    /** The zones' stagger, as the black leaves over the live match (§6.1). */
+    const stagger = () => {
+      setEntering(true);
+      uiFlags.set({ entering: true });
+      window.clearTimeout(enteringTimer.current);
+      enteringTimer.current = window.setTimeout(() => { setEntering(false); uiFlags.set({ entering: false }); }, FADE.stagger);
+    };
+    /** Whether the first black ended on the match (true) or went back to the card (the cap ran out). */
+    let live = false;
+    const black = through({
+      inMs: FADE.toMatch.in, outMs: FADE.toMatch.out,
+      swap: async () => {
+        if (attempt.current !== token) return;
+        setScreen({ kind: "deploying" });
+        const held = Promise.all([deployed, new Promise((r) => window.setTimeout(r, FADE.toMatch.hold))]).then(() => true);
+        const capped = new Promise<false>((r) => window.setTimeout(() => r(false), FADE.toMatch.cap));
+        live = await Promise.race([held, capped]);
+        if (attempt.current !== token) return;
+        // No spawn within the cap: back to the loading card (canvas hidden, HUD dormant — no shared
+        // frame), which says WCHODZISZ and keeps WRÓĆ DO MENU clickable while we keep waiting.
+        setScreen({ kind: live ? "game" : "entering" });
+      },
+      onClear: () => { if (attempt.current === token && live) stagger(); },
+    });
     const host = appRoot.current;
     if (host && await enterFullscreen(host)) void lockKeyboard();
     void game.requestPointerLockAsync();
     connection.send(C2S.Ready);
+    // A deploy that fails says so in Polish (§5.5 `deploy-timeout`) even while `Game.ts:842` still
+    // rejects with English: an error that is not already a code is the deploy failing.
+    waitFor(game.waitForDeployment().catch((e: unknown) => Promise.reject(errorCode(e) === ERR.unknown ? new Error(ERR.deployTimeout) : e)));
     try {
-      await game.waitForDeployment();
-      if (attempt.current === token) setScreen({ kind: "game" });
-    } catch (error) { if (attempt.current === token) await leave(humanError(error)); }
+      await black;
+      if (live || attempt.current !== token) return;
+      // The slow path: the card is up again; the spawn (or the deploy timeout, `Game.ts:842`) decides.
+      await deployed;
+      if (attempt.current !== token) return;
+      await through({
+        inMs: FADE.toMatch.in, outMs: FADE.toMatch.out,
+        swap: () => { if (attempt.current === token) setScreen({ kind: "game" }); },
+        onClear: () => { if (attempt.current === token) stagger(); },
+      });
+    } catch (error) { if (attempt.current === token) await leave(error); }
   };
   useEffect(() => () => {
     attempt.current++;
@@ -160,14 +274,14 @@ export function App() {
   return (
     <div className="app" ref={appRoot}>
       {/* The game canvas is created imperatively per start (see freshCanvas); menus overlay this host. */}
-      <div ref={canvasHost} className="game-canvas-host" style={{ visibility: screen.kind === "game" || screen.kind === "entering" ? "visible" : "hidden" }} />
+      <div ref={canvasHost} className="game-canvas-host" style={{ visibility: screen.kind === "game" || screen.kind === "deploying" ? "visible" : "hidden" }} />
       {/* Mounted from the READY screen on, not from DEPLOY: React's first commit of this tree is
           ~25 ms (measured, `e2e/tools/hud-bench.mjs`), and paying it at the moment the player
           presses DEPLOY is a dropped frame in the first second of play. `dormant` keeps it
           invisible and inert until the match actually starts. */}
-      {(screen.kind === "ready" || screen.kind === "entering" || screen.kind === "game") && (
+      {(screen.kind === "ready" || screen.kind === "entering" || screen.kind === "deploying" || screen.kind === "game") && (
         <Hud
-          dormant={screen.kind !== "game"}
+          dormant={screen.kind !== "game"} entering={entering}
           settings={settings} onSettings={updateSettings} onLeave={() => void leave("left")}
           onResume={async () => (await gameRef.current?.requestPointerLockAsync()) ?? false}
           onPause={() => gameRef.current?.releasePointerLock()}
@@ -190,7 +304,10 @@ export function App() {
           shop={shopApi} chat={chatApi} radar={radar}
         />
       )}
-      {(screen.kind === "connecting" || screen.kind === "ready" || screen.kind === "entering") && <Loading entering={screen.kind === "entering"} ready={screen.kind === "ready" && loadStage === "ready"} onEnter={enter} onCancel={() => void leave("left")} />}
+      {(screen.kind === "connecting" || screen.kind === "ready" || screen.kind === "entering" || screen.kind === "deploying") && (
+        <Loading entering={screen.kind === "entering" || screen.kind === "deploying"} ready={screen.kind === "ready" && loadStage === "ready"}
+          gameMode={picked.gameMode} mapId={picked.mapId} onEnter={enter} onCancel={() => void leave("left")} />
+      )}
       {screen.kind === "menu" && (
         <Menu
           settings={settings}
@@ -200,19 +317,7 @@ export function App() {
           onPlay={play}
         />
       )}
+      <Fade ref={fadeRef} on={fadeState.on} ms={fadeState.ms} />
     </div>
   );
-}
-
-function humanError(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  if (/startup|deployment/i.test(msg)) return msg;
-  if (/ECONNREFUSED|Failed to fetch|NetworkError|network|refused|ENOTFOUND|timeout/i.test(msg)) return "Cannot reach the game server. Is it running?";
-  if (/full/i.test(msg)) return "That room is full.";
-  // The renderer's own messages are already written for a player; passing them through beats
-  // replacing them with a generic failure that says nothing about what to try.
-  if (/WebGL2|hardware acceleration/i.test(msg)) return msg;
-  if (/not found|no rooms|doesn't exist|does not exist/i.test(msg)) return "Room not found.";
-  if (/WebGL2|WebGPU/i.test(msg)) return msg;
-  return msg || "Something went wrong.";
 }

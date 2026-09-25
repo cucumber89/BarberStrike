@@ -1,6 +1,13 @@
-import { BOMB, DUEL, GUN_GAME, MODES, OSTRZYZENI, TEAM_NAMES, parseHaircut, scoreLimitFor, type GameMode, type Team } from "@frankibarber/shared";
+import { BOMB, DUEL, GUN_GAME, MATCH, MODES, OSTRZYZENI, parseBracket, parseHaircut, scoreLimitFor, worstHaircut, type GameMode, type Team } from "@frankibarber/shared";
 import type { MatchReward } from "../game/progression/profile";
 import type { ScoreRow } from "../game/store";
+import { countWords } from "./hud/format";
+import type { EndedStage } from "./hud/phase";
+import { roundReasonShort, sideNames } from "./hud/roundText";
+
+// The round's words (side names, round reasons, the round card) moved to `hud/roundText.ts` in
+// drop U; they are re-exported here so every caller reads them from where it always did.
+export { OSTRZYZENI_SIDES, roundEnd, roundReasonText, sideNames, type RoundEnd } from "./hud/roundText";
 
 /**
  * The words on the result screens, computed from the replicated state and nothing else. Pure so
@@ -10,6 +17,11 @@ import type { ScoreRow } from "../game/store";
  * RULE: no sentence here claims a cause the state does not carry. Where the server does not say
  * (a Domination match can end on time or on points, and both leave the same fields), the
  * sentence is derived from the score against the mode's limit, which is the rule the server ran.
+ *
+ * Drop U (docs/UI_U_SPEC.md P6): the match end is read in three stages — A the final round (P5's
+ * banner, round modes only), B the verdict, C the card — and every stage is a function here, so
+ * the reading budget (§6.5: at most three words per second on screen) is a unit test over every
+ * outcome and every reason instead of a hope.
  */
 
 export type Outcome = "win" | "loss" | "draw" | "over";
@@ -26,11 +38,15 @@ export interface ResultCtx {
   scoreA: number;
   scoreB: number;
   players: readonly ScoreRow[];
+  /** The last round's server reason (`bomb.result`, mirrored for every round mode); "" when none. */
+  roundResult?: string;
+  /** The tournament's bracket string; "" outside a tournament. */
+  bracket?: string;
 }
 
-/** Ostrzyżeni's sides, in the team slots (see Hud.tsx). */
-export const OSTRZYZENI_SIDES = ["OCALENI", "OSTRZYŻENI"] as const;
-export const sideNames = (mode: GameMode): readonly [string, string] => (mode === "ostrzyzeni" ? OSTRZYZENI_SIDES : TEAM_NAMES);
+/** One life a round, a freeze, a break (§6.3). Written out: `phase.ts` is P2's to move. */
+const ROUND_MODES: ReadonlySet<GameMode> = new Set<GameMode>(["bomb", "duel", "turniej", "ostrzyzeni"]);
+export const isRoundModeResult = (mode: GameMode): boolean => ROUND_MODES.has(mode);
 
 /** Win / loss / draw from the local player's seat; "over" for somebody with no row (a watcher). */
 export function matchOutcome(c: ResultCtx): Outcome {
@@ -40,32 +56,61 @@ export function matchOutcome(c: ResultCtx): Outcome {
   return c.winnerId === "" ? "draw" : c.winnerId === c.myId ? "win" : "loss";
 }
 
-/** The score line under the title: sides, or the named winner, or both (Ostrzyżeni). */
-export function scoreLine(c: ResultCtx): string {
-  const [a, b] = sideNames(c.mode);
-  if (MODES[c.mode].winner === "team") return `${a} ${c.scoreA} — ${c.scoreB} ${b}`;
-  const named = c.winnerName ? `${c.winnerName} bierze tę noc` : "Nikt nie bierze tej nocy";
-  return c.mode === "ostrzyzeni" ? `${a} ${c.scoreA} — ${c.scoreB} ${b} · ${named}` : named;
+/** The final of a finished bracket (its last pair), or null when there is no bracket to read. */
+function finalOf(bracket: string | undefined): { a: string; b: string; scoreA: number; scoreB: number } | null {
+  const view = parseBracket(bracket ?? "");
+  const m = view?.matches[view.matches.length - 1];
+  return m && m.a && m.b ? m : null;
 }
 
-const unitOf: Partial<Record<GameMode, string>> = { tdm: "zabójstw", dom: "punktów", boys: "punktów", bomb: "wygranych rund", duel: "wygranych rund" };
+/**
+ * The score line under the title: the sides (the veto keeps „FADE 40 — 31 TAPER”; Ostrzyżeni's are
+ * OCALENI and OSTRZYŻENI), the final's two names and score in a tournament, or the named winner in
+ * FFA and gun game. Ostrzyżeni's winner is a player, but the podium's ★ names them: the line used
+ * to add „· X bierze tę noc”, four words the card's budget (§6.5, ≤ 42) has no room for twice.
+ */
+export function scoreLine(c: ResultCtx): string {
+  const [a, b] = sideNames(c.mode);
+  if (MODES[c.mode].winner === "team" || c.mode === "ostrzyzeni") return `${a} ${c.scoreA} — ${c.scoreB} ${b}`;
+  const final = c.mode === "turniej" ? finalOf(c.bracket) : null;
+  if (final) return `${final.a} ${final.scoreA} — ${final.scoreB} ${final.b}`;
+  return c.winnerName ? `${c.winnerName} bierze tę noc` : "Nikt nie bierze tej nocy";
+}
 
-/** One sentence on how the match was decided. */
+/**
+ * Stage B's second line. The score line, except where it is a sentence: in FFA and gun game the
+ * verdict names the winner with the podium's star („★ xXPiotrekXx”), and says nothing on a draw —
+ * three seconds hold nine words at most (§6.5), and „Nikt nie bierze tej nocy” alone is five.
+ */
+export function verdictScore(c: ResultCtx): string {
+  if (hasScoreLine(c.mode)) return scoreLine(c);
+  return c.winnerName ? `★ ${c.winnerName}` : "";
+}
+
+/** FFA and gun game have no sides: the podium is their score, so the card prints no score line. */
+export const hasScoreLine = (mode: GameMode): boolean => MODES[mode].teams;
+
+const unitOf: Partial<Record<GameMode, string>> = { tdm: "zabójstw", dom: "punktów", boys: "punktów" };
+const bothSidesHere = (c: ResultCtx): boolean => {
+  const connected = (t: Team) => c.players.some((p) => p.connected && p.team === t);
+  return connected(0) && connected(1);
+};
+
+/** One sentence on how the match was decided (the card's why when no round decided it). */
 export function matchWhy(c: ResultCtx): string {
-  const def = MODES[c.mode];
   // TDM's limit is the room's (`scoreLimitFor`), not the mode's: the result screen has to explain
   // the match that was actually played.
   const limit = scoreLimitFor(c.mode, c.players.length);
   const top = Math.max(c.scoreA, c.scoreB);
-  const connected = (t: Team) => c.players.some((p) => p.connected && p.team === t);
   if (c.mode === "gungame") {
     const lead = c.players.find((p) => p.id === c.winnerId);
-    if (lead && lead.score >= GUN_GAME.ladder.length) return `${lead.name} przeszedł całą drabinkę ${GUN_GAME.ladder.length} broni jako pierwszy`;
+    if (lead && lead.score >= GUN_GAME.ladder.length) return `${lead.name} przeszedł całą drabinkę ${GUN_GAME.ladder.length} broni`;
     return c.winnerId ? `Czas minął — ${c.winnerName} jest najwyżej na drabince` : "Czas minął przy równej drabince";
   }
   if (c.mode === "ostrzyzeni") {
-    const rounds = `Po ${OSTRZYZENI.rounds} rundach: ocaleni ${c.scoreA}, ostrzyżeni ${c.scoreB}`;
-    return c.winnerName ? `${rounds} · najwięcej punktów ma ${c.winnerName}` : `${rounds} · równa liczba punktów`;
+    // The score is on the line above; the why only names who took the night (drop U: it printed
+    // the score a second time).
+    return c.winnerName ? `Po ${OSTRZYZENI.rounds} rundach najwięcej punktów ma ${c.winnerName}` : `Po ${OSTRZYZENI.rounds} rundach równa liczba punktów`;
   }
   if (c.mode === "ffa") {
     const lead = c.players.find((p) => p.id === c.winnerId);
@@ -76,29 +121,308 @@ export function matchWhy(c: ResultCtx): string {
   // A tournament is decided by the FINAL, not by a limit: the pair scores on the screen are one
   // pair's, and "the first team to 6 points" is a sentence about a mode this is not.
   if (c.mode === "turniej") return c.winnerName ? `${c.winnerName} wygrał finał drabinki` : "Drabinka rozegrana";
-  if (top >= limit) return c.mode === "bomb" ? `Pierwsza drużyna z ${BOMB.wins} wygranymi rundami` : c.mode === "duel" ? `Pierwszy do ${DUEL.wins} wygranych rund` : `Pierwsza drużyna do ${limit} ${unitOf[c.mode] ?? "punktów"}`;
-  if (!connected(0) || !connected(1)) return "Druga strona opuściła mecz";
+  if (top >= limit) return c.mode === "bomb" ? `Pierwsza drużyna z ${BOMB.wins} wygranymi rundami` : c.mode === "duel" ? `Pierwszy do ${DUEL.wins} wygranych rund` : `Pierwsi do ${limit} ${unitOf[c.mode] ?? "punktów"}`;
+  if (!bothSidesHere(c)) return "Druga strona opuściła mecz";
   if (c.scoreA === c.scoreB) return "Czas minął przy równym wyniku";
-  return `Czas minął — wyższy wynik ${unitOf[c.mode] ? "w liczbie " + unitOf[c.mode] : ""} wygrywa`.replace(/\s+/g, " ");
+  return "Wyższy wynik po czasie";
 }
 
-export interface KeyStat { label: string; value: string }
+/**
+ * The deciding round's server reason when the match's why names it, else "". Bomb, the 1 v 1 and
+ * Ostrzyżeni are decided by their last round. A tournament is not: it is decided by its FINAL, and
+ * the server leaves the final's deciding-round reason in `bomb.result` at the end
+ * (`TdmRoom.ts:1655` sets it, `:1659` → `finishPair` → `:1539` `endMatch`, which never clears it)
+ * — so a decided tournament always carries one, and reading it would replace „ZDZICHU wygrał finał
+ * drabinki” (§5.2 #63) and „Finał drabinki” (§7 P6 WORK 2) with a sentence about one round of one
+ * pair. Stage A (P5's final-round banner) still names that round.
+ */
+function decidingRound(c: ResultCtx): string {
+  if (!isRoundModeResult(c.mode) || c.mode === "turniej") return "";
+  return c.roundResult ?? "";
+}
 
-/** The three numbers that matter in this mode, for the local player's row. */
+/**
+ * Stage C's why (`result-why`). In a round mode the match was decided by its last round, so the
+ * line names it — `${short} w ostatniej rundzie` (graft) — and falls back to the match's rule when
+ * the state holds no reason (a duel capped during a freeze: the server clears `bomb.result` at
+ * every freeze). The tournament reads its final (`decidingRound`).
+ */
+export function resultWhy(c: ResultCtx): string {
+  const rr = decidingRound(c);
+  if (rr !== "") return `${roundReasonShort(rr)} w ostatniej rundzie`;
+  return matchWhy(c);
+}
+
+/**
+ * Stage B's why (`result-verdict-why`), at most three words: the deciding round's short reason in
+ * a round mode (§5.4), otherwise the rule — „Limit zabójstw”, „Wynik po czasie”, „Cała drabinka”,
+ * „Finał drabinki” — with „Limit punktów” for the two points modes (a kill limit would be false
+ * there) and „Walkower” when a side left (what the pair card calls it, §5.2 #31).
+ */
+export function verdictWhy(c: ResultCtx): string {
+  const rr = decidingRound(c);
+  if (rr !== "") return roundReasonShort(rr);
+  if (c.mode === "turniej") return "Finał drabinki";
+  if (c.mode === "gungame") {
+    const lead = c.players.find((p) => p.id === c.winnerId);
+    return lead && lead.score >= GUN_GAME.ladder.length ? "Cała drabinka" : "Wynik po czasie";
+  }
+  if (c.mode === "ffa") {
+    const lead = c.players.find((p) => p.id === c.winnerId);
+    return lead && lead.kills >= scoreLimitFor(c.mode, c.players.length) ? "Limit zabójstw" : "Wynik po czasie";
+  }
+  if (c.mode === "ostrzyzeni") return "Wynik po czasie";
+  const limit = scoreLimitFor(c.mode, c.players.length);
+  if (Math.max(c.scoreA, c.scoreB) >= limit && (c.mode === "tdm" || c.mode === "dom" || c.mode === "boys")) return c.mode === "tdm" ? "Limit zabójstw" : "Limit punktów";
+  if (!bothSidesHere(c)) return "Walkower";
+  return "Wynik po czasie";
+}
+
+/** Stage B, the verdict: the title in the result's colour, the score line, the short why. */
+export interface Verdict { title: string; score: string; why: string }
+export const verdict = (c: ResultCtx): Verdict => ({ title: OUTCOME_TITLE[matchOutcome(c)], score: verdictScore(c), why: verdictWhy(c) });
+
+export interface KeyStat { id: "objective" | "kills" | "assists" | "deaths"; label: string; value: string }
+
+/**
+ * The three numbers under the verdict, in ONE order in every mode (drop U): the mode's objective
+ * first where it has one of its own (points, the rung), then kills, assists, deaths — cut to three.
+ * Where kills ARE the objective (TDM, FFA) or the objective is the team's rounds (Bomb, the 1 v 1,
+ * the tournament), it reads K, A, D. The old per-mode orders (K D A here, K A D in Bomb, shaves in
+ * Ostrzyżeni) made the same number sit in a different box every match.
+ */
 export function keyStats(mode: GameMode, row: ScoreRow | undefined): KeyStat[] {
   if (!row) return [];
-  const k = { label: "Zabójstwa", value: String(row.kills) };
-  const d = { label: "Zgony", value: String(row.deaths) };
-  const a = { label: "Asysty", value: String(row.assists) };
-  const pts = { label: "Punkty", value: String(row.score) };
-  switch (mode) {
-    case "dom": case "boys": return [pts, k, a];
-    case "bomb": return [k, a, d];
-    case "gungame": return [{ label: "Szczebel", value: `${Math.min(GUN_GAME.ladder.length, row.score)} / ${GUN_GAME.ladder.length}` }, k, d];
-    case "ostrzyzeni": return [pts, { label: "Razy ogolony", value: String(parseHaircut(row.haircut).shaves) }, k];
-    default: return [k, d, a];
-  }
+  const k: KeyStat = { id: "kills", label: "ZABÓJSTWA", value: String(row.kills) };
+  const a: KeyStat = { id: "assists", label: "ASYSTY", value: String(row.assists) };
+  const d: KeyStat = { id: "deaths", label: "ZGONY", value: String(row.deaths) };
+  const objective: KeyStat | null =
+    mode === "gungame" ? { id: "objective", label: "SZCZEBEL", value: `${Math.min(GUN_GAME.ladder.length, row.score)} / ${GUN_GAME.ladder.length}` }
+      : mode === "dom" || mode === "boys" || mode === "ostrzyzeni" ? { id: "objective", label: "PUNKTY", value: String(row.score) }
+        : null;
+  return (objective ? [objective, k, a, d] : [k, a, d]).slice(0, 3);
 }
+
+/**
+ * One step of the podium: who, the number that ranked them, their side (team modes), whether it is
+ * me, and whether it carries the ★. `rank` is shared by a dead heat (1, 1, 3), so a draw the server
+ * ruled (FFA or gun game level on both of its keys, `winnerId` "") crowns nobody.
+ */
+export interface PodiumStep { id: string; name: string; value: string; rank: 1 | 2 | 3; me: boolean; team: Team | null; star: boolean }
+
+/**
+ * The server's own order (TdmRoom.endMatch): FFA by kills, then score; gun game, Ostrzyżeni and
+ * every points board by score, then kills. Two rows level on both keys are a dead heat — the
+ * server's draw. Deaths only settle the ORDER on screen of a heat, never its place.
+ */
+const scoreKeys = (r: ScoreRow): [number, number] => [r.score, r.kills];
+const killKeys = (r: ScoreRow): [number, number] => [r.kills, r.score];
+export const rankKeys = (mode: GameMode): ((r: ScoreRow) => [number, number]) => (mode === "ffa" ? killKeys : scoreKeys);
+export const rankCompare = (mode: GameMode) => {
+  const k = rankKeys(mode);
+  return (a: ScoreRow, b: ScoreRow): number => {
+    const [a1, a2] = k(a), [b1, b2] = k(b);
+    return b1 - a1 || b2 - a2 || a.deaths - b.deaths;
+  };
+};
+const byScore = rankCompare("tdm");
+
+/** Everybody, best first, by the number the podium shows for the mode (turniej by the bracket). */
+export function ranking(c: ResultCtx): { row: ScoreRow; value: number; place: number }[] {
+  return placed(c, orderRows(c));
+}
+
+function orderRows(c: ResultCtx): { row: ScoreRow; value: number; key: number[] }[] {
+  const keyed = (row: ScoreRow, value: number, lead: number[] = []) => ({ row, value, key: [...lead, ...rankKeys(c.mode)(row)] });
+  if (c.mode === "ffa") return [...c.players].sort(rankCompare("ffa")).map((row) => keyed(row, row.kills));
+  if (c.mode === "gungame") return [...c.players].sort(byScore).map((row) => keyed(row, Math.min(GUN_GAME.ladder.length, row.score)));
+  if (c.mode === "turniej") {
+    // The champion, the finalist, then everyone knocked out earlier by the rounds they took in the
+    // pair that knocked them out — all of it read off the bracket the server replicates.
+    const view = parseBracket(c.bracket ?? "");
+    if (view) {
+      const out = new Map<string, { depth: number; took: number }>();
+      view.matches.forEach((m) => {
+        if (!m.winner) return;
+        const [w, l, tw, tl] = m.winner === "a" ? [m.a, m.b, m.scoreA, m.scoreB] : [m.b, m.a, m.scoreB, m.scoreA];
+        out.set(l, { depth: m.round, took: tl });
+        const prev = out.get(w);
+        if (!prev || prev.depth <= m.round) out.set(w, { depth: m.round + 1, took: tw });
+      });
+      const at = (r: ScoreRow) => out.get(r.name) ?? { depth: -1, took: 0 };
+      return [...c.players].sort((a, b) => at(b).depth - at(a).depth || at(b).took - at(a).took || byScore(a, b))
+        .map((row) => keyed(row, at(row).took, [at(row).depth, at(row).took]));
+    }
+  }
+  return [...c.players].sort(byScore).map((row) => keyed(row, row.score));
+}
+
+/**
+ * Places, competition style: a row level with the one above it on every key shares its place.
+ * Where the server named a winner (`winnerId`) that row stands first and alone, whatever the rows
+ * say — the card never crowns somebody the server did not.
+ */
+function placed(c: ResultCtx, rows: { row: ScoreRow; value: number; key: number[] }[]): { row: ScoreRow; value: number; place: number }[] {
+  const named = MODES[c.mode].winner === "player" && c.winnerId !== "" ? rows.findIndex((r) => r.row.id === c.winnerId) : -1;
+  if (named > 0) rows.unshift(...rows.splice(named, 1));
+  const same = (x: number[], y: number[]) => x.length === y.length && x.every((v, i) => v === y[i]);
+  const out: { row: ScoreRow; value: number; place: number }[] = [];
+  rows.forEach((r, i) => {
+    const prev = rows[i - 1];
+    const tied = i > 0 && !(i === 1 && named >= 0) && same(prev.key, r.key);
+    out.push({ row: r.row, value: r.value, place: tied ? out[i - 1].place : i + 1 });
+  });
+  return out;
+}
+
+/** True when the server ruled no single winner for the match (a player mode's dead heat). */
+const noChampion = (c: ResultCtx): boolean => MODES[c.mode].winner === "player" && c.mode !== "turniej" && c.winnerId === "";
+
+/** The top three (fewer when fewer played), #1 first; a shared place shares its step height, and a draw has no ★. */
+export function podium(c: ResultCtx): PodiumStep[] {
+  // A tournament's rows sit on team 0/1 only while their pair plays: no side to show at the end.
+  const sided = MODES[c.mode].teams && c.mode !== "turniej";
+  const all = ranking(c);
+  const top = all.slice(0, 3);
+  const sole = top.length > 0 && top.filter((r) => r.place === 1).length === 1;
+  return top.map(({ row, value, place }) => ({
+    id: row.id, name: row.name, value: String(value), rank: Math.min(3, place) as 1 | 2 | 3, me: row.id === c.myId, team: sided ? row.team : null,
+    star: place === 1 && sole && !noChampion(c),
+  }));
+}
+
+/** „MIEJSCE #n Z m” (§5.2 #62), in FFA and gun game only, and only when I am off the podium; n is my shared place. */
+export function placement(c: ResultCtx): string | null {
+  if (hasScoreLine(c.mode)) return null;
+  const all = ranking(c);
+  const i = all.findIndex((r) => r.row.id === c.myId);
+  return i >= 3 ? `MIEJSCE #${all[i].place} Z ${all.length}` : null;
+}
+
+/**
+ * The Tab board header's two ends: names and scores that belong to the SAME pair. In a tournament
+ * the break between pairs is the one moment they part: the server has moved the bracket on to the
+ * next pair (`finishPair`) but leaves the finished pair's `scoreA`/`scoreB` and round until the
+ * next `startPair` resets them. There the ends read the pair now up, off the bracket (0 : 0), and
+ * `round` is false: the round belongs to the pair that is over. Once the draw is done, the final.
+ */
+export function boardSides(mode: GameMode, bracket: string, betweenPairs: boolean, scoreA: number, scoreB: number):
+  { names: readonly [string, string]; score: readonly [number, number]; round: boolean } {
+  if (mode !== "turniej") return { names: sideNames(mode), score: [scoreA, scoreB], round: true };
+  const view = parseBracket(bracket);
+  const now = view?.matches[view.at];
+  const pair = now && now.a && now.b ? now : null;
+  const last = view?.matches[view.matches.length - 1];
+  const names = pair ? [pair.a, pair.b] as const : last && last.a && last.b ? [last.a, last.b] as const : sideNames(mode);
+  if (betweenPairs && pair) return { names, score: [pair.scoreA, pair.scoreB], round: false };
+  return { names, score: [scoreA, scoreB], round: true };
+}
+
+/** „+790 XP · POZIOM 4” — the XP and the level it left you on. */
+export const xpLine = (r: MatchReward): string => `+${r.total} XP · POZIOM ${r.after.level}`;
+
+/** „NAJGORSZA FRYZURA: RYSIEK ×3”, or null when nobody was shaved. */
+export function worstLine(players: readonly ScoreRow[]): string | null {
+  const w = worstHaircut(players);
+  return w ? `NAJGORSZA FRYZURA: ${w.name} ×${w.shaves}` : null;
+}
+
+/** The footer's clock: the real time to the warm-up the server restarts by itself. */
+export const warmupLine = (msLeft: number): string => `ROZGRZEWKA ZA ${Math.max(0, Math.ceil(msLeft / 1000))}s`;
+
+export const TAB_WORDS = { summary: "PODSUMOWANIE", table: "TABELA", bracket: "DRABINKA" } as const;
+export const DETAILS_WORD = "SZCZEGÓŁY";
+export const LEAVE_WORD = "WYJDŹ DO MENU";
+export const WATCHER_NOTE = "Oglądasz — bez nagród za ten mecz.";
+
+/** Everything stage C prints before a click, as strings — what `MatchResult` renders and the budget test counts. */
+export interface StageC {
+  title: string;
+  /** Null in FFA and gun game, where the podium is the score. */
+  score: string | null;
+  why: string;
+  tabs: string[];
+  podium: PodiumStep[];
+  placement: string | null;
+  stats: KeyStat[];
+  /** The XP line, or the watcher's note; null when neither applies. */
+  xp: string | null;
+  levelUp: string | null;
+  worst: string | null;
+  details: string | null;
+  foot: string;
+  leave: string;
+}
+
+export function stageC(c: ResultCtx, reward: MatchReward | null, msLeft: number): StageC {
+  const outcome = matchOutcome(c);
+  const me = c.players.find((p) => p.id === c.myId);
+  return {
+    title: OUTCOME_TITLE[outcome],
+    score: hasScoreLine(c.mode) ? scoreLine(c) : null,
+    why: resultWhy(c),
+    tabs: [TAB_WORDS.summary, TAB_WORDS.table, ...(c.bracket ? [TAB_WORDS.bracket] : [])],
+    podium: podium(c),
+    placement: placement(c),
+    stats: keyStats(c.mode, me),
+    xp: reward ? xpLine(reward) : outcome === "over" ? WATCHER_NOTE : null,
+    // One word however many levels: the XP line already names the level it left you on.
+    levelUp: reward && reward.levelsGained > 0 ? "AWANS" : null,
+    worst: worstLine(c.players),
+    details: reward ? DETAILS_WORD : null,
+    foot: warmupLine(msLeft),
+    leave: LEAVE_WORD,
+  };
+}
+
+/** The words stage C shows, counted the gallery's way (`countWords`, §3.10). */
+export function stageCWords(s: StageC): number {
+  const parts = [
+    s.title, s.score ?? "", s.why, ...s.tabs, ...s.podium.flatMap((p) => [p.name, p.value]), s.placement ?? "",
+    ...s.stats.flatMap((x) => [x.value, x.label]), s.xp ?? "", s.levelUp ?? "", s.worst ?? "", s.details ?? "", s.foot, s.leave,
+  ];
+  return parts.reduce((n, p) => n + countWords(p), 0);
+}
+
+/** Stage B's words. */
+export const verdictWords = (v: Verdict): number => countWords(v.title) + countWords(v.score) + countWords(v.why);
+
+/**
+ * The stage the result layer shows: the clock's (`endedStage`), unless the player skipped to the
+ * card with Tab or a tab click (graft), and C once the match is no longer Ended (the card fading
+ * out on Ended → Waiting keeps the face it had).
+ */
+export function resultStage(stage: EndedStage | null, skipped: boolean): EndedStage {
+  if (skipped || stage === null) return "C";
+  return stage;
+}
+
+export type ResultTab = "summary" | "table" | "bracket";
+/** What the player has done to the result: skipped to the card, and which tab it shows. */
+export interface ResultView { skipped: boolean; tab: ResultTab }
+export const RESULT_VIEW0: ResultView = Object.freeze({ skipped: false, tab: "summary" });
+export type ResultInput = { kind: "tabKey" } | { kind: "tabClick"; tab: ResultTab };
+
+/**
+ * The result's two inputs. A Tab press before the card jumps to it (graft, §6.1); on the card Tab
+ * flips the table in and out, as it does in play. A click on a tab opens that tab, and jumps to the
+ * card if it was not up yet.
+ */
+export function resultInput(v: ResultView, input: ResultInput, stage: EndedStage | null): ResultView {
+  if (input.kind === "tabClick") return { skipped: true, tab: input.tab };
+  if (resultStage(stage, v.skipped) !== "C") return { ...v, skipped: true };
+  return { ...v, tab: v.tab === "table" ? "summary" : "table" };
+}
+
+/** How long each stage is on screen, from `MATCH.endedMs` and the stage lengths (§6.2). */
+export const STAGE_SECONDS = {
+  verdict: 3,
+  cardRound: (MATCH.endedMs - 6_000) / 1000,
+  cardContinuous: (MATCH.endedMs - 3_000) / 1000,
+} as const;
+
+/** Ended → Waiting: the card fades out over this long, mounted with its listeners off (§6.1). */
+export const RESULT_EXIT_MS = 400;
 
 /** The one reward worth a headline, or null: a haircut beats a badge beats a level. */
 export function topReward(r: MatchReward, names: { badge: (id: string) => string | undefined; haircut: (id: string) => string | undefined }): string | null {
@@ -110,44 +434,88 @@ export function topReward(r: MatchReward, names: { badge: (id: string) => string
   return null;
 }
 
-/** Polish for the server's bomb / duel round reasons (`bomb.result`). Unknown strings pass through. */
-const ROUND_REASON: Record<string, string> = {
-  "BOMB DETONATED": "Ładunek wybuchł",
-  "BOMB DEFUSED": "Ładunek rozbrojony",
-  "DEFENDERS ELIMINATED": "Obrońcy wyeliminowani",
-  "ATTACKERS ELIMINATED": "Atakujący wyeliminowani",
-  "SITE SECURED": "Czas minął, ładunku nie podłożono",
-  "TRADE": "Obaj padli — runda bez punktu",
-  "ELIMINATED": "Przeciwnik wyeliminowany",
-  "TIME · EVEN": "Czas minął przy równym zdrowiu",
-  "TIME · MORE HEALTH": "Czas minął — więcej zdrowia wygrywa",
-};
-export const roundReasonText = (result: string): string => ROUND_REASON[result] ?? result;
+/** The shave count a row carries (the scoreboard's ✂ column). */
+export const shavesOf = (r: ScoreRow): number => parseHaircut(r.haircut).shaves;
 
-export interface RoundEnd { title: string; why: string; mine: boolean | null }
+// ---------------------------------------------------------------- the Tab board's round history
+
+/** The four reason icons of the history strip (§5.2 #52): ✹ detonation, ✂ defuse, ☠ elimination, ⏱ time. */
+export type HistoryKind = "detonation" | "defuse" | "elimination" | "time";
+const HISTORY_KIND: Record<string, HistoryKind> = {
+  "BOMB DETONATED": "detonation", "BOMB DEFUSED": "defuse",
+  "DEFENDERS ELIMINATED": "elimination", "ATTACKERS ELIMINATED": "elimination", "ELIMINATED": "elimination", "TRADE": "elimination", "ALL SHAVED": "elimination",
+  "SITE SECURED": "time", "TIME · EVEN": "time", "TIME · MORE HEALTH": "time", "SURVIVORS HELD": "time",
+};
+
+/** One slot of the strip: a round that was played and SEEN (winner, reason), or an empty one. */
+export interface HistorySlot {
+  n: number;
+  /** Who took it; null when this client did not see it end (it joined later) or it is still to come. */
+  winner: Team | -1 | null;
+  kind: HistoryKind | null;
+  reason: string;
+  /** The round being played now. */
+  now: boolean;
+  /** The sides swap after this round: a gap in the strip. */
+  gapAfter: boolean;
+}
 
 /**
- * The round card: who took the round and why, from the mode's real signals — the bomb's `result`
- * string (whose side follows from it and the attacking team), the duel's reason string plus the
- * winner the Prep event carried, Ostrzyżeni's winner alone. Null when the state does not say.
+ * The history strip of a round mode: one slot per round the match is planned to run to — more when
+ * it runs longer (a duel's drawn rounds) — filled only from
+ * the rounds this client observed (`hud.roundHistory`) — a round before I joined is an empty slot,
+ * never a guess (Principle 13). Null where there is no strip: continuous modes, and the tournament,
+ * whose rounds belong to one pair at a time (the bracket is its history).
  */
-export function roundEnd(mode: GameMode, bombResult: string, roundWinner: Team | -1, attackTeam: Team | -1, myTeam: Team): RoundEnd | null {
-  const [a, b] = sideNames(mode);
-  const won = (t: Team) => ({ title: `RUNDA DLA ${t === 0 ? a : b}`, why: "", mine: t === myTeam });
-  if (mode === "bomb") {
-    if (!bombResult || attackTeam === -1) return null;
-    const attackers = bombResult === "BOMB DETONATED" || bombResult === "DEFENDERS ELIMINATED";
-    const t = (attackers ? attackTeam : 1 - attackTeam) as Team;
-    return { ...won(t), why: roundReasonText(bombResult) };
-  }
-  if (mode === "duel") {
-    if (!bombResult) return null;
-    if (roundWinner === -1) return { title: "RUNDA BEZ ROZSTRZYGNIĘCIA", why: roundReasonText(bombResult), mine: null };
-    return { ...won(roundWinner), why: roundReasonText(bombResult) };
-  }
-  if (mode === "ostrzyzeni") {
-    if (roundWinner === -1) return null;
-    return { ...won(roundWinner), why: roundWinner === OSTRZYZENI.survivorTeam ? "Ktoś dotrwał nieostrzyżony do końca czasu" : "Wszyscy ostrzyżeni" };
-  }
-  return null;
+export function historySlots(mode: GameMode, history: readonly { round: number; winner: Team | -1; reason: string }[], current: number): HistorySlot[] | null {
+  const planned = mode === "bomb" ? BOMB.maxRounds : mode === "duel" ? 2 * DUEL.wins - 1 : mode === "ostrzyzeni" ? OSTRZYZENI.rounds : 0;
+  if (!planned) return null;
+  // The planned length is a floor, not a cap: a duel round can be drawn (a trade, or even health on
+  // the clock — nobody scores it) and the duel has no round cap, so a real duel can run to round 12
+  // and past it. The strip grows to the round being played and to the last round seen, so the
+  // round in the header always has its slot and every seen result is drawn.
+  const total = Math.max(planned, Math.floor(current) || 0, ...history.map((r) => r.round));
+  const seen = new Map(history.map((r) => [r.round, r]));
+  return Array.from({ length: total }, (_, i): HistorySlot => {
+    const n = i + 1;
+    const r = seen.get(n);
+    const gapAfter = n < total && (mode === "bomb" ? n === BOMB.halfRounds : mode === "duel" ? n % DUEL.halfRounds === 0 : false);
+    return { n, winner: r ? r.winner : null, kind: r ? HISTORY_KIND[r.reason] ?? "elimination" : null, reason: r?.reason ?? "", now: !r && n === current, gapAfter };
+  });
+}
+
+// ---------------------------------------------------------------- the Tab board's density
+
+/**
+ * How tightly the Tab board is drawn. It is held open by a key while the pointer is locked and the
+ * wheel changes weapons, so a board that scrolls hides its bottom rows from the player for good:
+ * every row must be on screen, whatever the roster (a fixed 6 v 6, an open lobby's 32 people and 8
+ * bots) and whatever the screen (§4.4: ≤ 80vh from max(10vh, 88px)). So the board is drawn at the
+ * first density at which it fits, measured, never guessed from a head count:
+ *   0  the spec's board: my side above theirs, roomy rows;
+ *   1  the same, rows at the t1 line with no air, a tighter header;
+ *   2  the two sides SIDE BY SIDE (mine on the left), rows as in 1 — the one layout in which a
+ *      crowd fits under 80vh at the 14 px floor (a solo ranking splits into two columns);
+ *   3  as 2, and the header, the gaps and the table heads at their floor.
+ * Nothing ever goes under the type floor (§3.1): the board changes its layout, not its size.
+ */
+export type BoardDensity = 0 | 1 | 2 | 3;
+export const BOARD_DENSITY_MAX: BoardDensity = 3;
+/** From density 2 the tables stand side by side. */
+export const boardSplit = (d: BoardDensity): boolean => d >= 2;
+/**
+ * The density to draw next, given the one just drawn and whether it overflowed: one step denser
+ * while it does not fit, and null (keep it) once it fits or there is nothing denser to try.
+ */
+export function nextDensity(drawn: BoardDensity, overflows: boolean): BoardDensity | null {
+  return overflows && drawn < BOARD_DENSITY_MAX ? ((drawn + 1) as BoardDensity) : null;
+}
+/**
+ * A ranking split into two columns that read down the left one and then down the right one, as
+ * a printed table does: the first ⌈n/2⌉ places on the left, so #1 heads the left column and the
+ * place after the left column's last heads the right one.
+ */
+export function splitColumns<T>(rows: readonly T[]): [T[], T[]] {
+  const half = Math.ceil(rows.length / 2);
+  return [rows.slice(0, half), rows.slice(half)];
 }
