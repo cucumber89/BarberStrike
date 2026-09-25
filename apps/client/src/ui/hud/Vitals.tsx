@@ -37,12 +37,23 @@ type HealthBand = "ok" | "hurt" | "critical";
 const healthBand = (health: number, max: number): HealthBand =>
   health / max > 0.6 ? "ok" : health / max > 0.3 ? "hurt" : "critical";
 
-/** The Boys header: the class, and the next one only when it differs („Assault → Medic”). */
-const boysHeader = (cls: number, next: number): string => {
+/**
+ * The Boys header: the class, and the next one only when it differs („Assault → Medic”). It reads
+ * as one line (`textContent` „Assault → Medic”, what the gallery pins) but is laid out as two, the
+ * class over „→ Medic”: the plate's right column is 125 px, and on one line „Assault → Marksman” is
+ * 141 px at 14 px and 169 px at 1080p, so every pair with a long name was cut with an ellipsis. On
+ * two lines the widest, „→ Marksman”, is under 110 px at the 17 px cap.
+ */
+function BoysHeader({ cls, next }: { cls: number; next: number }) {
   const now = boysClass(cls).name;
   const then = boysClass(next).name;
-  return then === now ? now : `${now} → ${then}`;
-};
+  return (
+    <div className="vt-class">
+      <span className="vt-cls">{now}</span>
+      {then !== now && <>{" "}<span className="vt-next">→ {then}</span></>}
+    </div>
+  );
+}
 
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 
@@ -107,7 +118,7 @@ export const Vitals = memo(function Vitals({ now }: ZoneProps & { now: number })
           <div className="vt-bar"><div className="vt-fill" style={{ "--v": clamp01(health / maxHealth) } as React.CSSProperties} /></div>
         </div>
         <div className="vt-side">
-          {boys && <div className="vt-class">{boysHeader(cls, nextCls)}</div>}
+          {boys && <BoysHeader cls={cls} next={nextCls} />}
           {(armor > 0 || broke) && (
             <div className="armor" data-testid="armor" data-broke={broke || undefined} aria-label={broke ? "PŁYTA ROZBITA" : undefined}>
               <span className="armor-icon">

@@ -53,8 +53,14 @@
 .vt-bar { width: 132px; height: 4px; overflow: hidden; background: rgba(244, 240, 231, .12); }
 .vt-fill { height: 100%; background: var(--vt-c); transform-origin: left; transform: scaleX(var(--v, 1)); transition: transform var(--hud-base) var(--hud-ease); }
 .vt-side { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
-/* Boys: the class (and the next one) over the armour, at t1 in its own case („Assault → Medic”). */
-.vt-class { font: 600 var(--hud-t1)/1.2 var(--font-ui); color: var(--hud-tx2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Boys: the class over „→ the next one” (Vitals.tsx BoysHeader), at t1 in its own case, above the
+   armour. The column is 125 px, so the header is two lines, never one cut line: the widest,
+   „→ Marksman”, is under 110 px at the t1 cap. Two lines at line-height 1 and the armour's digits
+   at .75 fit the 62 px inside the plate up to the t1/t3 caps (17 + 17 + 2 + 25.5 = 61.5 px). A
+   line is clipped sideways only (overflow-x: clip keeps the descender of „Heavy”). */
+.vt-class { display: flex; flex-direction: column; font: 600 var(--hud-t1)/1 var(--font-ui); color: var(--hud-tx2); }
+.vt-cls, .vt-next { white-space: nowrap; overflow-x: clip; text-overflow: ellipsis; }
+.vt-class ~ .armor .armor-num { line-height: .75; }
 .armor { display: flex; align-items: center; gap: 6px; }
 .armor-icon { position: relative; display: inline-flex; flex: none; color: var(--hud-tx2); }
 .armor-num { font-family: var(--font-display); font-size: var(--hud-t3); line-height: 1; letter-spacing: var(--hud-track-num); font-variant-numeric: tabular-nums; }
