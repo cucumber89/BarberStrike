@@ -98,16 +98,27 @@ const stateOf = (page: Page, id: string) => page.evaluate((pid) => {
 }, id);
 
 /**
+ * Where the shooter stands to kill: close sides first (1.5 m — `dev:teleport` checks only the
+ * world, not bodies), then the old 2.5–3.5 m ring. MEASURED 2026-09-25 on the duel's „gora”: with
+ * the old ring alone B never killed A in round 1 (veil-cost exit 2, "B could not kill A"); with the
+ * close sides first A died in all 5 rounds (1.5,0 was refused, inside a wall, in rounds 1–3). A side
+ * the room refuses (the shooter did not arrive) is skipped, not shot from.
+ */
+const SIDES: [number, number][] = [[1.5, 0], [-1.5, 0], [0, 1.5], [0, -1.5], [3.5, 0], [-3.5, 0], [0, 3.5], [0, -3.5], [2.5, 2.5], [-2.5, -2.5]];
+
+/**
  * The shooter walks up to the victim (dev teleport, trying a few sides for a line of sight) and
  * fires bursts until the victim is down — the kill sequence of `multiplayer.spec.ts`.
  */
 async function kill(shooter: Page, victim: Page, victimId: string): Promise<void> {
   const burst = async () => { await shooter.mouse.down(); await waitForFrames(shooter, 2); await shooter.mouse.up(); await waitForFrames(shooter, 1); };
-  for (const [ox, oz] of [[3.5, 0], [-3.5, 0], [0, 3.5], [0, -3.5], [2.5, 2.5], [-2.5, -2.5]]) {
+  for (const [ox, oz] of SIDES) {
     const t = await stateOf(shooter, victimId);
     if (!t.alive) return;
     await shooter.evaluate(([x, y, z]) => window.__fb.game.conn.send("dev:teleport", { x, y, z }), [t.x + ox, t.y, t.z + oz]);
     await shooter.waitForTimeout(400);
+    const at = await shooter.evaluate(() => { const p = window.__fb.game.localPlayer.body; return { x: p.x, z: p.z }; });
+    if (Math.hypot(at.x - (t.x + ox), at.z - (t.z + oz)) > 1) continue; // refused: inside a wall
     for (let i = 0; i < 25; i++) {
       await lookAt(shooter, { x: t.x, y: t.y + 1.2, z: t.z });
       await burst();
@@ -239,7 +250,11 @@ test.describe("P1: the HUD's live state", () => {
       for (const p of [a, b]) p.on("pageerror", (e) => errors.push(e.message));
       const room = `hudfeed-late-${Date.now()}`;
       await joinRoom(a, "ALFA", room); await joinRoom(b, "BRAVO", room);
-      await a.waitForFunction(() => window.__fb.hud.get().phase === "playing", null, { timeout: 120_000, polling: 250 });
+      // Fresh into the live round, so C's join (tens of seconds on software GL) lands inside it.
+      await a.waitForFunction(() => {
+        const h = window.__fb.hud.get() as unknown as { phase: string; serverNow: number; bomb: { roundEndsAt: number } | null };
+        return h.phase === "playing" && (h.bomb?.roundEndsAt ?? 0) - h.serverNow > 90_000;
+      }, null, { timeout: 180_000, polling: 250 });
 
       // C joins the live round: the room spawns C and puts C down in the same tick (TdmRoom C2S.Ready).
       const c = await newPlayer(cc, "bomb");
