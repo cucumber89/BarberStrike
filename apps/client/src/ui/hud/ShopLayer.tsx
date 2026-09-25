@@ -3,28 +3,30 @@ import { MatchPhase } from "@frankibarber/shared";
 import { useHud, useHudSlice } from "../../game/store";
 import { Shop, type ShopApi } from "../Shop";
 import { uiFlags } from "./uiFlags";
+import { useKeepMounted } from "./useKeepMounted";
 import type { ZoneProps } from "./types";
 
 /**
- * Drop U, P0 (seed for P7): the buy menu's mount (B), exactly as `Hud.tsx` had it — mounted only
- * while the shop is open and the match has not ended, with the whole state, the shop's actions and
- * the HUD clock (docs/UI_U_SPEC.md §7 P0 0d; the conditional mount stays, veto). It publishes
- * `uiFlags.overlay.shop` while the card shows.
+ * The buy menu's mount (B): mounted only while the shop is open and the match has not ended, with
+ * the whole state, the shop's actions and the HUD clock. The mount stays CONDITIONAL (veto): on
+ * close the card stays 160 ms for its exit (§6.1) with its keys off (`live={false}`), then leaves
+ * the tree (`useKeepMounted`). `uiFlags.overlay.shop` is published while it is open — not while it
+ * is leaving — so the zones it hid come back as it fades (§4.5).
  *
- * Zone `shop`: `Shop`'s root lives in `Shop.tsx` (P7's), so P0 marks it with a `display: contents`
- * wrapper — no box of its own, no change to the layout or the paint — and P7 moves the attribute
- * onto the card.
+ * Zone `shop` is on the shop's own root (`Shop.tsx`), which has a box: the `display: contents`
+ * wrapper P0 used to mark it is gone.
  */
+const EXIT_MS = 160;
+
 export const ShopLayer = memo(function ShopLayer({ api, now }: ZoneProps & { api: ShopApi; now: number }) {
   const open = useHudSlice((s) => s.shopOpen && s.phase !== MatchPhase.Ended);
+  const mount = useKeepMounted(open, EXIT_MS);
   useLayoutEffect(() => { uiFlags.set({ overlay: { shop: open } }); }, [open]);
   useLayoutEffect(() => () => uiFlags.set({ overlay: { shop: false } }), []);
-  return open ? <ShopMount api={api} now={now} /> : null;
+  return mount === "closed" ? null : <ShopMount api={api} now={now} closing={mount === "closing"} />;
 });
 
-const CONTENTS = { display: "contents" } as const;
-
-function ShopMount({ api, now }: { api: ShopApi; now: number }) {
+function ShopMount({ api, now, closing }: { api: ShopApi; now: number; closing: boolean }) {
   const h = useHud();
-  return <div data-zone="shop" style={CONTENTS}><Shop h={h} api={api} now={now} /></div>;
+  return <div className={closing ? "shop-exit" : "shop-enter"}><Shop h={h} api={api} now={now} live={!closing} /></div>;
 }

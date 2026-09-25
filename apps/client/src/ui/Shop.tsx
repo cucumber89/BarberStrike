@@ -1,15 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { MatchPhase,
-  ARMOR, BOYS, BOYS_CLASSES, ECONOMY, GRENADES, PERKS, PERK_ORDER, WEAPONS, WEAPON_PRICES,
-  boysClass, buyShortfall, canBuy, canSell, perkActive, perkTimed, primaryOf, secondaryOf,
-  DUEL, CS_KILL_REWARD, CS_KILL_REWARD_DEFAULT,
-  isArmorId, isGrenadeId, isPerkId, isWeaponId,
-  type ArmorId, type GrenadeId, type PerkId, type ShopItemId, type Wallet, type WeaponId,
+  ARMOR, BOYS, BOYS_CLASSES, ECONOMY, GRENADES, PERKS, WEAPONS, WEAPON_PRICES,
+  boysClass, buyShortfall, canBuy, canSell, csKillReward, perkActive, perkTimed, planById, primaryOf, secondaryOf,
+  isArmorId, isGrenadeId, isWeaponId,
+  type ArmorId, type GameMode, type GrenadeId, type PerkId, type ShopItemId, type Wallet, type WeaponId,
 } from "@frankibarber/shared";
 import type { HudState } from "../game/store";
 import { uiSound } from "../game/audio";
 import { feelOf } from "../game/combat/weaponFeel";
 import { SHOP_ART } from "./shopArt";
+import { money } from "./hud/format";
 import { CAT_INFO, ITEM_ROLE, SHOP_CATS, catForCode, itemName, itemStats, keyForPos, posForCode, shopCatalog, type ShopCat } from "./shopCatalog";
 
 export interface ShopApi {
@@ -20,15 +20,21 @@ export interface ShopApi {
   close(): void;
 }
 
-interface Props { h: HudState; api: ShopApi; now: number }
+interface Props {
+  h: HudState; api: ShopApi; now: number;
+  /**
+   * False while the card plays its exit (`ShopLayer`, 160 ms): drawn, but its keys are off, so a
+   * digit pressed on the way out cannot buy anything (`useKeepMounted`, §6.1). Defaults to true.
+   */
+  live?: boolean;
+}
 
 /**
- * Why a request was refused, in words a player can act on. Shown ON the row (not only in the
- * result line), because a greyed button with no reason is the thing players complain about. The
- * money case is built from the wallet instead (see `why()`): "brakuje $300" beats "za drogo".
+ * Why the server refused a request, for the result line (3 s after its answer). A refusal the
+ * shelf can predict is on the tile already, as one or two words; these are the rest.
  */
 const REASONS: Record<string, string> = {
-  closed: "Sklep zamknięty — kupuj po odrodzeniu albo przy ladzie $",
+  closed: "Sklep zamknięty",
   money: "Za mało pieniędzy",
   owned: "Już to masz",
   full: "Masz już maksimum",
@@ -38,15 +44,31 @@ const REASONS: Record<string, string> = {
   unknown: "Nieznany przedmiot",
   class: "Nie dla twojej roli",
   "no-shop": "W tym trybie nie ma sklepu",
-  shaved: "Ostrzyżeni nie kupują — masz maszynkę",
+  mode: "Nie w tym trybie",
+  shaved: "Ostrzyżeni nie kupują",
 };
 
-/** Short state for the disabled button, so the state is a WORD and not only a grey colour. */
+/** A refusal on the tile, in place of the price: one or two words (a tile is ≤ 6, §5.2 #49). */
 const BLOCKED_LABEL: Record<string, string> = {
-  closed: "ZAMKNIĘTE", money: "BRAK KASY", owned: "MASZ", full: "PEŁNO", slot: "SLOT ZAJĘTY", class: "NIE TA ROLA", "no-shop": "BRAK SKLEPU", shaved: "NIE TERAZ",
+  owned: "MASZ", full: "PEŁNO", slot: "SLOT ZAJĘTY", class: "NIE TA ROLA", mode: "NIE TU", "no-shop": "BRAK SKLEPU", shaved: "NIE TERAZ",
 };
 
-const money = (n: number) => `$${n.toLocaleString("en-US")}`;
+/**
+ * The scoped rifle's mark: a reticle after its name (Principle 7, an icon where CS2 would use one),
+ * with the word „LUNETA” kept as `sr-only` text for the e2e that reads it (`multiplayer.spec.ts:472`)
+ * and for a screen reader. As a word chip it cut the name short on a 1024-wide screen.
+ */
+function Scope() {
+  return (
+    <span className="tile-scope">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" /><path d="M8 0v5M8 11v5M0 8h5M11 8h5" /></svg>
+      <span className="sr-only">LUNETA</span>
+    </span>
+  );
+}
+
+/** The modes that pay Counter-Strike's kill table by weapon (`csRules` on the server). */
+const CS_MODES = new Set<GameMode>(["bomb", "duel", "turniej"]);
 
 /** How long a click waits for the server's answer before the button is offered again. */
 const PENDING_MS = 2000;
@@ -55,23 +77,44 @@ const ARM_MS = 6000;
 
 type Verdict = ReturnType<typeof canBuy> | { ok: false; reason: "class" };
 
+/** One tile's state, worked out once and then drawn. */
+interface TileState {
+  /** On you now: the gun in its slot, the plate you wear, a running perk, a grenade in hand. */
+  carried: boolean;
+  v: Verdict;
+  /** What the price slot shows instead of a price when the item is carried (≤ 3 words). */
+  have?: string;
+  /** What leaves the wallet: the price, or a swap's net after the old gun's refund. */
+  price: number;
+  /** The net of a swap (price − refund); undefined when nothing is traded in. */
+  swapNet?: number;
+  /** A small tag after the name: ×N on grenades you carry. */
+  badge?: string;
+  /** The tube scope: a reticle after the name, read as „LUNETA” (the word e2e pins, sr-only). */
+  scope?: boolean;
+  sell?: WeaponId;
+}
+
 /**
- * Buy menu. Every rule shown here is the shared economy function the server will run, so no
- * button promises something the server then refuses; the server's ShopResult is still the only
- * thing that moves the wallet, and a click is greyed (`pending`) until that answer arrives.
+ * The buy menu, CS2's: the five aisles side by side as columns — pistols, the mid-tier, rifles,
+ * gear, grenades — every item on one screen, nothing to scroll and nothing behind a tab. A tile is
+ * the key („3·2”), the name, the price and at most one tag („MASZ”, „nosisz”, „działa jeszcze 12s”,
+ * „LUNETA”, „Brakuje $1,400”): ≤ 6 words (docs/UI_U_SPEC.md §5.2 #49–50). The header is the three
+ * things a buyer checks — SKLEP · money · time left — and, in a plan round, the one-line vote
+ * (`shop-plan`; F1 / F2 stay live through the plan card, P3). The strip under the shelf says what
+ * the focused item is FOR and, in the Counter-Strike modes, what a kill with it pays.
  *
- * LAYOUT: four aisles as tabs on a left rail, one aisle at a time on the right as full-width
- * rows. The previous one-screen menu put 24 rows in three columns and paid for it in 9.5 px stat
- * lines, names cut to "M-1 Clean Li…" and two buy buttons below the fold at 125 % zoom. One aisle
- * at a time is never more than ten rows, which is what the digit keys can reach anyway, so every
- * row gets a name at 17 px, a role line a first-time buyer can read, a large silhouette and a
- * price cell that says what the swap really costs. `e2e/tools/ui-fit.mjs` measures all four tabs.
+ * Every rule shown is the shared economy function the server runs, so no tile promises something
+ * the server then refuses; the server's ShopResult is still the only thing that moves the wallet,
+ * and a click is greyed (`pending`) until that answer arrives.
  *
- * KEYS, unchanged in spirit: an aisle digit (1–4) first — it also switches the tab — then the
- * item's digit, 1–9 and 0 for the tenth. `shopCatalog` is the one source for both the printed
- * shortcut and what the handler accepts.
+ * KEYS: an aisle digit (1–5) arms the aisle, then the item's digit (1–9, 0 for the tenth) buys it —
+ * `shopCatalog` is the one source for the printed key and the accepted one. Clicking a column's
+ * header arms it too; pressing that same aisle's digit next keeps it armed (the header shows the
+ * digit, so that is what a player presses), any other digit buys from it. Tab is never taken:
+ * the scoreboard opens over the shop, as in CS2.
  */
-export function Shop({ h, api, now }: Props) {
+export function Shop({ h, api, now, live = true }: Props) {
   const wallet: Wallet = { money: h.money, owned: h.owned, lethal: h.lethal, lethalCount: h.lethalCount, tactical: h.tactical, tacticalCount: h.tacticalCount, armor: h.armor, perks: h.perks };
   const boys = h.mode === "boys";
   const ctx = { boysClass: boys ? h.boysClass : undefined, now: h.serverNow, spawnedAt: -1e9, phase: h.phase, alive: h.alive, nearStation: true }; // window state comes from `buyWindowLeft` already
@@ -80,14 +123,13 @@ export function Shop({ h, api, now }: Props) {
   const secondary = secondaryOf(wallet);
   const left = h.buyWindowLeft === Infinity ? null : Math.ceil(h.buyWindowLeft / 1000);
   const result = h.shopResult && now - h.shopResult.at < 3000 ? h.shopResult : null;
+  const cs = CS_MODES.has(h.mode);
 
   const cats = useMemo(() => shopCatalog({ mode: h.mode, boysClass: boys ? h.boysClass : undefined }), [h.mode, boys, h.boysClass]);
-  /** The aisle on screen. */
-  const [cat, setCat] = useState<ShopCat>(1);
-  /** Set by the first digit: the next digit picks an item from `cat`. Cleared by use, Escape or time. */
-  const [armed, setArmed] = useState(false);
+  /** Set by an aisle digit or a column click: the next digit picks an item from that aisle. */
+  const [armed, setArmed] = useState<{ cat: ShopCat; by: "key" | "click" } | null>(null);
   const armedAt = useRef(0);
-  /** The row under the mouse or keyboard, for the detail panel. */
+  /** The tile under the mouse or keyboard, for the detail strip. */
   const [focus, setFocus] = useState<ShopItemId | null>(null);
   /** Items with a request in flight: item → time sent. */
   const [pending, setPending] = useState<Record<string, number>>({});
@@ -104,13 +146,12 @@ export function Shop({ h, api, now }: Props) {
     const stale = Object.entries(pending).filter(([, t]) => now - t > PENDING_MS);
     if (stale.length) setPending((p) => { const n = { ...p }; for (const [k] of stale) delete n[k]; return n; });
   }, [now, pending]);
-  useEffect(() => { if (armed && now - armedAt.current > ARM_MS) setArmed(false); }, [now, armed]);
+  useEffect(() => { if (armed && now - armedAt.current > ARM_MS) setArmed(null); }, [now, armed]);
 
   const verdict = (item: ShopItemId): Verdict =>
     !SHOP_CATS.some((c) => cats[c].includes(item)) ? { ok: false, reason: "class" }
     : open ? canBuy(wallet, item, ctx)
     : { ok: false, reason: "closed" };
-  const why = (v: Verdict): string => v.ok ? "" : v.reason === "money" ? "" : REASONS[v.reason] ?? v.reason;
   const isPending = (item: string) => item in pending;
   const request = (item: ShopItemId, fn: () => void) => {
     if (isPending(item)) return;
@@ -118,23 +159,25 @@ export function Shop({ h, api, now }: Props) {
     setPending((p) => ({ ...p, [item]: now }));
     fn();
   };
+  const arm = (cat: ShopCat, by: "key" | "click") => { uiSound("click"); setArmed({ cat, by }); armedAt.current = now; };
 
   useEffect(() => {
+    if (!live) return;
     const down = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      if (e.code === "Escape") { e.preventDefault(); if (armed) setArmed(false); else api.close(); return; }
+      if (e.code === "Escape") { e.preventDefault(); if (armed) setArmed(null); else api.close(); return; }
       const pos = posForCode(e.code);
-      if (pos === 0) return;
+      if (pos === 0) return; // not a digit: Tab, B and everything else pass through untouched
       e.preventDefault();
-      if (!armed) {
-        const c = catForCode(e.code);
-        if (c) { uiSound("click"); setCat(c); setArmed(true); armedAt.current = now; }
+      const aisle = catForCode(e.code);
+      if (!armed || (armed.by === "click" && aisle === armed.cat)) {
+        if (aisle) arm(aisle, "key");
         return;
       }
-      setArmed(false);
-      const item = cats[cat][pos - 1];
+      setArmed(null);
+      const item = cats[armed.cat][pos - 1];
       if (item && verdict(item).ok) request(item, () => api.buy(item));
     };
     window.addEventListener("keydown", down);
@@ -142,130 +185,84 @@ export function Shop({ h, api, now }: Props) {
     // `verdict` closes over the wallet, which changes on every purchase — rebinding is the point.
   });
 
-  /**
-   * What a SWAP actually costs you, in the one number a player wants: the price minus what the gun
-   * you are carrying is worth. It used to read "dopłata $580" beside a price of "$1,200" and a
-   * first-time buyer could not tell which of the two would leave their wallet.
-   */
-  const swapLine = (id: WeaponId, v: Verdict, starter: boolean): { text: string; tone: string } | null => {
-    if (!v.ok || starter) return null;
-    const net = WEAPON_PRICES[id] - v.refund;
-    if (v.refund <= 0) return null;
-    return net > 0 ? { text: `zapłacisz ${money(net)} — stara broń w rozliczeniu`, tone: "pay" }
-      : net < 0 ? { text: `dostaniesz ${money(-net)} z powrotem`, tone: "credit" }
-      : { text: "wymiana bez dopłaty", tone: "" };
-  };
-
-  interface RowState {
-    carried: boolean; tag?: string; v: Verdict; label: string; onBuy: () => void;
-    sub?: { text: string; tone: string } | null; price: number; sell?: WeaponId;
-  }
-
-  /**
-   * One item, as a CS2 buy-menu TILE: the picture, the name, the price, and one line that is
-   * either what the thing is for or why you cannot have it.
-   *
-   * It was a full-width row with a separate BUY button on the right, which meant a player's eye
-   * crossed the whole card for every purchase and the price sat in a third column away from both.
-   * A tile is what CS2 puts in front of you: the whole card is the button, the price is under the
-   * picture, and the state (MASZ / BRAKUJE $600) is a chip you can read without reading words.
-   * SELL keeps its own small button in the corner, above the tile's hit area.
-   */
-  const tile = (id: ShopItemId, pos: number, name: React.ReactNode, s: RowState) => {
+  const tile = (id: ShopItemId, cat: ShopCat, pos: number, s: TileState) => {
     const Art = SHOP_ART[id];
-    const blocked = !s.carried && !s.v.ok;
-    const short = !s.v.ok && s.v.reason === "money" ? buyShortfall(wallet, id, ctx) : 0;
-    const reason = blocked ? (short > 0 ? `Brakuje ${money(short)}` : why(s.v)) : "";
     const busy = isPending(id);
+    const reason = s.v.ok ? "" : s.v.reason;
+    const blocked = !s.carried && !s.v.ok;
+    const short = reason === "money" ? buyShortfall(wallet, id, ctx) : 0;
+    // A closed shop greys the shelf and says so once, in the header; every tile keeps its price.
+    const refusal = blocked && reason !== "closed" ? (short > 0 ? `Brakuje ${money(short)}` : BLOCKED_LABEL[reason] ?? "") : "";
     const buyable = s.v.ok && !busy;
+    const priceText = busy ? "…"
+      : s.carried && s.have && !s.v.ok ? s.have
+      : refusal ? refusal
+      : s.price === 0 ? "ZA DARMO"
+      : s.swapNet !== undefined ? (s.swapNet >= 0 ? money(s.swapNet) : `+${money(-s.swapNet)}`)
+      : money(s.price);
+    const tone = busy ? "" : s.carried && s.have && !s.v.ok ? "have" : refusal ? "no" : s.swapNet !== undefined ? "swap" : "";
+    const label = `${itemName(id)}, ${s.price === 0 ? "za darmo" : money(s.price)}${s.swapNet !== undefined ? `, z wymianą ${money(s.swapNet)}` : ""}${refusal ? ` — ${refusal}` : s.carried && s.have ? ` — ${s.have}` : ""}`;
     return (
       <div key={id}
-        className={`shop-tile ${s.carried ? "carried" : ""} ${blocked ? "locked" : ""} ${armed ? "aisle-armed" : ""} ${busy ? "pending" : ""}`}
+        className={`shop-tile${s.carried ? " carried" : ""}${blocked ? " locked" : ""}${busy ? " pending" : ""}`}
         data-testid={`shop-${id}`}
         onMouseEnter={() => setFocus(id)}>
-        <button className="tile-hit" disabled={!buyable} data-testid={`buy-${id}`}
-          aria-label={`${itemName(id)}, ${s.price === 0 ? "za darmo" : money(s.price)}${blocked ? ` — ${reason}` : ""}`}
-          onClick={() => request(id, s.onBuy)} onFocus={() => setFocus(id)} />
-        <span className="tile-top">
-          <span className="tile-key" aria-hidden>{cat}<i>·</i>{keyForPos(pos)}</span>
-          {s.sell && (
+        <button className="tile-hit" disabled={!buyable} data-testid={`buy-${id}`} aria-label={label}
+          onClick={() => request(id, () => api.buy(id))} onFocus={() => setFocus(id)} />
+        <span className="tile-art" aria-hidden="true"><Art /></span>
+        <span className="tile-name">{itemName(id)}{s.badge && <small className="tile-badge">{s.badge}</small>}{s.scope && <Scope />}</span>
+        <span className="tile-foot">
+          {/* One text node, so the key is one word („3·2”, §3.10) and `ui-fit.mjs` reads it whole. */}
+          <span className="tile-key" aria-hidden="true">{`${cat}·${keyForPos(pos)}`}</span>
+          {/* A gun you carry and can sell shows SPRZEDAJ where the price was: the tile's brass edge
+              already says it is yours, and „MASZ” beside the button did not fit a 1024-wide column. */}
+          {s.sell ? (
             <button className="tile-sell" disabled={busy} onClick={() => request(id, () => api.sell(s.sell!))} data-testid={`sell-${id}`}
               title={`Sprzedaj za ${money(Math.round(WEAPON_PRICES[s.sell] * ECONOMY.sellRatio))}`}>
-              SPRZEDAJ<span className="shop-sell-amount"> {money(Math.round(WEAPON_PRICES[s.sell] * ECONOMY.sellRatio))}</span>
+              SPRZEDAJ
             </button>
+          ) : (
+            <span className={`tile-price${tone ? ` ${tone}` : ""}`} data-testid={refusal ? `why-${id}` : undefined}
+              title={s.swapNet !== undefined ? "Z wymianą: stara broń wraca za 70 % ceny" : undefined}>
+              {s.swapNet !== undefined && !refusal && !busy && <i className="tile-swap" aria-hidden="true">⇄</i>}{priceText}
+            </span>
           )}
-        </span>
-        <span className="tile-art"><Art /></span>
-        <span className="tile-name">{name}</span>
-        {/* The line under the name is what a first-time buyer reads: what the thing is FOR, or
-            what a swap really costs. It does NOT become the refusal when the refusal is "you are
-            $400 short" — that is a number, it belongs next to the price, and a player who cannot
-            afford a gun still wants to know what the gun is. Only a refusal you cannot read off
-            the price (a full slot, a shut shop) takes the line. */}
-        <span className={`tile-role ${blocked && !short ? "why" : ""}`} data-testid={blocked && !short ? `why-${id}` : undefined}>
-          {blocked && !short ? <><i aria-hidden>✕</i> {reason}</> : !s.carried && s.sub ? s.sub.text : ITEM_ROLE[id]}
-        </span>
-        <span className="tile-foot">
-          <b className="tile-price">{s.price === 0 ? "ZA DARMO" : money(s.price)}</b>
-          {/* The chip is the state in one glance: what you already carry ("MASZ · SLOT 1",
-              "nosisz", "działa jeszcze 12 s"), what pressing this does (KUP / WYMIEŃ), or exactly
-              how much you are short. */}
-          <span className={`tile-state ${s.carried ? "have" : blocked ? "no" : "ok"}`} data-testid={short ? `why-${id}` : undefined}>
-            {busy ? "…" : s.carried ? (s.tag ?? s.sub?.text ?? "MASZ") : s.v.ok ? s.label : short ? `Brakuje ${money(short)}` : BLOCKED_LABEL[s.v.reason] ?? "—"}
-          </span>
         </span>
       </div>
     );
   };
-  const row = tile;
 
-  const weaponRow = (id: WeaponId, i: number) => {
+  const weaponTile = (id: WeaponId, cat: ShopCat, i: number) => {
     const w = WEAPONS[id];
     const starter = boys && id === boysClass(h.boysClass).starter;
     const carried = id === secondary || id === primary;
     const v = verdict(id);
     const sellable = carried && open && canSell(wallet, id, ctx).ok;
     const swapping = w.slot === 1 ? primary : secondary !== "pistol" ? secondary : null;
-    // The SCOPE badge follows the glass the player will actually look through (matrix D-B2), not
-    // WeaponDef.scoped, which stays the sniper-only balance predicate it has always been.
-    const glass = feelOf(w.id).scope;
-    return row(id, i + 1,
-      <>{w.name}{glass !== null && <span className="shop-slot">{glass === "tube" ? "LUNETA" : "CELOWNIK"}</span>}</>,
-      {
-        carried, v, price: starter ? 0 : WEAPON_PRICES[id],
-        tag: carried ? `MASZ · SLOT ${w.slot}` : undefined,
-        sub: carried ? { text: `masz · slot ${w.slot}`, tone: "tag" } : swapping ? swapLine(id, v, starter) : null,
-        label: starter ? "ZA DARMO" : swapping && v.ok && v.refund > 0 ? "WYMIEŃ" : "KUP",
-        onBuy: () => api.buy(id),
-        sell: sellable ? id : undefined,
-      });
+    const refund = v.ok ? v.refund : 0;
+    return tile(id, cat, i + 1, {
+      carried, v, price: starter ? 0 : WEAPON_PRICES[id], have: "MASZ",
+      swapNet: !carried && !starter && swapping && refund > 0 ? WEAPON_PRICES[id] - refund : undefined,
+      // The badge follows the glass the player will actually look through (matrix D-B2), not
+      // WeaponDef.scoped, which stays the sniper-only balance predicate it has always been.
+      scope: feelOf(w.id).scope === "tube",
+      sell: sellable ? id : undefined,
+    });
   };
 
-  const grenadeRow = (id: GrenadeId, i: number) => {
+  const grenadeTile = (id: GrenadeId, cat: ShopCat, i: number) => {
     const g = GRENADES[id];
     const count = g.slot === "lethal" ? (wallet.lethal === id ? wallet.lethalCount : 0) : (wallet.tactical === id ? wallet.tacticalCount : 0);
-    const v = verdict(id);
-    const max = g.slot === "lethal" ? ECONOMY.lethalMax : ECONOMY.tacticalMax;
-    return row(id, i + 1,
-      <>{g.name}<span className={`shop-slot ${g.slot}`}>{g.slot === "lethal" ? "G" : "4"}</span></>,
-      {
-        carried: count > 0, v, price: g.price,
-        sub: count > 0 ? { text: `masz ×${count} z ${max}`, tone: "tag" } : null,
-        label: count > 0 ? "DOKUP" : "KUP",
-        onBuy: () => api.buy(id),
-      });
+    return tile(id, cat, i + 1, { carried: count > 0, v: verdict(id), price: g.price, have: "PEŁNO", badge: count > 0 ? `×${count}` : undefined });
   };
 
-  const gearRow = (id: ShopItemId, i: number) => {
+  const gearTile = (id: ShopItemId, cat: ShopCat, i: number) => {
     if (isArmorId(id)) {
-      const a = ARMOR[id as ArmorId]; const worn = h.armor >= a.armor; const v = verdict(id);
-      return row(id, i + 1, a.name, {
-        carried: worn, v, price: a.price,
-        sub: worn ? { text: "nosisz", tone: "tag" } : h.armor > 0 ? { text: `masz ${h.armor} pkt`, tone: "tag" } : null,
-        label: h.armor > 0 ? "ULEPSZ" : "KUP", onBuy: () => api.buy(id),
-      });
+      const a = ARMOR[id as ArmorId];
+      return tile(id, cat, i + 1, { carried: h.armor >= a.armor, v: verdict(id), price: a.price, have: "nosisz" });
     }
-    const p = PERKS[id as PerkId]; const active = perkActive(wallet.perks, id as PerkId, h.serverNow); const v = verdict(id);
+    const p = PERKS[id as PerkId];
+    const active = perkActive(wallet.perks, id as PerkId, h.serverNow);
     // `perkTimed`, not `durationMs > 0`: a perk armed for the whole round (the Ostrzyżony's speed)
     // otherwise printed "działa jeszcze 999985 s", and — the other way round — a flask bought this
     // instant can measure a few ms OVER its own duration against the client's estimate of the
@@ -273,104 +270,65 @@ export function Shop({ h, api, now }: Props) {
     // plainly counting down.
     const leftS = active && perkTimed(id as PerkId, wallet.perks[id as PerkId], h.serverNow)
       ? Math.max(1, Math.ceil((wallet.perks[id as PerkId] - h.serverNow) / 1000)) : null;
-    return row(id, i + 1, p.name, {
-      carried: active, v, price: p.price,
-      sub: active ? { text: leftS !== null ? `działa jeszcze ${leftS} s` : "uzbrojone", tone: "tag" } : null,
-      label: "UŻYJ", onBuy: () => api.buy(id),
-    });
+    return tile(id, cat, i + 1, { carried: active, v: verdict(id), price: p.price, have: leftS !== null ? `działa jeszcze ${leftS}s` : "uzbrojone" });
   };
 
-  // Aisles 1–3 are guns (sidearms, the mid-tier, the rifles), 4 is gear, 5 is grenades — CS2's
-  // order, and the only place in this component that has to know it.
-  const rows = cat <= 3 ? (cats[cat] as WeaponId[]).map(weaponRow)
-    : cat === 5 ? (cats[5] as GrenadeId[]).map(grenadeRow)
-    : cats[4].map(gearRow);
+  const aisle = (c: ShopCat) =>
+    c <= 3 ? (cats[c] as WeaponId[]).map((id, i) => weaponTile(id, c, i))
+    : c === 5 ? (cats[5] as GrenadeId[]).map((id, i) => grenadeTile(id, c, i))
+    : cats[4].map((id, i) => gearTile(id, c, i));
 
-  /** What each aisle says about the loadout right now, on its tab — the "what do I have" line. */
-  const carriedLine = (c: ShopCat): string => {
-    if (c === 1) return WEAPONS[secondary].name;
-    if (c === 2 || c === 3) return primary ? WEAPONS[primary].name : "brak — kup broń";
-    if (c === 5) {
-      const parts = [wallet.lethal ? `${GRENADES[wallet.lethal].name} ×${wallet.lethalCount}` : "", wallet.tactical ? `${GRENADES[wallet.tactical].name} ×${wallet.tacticalCount}` : ""].filter(Boolean);
-      return parts.length ? parts.join(" · ") : "brak granatów";
-    }
-    const perks = PERK_ORDER.filter((id) => perkActive(wallet.perks, id, h.serverNow)).length;
-    const plate = h.armor > 0 ? `płyta ${h.armor}` : "brak płyty";
-    return perks > 0 ? `${plate} · ${perks} ${perks === 1 ? "wzmocnienie" : "wzmocnienia"}` : plate;
-  };
-
-  /** Detail panel: the focused row, else what this aisle already holds, else its first item. */
-  const detailId: ShopItemId | null = focus && cats[cat].includes(focus) ? focus
-    : cat === 1 ? secondary
-    : cat === 2 || cat === 3 ? ((primary && cats[cat].includes(primary) ? primary : null) ?? cats[cat][0] ?? null)
-    : cats[cat][0] ?? null;
+  /** The strip's item: the tile under the mouse, else the gun in hand's slot (primary first). */
+  const detailId: ShopItemId | null = focus ?? primary ?? secondary ?? null;
   const DetailArt = detailId ? SHOP_ART[detailId] : null;
-  const detailPrice = detailId ? (isWeaponId(detailId) ? WEAPON_PRICES[detailId] : isGrenadeId(detailId) ? GRENADES[detailId].price : isPerkId(detailId) ? PERKS[detailId].price : ARMOR[detailId as ArmorId].price) : 0;
+  const killPay = cs && detailId && (isWeaponId(detailId) || (isGrenadeId(detailId) && GRENADES[detailId].slot === "lethal"))
+    ? csKillReward(detailId) : 0;
 
-  /**
-   * THE DEAD AISLE. On a pistol round a player has $800 and the rifles cost $2,000 and up, so an
-   * aisle can be ten tiles of "Brakuje $1,800" with nothing to do in it — which is where a
-   * first-time player concludes the shop is broken. When that happens the aisle's own hint line
-   * says so and names an aisle that does have something in reach.
-   */
-  const canAfford = (id: ShopItemId): boolean => verdict(id).ok;
-  const nothingAffordable = open && cats[cat].length > 0 && !cats[cat].some(canAfford);
-  const elsewhere = SHOP_CATS.filter((c) => c !== cat && cats[c].some(canAfford));
-  const affordableHint = nothingAffordable
-    ? elsewhere.length
-      ? `Na nic w tym dziale cię teraz nie stać — masz ${money(h.money)}. Zajrzyj do: ${elsewhere.map((c) => `${c} ${CAT_INFO[c].short}`).join(" · ")}.`
-      : `Na nic cię teraz nie stać — masz ${money(h.money)}. Zabójstwa i wygrane rundy dokładają do konta.`
-    : "";
+  // The living arena's vote, as one line. The plan card (P3) stays mounted under the shop with F1 /
+  // F2 live, so the keys printed here work; the defence sees the attack's vote without keys.
+  const p = h.plan;
+  const voting = !!p && p.options.length > 0 && p.chosen === 0 && h.phase === MatchPhase.Prep && h.serverNow < p.appliesAt;
+  const myVote = voting && h.myTeam === p!.votingTeam;
 
-  /**
-   * The line under SKLEP: where this window came from, in the words of the mode you are in.
-   *
-   * The 1 v 1 has its own two, because its window is Counter-Strike's and CS's window is two
-   * different moments — the freeze you buy in, and the few seconds of live round in which you can
-   * still fix what you forgot. "Okno po odrodzeniu" would describe neither.
-   */
-  const duelShop = h.mode === "duel";
-  const status = !h.alive ? "Obserwujesz · zmiana roli od następnego odrodzenia"
-    : !open ? duelShop ? "Sklep zamknięty do końca rundy" : "Sklep zamknięty · znajdź ladę $ na mapie"
-    : duelShop ? (h.phase === MatchPhase.Prep
-        ? `Runda jeszcze nie ruszyła · kupujesz ${left ?? 0} s, plus ${Math.round(DUEL.buyTailMs / 1000)} s po starcie`
-        : `Runda trwa · sklep zamyka się za ${left ?? 0} s`)
-    : h.nearStation ? "Przy ladzie · otwarte"
-    : left !== null ? `Okno po odrodzeniu · zostało ${left} s`
-    // Prep is not warm-up: it is a countdown inside a running match.
-    : h.phase === MatchPhase.Prep ? "Przygotowanie · otwarte do startu rundy"
-    : "Rozgrzewka · otwarte";
+  /** Every aisle's shelf has the same rows, the longest aisle's (at least five), so tiles line up across. */
+  const rows = Math.max(5, ...SHOP_CATS.map((c) => cats[c].length));
+  const countdown = !open ? "ZAMKNIĘTY" : left !== null ? `${left}s` : h.nearStation ? "PRZY LADZIE" : "OTWARTY";
+  const armedCat = armed?.cat ?? null;
 
   return (
-    <div className="shop" data-testid="shop" onContextMenu={(e) => e.preventDefault()}>
+    <div className="shop" data-testid="shop" data-zone="shop" onContextMenu={(e) => e.preventDefault()}>
       <div className="shop-card">
         <div className="shop-head">
-          <div className="shop-head-left">
-            <div className="shop-title">SKLEP</div>
-            <div className="shop-sub">{status}</div>
+          <div className="shop-headline">
+            <span className="shop-title">SKLEP</span>
+            <b className="shop-wallet" data-testid="shop-money">{money(h.money)}</b>
+            <b className={`shop-countdown${left !== null && left <= 5 && open ? " warn" : ""}${!open ? " shut" : ""}`} data-testid="shop-countdown">{countdown}</b>
           </div>
-          <div className="shop-head-right">
-            <div className={`shop-countdown ${left !== null && left <= 5 ? "urgent" : ""}`} data-testid="shop-countdown">
-              <small>CZAS NA ZAKUPY</small><strong>{!open ? "ZAMKNIĘTE" : left === null ? "OTWARTE" : `${left}s`}</strong>
+          {voting && (
+            <div className="shop-plan" data-testid="shop-plan">
+              <span className="shop-plan-label">{myVote ? "PLAN:" : "PLAN RYWALI:"}</span>
+              {p!.options.map((id, i) => (
+                <span key={id} className="shop-plan-opt">
+                  {myVote && <kbd>F{i + 1}</kbd>}{planById(id)?.name ?? ""}<b>{p!.tally[i] ?? 0}</b>
+                </span>
+              ))}
             </div>
-            <div className="shop-wallet" data-testid="shop-money"><small>TWOJA KASA</small>{money(h.money)}</div>
-            <button className="shop-btn ghost close" onClick={() => { uiSound("click"); api.close(); }} data-testid="shop-close">ZAMKNIJ · ESC</button>
-          </div>
+          )}
         </div>
 
         {boys && (
           <section className="boys-strip" data-testid="boys-picker">
-            <span className="boys-strip-label">TWOJA ROLA<small>zmiana przy odrodzeniu · kasa zostaje</small></span>
+            <span className="boys-strip-label">ROLA</span>
             <div className="boys-strip-row">
               {BOYS_CLASSES.map((id) => {
                 const c = BOYS[id];
-                const mates = h.players.filter((p) => p.connected && p.team === h.myTeam && p.boysClass === id).length;
+                const mates = h.players.filter((pl) => pl.connected && pl.team === h.myTeam && pl.boysClass === id).length;
                 return (
                   <button key={id} className={`boys-chip ${h.nextClass === id ? "on" : ""}`} aria-pressed={h.nextClass === id}
                     data-testid={`boys-class-${id}`} title={c.blurb}
                     onClick={() => { uiSound("click"); api.selectClass?.(id); }}>
                     <b>{c.name}</b>
-                    <span>{h.boysClass === id ? "AKTYWNA" : h.nextClass === id ? "OD ODRODZENIA" : `${mates} w drużynie`}</span>
+                    <span>{h.boysClass === id ? "AKTYWNA" : h.nextClass === id ? "OD ODRODZENIA" : `${mates} W DRUŻYNIE`}</span>
                   </button>
                 );
               })}
@@ -378,72 +336,40 @@ export function Shop({ h, api, now }: Props) {
           </section>
         )}
 
-        <div className="shop-main">
-          <nav className="shop-rail" aria-label="Działy sklepu">
-            {SHOP_CATS.map((c) => (
-              <button key={c} className={`shop-tab ${cat === c ? "on" : ""} ${armed && cat === c ? "armed" : ""}`} aria-pressed={cat === c}
-                data-testid={`shop-tab-${c}`} onClick={() => { uiSound("click"); setCat(c); setArmed(false); }}>
-                <span className="shop-tab-key">{c}</span>
-                <span className="shop-tab-text">
-                  <b>{CAT_INFO[c].label}</b>
-                  <small>{carriedLine(c)}</small>
-                </span>
-                <span className="shop-tab-count">{cats[c].length}</span>
+        <div className={`shop-grid${open ? "" : " shut"}`} data-testid="shop-grid" style={{ "--rows": rows } as CSSProperties}>
+          {SHOP_CATS.map((c) => (
+            <section key={c} className={`shop-aisle${armedCat === c ? " armed" : ""}`} aria-label={CAT_INFO[c].label}>
+              <button className="shop-tab" aria-pressed={armedCat === c} data-testid={`shop-tab-${c}`}
+                onClick={() => (armedCat === c ? setArmed(null) : arm(c, "click"))}>
+                <kbd>{c}</kbd>{CAT_INFO[c].label}
               </button>
-            ))}
-          </nav>
-
-          <section className="shop-panel" aria-live="polite">
-            <div className={`shop-aisle-head ${armed ? "armed" : ""}`}>
-              <span className="shop-aisle-key">{cat}</span>
-              <span className="shop-aisle-label">{CAT_INFO[cat].label}</span>
-              <span className="shop-hint">{nothingAffordable ? affordableHint
-                : cat === 2 || cat === 3 ? `slot 1 · wymiana zwraca ${Math.round(ECONOMY.sellRatio * 100)} % ceny starej broni`
-                : cat === 5 ? `bojowe pod G ×${ECONOMY.lethalMax} · taktyczne pod 4 ×${ECONOMY.tacticalMax}`
-                : cat === 4 && !cats[4].some(isPerkId) ? "w tym trybie tylko płyty — bez wzmocnień"
-                : CAT_INFO[cat].note}</span>
-            </div>
-            <div className="shop-grid" data-testid="shop-grid">
-              {rows}
-            </div>
-            {/* The stats of whatever the mouse or the keyboard is on, UNDER the shelf rather than
-                beside it. It used to live on the aisle rail, which with CS2's five aisles left it
-                cut off at the bottom on a 720p screen — and it was deleted outright below 1100 px,
-                i.e. exactly on the laptops that have the least room on a tile for the same words. */}
-            {detailId && DetailArt && (
-              <div className="shop-detail" data-testid="shop-detail">
-                <div className="shop-detail-art"><DetailArt /></div>
-                <div className="shop-detail-text">
-                  <div className="shop-detail-name">{itemName(detailId)}</div>
-                  <div className="shop-detail-role">{ITEM_ROLE[detailId]}</div>
-                </div>
-                <dl className="shop-detail-stats">
-                  {itemStats(detailId).map((s) => <React.Fragment key={s.label}><dt>{s.label}</dt><dd>{s.value}</dd></React.Fragment>)}
-                  <dt>Cena</dt><dd>{detailPrice === 0 ? "za darmo" : money(detailPrice)}</dd>
-                </dl>
-              </div>
-            )}
-          </section>
+              <div className="shop-shelf">{aisle(c)}</div>
+            </section>
+          ))}
         </div>
 
+        {detailId && DetailArt && (
+          <div className="shop-detail" data-testid="shop-detail" title={itemStats(detailId).map((s) => `${s.label}: ${s.value}`).join(" · ")}>
+            <span className="shop-detail-art" aria-hidden="true"><DetailArt /></span>
+            <b className="shop-detail-name">{itemName(detailId)}</b>
+            <span className="shop-detail-role">{ITEM_ROLE[detailId]}</span>
+            {killPay > 0 && <b className="shop-detail-pay">+{money(killPay)} ZA ZABÓJSTWO</b>}
+          </div>
+        )}
+
         <div className="shop-foot">
-          <span className={`shop-result ${result ? (result.ok ? "ok" : "err") : ""}`} data-testid="shop-result" role="status">
+          <span className={`shop-result${result ? (result.ok ? " ok" : " err") : armed ? " armed" : ""}`} data-testid="shop-result" role="status">
             {result
               ? (result.ok ? `✓ ${result.sold ? "Sprzedano" : "Kupiono"}: ${itemName(result.item)}` : `✕ ${REASONS[result.reason ?? "unknown"] ?? result.reason}`)
               : armed
-                ? `${CAT_INFO[cat].label} — teraz naciśnij numer z kafelka (ten po kropce, np. ${cat}·2)`
-                : duelShop
-                  // The duel pays CS's table, in sentences: a row of bare numbers reads like a
-                  // price list, and a first-time player took it for one. The carry-over rule is
-                  // here too, because it is the thing that decides how much of this you spend.
-                  // Short enough to fit the strip, and only what changes a buying decision: the
-                  // kill table is in the detail panel's world, the carry rule decides how much of
-                  // your money you should spend right now.
-                  ? `Wygrasz rundę: +${money(DUEL.economy.win)}. Przegrasz: +${money(DUEL.economy.lossBase)} i więcej. Przeżyjesz — kasa i broń zostają.`
-                  : `Zabójstwo ${money(ECONOMY.killReward)} · strzał w głowę +${money(ECONOMY.headshotBonus)} · asysta ${money(ECONOMY.assistReward)}`}
+                ? `${CAT_INFO[armed.cat].label} · naciśnij numer z kafelka`
+                : cs ? ""
+                  : `Zabójstwo ${money(ECONOMY.killReward)} · w głowę +${money(ECONOMY.headshotBonus)} · asysta ${money(ECONOMY.assistReward)}`}
           </span>
-          <span className="shop-keyhelp">
-            Kliknij przedmiot — albo wciśnij numer działu, a potem numer z kafelka (np. <kbd>3</kbd> potem <kbd>2</kbd>) · <kbd>ESC</kbd> lub <kbd>B</kbd> wraca do gry
+          <span className="shop-keys">
+            <span><kbd>1–5</kbd> DZIAŁ</span>
+            <span><kbd>0–9</kbd> PRZEDMIOT</span>
+            <button className="shop-close" onClick={() => { uiSound("click"); api.close(); }} data-testid="shop-close"><kbd>B</kbd> ZAMKNIJ</button>
           </span>
         </div>
       </div>
