@@ -8,6 +8,11 @@ import { test, expect, type BrowserContext, type Page } from "@playwright/test";
  * - The killer card's facts: the killer's HP is their replicated health, and the respawn deadline
  *   the card counts to is the moment the server revives (± 150 ms).
  * - Spectating: a player killed in a duel watches the other player, through their eye.
+ * - The respawn: from `S2C.Spawn` on the store says alive, and the card fades its last frame — it
+ *   never redraws the dead copy while the patch is on its way.
+ * - A late joiner in a live bomb round (spawned and put down in one tick, no `S2C.Kill`) is dead
+ *   locally too, and watches a living teammate through their eye, under „DOŁĄCZYSZ W NASTĘPNEJ
+ *   RUNDZIE”.
  *
  * The pictures go to e2e/out/u/p1/. Everything is read through the dev handle `window.__fb`
  * (the store, `hud.get()`, and the game), never through the HUD's words.
@@ -32,7 +37,7 @@ interface DebugHandle {
     conn: { send(t: string, m: unknown): void; state: { players: { get(id: string): (V3 & { health: number; alive: boolean }) | undefined } } };
   };
 }
-declare global { interface Window { __fb: DebugHandle; __p1SpawnAt?: number } }
+declare global { interface Window { __fb: DebugHandle; __p1SpawnAt?: number; __p1SpawnAlive?: boolean; __p1Texts?: string[] } }
 
 const LOW_SETTINGS = JSON.stringify({ graphics: { preset: "low", renderer: "webgl2", renderScale: 0.5, shadows: "off", postProcessing: false, effects: 0.3, antialiasing: false, importedModels: false } });
 const ctxOpts = { viewport: { width: 1280, height: 720 } };
@@ -188,7 +193,7 @@ test.describe("P1: the HUD's live state", () => {
       const idA = (await hud(a)).myId, idB = (await hud(b)).myId;
       await a.waitForFunction(() => { const h = window.__fb.hud.get(); return h.phase === "playing" && h.alive && h.phaseEndsAt - h.serverNow > 8_000 && h.serverNow > h.spawnProtectedUntil + 500; }, null, { timeout: 90_000 });
       // The spawn the server sends back, on A's own clock.
-      await a.evaluate(() => { window.__p1SpawnAt = 0; window.__fb.game.events.on("localSpawn", () => { window.__p1SpawnAt = performance.now(); }); });
+      await a.evaluate(() => { window.__p1SpawnAt = 0; window.__fb.game.events.on("localSpawn", () => { window.__p1SpawnAt = performance.now(); window.__p1SpawnAlive = window.__fb.hud.get().alive; }); });
 
       await kill(b, a, idA);
       expect((await hud(a)).alive, "A should have been killed by B").toBe(false);
@@ -205,11 +210,68 @@ test.describe("P1: the HUD's live state", () => {
       await a.screenshot({ path: `${OUT}/tdm-killer-card.png` });
 
       // The server revives A on its own timer: the card's zero is that moment, ± 150 ms.
+      // Every text the death zone shows from here to the respawn and after it (the card must fade
+      // its LAST frame: no „ZGINĄŁEŚ”, no „WRACASZ W NASTĘPNEJ RUNDZIE” in a TDM respawn).
+      await a.evaluate(() => {
+        const seen: string[] = (window.__p1Texts = []);
+        new MutationObserver(() => { const t = document.querySelector("[data-zone=death]")?.textContent ?? ""; if (t && seen[seen.length - 1] !== t) seen.push(t); })
+          .observe(document.body, { subtree: true, childList: true, characterData: true });
+      });
       await a.waitForFunction(() => (window.__p1SpawnAt ?? 0) > 0, null, { timeout: 8_000 });
       const late = await a.evaluate((respawnAt) => (window.__p1SpawnAt ?? 0) - respawnAt, card.respawnAt);
       expect(Math.abs(late), `respawned ${Math.round(late)} ms from the card's deadline`).toBeLessThanOrEqual(150);
+      expect(await a.evaluate(() => window.__p1SpawnAlive), "S2C.Spawn makes the store alive at once").toBe(true);
       await expect(a.getByTestId("death")).toHaveCount(0);
+      await a.waitForTimeout(800); // past the patch that confirms the spawn
+      const texts = await a.evaluate(() => window.__p1Texts ?? []);
+      expect(texts.filter((t) => t.includes("ZGINĄŁEŚ") || t.includes("NASTĘPNEJ RUNDZIE") || t.includes("NIKOGO")), "no dead copy across the respawn").toEqual([]);
+      expect((await hud(a)).alive).toBe(true);
       expect(errors).toEqual([]);
     } finally { await ca.close(); await cb.close(); }
+  });
+
+  test("bomb: a late joiner is down with no kill, and watches a living teammate", async ({ browser }) => {
+    test.setTimeout(300_000);
+    const ca = await browser.newContext(ctxOpts), cb = await browser.newContext(ctxOpts), cc = await browser.newContext(ctxOpts);
+    const errors: string[] = [];
+    try {
+      const a = await newPlayer(ca, "bomb"), b = await newPlayer(cb, "bomb");
+      for (const p of [a, b]) p.on("pageerror", (e) => errors.push(e.message));
+      const room = `hudfeed-late-${Date.now()}`;
+      await joinRoom(a, "ALFA", room); await joinRoom(b, "BRAVO", room);
+      await a.waitForFunction(() => window.__fb.hud.get().phase === "playing", null, { timeout: 120_000, polling: 250 });
+
+      // C joins the live round: the room spawns C and puts C down in the same tick (TdmRoom C2S.Ready).
+      const c = await newPlayer(cc, "bomb");
+      c.on("pageerror", (e) => errors.push(e.message));
+      await joinRoom(c, "SPOZNIONY", room);
+      await c.waitForFunction(() => { const h = window.__fb.hud.get(); return !h.alive && h.lateJoin && !window.__fb.game.localPlayer.alive; }, null, { timeout: 15_000 });
+      const me = await hud(c);
+      expect(me.diedAt, "no death was announced: no killer card").toBe(0);
+      expect(me.killer).toBeNull();
+      // The spectator runs: a living teammate, through their eye.
+      await c.waitForFunction(() => window.__fb.hud.get().spectating !== null, null, { timeout: 10_000 });
+      const watched = await c.evaluate(() => {
+        const h = window.__fb.hud.get() as unknown as { spectating: { id: string }; myTeam: number; players: { id: string; team: number; alive: boolean }[] };
+        const row = h.players.find((p) => p.id === h.spectating.id)!;
+        return { id: row.id, sameTeam: row.team === h.myTeam, alive: row.alive };
+      });
+      expect(watched.alive).toBe(true);
+      expect(watched.sameTeam, "a teammate first").toBe(true);
+      await waitForFrames(c, 6);
+      const gap = await c.evaluate((id) => {
+        const g = window.__fb.game;
+        const eye = { x: 0, y: 0, z: 0, set(x: number, y: number, z: number) { this.x = x; this.y = y; this.z = z; return this; } };
+        g.remotePlayers.get(id)!.eye(eye);
+        const cam = g.localPlayer.camera.position;
+        return Math.hypot(cam.x - eye.x, cam.y - eye.y, cam.z - eye.z);
+      }, watched.id);
+      expect(gap, `camera ${gap.toFixed(3)} m from the teammate's eye`).toBeLessThan(0.3);
+      await expect(c.getByTestId("spectate")).toBeVisible();
+      await expect(c.getByTestId("late-join")).toHaveText("DOŁĄCZYSZ W NASTĘPNEJ RUNDZIE");
+      await expect(c.getByTestId("death")).toHaveCount(0);
+      await c.screenshot({ path: `${OUT}/late-join-spectate-live.png` });
+      expect(errors).toEqual([]);
+    } finally { await ca.close(); await cb.close(); await cc.close(); }
   });
 });
