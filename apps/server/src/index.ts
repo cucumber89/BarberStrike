@@ -7,6 +7,8 @@ import { GAME_VERSION, MAX_PLAYERS, modeCapacity, openPlayerCap } from "@frankib
 import { TdmRoom } from "./rooms/TdmRoom";
 import { clientDir, hostBanner, serveClient, spaFallback } from "./hosting";
 import { tickStats } from "./stats";
+import { accountRoutes } from "./accounts/routes";
+import { openDb } from "./accounts/db";
 
 const PORT = Number(process.env.PORT ?? 2567);
 const origins = (process.env.CORS_ORIGIN ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -49,6 +51,12 @@ app.get("/rooms", async (_req, res) => {
     res.status(500).json({ error: String(err) });
   }
 });
+
+// Accounts REST (drop V / H, P4): auth + persistence on the existing Express server, off the game
+// loop (L6). Mounted under `/api` BEFORE the SPA fallback so its routes answer with JSON instead of
+// the client's index.html. `openDb` migrates the six-table SQLite file on first use.
+openDb();
+app.use("/api", accountRoutes());
 
 /**
  * Player-hosted games (2.0): serve the built client from this very process when it is there.
