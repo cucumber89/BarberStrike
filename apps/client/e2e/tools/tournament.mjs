@@ -7,7 +7,76 @@
  *
  * Needs the dev servers (`FB_DEV_TOOLS=1 node apps/server/dist/index.js` on 2567, vite on 5174).
  * Run from apps/client: `PW_CHROMIUM=/opt/pw-browsers/chromium node e2e/tools/tournament.mjs`
+ *
+ * LOBBY MODE (drop V, P2): `LOBBY=1 node e2e/tools/tournament.mjs` runs the WAITING-ROOM scenario
+ * instead — no browser, no UI (that is P5). It drives the `tournament-lobby` room straight over the
+ * Colyseus SDK against a running server (default `ws://localhost:2567`): a host plus eight entrants,
+ * all ready, START, and the assertion that four parallel arenas come up; plus the authoritative chat
+ * safety (a line over 200 chars comes back truncated to 200, a second line inside 1 s is dropped,
+ * and `<b>x</b>` comes back with its angle brackets escaped). The presence→bracket seam and the
+ * exact numbers are pinned deterministically in the server test `TournamentLobby.test.ts` — here we
+ * confirm the room is reachable, hosts, starts and sanitises over a real socket.
  */
+if (process.env.LOBBY === "1") {
+  const { Client } = await import("@colyseus/sdk");
+  const URL = process.env.WS_URL ?? "ws://localhost:2567";
+  const fail = (m) => { console.log("FAIL:", m); process.exit(1); };
+  const client = new Client(URL);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  console.log(`# Poczekalnia turnieju (P2), na żywo — ${URL}\n\`\`\``);
+  const host = await client.create("tournament-lobby", { name: "HOST", size: 8, seed: 21 });
+  const roomId = host.roomId;
+  const chat = []; // every lobby:chat line the host receives back from the server
+  host.onMessage("lobby:chat", (line) => chat.push(line));
+  const others = [];
+  for (let i = 1; i < 8; i++) others.push(await client.joinById(roomId, { name: `G${i}` }));
+  const all = [host, ...others];
+  await sleep(400);
+  const rosterN = host.state.entrants.size;
+  console.log(`w poczekalni: ${rosterN} entrants   host = ${host.state.hostId === host.sessionId ? "TY" : "?"}`);
+  if (rosterN !== 8) fail(`spodziewano 8 entrants, jest ${rosterN}`);
+
+  for (const c of all) c.send("lobby:ready", { ready: true });
+  await sleep(300);
+  const readyN = [...host.state.entrants.values()].filter((e) => e.ready).length;
+  console.log(`gotowych: ${readyN}/8`);
+
+  // A non-host START must do nothing; only the host raises the arenas.
+  others[0].send("lobby:start", {});
+  await sleep(300);
+  if (host.state.phase !== "poczekalnia") fail("START od nie-hosta ruszył turniej");
+
+  host.send("lobby:start", {});
+  await sleep(1500);
+  console.log(`faza: ${host.state.phase}   aren: ${host.state.arenas.size}`);
+  if (host.state.phase !== "trwa") fail(`faza po START = ${host.state.phase}, oczekiwano 'trwa'`);
+  if (host.state.arenas.size !== 4) fail(`aren = ${host.state.arenas.size}, oczekiwano 4`);
+  for (const [, a] of host.state.arenas) if (!a.roomId || !a.live) fail("arena bez roomId/live");
+  console.log(`drabinka: ${host.state.bracket.split(";")[0]}   (rozmiar|para)`);
+
+  // Chat safety, all server-authoritative and observable in the broadcast back to the host.
+  chat.length = 0;
+  host.send("lobby:chat", { text: "x".repeat(500) });
+  await sleep(1100);
+  host.send("lobby:chat", { text: "<b>x</b>" });
+  await sleep(200);
+  host.send("lobby:chat", { text: "za szybko, odrzuć" }); // < 1 s after the previous → dropped
+  await sleep(400);
+  const first = chat[0];
+  console.log(`czat #1 długość: ${first?.text.length} (obcięte do 200)`);
+  if (!first || first.text.length !== 200) fail(`czat nie obcięty do 200 (${first?.text.length})`);
+  const esc = chat.find((l) => l.text.includes("&lt;b&gt;"));
+  console.log(`czat #2 escaped: ${esc ? esc.text : "(brak)"}`);
+  if (!esc || esc.text.includes("<b>")) fail("czat nie zescapował <b>");
+  console.log(`czat: przyjętych linii = ${chat.length} (3. odrzucona przez rate-limit)`);
+  if (chat.length !== 2) fail(`oczekiwano 2 przyjętych linii, jest ${chat.length}`);
+
+  console.log("```\nOK: poczekalnia hostuje, startuje 4 areny i sanityzuje czat.");
+  for (const c of all) await c.leave();
+  process.exit(0);
+}
+
 import { chromium } from "@playwright/test";
 const OUT = process.env.OUT ?? "e2e/out/turniej";
 const LOW = JSON.stringify({ graphics: { preset: "low", renderer: "webgl2", renderScale: 0.5, shadows: "off", postProcessing: false, effects: 0.4, antialiasing: false } });

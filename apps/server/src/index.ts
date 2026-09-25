@@ -5,6 +5,7 @@ import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { GAME_VERSION, MAX_PLAYERS, modeCapacity, openPlayerCap } from "@frankibarber/shared";
 import { TdmRoom } from "./rooms/TdmRoom";
+import { TournamentLobbyRoom } from "./rooms/TournamentLobbyRoom";
 import { clientDir, hostBanner, serveClient, spaFallback } from "./hosting";
 import { tickStats } from "./stats";
 import { accountRoutes } from "./accounts/routes";
@@ -81,6 +82,10 @@ const gameServer = new Server({
 // Rooms match on name AND mode (drop 4) AND map (drop G): a quick-play into "ffa" never lands in
 // someone's TDM, and a quick-play onto GÓRA never lands in a Night District room.
 gameServer.define("tdm", TdmRoom).filterBy(["room", "mode", "map"]);
+
+// The tournament waiting-room (drop V, D1): a light coordinator with no game tick. It raises `tdm`
+// duels as arenas server-side and dirigates the bracket; the arenas above are what actually play.
+gameServer.define("tournament-lobby", TournamentLobbyRoom);
 
 gameServer.listen(PORT).then(() => {
   console.log(`[BARBERSTRIKE ${GAME_VERSION}] listening on :${PORT}`);
