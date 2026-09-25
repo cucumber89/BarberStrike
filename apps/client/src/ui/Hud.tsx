@@ -22,6 +22,7 @@ import { ResultLayer } from "./hud/ResultLayer";
 import { ScoreboardOverlay } from "./hud/ScoreboardOverlay";
 import { ShopLayer } from "./hud/ShopLayer";
 import { PauseMenu } from "./hud/PauseMenu";
+import { PerfBadge } from "./hud/PerfBadge";
 
 /**
  * The in-match HUD: the zone components of `ui/hud/` (drop U, docs/UI_U_SPEC.md §7 P0 0d), each
@@ -69,6 +70,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       <PauseMenu model={model} settings={settings} onSettings={onSettings} onLeave={onLeave} onResume={onResume} onPause={onPause}
         onFullscreen={onFullscreen} onChooseTeam={onChooseTeam} dormant={dormant} />
       <FrameCounter show={settings.hud.fps || import.meta.env.DEV} dormant={dormant} />
+      <PerfBadge settings={settings} onSettings={onSettings} dormant={dormant} />
     </div>
   );
 }
