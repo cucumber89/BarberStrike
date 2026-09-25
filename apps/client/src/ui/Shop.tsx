@@ -153,7 +153,8 @@ export function Shop({ h, api, now, live = true }: Props) {
     : { ok: false, reason: "closed" };
   const isPending = (item: string) => item in pending;
   const request = (item: ShopItemId, fn: () => void) => {
-    if (isPending(item)) return;
+    // On the way out nothing is bought or sold, whatever still takes the pointer (§6.1).
+    if (!live || isPending(item)) return;
     uiSound("click");
     setPending((p) => ({ ...p, [item]: now }));
     fn();

@@ -69,9 +69,12 @@
 /* The layer: the dim (no blur — Principle 15), the column at x 0, 380 wide, and the settings
    panel beside it at x 380. `.hud > *` takes the pointer away from every HUD child; this one
    wants it back, so a click beside the column lands on the dim and not on the game. */
-.pause-layer { position: absolute; inset: 0; z-index: var(--z-pause); pointer-events: auto; }
+/* The column's width: 380 px, but never closer than 16 px to the top strip (centred, §4.5: it stays
+   visible under pause) — 380 / 344 / 219.5 px at 1600 / 1280 / 1024 wide. */
+.pause-layer { --pause-w: min(380px, calc(50vw - var(--hud-strip-w) / 2 - 16px));
+  position: absolute; inset: 0; z-index: var(--z-pause); pointer-events: auto; }
 .pause-dim { position: absolute; inset: 0; background: rgba(3,8,11,.55); animation: p7-fade-in 160ms var(--hud-ease) both; }
-.pause { position: absolute; left: 0; top: 0; bottom: 0; width: 380px; display: flex; flex-direction: column;
+.pause { position: absolute; left: 0; top: 0; bottom: 0; width: var(--pause-w); display: flex; flex-direction: column;
   padding: clamp(24px, 9vh, 96px) 24px 20px; overflow-y: auto;
   background: rgba(5,15,20,.94); border-right: var(--hud-plate-line); color: var(--hud-tx); font-family: var(--font-ui);
   animation: p7-slide-in var(--hud-base) var(--hud-ease) both; }
@@ -120,7 +123,7 @@
    scroll are lifted here, so nothing scrolls inside something that scrolls. It starts BELOW the
    strip (§4.5: under pause the strip stays visible — the match runs on): `max(10vh, 96px)` clears
    today's strip (bottom 91 px) and §4.1's (16 + 56 = 72 px), as the Tab board's top does (§4.4). */
-.pause-settings { --set-top: max(10vh, 96px); position: absolute; left: 380px; top: var(--set-top); width: min(760px, calc(100vw - 420px));
+.pause-settings { --set-top: max(10vh, 96px); position: absolute; left: var(--pause-w); top: var(--set-top); width: min(760px, calc(100vw - var(--pause-w) - 40px));
   max-height: calc(100% - var(--set-top)); overflow-y: auto;
   padding: 16px 28px 24px; background: rgba(5,15,20,.94); border: var(--hud-plate-line); border-left: 0;
   animation: p7-slide-in-short 160ms var(--hud-ease) both; }
@@ -160,6 +163,23 @@
 .team-card.refused .team-state { color: var(--hud-tx2); }
 .teams-answer { margin: 0; font: 600 var(--hud-t1)/1.35 var(--font-ui); color: var(--hud-ok); }
 .teams-answer.err { color: var(--hud-danger); }
+/* Narrow screens (1024×576): the column is only ~220 px wide there (`--pause-w`), so it tightens —
+   buttons at t1, the team cards and the leave confirmation stacked — and nothing wraps inside a
+   button or runs out of the column. */
+@media (max-width: 1100px) {
+  .pause { padding: 14px 12px 12px; }
+  /* The mode's title may break at its space here; the map's name still never does. */
+  .pause-objective span:first-child { white-space: normal; }
+  .pause-nav { margin-top: 10px; gap: 2px; }
+  .pause-btn { gap: 8px; min-height: 32px; padding: 0 10px; font-size: var(--hud-t1); white-space: nowrap; }
+  .pause-confirm { padding: 10px; }
+  .pause-confirm-row { grid-template-columns: 1fr; }
+  /* The stacked cards still leave every button on screen with the picker open at 1024×576. */
+  .teams { gap: 4px; padding: 6px 10px; }
+  .team-card { grid-template-columns: minmax(0, 1fr); grid-template-areas: "name" "count" "state"; padding: 4px 10px; }
+  .team-name { font-size: var(--hud-t2); }
+  .team-count { justify-self: start; letter-spacing: var(--hud-track-num); }
+}
 
 /* ============================================================================ shop (§4.4, §5.2 #49–50) */
 /* One card, no scroll (PLAN_2_1.md:238-239): the header, the five aisles side by side, the detail
@@ -334,6 +354,8 @@
 .shop-enter > .shop { animation: p7-fade-in 160ms var(--hud-ease) both; }
 .shop-enter .shop-card { animation: p7-rise-in 160ms var(--hud-ease) both; }
 .shop-exit > .shop { animation: p7-fade-out 160ms var(--hud-ease-in) forwards; pointer-events: none; }
+/* SPRZEDAJ takes the pointer back on purpose (`.tile-sell`), so the exit takes it again. */
+.shop-exit .tile-sell { pointer-events: none; }
 .shop-exit .shop-card { animation: p7-sink-out 160ms var(--hud-ease-in) forwards; }
 
 /* ============================================================================ §4.5 rows for P7's zones */
