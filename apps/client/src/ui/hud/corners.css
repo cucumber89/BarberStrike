@@ -3,8 +3,8 @@
    the kill feed (top right), the crosshair and the full-screen veils around it.
 
    Every size, colour, plate, edge and duration is a §3 token from hud.css; nothing here sets a
-   literal font size or a text-transform (G4). The zones sit on the shared geometry (§3.6), so the
-   own pairs hold by construction at every width:
+   literal font size or changes letter case (G4: pinned words are uppercased in JS). The zones sit
+   on the shared geometry (§3.6), so the own pairs hold by construction at every width:
      vitals 300×64 at (edge, edge)        perks  h 36 at bottom --hud-row2-bottom   → 12 px apart
      ammo   240×64 at (edge, edge)        gear   h 36 at bottom --hud-row2-bottom   → 12 px apart
      weapon name at bottom --hud-weapon-bottom, above the gear row                  → 12 px apart
