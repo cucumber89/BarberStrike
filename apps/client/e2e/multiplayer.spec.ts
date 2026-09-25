@@ -19,7 +19,7 @@ interface DebugHandle {
     mode: string; flags: { id: string; owner: number; capTeam: number; cap: number; contested: boolean }[]; inFlag: number; scoreA: number; scoreB: number; tac: number; tacOn: boolean; winnerName: string;
     bomb: { stage: string; round: number; attackTeam: number; carrier: string; progress: number; result: string } | null;
     smokeOpacity: number;
-    chat: { name: string; text: string }[]; chatOpen: string | null; marks: { kind: string }[]; flagNotice: { text: string } | null;
+    chat: { name: string; text: string }[]; chatOpen: string | null; marks: { kind: string }[]; flagNotice: { text: string; flag?: string; team: number } | null;
     reward: { total: number; earned: string[] } | null; profile: { xp: number; badges: string[] };
   } };
 }
@@ -162,7 +162,8 @@ test.describe("two clients", () => {
       await expect(b.getByTestId("round-end")).toHaveClass(/mine/);
       await expect(a.getByTestId("round-end")).toHaveClass(/theirs/);
       await b.screenshot({ path: "e2e/out/m/round-end-bomb.png" });
-      await expect.poll(async () => (await hud(b)).bomb?.round, { timeout: 10000 }).toBe(2);
+      // The break after the round is BOMB.breakMs (7 s since drop U, pinned ≤ 9000 by bomb.test).
+      await expect.poll(async () => (await hud(b)).bomb?.round, { timeout: 12000 }).toBe(2);
       expect((await hud(b)).bomb?.attackTeam).toBe(0);
       expect((await hud(b)).bomb?.stage).toBe("buy");
       expect(errors).toEqual([]);
@@ -279,7 +280,7 @@ test.describe("two clients", () => {
     });
     await expect.poll(async () => (await hud(a)).alive, { timeout: 6000 }).toBe(true);
     expect((await hud(a)).phase).toBe("playing");
-    await expect(a.getByTestId("prep")).toHaveCount(0);
+    await expect(a.getByTestId("round-end")).toHaveCount(0);
     await expect(a.getByTestId("death")).toHaveCount(0);
     expect((await hud(a)).health).toBe(100);
     const survivorAfter = await b.evaluate(() => {
@@ -541,7 +542,9 @@ test.describe("two clients", () => {
     await expect(a.getByTestId("flag-A")).toHaveAttribute("data-owner", String(teamA));
     // The notice fades after 2.6 s and the owner poll above can outlast it in headless, so read the
     // store (which keeps the last notice) instead of the DOM.
-    expect(await a.evaluate(() => window.__fb.hud.get().flagNotice?.text ?? "")).toContain("TOOK A");
+    const notice = await a.evaluate(() => window.__fb.hud.get().flagNotice);
+    expect(notice?.flag).toBe("A");
+    expect(notice?.team).toBe(teamA);
     await expect(b.getByTestId("flag-A")).toHaveAttribute("data-owner", String(teamA), { timeout: 5000 });
     await expect.poll(async () => { const h = await hud(a); return teamA === 0 ? h.scoreA : h.scoreB; }, { timeout: 25_000 }).toBeGreaterThan(0);
 
