@@ -78,3 +78,45 @@ Decyzje L1–L7 z planu (nic nie jest blokowane, nagrody tylko kosmetyczne, auto
 tick i snapshot bez zmian bez mojej zgody). Nowe pola schematu: wolno tylko dla tego, o co
 prosiłem (konta, poczekalnia, areny, trofea) i każde wypisz w spec jako decyzję. UI po polsku.
 Istniejące `data-testid` i testy e2e to kontrakt.
+
+---
+
+## Kolejne wiadomości (wklejaj, gdy Ultron o to poprosi albo gdy trzeba)
+
+**Po projekcie, gdy spec ci się podoba:**
+> Akceptuję docs/V_SPEC.md. Odpowiedzi na pytania: <tu twoje odpowiedzi>. Ruszaj z krokiem 2 (szkielet), potem 3 (budowa wszystkich pakietów naraz), 4 (scalenie + bramka) i 5 (ledger, push, raport). Tryb TURBO.
+
+**Gdy chcesz coś zmienić w projekcie:**
+> Zanim budujesz, zmień w V_SPEC.md: <co>. Pokaż mi tylko różnice.
+
+**Gdy trafisz na limit użycia i potem wrócisz:**
+> Limit się zresetował. Sprawdź stan (git log, gałęzie u/*, journal ostatniego workflow) i wznów przerwany workflow przez resumeFromRunId. Nie zaczynaj od nowa.
+
+**Gdy chcesz wiedzieć, na czym stoimy:**
+> Na czym stoimy? Krótko: co gotowe, co trwa, co zostało, ile agentów pracuje.
+
+**Gdy chcesz zobaczyć efekt:**
+> Uruchom galerię HUD i pokaż mi zrzuty przed/po dla: menu, poczekalni turnieju, drabinki, oglądania meczu, ekranu zwycięzcy.
+
+**Gdy chcesz zagrać lokalnie:**
+> Odpal grę lokalnie (serwer + klient) i podaj mi adres do przeglądarki.
+
+**Na koniec:**
+> Otwórz PR z claude/practical-bardeen-07gu1m do main z opisem dropów U i V.
+
+## Ściąga: gdzie czego szukać
+
+| Co | Gdzie |
+|---|---|
+| Plan projektu, ledger, decyzje, odłożone | `docs/PLAN_2_1.md` |
+| Zasady Ultrona (floty agentów) | `docs/ULTRON.md` |
+| Spec przebudowy UI (drop U) | `docs/UI_U_SPEC.md` |
+| Spec turnieju/kont/menu (drop V, powstanie) | `docs/V_SPEC.md` |
+| HUD w grze (komponenty) | `apps/client/src/ui/hud/` (+ `ui/Hud.tsx`) |
+| Menu, sklep, drabinka, wyniki | `apps/client/src/ui/Menu.tsx`, `Shop.tsx`, `Bracket.tsx`, `MatchResult.tsx` |
+| Zasady trybów, turniej, czasy rund | `packages/shared/src/modes.ts`, `tournament.ts`, `cs.ts` |
+| Serwer gry (pokoje) | `apps/server/src/rooms/TdmRoom.ts`, `apps/server/src/index.ts` |
+| Galeria stanów HUD (zrzuty) | `node apps/client/e2e/tools/hud-states.mjs --label <nazwa>` → `apps/client/e2e/out/u/<nazwa>/` |
+| Porównanie zrzutów | `node apps/client/e2e/tools/hud-diff.mjs --a before --b <nazwa>` |
+| Testy | `pnpm test`, `pnpm typecheck`, `pnpm build`; e2e: `cd apps/client && set PW_WEBSERVER=1 && npx playwright test` |
+| Uruchomienie gry lokalnie | `pnpm dev` → klient http://localhost:5174 |
