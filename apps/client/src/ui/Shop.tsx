@@ -10,7 +10,7 @@ import { uiSound } from "../game/audio";
 import { feelOf } from "../game/combat/weaponFeel";
 import { SHOP_ART } from "./shopArt";
 import { money } from "./hud/format";
-import { CAT_INFO, ITEM_ROLE, SHOP_CATS, catForCode, itemName, itemStats, keyForPos, posForCode, shopCatalog, type ShopCat } from "./shopCatalog";
+import { CAT_INFO, ITEM_ROLE, SHOP_CATS, catForCode, itemName, itemStats, keyForPos, posForCode, shopCatalog, tileTag, type ShopCat } from "./shopCatalog";
 
 export interface ShopApi {
   /** "The Boys" mode: pick the role you respawn as. */
@@ -46,11 +46,6 @@ const REASONS: Record<string, string> = {
   "no-shop": "W tym trybie nie ma sklepu",
   mode: "Nie w tym trybie",
   shaved: "Ostrzyżeni nie kupują",
-};
-
-/** A refusal on the tile, as its one tag beside the price: one or two words (a tile is ≤ 6, §5.2 #49). */
-const BLOCKED_LABEL: Record<string, string> = {
-  owned: "MASZ", full: "PEŁNO", slot: "SLOT ZAJĘTY", class: "NIE TA ROLA", mode: "NIE TU", "no-shop": "BRAK SKLEPU", shaved: "NIE TERAZ",
 };
 
 /**
@@ -90,7 +85,7 @@ interface TileState {
   price: number;
   /** The net of a swap (price − refund); undefined when nothing is traded in. */
   swapNet?: number;
-  /** A small tag after the name: ×N on grenades you carry. */
+  /** A small tag after the name: ×N/max on grenades you carry. */
   badge?: string;
   /** The tube scope: a reticle after the name, labelled „LUNETA” (the word the e2e pins). */
   scope?: boolean;
@@ -193,10 +188,13 @@ export function Shop({ h, api, now, live = true }: Props) {
     const Art = SHOP_ART[id];
     const busy = isPending(id);
     const reason = s.v.ok ? "" : s.v.reason;
-    const blocked = !s.carried && !s.v.ok;
     const short = reason === "money" ? buyShortfall(wallet, id, ctx) : 0;
-    // A closed shop greys the shelf and says so once, in the header; every tile keeps its price.
-    const refusal = blocked && reason !== "closed" ? (short > 0 ? `Brakuje ${money(short)}` : BLOCKED_LABEL[reason] ?? "") : "";
+    // The one tag comes from WHY the item is refused, not from carrying it (`tileTag`): one Frag of
+    // two in the pocket is refused for money or a shut window, and the tile says that, with its
+    // `why-{id}`. A closed shop greys the shelf and says so once, in the header.
+    const t = tileTag({ reason, carried: s.carried, have: s.have ?? "", short });
+    const blocked = t.locked;
+    const refusal = t.tone === "no" ? t.text : "";
     const buyable = s.v.ok && !busy;
     // The price is ALWAYS printed (§5.2 #49: key, name, price, at most one tag), as one word: a free
     // gun reads „$0” — „ZA DARMO” beside „MASZ” made „1·1 P9 Straight Razor MASZ ZA DARMO” seven
@@ -207,8 +205,7 @@ export function Shop({ h, api, now, live = true }: Props) {
       : money(s.price);
     // The one tag: a refusal the shelf can predict, or what a carried item is doing. A gun you
     // carry and may sell shows SPRZEDAJ there instead (the tile's brass edge already says it is yours).
-    const have = s.carried && s.have && !s.v.ok ? s.have : "";
-    const tag = s.sell ? "" : refusal || have;
+    const tag = s.sell ? "" : t.text;
     const label = `${itemName(id)}, ${s.price === 0 ? "za darmo" : money(s.price)}${s.swapNet !== undefined ? `, z wymianą ${money(s.swapNet)}` : ""}${tag ? ` — ${tag}` : ""}`;
     return (
       <div key={id}
@@ -267,7 +264,10 @@ export function Shop({ h, api, now, live = true }: Props) {
   const grenadeTile = (id: GrenadeId, cat: ShopCat, i: number) => {
     const g = GRENADES[id];
     const count = g.slot === "lethal" ? (wallet.lethal === id ? wallet.lethalCount : 0) : (wallet.tactical === id ? wallet.tacticalCount : 0);
-    return tile(id, cat, i + 1, { carried: count > 0, v: verdict(id), price: g.price, have: "PEŁNO", badge: count > 0 ? `×${count}` : undefined });
+    const max = g.slot === "lethal" ? ECONOMY.lethalMax : ECONOMY.tacticalMax;
+    // „PEŁNO” only when the slot really is full; one of two reads „×1/2” after the name (the base
+    // shop's „masz ×1 z 2”, in one word) and the tile's tag stays free for the real refusal.
+    return tile(id, cat, i + 1, { carried: count > 0, v: verdict(id), price: g.price, have: count >= max ? "PEŁNO" : "", badge: count > 0 ? `×${count}/${max}` : undefined });
   };
 
   const gearTile = (id: ShopItemId, cat: ShopCat, i: number) => {

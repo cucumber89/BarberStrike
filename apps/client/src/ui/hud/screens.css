@@ -215,7 +215,7 @@
    its place (§5.2 #49). The whole tile is the buy button (`.tile-hit` under the text); SPRZEDAJ
    sits above it. A tile is a size container: its row decides its height, and a short row drops
    the picture instead of squeezing the words. */
-.shop-tile { position: relative; container-type: size; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; padding: 6px 8px;
+.shop-tile { position: relative; container-type: size; font-size: var(--hud-t2); display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; padding: 6px 8px;
   background: rgba(244,240,231,.045); border: 1px solid rgba(178,201,210,.14); border-radius: var(--hud-radius); }
 .shop-tile:hover { background: rgba(244,240,231,.08); border-color: rgba(231,182,46,.55); }
 .shop-tile:has(.tile-hit:focus-visible) { border-color: var(--hud-accent); box-shadow: 0 0 0 1px var(--hud-accent); }
@@ -240,9 +240,11 @@
 .tile-scope svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; }
 /* „LUNETA” is the icon's aria-label; the word stays in the tile's textContent for the e2e only. */
 .tile-scope-word { display: none; }
-/* The foot: the key and the price on one line and, on a tile tall enough for three lines, the one
-   tag („Brakuje $250”, „MASZ”, „nosisz”, „działa jeszcze 12s”) or SPRZEDAJ on its own line above
-   them — beside the price, never in its place (§5.2 #49). */
+/* The foot: the key and the price, and the one tag („Brakuje $250”, „MASZ”, „nosisz”, „działa
+   jeszcze 12s”) or SPRZEDAJ beside the price, never in its place (§5.2 #49). A tag must never
+   change the picture's size: every tile of a shelf draws its art at ONE size (audit P7-2, the
+   rifles at 1280×720 shrank to thumbnails beside an untagged C-20). So the foot has one shape per
+   shelf, never per tile — see the two container rules below the tag. */
 .tile-foot { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; }
 .tile-key { order: 1; flex: 0 0 auto; font: 500 var(--hud-key)/1 var(--font-mono); letter-spacing: var(--hud-track-num); color: var(--hud-tx2); }
 .shop-aisle.armed .tile-key { color: var(--hud-accent); }
@@ -250,11 +252,28 @@
 .shop-tile.locked .tile-price { color: var(--hud-tx2); }
 .tile-swap { margin-right: 6px; font-style: normal; color: var(--hud-tx2); }
 .tile-tag { order: 0; flex: 0 0 100%; min-width: 0; display: flex; white-space: nowrap; font: 600 var(--hud-t1)/1.1 var(--font-ui); }
+/* Wide tiles (1280×720 to 1600×900; 1920×1080 is narrow: its t2 grows faster than its tiles):
+   key · tag · price on ONE line on every tile. The widest foot is
+   „3·5” (25 px) + „Brakuje $1,050” or SPRZEDAJ (≈ 7.45 t1) + „$4,750” (≈ 3.85 t2) + two 6 px gaps;
+   with t1 ≤ .824 t2 (hud.css clamps) that is ≤ 37 px + 9.99 t2, inside 12.2 em of t2 for any
+   t2 ≥ 16.3 px — and t2 never goes under 17. The tile's font-size is t2, so `em` here is t2. */
+@container (min-width: 12.2em) {
+  .tile-foot { flex-wrap: nowrap; column-gap: 6px; }
+  .tile-tag { order: 1; flex: 0 0 auto; }
+}
+/* Narrow tiles: the tag keeps its own line, and a tile without a tag keeps that line empty, so
+   the art is the same size on every tile of the shelf. That line costs the art ~17 px, so a narrow
+   tile draws art only from 80 px of height (≥ 20 px of picture, not a 7 px sliver at 1093×614). */
+@container (width < 12.2em) and (height <= 80px) { .tile-art { display: none; } }
+@container (width < 12.2em) and (height > 80px) {
+  .tile-foot:not(:has(.tile-tag))::before { content: "\00a0"; order: 0; flex: 0 0 100%; font: 600 var(--hud-t1)/1.1 var(--font-ui); }
+}
 .tile-tag.have { color: var(--hud-accent); }
 .tile-tag.no { color: var(--hud-danger); }
+/* Its line is as tall as a text tag's (1.1 em with the 1 px borders), so SPRZEDAJ moves no picture either. */
 .tile-sell { display: inline-flex; align-items: center; padding: 0 8px; cursor: pointer; pointer-events: auto;
   background: rgba(244,240,231,.07); border: var(--hud-plate-line); border-radius: var(--hud-radius); color: var(--hud-tx2);
-  font: 600 var(--hud-t1)/1.1 var(--font-ui); letter-spacing: var(--hud-track-label); }
+  font: 600 var(--hud-t1)/calc(1.1em - 2px) var(--font-ui); letter-spacing: var(--hud-track-label); }
 .tile-sell:hover:not(:disabled) { color: var(--hud-tx); border-color: var(--hud-accent); }
 .tile-sell-icon { display: none; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 /* A short tile (TDM's six rows at 1164×655 and below, 55 px at 1024×576): the three lines still fit
