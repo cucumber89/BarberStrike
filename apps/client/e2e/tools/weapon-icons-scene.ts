@@ -79,8 +79,10 @@ function renderParts(parts: NamedBox[], id: WeaponId, size: number): { rgba: Uin
   const eye = add(center, scale(dir, radius * 3));
   const light = norm([-0.5, 0.85, -0.35]); // key light for face shading
 
-  // Orthographic half-extent: fit the model's projected bounds, times the art's margin.
-  const half = radius * 1.02 * a.zoom;
+  // Orthographic half-extent: fit the model's projected bounds, times the art's margin. The 3D
+  // radius (half the diagonal) overestimates a long thin gun's silhouette, so a tight factor still
+  // leaves headroom; the content-crop below removes whatever transparent margin is left.
+  const half = radius * 0.9 * a.zoom;
   const px = size / (2 * half);
 
   const project = (w: Vec3): { sx: number; sy: number; depth: number } => {
@@ -101,8 +103,13 @@ function renderParts(parts: NamedBox[], id: WeaponId, size: number): { rgba: Uin
       // Back-face cull against the camera.
       if (dot(f.n, viewDir) <= 0.02) continue;
       const lit = Math.max(0, dot(f.n, light));
-      const shade = 0.4 + 0.6 * lit; // ambient + diffuse
-      const col: [number, number, number] = [Math.round(base[0] * shade), Math.round(base[1] * shade), Math.round(base[2] * shade)];
+      const shade = 0.44 + 0.78 * lit; // ambient + diffuse, a touch brighter and higher-contrast so
+      // the gun reads as a lit object rather than a flat grey blob (clamped to 255 below).
+      const col: [number, number, number] = [
+        Math.min(255, Math.round(base[0] * shade)),
+        Math.min(255, Math.round(base[1] * shade)),
+        Math.min(255, Math.round(base[2] * shade)),
+      ];
       const proj = f.idx.map((i) => project(cs[i]));
       quads.push({ pts: proj.map((p) => [p.sx, p.sy]) as [number, number][], depth: (proj[0].depth + proj[1].depth + proj[2].depth + proj[3].depth) / 4, col });
     }
@@ -133,17 +140,50 @@ function renderParts(parts: NamedBox[], id: WeaponId, size: number): { rgba: Uin
   return { rgba: data.data, opaque, radius };
 }
 
-/** Every shop weapon as a base64 PNG, three-quarter, transparent background. */
+/** Tight alpha bounding box of an RGBA buffer (pixels with alpha > 8), or null if fully clear. */
+function alphaBounds(rgba: Uint8ClampedArray, size: number): { x: number; y: number; w: number; h: number } | null {
+  let x0 = size, y0 = size, x1 = -1, y1 = -1;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (rgba[(y * size + x) * 4 + 3] > 8) {
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+  }
+  if (x1 < 0) return null;
+  return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+
+/**
+ * Every shop weapon as a base64 PNG, three-quarter, transparent background — CROPPED to the gun's
+ * own bounding box (+ a small pad). A square canvas around a wide, short gun is mostly transparent
+ * margin, and `object-fit: contain` in the shop tile then shrinks the whole square (gun included)
+ * to fit the tile's height, so the gun read as a tiny thumbnail. Cropping to content gives the PNG
+ * the gun's real aspect, so the tile fills its width with the gun and it reads large.
+ */
 export function renderWeaponIcons(size: number): IconResult[] {
   const out: IconResult[] = [];
   for (const id of WEAPON_ART_IDS) {
     const pp = proceduralParts(id);
     const parts = [...pp.parts, ...pp.magazine];
     const { rgba, opaque, radius } = renderParts(parts, id, size);
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = size;
-    canvas.getContext("2d")!.putImageData(new ImageData(rgba, size, size), 0, 0);
-    const png = canvas.toDataURL("image/png").split(",")[1];
+
+    const full = document.createElement("canvas");
+    full.width = full.height = size;
+    full.getContext("2d")!.putImageData(new ImageData(rgba, size, size), 0, 0);
+
+    const b = alphaBounds(rgba, size);
+    let outCanvas = full;
+    if (b) {
+      const pad = Math.round(size * 0.03);
+      const x = Math.max(0, b.x - pad), y = Math.max(0, b.y - pad);
+      const w = Math.min(size - x, b.w + pad * 2), h = Math.min(size - y, b.h + pad * 2);
+      const crop = document.createElement("canvas");
+      crop.width = w; crop.height = h;
+      crop.getContext("2d")!.drawImage(full, x, y, w, h, 0, 0, w, h);
+      outCanvas = crop;
+    }
+    const png = outCanvas.toDataURL("image/png").split(",")[1];
     out.push({ id, png, opaque, radius });
   }
   return out;
