@@ -85,6 +85,8 @@ export class RemotePlayer {
   sliding = false;
   private slidingUntil = 0;
   private wasAlive = true;
+  /** Drop U (P1): the body is not drawn — the spectator's camera is inside its head. */
+  private hidden = false;
   private skinsValue = "";
   private input = { speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol" as WeaponId, moveDir: 0, vy: 0, perked: false, lean: 0, tac: false, slide: false, shaved: false, haircut: "" };
 
@@ -142,7 +144,7 @@ export class RemotePlayer {
     this.x = x; this.y = y; this.z = z; this.yaw = yaw;
     this.character.root.position.set(x, y, z);
     this.character.revive();
-    this.character.setEnabled(true);
+    this.character.setEnabled(!this.hidden);
     this.alive = true; this.wasAlive = true;
     this.slidingUntil = 0; this.sliding = false;   // a fresh body is not mid-slide
   }
@@ -199,7 +201,7 @@ export class RemotePlayer {
     c.root.position.set(this.x, this.y, this.z);
     c.root.rotation.y = this.yaw;
     if (this.wasAlive && !this.alive) c.die();
-    if (!this.wasAlive && this.alive) { c.revive(); c.setEnabled(true); }
+    if (!this.wasAlive && this.alive) { c.revive(); c.setEnabled(!this.hidden); }
     this.wasAlive = this.alive;
 
     const inp = this.input;
@@ -213,6 +215,18 @@ export class RemotePlayer {
     inp.moveDir = this.speed > 0.3 ? Math.atan2(this.vx, this.vz) - this.yaw : 0;
     c.update(inp, dtMs);
   }
+
+  /**
+   * Drop U (P1): hide or show the body. A dead player spectating this one looks out of its eye
+   * (`RemotePlayer.eye`), and the inside of a head is not a view. Presentation only.
+   */
+  setHidden(hidden: boolean): void {
+    if (this.hidden === hidden) return;
+    this.hidden = hidden;
+    this.character.setEnabled(!hidden);
+  }
+
+  get isHidden(): boolean { return this.hidden; }
 
   /** World-space muzzle position of the held weapon. */
   muzzle(out: Vector3): Vector3 {
