@@ -55,9 +55,11 @@ for (let i = 1; i <= CYCLES; i++) {
   await page.evaluate(() => document.fullscreenElement && document.exitFullscreen());
   await page.waitForTimeout(2500);
   rows.push(await sample(`match ${i}`));
-  // Leave: Escape opens the pause menu, LEAVE returns to the main menu.
+  // Leave: Escape opens the ESC column, OPUŚĆ MECZ asks „NA PEWNO WYJŚĆ?” (drop U, P7) and TAK,
+  // WYJDŹ returns to the main menu.
   await page.keyboard.press("Escape");
   await page.getByTestId("btn-leave").click({ timeout: 10000 });
+  await page.getByTestId("btn-leave-confirm").click({ timeout: 10000 });
   await page.getByTestId("btn-play").waitFor({ timeout: 30000 });
   await page.waitForTimeout(800);
   rows.push(await sample(`menu ${i}`));
