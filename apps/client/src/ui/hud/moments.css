@@ -1,28 +1,120 @@
-/* ui/hud/moments.css — countdown, prep, reconnect, round end and the flag notice (seeded by P0 for P5).
-   Drop U P0 0e moved these rules VERBATIM from ui/styles.css and then ui/cinematic.css, each in
-   its original order, without collapsing the later layer into the earlier one. index.css imports
-   the hud/*.css files between styles.css and cinematic.css, so the cascade is the one they had. */
+/* ui/hud/moments.css — the match's moments (P5; docs/UI_U_SPEC.md §3.7, §4.2, §6.1): the banner
+   and its band, the alert slot, the countdown's intro block and digit. Every size, colour, box and
+   duration is a §3 token (hud.css); nothing here is uppercased by CSS — the words are uppercased
+   in JS (§3.3). Animations exist only under `prefers-reduced-motion: no-preference`, so under
+   reduce there is none at all (§2 Principle 11, R3), and each one ends by 600 ms. */
 
-.center-msg { position: absolute; left: 50%; top: 32%; transform: translate(-50%, -50%); font-family: var(--font-display); font-size: 120px; color: var(--tx); text-shadow: 0 4px 24px rgba(0,0,0,.8); }
-.center-sub { position: absolute; left: 50%; top: 60px; transform: translateX(-50%); font-size: 12px; letter-spacing: 0.25em; color: var(--tx-2); }
+/* The mode line's old box (P2's `Objective` still carries the class). Kept here, where P0's move
+   put it, with the literal 12 px turned into the t1 token. */
+.center-sub { position: absolute; left: 50%; top: 60px; transform: translateX(-50%); font-size: var(--hud-t1); letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
 
-/* Preparation between respawn waves. Smaller than the match-start countdown on purpose: it comes
-   round every seventeen seconds, and a 120px number that often would be shouting. */
-.center-msg.prep { font-size: 0; text-align: center; }
-.prep-count { font-family: var(--font-display); font-size: 72px; line-height: 1; color: var(--brass); }
-.prep-sub { margin-top: 10px; font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.28em; color: var(--tx-2); white-space: nowrap; }
-/* Between rounds. */
-.round-end { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); text-align: center; padding: 16px 36px; min-width: 360px;
-  background: rgba(10,10,12,.86); border: 1px solid var(--line); border-top: 2px solid var(--tx-2); animation: result-in 200ms ease-out; }
-.round-end.mine { border-top-color: var(--brass); } .round-end.theirs { border-top-color: var(--red); }
-.round-end-title { font-family: var(--font-display); font-size: 44px; letter-spacing: 0.16em; line-height: 1; color: var(--tx); }
-.round-end.mine .round-end-title { color: var(--brass); }
-.round-end-why { margin-top: 6px; font-size: 15px; color: var(--tx-2); }
-.round-end-carry { margin-top: 4px; font-size: 14px; color: var(--brass); }
-.round-end-score { margin-top: 8px; font-family: var(--font-mono); font-size: 18px; color: var(--tx-2); }
-.round-end-score b { color: var(--tx); font-weight: normal; }
-.round-end-next { margin-top: 6px; font-size: 13px; letter-spacing: 0.16em; color: var(--brass); }
-@media (prefers-reduced-motion: reduce) { .round-end { animation: none; } }
-.reconnect { position: absolute; left: 50%; top: 96px; transform: translateX(-50%); padding: 8px 14px; background: rgba(10,10,12,.85); border-left: 3px solid var(--red); font-size: 12px; letter-spacing: 0.2em; color: var(--tx); animation: pulse 1s ease-in-out infinite; }
-.flag-notice { position: absolute; left: 50%; top: 112px; transform: translateX(-50%); font-family: var(--font-display); font-size: 20px; letter-spacing: .2em; padding: 6px 14px; background: rgba(10,10,12,.7); animation: slide-in 160ms ease-out; white-space: nowrap; }
-.flag-notice.t0 { color: var(--team0); } .flag-notice.t1 { color: var(--team1); }
+/* ---------------------------------------------------------------- colours (§3.4) */
+.moment-banner .tone-team0, .moment-alert.tone-team0 { color: var(--hud-team0); }
+.moment-banner .tone-team1, .moment-alert.tone-team1 { color: var(--hud-team1); }
+.moment-banner .tone-ok { color: var(--hud-ok); }
+.moment-banner .tone-danger, .moment-alert.tone-danger { color: var(--hud-danger); }
+.moment-banner .tone-warn, .moment-alert.tone-warn { color: var(--hud-warn); }
+.moment-banner .tone-dim, .moment-alert.tone-dim { color: var(--hud-tx2); }
+.moment-banner .tone-tx, .moment-alert.tone-tx { color: var(--hud-tx); }
+.moment-band.rule-team0 { --rule: var(--hud-team0); }
+.moment-band.rule-team1 { --rule: var(--hud-team1); }
+.moment-band.rule-ok { --rule: var(--hud-ok); }
+.moment-band.rule-danger { --rule: var(--hud-danger); }
+.moment-band.rule-warn { --rule: var(--hud-warn); }
+.moment-band.rule-dim { --rule: var(--hud-tx2); }
+.moment-band.rule-tx { --rule: var(--hud-tx); }
+
+/* ---------------------------------------------------------------- the banner (§3.7) */
+/* The stage has no zone: it holds the band (zone veil) and the box (zone banner) side by side. */
+.moment-slot { display: contents; }
+.moment-stage { position: absolute; left: 0; right: 0; top: var(--hud-banner-top); z-index: var(--z-banner); display: flex; justify-content: center; }
+/* §3.7's band, dark from 20 % to 80 % of the width as §3.7 has it, but fading in from 8 % rather
+   than from the edge, and its coloured rules from 14 %: the radar ends at x 200 of 1600 (12.5 %)
+   and at x 168 of 1024, so neither the dark nor a rule is drawn across the map. */
+.moment-band { position: absolute; inset: 0; --rule: var(--hud-tx2);
+  background: linear-gradient(90deg, transparent 8%, rgba(5,15,20,.86) 20%, rgba(5,15,20,.86) 80%, transparent 92%); }
+.moment-band::before, .moment-band::after { content: ""; position: absolute; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent 14%, var(--rule) 26%, var(--rule) 74%, transparent 86%); }
+.moment-band::before { top: 0; }
+.moment-band::after { bottom: 0; }
+/* Three rows: 12 + t1·1.2 + 4 + t5 + 4 + t2·1.2 + 12 — 120–253 px at 576 high, 180–330 at 900. */
+.moment-banner { position: relative; box-sizing: border-box; width: var(--hud-banner-w); padding: 12px 16px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.mb-eyebrow { display: flex; justify-content: center; gap: 12px; min-height: calc(var(--hud-t1) * 1.2);
+  font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); line-height: 1.2; letter-spacing: var(--hud-track-label); }
+/* A chip is a tag, not a link: a hairline frame and a faint fill in its own colour, drawn with
+   box-shadow so the row keeps its t1·1.2 height. */
+.mb-chip { padding: 0 8px; border-radius: var(--hud-radius); background: color-mix(in srgb, currentColor 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 60%, transparent); }
+.mb-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-display); font-weight: 400; font-size: var(--hud-t5); line-height: 1;
+  letter-spacing: var(--hud-track-num); color: var(--hud-tx); white-space: nowrap; text-shadow: 0 2px 14px rgba(0,0,0,.55); }
+.mb-title.long { font-size: var(--hud-t4); line-height: var(--hud-t5); }
+.mb-line { min-height: calc(var(--hud-t2) * 1.2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t2); line-height: 1.2; color: var(--hud-tx2); }
+.mb-sep { color: var(--hud-tx2); }
+.mb-part[data-testid="round-mvp"] { color: var(--hud-tx); }
+.moment-banner.k-freeze .mb-line, .moment-banner.k-role .mb-line { color: var(--hud-tx); letter-spacing: var(--hud-track-label); }
+.moment-banner.k-shaved .mb-line { color: var(--hud-tx); letter-spacing: var(--hud-track-label); }
+
+/* The countdown digit: the banner box, no band (veto: no full-width band while the countdown is live). */
+.moment-digit { font-family: var(--font-display); font-size: var(--hud-t5); line-height: 1; letter-spacing: var(--hud-track-num); color: var(--hud-tx);
+  padding: 12px 24px; text-shadow: 0 4px 24px rgba(0,0,0,.8); }
+
+/* ---------------------------------------------------------------- the alert slot (§4.2) */
+.moment-alert { position: absolute; left: 0; right: 0; margin-inline: auto; width: max-content; top: var(--hud-alert-top); z-index: var(--z-alert);
+  box-sizing: border-box; height: 40px; padding: 0 20px; display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-display); font-weight: 400; font-size: var(--hud-t3); line-height: 1; letter-spacing: var(--hud-track-num); white-space: nowrap;
+  background: linear-gradient(90deg, transparent, var(--hud-plate) 14%, var(--hud-plate) 86%, transparent);
+  text-shadow: 0 1px 6px rgba(0,0,0,.6); }
+/* The 2 px rule under the line, in its colour, fading out at both ends like the plate. */
+.moment-alert::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, currentColor 14%, currentColor 86%, transparent); }
+.moment-alert[data-kind="reconnect"] { z-index: var(--z-reconnect); }
+.ma-spinner { width: 16px; height: 16px; box-sizing: border-box; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; }
+
+/* ---------------------------------------------------------------- the countdown's intro (§3.6) */
+.moment-intro { position: absolute; left: var(--hud-intro-left); top: var(--hud-intro-top); width: var(--hud-intro-w); z-index: var(--z-banner);
+  box-sizing: border-box; padding-left: 14px; border-left: 2px solid var(--hud-accent);
+  display: flex; flex-direction: column; gap: 4px; text-shadow: 0 2px 10px rgba(0,0,0,.85); }
+.mi-eyebrow { font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); line-height: 1.2; letter-spacing: var(--hud-track-label); color: var(--hud-accent); }
+.mi-title { font-family: var(--font-display); font-weight: 400; font-size: var(--hud-t3); line-height: 1; letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
+.mi-line { font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t2); line-height: 1.2; letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+
+/* ---------------------------------------------------------------- §4.5: when these zones step aside */
+/* The hide rule (§3.8), on the rows that concern P5: dead → no intro; Tab, the shop or ESC → only
+   the reconnect line stays; a banner up → the alert slot waits (the bus already holds it back);
+   the result's stages B and C → only the reconnect line. */
+.hud[data-alive="false"] .moment-intro,
+.hud:is([data-overlay~="tab"], [data-overlay~="shop"], [data-overlay~="pause"], [data-stage="B"], [data-stage="C"]) :is(.moment-intro, .moment-band, .moment-banner, .moment-digit, .moment-alert:not([data-kind="reconnect"])),
+.hud[data-banner="1"] .moment-alert:not([data-kind="reconnect"]) {
+  opacity: 0; visibility: hidden; transition: opacity var(--hud-fast), visibility 0s linear var(--hud-fast);
+}
+
+/* ---------------------------------------------------------------- motion (§3.8, §6.1) */
+@media (prefers-reduced-motion: no-preference) {
+  /* Banners: in over 320 ms (the band opens, the box settles), out over 240 ms. „WALCZ!” in 200. */
+  .moment-band { animation: moment-band-in var(--hud-in) var(--hud-ease); }
+  .moment-banner { animation: moment-box-in var(--hud-in) var(--hud-ease); }
+  .moment-banner.k-fight { animation-duration: var(--hud-base); }
+  .moment-slot:has(.k-fight) .moment-band { animation-duration: var(--hud-base); }
+  .moment-slot.out .moment-band, .moment-slot.out .moment-banner { animation: moment-out var(--hud-out) var(--hud-ease-in) forwards; }
+  /* A match point's eyebrow glows twice (2 × 250 ms). */
+  .mb-eyebrow.glow .mb-chip { animation: moment-glow 250ms ease-in-out 2; }
+  /* The digit pops from 1.2 to 1 in 180 ms, each second (it is re-mounted per digit). */
+  .moment-digit { animation: moment-pop 180ms var(--hud-ease); }
+  /* Alerts drop 8 px with a fade in 200 ms, and leave in 240. */
+  .moment-alert { animation: moment-drop var(--hud-base) var(--hud-ease); }
+  .moment-alert.out { animation: moment-out var(--hud-out) var(--hud-ease-in) forwards; }
+  /* The reconnect spinner turns once a second for as long as the line stands. */
+  .ma-spinner { animation: moment-spin 1s linear infinite; }
+  /* The intro slides in from −24 px over 320 ms and leaves in 240. */
+  .moment-intro { animation: moment-slide var(--hud-in) var(--hud-ease); }
+  .moment-intro.out { animation: moment-out var(--hud-out) var(--hud-ease-in) forwards; }
+}
+@keyframes moment-band-in { from { opacity: 0; transform: scaleX(.6); } }
+@keyframes moment-box-in { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes moment-out { to { opacity: 0; } }
+@keyframes moment-glow { 50% { color: var(--hud-tx); text-shadow: 0 0 12px currentColor; } }
+@keyframes moment-pop { from { opacity: .4; transform: scale(1.2); } }
+@keyframes moment-drop { from { opacity: 0; transform: translateY(-8px); } }
+@keyframes moment-spin { to { transform: rotate(1turn); } }
+@keyframes moment-slide { from { opacity: 0; transform: translateX(-24px); } }

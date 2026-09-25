@@ -29,7 +29,7 @@ export const scenarios: Scenario[] = [
   {
     id: "countdown", moment: "Odliczanie do startu meczu (3…)",
     n: 2, maxWords: 24,
-    state: { ...base("tdm"), phase: MatchPhase.Countdown, phaseEndsAt: S + 2_600, players: roster({ f: 0 }), money: ECONOMY.startMoney, buyWindowLeft: Infinity },
+    state: { ...base("tdm"), mapId: NIGHT_DISTRICT.id, phase: MatchPhase.Countdown, phaseEndsAt: S + 2_600, players: roster({ f: 0 }), money: ECONOMY.startMoney, buyWindowLeft: Infinity },
     radar: radarFor(NIGHT_DISTRICT, 0, 0, { mates: MATES }),
   },
   {
@@ -44,6 +44,7 @@ export const scenarios: Scenario[] = [
       players: roster({ f: 0.36, dead: ["p2", "p5", "p6", "p7", "bot-3", "bot-4"] }), ...kit("rifle", 14), owned: ["pistol", "rifle"], health: 63, money: 450 + BOMB.winMoney,
       killFeed: feed(0, [[4_600, "me", "p6", "rifle"], [1_300, "p1", "p5", "rifle", { headshot: true }]]),
       moneyToasts: [{ key: 7, delta: BOMB.winMoney, reason: "capture", total: 450 + BOMB.winMoney, at: T - 600 }],
+      roundMvp: { id: "me", name: seat("me").name, kills: 1, why: "plant" },
     }),
     radar: radarFor(NIGHT_DISTRICT, 0, 0.6, { mates: MATES, dead: ["p2"] }),
   },
@@ -60,14 +61,18 @@ export const scenarios: Scenario[] = [
       players: roster({ f: 0.36, dead: ["me", "p1", "p2", "bot-1", "bot-2", "p7"] }), money: 200 + csLossBonus(0),
       killFeed: feed(0, [[5_000, "p6", "me", "smg"], [2_900, "p5", "p1", "dmr", { headshot: true }], [1_200, "bot-3", "p2", "shotgun"]]),
       moneyToasts: [{ key: 8, delta: csLossBonus(0), reason: "capture", total: 200 + csLossBonus(0), at: T - 600 }],
+      roundMvp: { id: "p5", name: seat("p5").name, kills: 3, why: "kills" },
     }),
     radar: radarFor(NIGHT_DISTRICT, 0, 0.55, { alive: false, mates: MATES, dead: ["p1", "p2", "bot-1", "bot-2"] }),
   },
   {
+    // Photographed 1.2 s into the round-7 freeze: the freeze-start banner holds its first 2000 ms
+    // only (§6.5), so the round clock reads 0:14 — §5.2's „0:13” is already past the banner. The
+    // match deadline stays where the pre-drop photograph had it (the old strip's „19:58”).
     id: "bomb-halftime", moment: "Bomb: połowa — runda 7, zmiana stron, pistolety i 800 $",
     n: 22, maxWords: 24,
-    state: bombFreeze(7, 12_600, {
-      scoreA: 4, scoreB: 2, money: BOMB.startMoney, ...kit("pistol"), owned: ["pistol"], armor: 0, players: roster({ f: 0.5 }),
+    state: bombFreeze(7, BOMB.buyMs - 1_200, {
+      matchEndsAt: bombMatchEnds(6, BOMB.buyMs - 12_600), scoreA: 4, scoreB: 2, money: BOMB.startMoney, ...kit("pistol"), owned: ["pistol"], armor: 0, players: roster({ f: 0.5 }),
     }),
     radar: radarFor(NIGHT_DISTRICT, 1, 0, { mates: MATES }),
   },
@@ -187,7 +192,9 @@ export const scenarios: Scenario[] = [
       players: roster({ f: 0.9, dead: ["p1", "p2", "p5", "p6", "p7", "bot-3"] }), ...kit("rifle", 9), owned: ["pistol", "rifle"], health: 42, money: 1_900,
     }),
     state: bombState(bombData({ round: 11, attackTeam: 1, stage: "resolved", site: SITE_A.id, x: SITE_A.x, y: SITE_A.y, z: SITE_A.z, result: "BOMB DEFUSED" }), {
-      phase: MatchPhase.Ended, phaseEndsAt: S + MATCH.endedMs - 1_500, roundWinner: 0, winner: 0, scoreA: 7, scoreB: 4, reward: REWARD_WIN,
+      // The deciding round goes Playing → Ended with no Prep event: the store's roundWinner is still
+      // the freeze's -1 (`Game.ts:355`); the bomb's result and attacking side name the round.
+      phase: MatchPhase.Ended, phaseEndsAt: S + MATCH.endedMs - 1_500, roundWinner: -1, winner: 0, scoreA: 7, scoreB: 4, reward: REWARD_WIN,
       players: roster({ f: 0.9, dead: ["p1", "p2", "p5", "p6", "p7", "bot-3"] }), ...kit("rifle", 9), owned: ["pistol", "rifle"], health: 42, money: 1_900,
       killFeed: feed(0, [[4_300, "bot-1", "p7", "smg"], [3_100, "me", "bot-3", "rifle"]]),
     }),
@@ -215,31 +222,111 @@ export const scenarios: Scenario[] = [
     id: "break-rejoin", n: 69, maxWords: 28, isNew: true,
     moment: "1 v 1: HUD wstaje w środku przerwy po rundzie (bez krawędzi Playing → Prep)",
     state: {
+      // A reload starts the store from `initialHud`: no Prep event was seen, so roundWinner is -1.
+      // Who took the round is read off the rows — after „TIME · MORE HEALTH” the healthier side
+      // (`ScoreRow.health`, P1's producer; without it the card stays down rather than guess).
       ...base("duel"), phase: MatchPhase.Prep, phaseEndsAt: S + 1_800, matchEndsAt: S + 10 * 60_000, round: 5, scoreA: 3, scoreB: 2,
-      roundResult: "TIME · MORE HEALTH", roundWinner: 0, buyWindowLeft: 0,
-      players: roster({ f: 0.4, only: ["me", "p5"] }), ...kit("smg", 12), owned: ["pistol", "smg"], health: 47, armor: 0, money: 2_300,
+      roundResult: "TIME · MORE HEALTH", roundWinner: -1, buyWindowLeft: 0,
+      players: roster({ f: 0.4, only: ["me", "p5"], set: { me: { health: 47 }, p5: { health: 31 } } }), ...kit("smg", 12), owned: ["pistol", "smg"], health: 47, armor: 0, money: 2_300,
     },
     radar: radarFor(DUEL_MAP, 0, 0.5, { mates: [] }),
   },
 ];
 
-/** P5's pins (§8.7): the countdown, the flag notice and the round-end banner. */
+/**
+ * P5's pins (§8.7, §8.8) on its zones — `banner`, `alert`, `intro` — in every scenario that proves a
+ * moment: which card holds the banner (by testid and class), its exact words (case-sensitive, as
+ * Playwright compares them), and what must NOT be in the banner in a break: the next-round
+ * countdown and the score, which live in the strip alone (Principle 1).
+ */
+const breakPins = (score: string) => [{ text: "następna runda za", zone: "banner" as const }, { text: score, zone: "banner" as const }];
 export const pins: PinSet = {
-  "countdown": { expect: ["[data-testid=countdown]"] },
-  "dom-live-capturing": { expect: ["[data-testid=flag-notice]"] },
-  "bomb-round-won": { expect: ["[data-testid=round-end].mine"], text: ["RUNDA DLA FADE"] },
-  "bomb-round-lost": { expect: ["[data-testid=round-end].theirs"], text: ["RUNDA DLA TAPER"] },
-  "duel-round-break": { expect: ["[data-testid=round-end].mine", "[data-testid=round-end-carry]"] },
-  // Seeded scenarios: P5 writes these pins in wave 2.
-  "countdown-aborted": {},
-  "fight-start": {},
-  "bomb-planted-alert": {},
-  "round-freeze-start": {},
-  "bomb-halftime-break": {},
-  "turniej-round-break": {},
-  "gungame-last-weapon": {},
-  "match-end-final-round": {},
-  "new-match-warmup": {},
-  "reconnecting": {},
-  "break-rejoin": {},
+  "countdown": {
+    expect: ["[data-testid=intro]", "[data-testid=countdown]"],
+    caseText: ["DRUŻYNOWY DEATHMATCH", "NIGHT DISTRICT", "GRASZ W FADE"],
+    zoneWords: { intro: 8, banner: 1 },
+  },
+  "countdown-aborted": {
+    expect: ["[data-testid=alert][data-kind=aborted] [data-testid=countdown-aborted]"],
+    absent: ["[data-testid=intro]", "[data-testid=countdown]"],
+    caseText: ["ODLICZANIE PRZERWANE"],
+  },
+  "fight-start": {
+    expect: ["[data-testid=fight]"],
+    absent: ["[data-testid=intro]", "[data-testid=countdown]"],
+    caseText: ["WALCZ!"],
+    zoneWords: { banner: 1 },
+  },
+  "round-freeze-start": { expect: ["[data-testid=round-start]"], caseText: ["RUNDA 5", "ATAKUJESZ"] },
+  "bomb-planted-alert": {
+    expect: ["[data-testid=alert][data-kind=plant] [data-testid=bomb-planted]"],
+    absent: ["[data-zone=banner]"],
+    caseText: ["ŁADUNEK PODŁOŻONY · A"],
+  },
+  "bomb-round-won": {
+    expect: ["[data-testid=round-end].mine", "[data-testid=round-end] [data-testid=round-mvp]"],
+    text: ["RUNDA DLA FADE"],
+    caseText: ["WYGRANA", "RUNDA DLA FADE", "Ładunek wybuchł · MVP Kowal · podłożenie"],
+    textAbsent: breakPins("4 : 1"),
+  },
+  "bomb-round-lost": {
+    expect: ["[data-testid=round-end].theirs"],
+    text: ["RUNDA DLA TAPER"],
+    caseText: ["PRZEGRANA", "RUNDA DLA TAPER", "Atak wybity · MVP xXPiotrekXx · 3 zabójstwa"],
+    textAbsent: breakPins("3 : 2"),
+  },
+  "bomb-halftime": {
+    expect: ["[data-testid=round-start]"],
+    caseText: ["DRUGA POŁOWA", "RUNDA 7", "BRONISZ"],
+    textAbsent: [{ text: "OSTATNIA RUNDA POŁOWY", zone: "banner" }, { text: "ATAKUJESZ", zone: "banner" }],
+  },
+  "bomb-halftime-break": {
+    expect: ["[data-testid=halftime]"],
+    absent: ["[data-testid=round-end]"],
+    caseText: ["PRZERWA", "ZMIANA STRON", "Teraz bronisz · wszyscy zaczynają od $800"],
+    textAbsent: breakPins("3 : 3"),
+  },
+  "duel-round-break": {
+    expect: ["[data-testid=round-end].mine", "[data-testid=round-end] [data-testid=round-end-carry]", "[data-testid=round-end] .mb-title:not(.long)"],
+    caseText: ["WYGRANA", "RUNDA DLA FADE", "Przeciwnik wyeliminowany · Broń zostaje"],
+    textAbsent: breakPins("2 : 0"),
+  },
+  "turniej-round-break": {
+    expect: ["[data-testid=round-end].watch"],
+    absent: ["[data-testid=round-end-carry]"],
+    caseText: ["RUNDA DLA ZDZICHU", "Przeciwnik wyeliminowany"],
+    textAbsent: [...breakPins("4 : 3"), { text: "WYGRANA", zone: "banner" }, { text: "PRZEGRANA", zone: "banner" }],
+  },
+  "dead-in-break": {
+    expect: ["[data-testid=round-end].theirs"],
+    caseText: ["PRZEGRANA", "RUNDA DLA TAPER", "Przeciwnik wyeliminowany · Broń przepada"],
+    textAbsent: breakPins("2 : 2"),
+  },
+  "break-rejoin": {
+    expect: ["[data-testid=round-end].mine", "[data-testid=round-end] .mb-title:not(.long)"],
+    caseText: ["WYGRANA", "RUNDA DLA FADE", "Czas — więcej zdrowia · Broń zostaje"],
+    textAbsent: [...breakPins("3 : 2"), { text: "REMIS", zone: "banner" }, { text: "BEZ ROZSTRZYGNIĘCIA", zone: "banner" }],
+  },
+  "match-end-final-round": {
+    expect: ["[data-testid=round-end].final.mine"],
+    absent: ["[data-testid=round-mvp]"],
+    caseText: ["OSTATNIA RUNDA", "RUNDA DLA FADE", "Ładunek rozbrojony"],
+  },
+  "gungame-last-weapon": { expect: ["[data-testid=alert][data-kind=lastWeapon] [data-testid=last-weapon]"], caseText: ["OSTATNIA BROŃ"] },
+  // The alert is in the DOM; until P7 holds back the automatic ESC column after Ended → Waiting,
+  // that column covers it (§4.5 `pause`), so only its presence and words are pinned.
+  "new-match-warmup": { expect: ["[data-testid=alert][data-kind=newMatch] [data-testid=new-match]"], caseText: ["NOWY MECZ · ROZGRZEWKA"] },
+  "reconnecting": {
+    expect: ["[data-testid=alert][data-kind=reconnect] [data-testid=reconnecting]"],
+    caseText: ["UTRACONO POŁĄCZENIE · ŁĄCZĘ PONOWNIE…"],
+  },
+  // P2's fixture (`top.ts`) is photographed 4.7 s into the 10 s freeze (its clock pin is „0:06”):
+  // past the role card's 2500 ms (§6.5), so a HUD that finds the freeze there shows no late card —
+  // and never „RUNDA n” in its place. The card itself: Moments.test.ts / bus.test.ts.
+  "infection-prep": {
+    absent: ["[data-testid=role-card]", "[data-testid=round-start]", "[data-zone=banner]"],
+    textAbsent: [{ text: "MASZ MASZYNKĘ" }, { text: "PRZETRWAJ" }],
+  },
+  "infection-converted": { expect: ["[data-testid=shaved-banner]"], caseText: ["OSTRZYŻONY!", "TERAZ TY GONISZ"] },
+  "dom-live-capturing": { expect: ["[data-testid=alert][data-kind=flag] [data-testid=flag-notice]"] },
 };
