@@ -60,8 +60,8 @@ if (process.env.GRACE === "1") {
   const p1 = await client.joinById(arena.roomId, { name: "TURA", session: token || undefined });
   const p2guest = await client.joinById(arena.roomId, { name: "GOSC", session: "zły-token-gościa" });
   await sleep(600);
-  console.log(`arena turniejowa: graczy = ${arena.state.players.size} (sesja przyjęta, gość bez błędu)`);
-  if (arena.state.players.size !== 2) fail(`arena: spodziewano 2 graczy, jest ${arena.state.players.size}`);
+  console.log(`arena turniejowa: graczy = ${arena.state.players.size} (twórca + sesja + gość, wszyscy bez błędu)`);
+  if (arena.state.players.size !== 3) fail(`arena: spodziewano 3 graczy, jest ${arena.state.players.size}`);
 
   // The plain duel: no tournament context, so the 15 s grace.
   const plain = await client.create("tdm", { mode: "duel", room: `p3-plain-${Date.now()}`, bots: 0 });

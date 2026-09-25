@@ -39,7 +39,7 @@ async function winMatch(side: 0 | 1): Promise<void> {
     if (!winner || !loser) break;
     kill(winner, loser);
     await h.tick(3);
-    if (h.state.phase !== MatchPhase.Ended) await h.advance(DUEL.breakMs + 100);
+    if ((h.state.phase as MatchPhase) !== MatchPhase.Ended) await h.advance(DUEL.breakMs + 100);
   }
 }
 
@@ -78,7 +78,7 @@ it("keeps the plain TDM/duel grace at 15 s when there is no tournament context",
 it("does not decide a result when a tournament-arena player leaves — the lobby times the walkover out", async () => {
   h = await RoomHarness.create({ room: "arena", mode: "duel", tournamentId: "lobbyY", matchIndex: 1, pair: ["ent-a", "ent-b"] });
   const published: unknown[] = [];
-  await h.room.presence.subscribe("tourn:lobbyY:1", (d) => published.push(d));
+  await h.room.presence.subscribe("tourn:lobbyY:1", (d: unknown) => published.push(d));
   const a = await h.join("Alpha"); await h.join("Bravo");
   await h.until(MatchPhase.Playing);
 
@@ -93,7 +93,7 @@ it("does not decide a result when a tournament-arena player leaves — the lobby
 it("publishes the winner (an entrant id) and the score on the pair's presence topic when the match ends", async () => {
   h = await RoomHarness.create({ room: "arena", mode: "duel", tournamentId: "lobbyZ", matchIndex: 2, pair: ["ent-a", "ent-b"] });
   const got: { winner: string; scoreA: number; scoreB: number }[] = [];
-  await h.room.presence.subscribe("tourn:lobbyZ:2", (d) => got.push(d as { winner: string; scoreA: number; scoreB: number }));
+  await h.room.presence.subscribe("tourn:lobbyZ:2", (d: unknown) => got.push(d as { winner: string; scoreA: number; scoreB: number }));
   const a = await h.join("Alpha"); const b = await h.join("Bravo");
   await h.until(MatchPhase.Prep);
   // Team 0 wins the match; team 0 is `pair[0]` = "ent-a".
