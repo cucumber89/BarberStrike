@@ -143,14 +143,18 @@ export async function migrate(profile: Profile): Promise<void> {
 export async function fetchTournaments(limit = 50): Promise<TournamentRecord[]> {
   const res = await fetch(apiUrl(`tournaments?limit=${encodeURIComponent(String(limit))}`), { credentials: "include" });
   if (!res.ok) return [];
-  return (await res.json()) as TournamentRecord[];
+  // The route answers `{ tournaments: [...] }` (routes.ts); tolerate a bare array too.
+  const body = (await res.json()) as TournamentRecord[] | { tournaments?: TournamentRecord[] };
+  return Array.isArray(body) ? body : body.tournaments ?? [];
 }
 
 /** `GET /api/trophies?login=` — the trophies on one account, public. */
 export async function fetchTrophies(login: string): Promise<Trophy[]> {
   const res = await fetch(apiUrl(`trophies?login=${encodeURIComponent(login)}`), { credentials: "include" });
   if (!res.ok) return [];
-  return (await res.json()) as Trophy[];
+  // The route answers `{ login, trophies: [...] }` (routes.ts); tolerate a bare array too.
+  const body = (await res.json()) as Trophy[] | { trophies?: Trophy[] };
+  return Array.isArray(body) ? body : body.trophies ?? [];
 }
 
 /**
