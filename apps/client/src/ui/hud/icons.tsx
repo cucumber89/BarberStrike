@@ -30,12 +30,17 @@ function Glyph({ className, title, size = 20, children }: IconProps & { children
   );
 }
 
-/** The C4: a charge with its display and two leads. */
+/**
+ * The C4: three charges strapped together, a timer display on the front and a lead out of the
+ * top — the block CS draws, rather than a case with a handle (P4 refinement; same name and props).
+ */
 export const IconBomb = (p: IconProps) => (
   <Glyph {...p}>
-    <rect x="3" y="8" width="18" height="12" rx="1.5" />
-    <rect x="6" y="11" width="8" height="4" rx="0.5" fill="#000" opacity="0.45" />
-    <path d="M8 8 C8 4 12 3 14 5 M16 8 V4" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+    <rect x="2" y="8" width="20" height="13" rx="1.2" />
+    <path d="M2 12.3h20M2 16.7h20" stroke="#000" strokeOpacity="0.35" strokeWidth="1" />
+    <rect x="7" y="10" width="10" height="5.5" rx="0.6" fill="#000" opacity="0.55" />
+    <path d="M9 12.8h2.2M12.6 12.8h2.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    <path d="M17 8V5.5C17 3.6 15 2.6 13.4 3.5L11 4.8" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
   </Glyph>
 );
 
@@ -55,11 +60,14 @@ export const IconCross = (p: IconProps) => (
   </Glyph>
 );
 
-/** Armour: a vest plate. */
+/**
+ * Armour: a plate carrier — two shoulder straps round the neck, the flared body and the waist
+ * band — so at 20 px it reads as a vest and not as a block (P4 refinement; same name and props).
+ */
 export const IconPlate = (p: IconProps) => (
   <Glyph {...p}>
-    <path d="M7 3h10l1.5 2.5L21 7v12.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5V7l2.5-1.5z" />
-    <path d="M9 3c0 2 1.3 3.2 3 3.2S15 5 15 3" fill="#000" opacity="0.35" />
+    <path d="M6 2h3v4c0 1.4 1.3 2.4 3 2.4s3-1 3-2.4V2h3v5l3 2v11.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 20.5V9l3-2z" />
+    <path d="M3 15.5h18" stroke="#000" strokeOpacity="0.35" strokeWidth="1.4" />
   </Glyph>
 );
 
