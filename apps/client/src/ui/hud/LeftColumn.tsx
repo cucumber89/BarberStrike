@@ -1,4 +1,4 @@
-import { memo, useSyncExternalStore } from "react";
+import { memo, useRef, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { MODES, MatchPhase, planById } from "@frankibarber/shared";
 import { useHud, useHudSlice, type HudState } from "../../game/store";
@@ -60,14 +60,16 @@ export const LeftColumn = memo(function LeftColumn({ radar, chat }: ZoneProps & 
   const teams = useHudSlice((s) => MODES[s.mode].teams);
   const myId = useHudSlice((s) => s.myId);
   const planUp = useHudSlice(planShowing);
+  // The chat measures its room against the column's bottom (§4.3: 12 px under the money or the plan).
+  const colRef = useRef<HTMLDivElement>(null);
   return (
     <>
-      <div className="left-col">
+      <div className="left-col" ref={colRef}>
         {connected && !ended && !tube ? <Minimap radar={radar} /> : <div className="radar-spacer" aria-hidden="true" />}
         <div className="left-slot" ref={walletRef} />
         <div className="left-slot" ref={planRef} />
       </div>
-      {connected && <Chat lines={lines} open={open} teams={teams} myId={myId} api={chat} planUp={planUp} />}
+      {connected && <Chat lines={lines} open={open} teams={teams} myId={myId} api={chat} planUp={planUp} column={colRef} />}
     </>
   );
 });
