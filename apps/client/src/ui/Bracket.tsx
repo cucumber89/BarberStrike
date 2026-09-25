@@ -1,4 +1,5 @@
-import { parseBracket, roundName, type BracketView } from "@frankibarber/shared";
+import { DUEL, parseBracket, roundName, type BracketView } from "@frankibarber/shared";
+import { roundReasonShort } from "./hud/roundText";
 
 /**
  * The tournament bracket (drop T), drawn from the one string the server replicates.
@@ -80,9 +81,85 @@ export function bracketLine(bracket: string): string {
   if (!view) return "";
   const m = view.matches[view.at];
   if (!m) return "";
-  // Rounds still to play, counting this one: a four-bracket's first pair has two (a semi-final and
-  // the final), so it reads PÓŁFINAŁ — which is how `roundName` names them, from the end.
-  return `${roundName(totalRounds(view) - m.round)} · ${m.a || "—"} vs ${m.b || "—"}`;
+  return `${stageOf(view, m.round)} · ${m.a || "—"} vs ${m.b || "—"}`;
+}
+
+/**
+ * Drop U: the stage of the pair on the board and nothing else — „PÓŁFINAŁ”, „FINAŁ” (in a draw of
+ * eight also „ĆWIERĆFINAŁ”). The strip's second row carries it beside the round number, and the pair
+ * card's title names the NEXT pair's stage with it; the two names are on the strip's sides already.
+ * "" when nobody is on (no bracket, or the final has been played).
+ */
+export function bracketStage(bracket: string): string {
+  const view = parseBracket(bracket);
+  const m = view?.matches[view.at];
+  return view && m ? stageOf(view, m.round) : "";
+}
+
+/**
+ * Rounds still to play, counting this one: a four-bracket's first pair has two (a semi-final and
+ * the final), so it reads PÓŁFINAŁ — which is how `roundName` names them, from the end.
+ */
+const stageOf = (view: BracketView, round: number): string => roundName(totalRounds(view) - round);
+
+/** The pair card between two pairs (§5.2 rows 30 and 31), every line of it as the player reads it. */
+export interface PairCard {
+  /** „ZDZICHU PRZECHODZI DALEJ”, or after a walkover „WALKOWER · ZDZICHU DALEJ”. The nick keeps its case. */
+  eyebrow: string;
+  /** „6 : 4 · Przeciwnik wyeliminowany” — the winner's score first and the last round's short reason; null after a walkover. */
+  verdict: string | null;
+  /** „NASTĘPNA PARA · FINAŁ”. */
+  title: string;
+  /** „Kowal vs ZDZICHU”: the next pair, `a` (team 0) first. */
+  next: string;
+  /** Where I stand: „GRASZ TERAZ”, „CZEKASZ NA SWOJĄ PARĘ”, „ODPADŁEŚ Z TURNIEJU”, or "" when the bracket does not know me. */
+  standing: string;
+  /** Which of the three it is, for its colour. */
+  standingKind: ReturnType<typeof standing>;
+  walkover: boolean;
+}
+
+const STANDING_TEXT: Record<ReturnType<typeof standing>, string> = {
+  playing: "GRASZ TERAZ",
+  waiting: "CZEKASZ NA SWOJĄ PARĘ",
+  out: "ODPADŁEŚ Z TURNIEJU",
+  "": "",
+};
+
+/**
+ * Drop U (P2): the card between two pairs — who went through and how, and who is up next. Pure: the
+ * bracket string, my own name and the last round's reason (`bomb.result`) say everything.
+ *
+ * The decided pair is the last REAL pair before `at` (`at − 1`, unless byes were walked past after
+ * it). A pair decided below `DUEL.wins` with no round reason on the board is a WALKOVER: somebody
+ * left (`withdraw` reports the scores as they stood, and the freeze had already cleared the reason),
+ * so the card says so and prints no score. A pair capped by the match clock below `DUEL.wins` still
+ * has its last round's reason, and reads as a normal result.
+ */
+export function pairCard(bracket: string, myName: string, roundResult: string): PairCard | null {
+  const view = parseBracket(bracket);
+  if (!view) return null;
+  let done: BracketView["matches"][number] | null = null;
+  for (let i = Math.min(view.at, view.matches.length) - 1; i >= 0 && !done; i--) {
+    const m = view.matches[i];
+    if (m.a && m.b && m.winner) done = m;
+  }
+  if (!done) return null;
+  const winner = done.winner === "a" ? done.a : done.b;
+  const [won, lost] = done.winner === "a" ? [done.scoreA, done.scoreB] : [done.scoreB, done.scoreA];
+  const walkover = Math.max(done.scoreA, done.scoreB) < DUEL.wins && roundResult === "";
+  const reason = roundResult ? roundReasonShort(roundResult) : "";
+  const next = view.matches[view.at];
+  const where = standing(bracket, myName);
+  return {
+    eyebrow: walkover ? `WALKOWER · ${winner} DALEJ` : `${winner} PRZECHODZI DALEJ`,
+    verdict: walkover ? null : `${won} : ${lost}${reason ? ` · ${reason}` : ""}`,
+    title: next ? `NASTĘPNA PARA · ${stageOf(view, next.round)}` : "DRABINKA",
+    next: next ? `${next.a || "—"} vs ${next.b || "—"}` : "",
+    standing: STANDING_TEXT[where],
+    standingKind: where,
+    walkover,
+  };
 }
 
 /** How many rounds this bracket has in total (a draw of four has two). */
