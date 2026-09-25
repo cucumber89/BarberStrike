@@ -189,8 +189,8 @@ export function keyStats(mode: GameMode, row: ScoreRow | undefined): KeyStat[] {
   return (objective ? [objective, k, a, d] : [k, a, d]).slice(0, 3);
 }
 
-/** One step of the podium: who, the number that ranked them, and whether it is me. */
-export interface PodiumStep { id: string; name: string; value: string; rank: 1 | 2 | 3; me: boolean }
+/** One step of the podium: who, the number that ranked them, their side (team modes), and whether it is me. */
+export interface PodiumStep { id: string; name: string; value: string; rank: 1 | 2 | 3; me: boolean; team: Team | null }
 
 const byScore = (a: ScoreRow, b: ScoreRow): number => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths;
 const byKills = (a: ScoreRow, b: ScoreRow): number => b.kills - a.kills || a.deaths - b.deaths;
@@ -221,7 +221,11 @@ export function ranking(c: ResultCtx): { row: ScoreRow; value: number }[] {
 
 /** The top three (fewer when fewer played), #1 first. */
 export function podium(c: ResultCtx): PodiumStep[] {
-  return ranking(c).slice(0, 3).map(({ row, value }, i) => ({ id: row.id, name: row.name, value: String(value), rank: (i + 1) as 1 | 2 | 3, me: row.id === c.myId }));
+  // A tournament's rows sit on team 0/1 only while their pair plays: no side to show at the end.
+  const sided = MODES[c.mode].teams && c.mode !== "turniej";
+  return ranking(c).slice(0, 3).map(({ row, value }, i) => ({
+    id: row.id, name: row.name, value: String(value), rank: (i + 1) as 1 | 2 | 3, me: row.id === c.myId, team: sided ? row.team : null,
+  }));
 }
 
 /** „MIEJSCE #n Z m” (§5.2 #62), in FFA and gun game only, and only when I am off the podium. */

@@ -163,14 +163,15 @@ const finalNames = (bracket: string): readonly [string, string] | null => {
 
 /**
  * The top three, #1 in the middle and raised, with its star — the nick in its own case and the
- * number the mode ranks by (points, kills, the rung, the final's rounds). My own step is marked.
+ * number the mode ranks by (points, kills, the rung, the final's rounds), each step standing on
+ * its side's colour in a team mode. My own step is marked.
  */
 function Podium({ steps, className = "" }: { steps: readonly PodiumStep[]; className?: string }) {
   if (!steps.length) return null;
   return (
     <ol className={`podium ${className}`.trim()} data-testid="podium" aria-label="Podium">
       {steps.map((s) => (
-        <li key={s.id} className={`podium-step r${s.rank}${s.me ? " me" : ""}`} aria-label={`Miejsce ${s.rank}`}>
+        <li key={s.id} className={`podium-step r${s.rank}${s.team === null ? "" : ` t${s.team}`}${s.me ? " me" : ""}`} aria-label={`Miejsce ${s.rank}`}>
           <span className="podium-name">{s.rank === 1 && <i className="podium-star" aria-hidden="true">★</i>}{s.name}</span>
           <b className="podium-value">{s.value}</b>
         </li>

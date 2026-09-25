@@ -114,6 +114,8 @@
 .podium-step.r1 { order: 2; height: var(--step1); padding-top: 14px; border-top-color: var(--hud-accent); background: linear-gradient(180deg, rgba(231, 182, 46, .2), rgba(231, 182, 46, .04)); }
 .podium-step.r2 { order: 1; height: var(--step2); border-top-color: rgba(175, 192, 202, .75); }
 .podium-step.r3 { order: 3; }
+.podium-step.t0 { box-shadow: inset 0 -3px 0 var(--hud-team0); }
+.podium-step.t1 { box-shadow: inset 0 -3px 0 var(--hud-team1); }
 .podium-step.me { outline: 1px solid var(--hud-accent); outline-offset: -1px; }
 .podium-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-ui); font-size: var(--hud-t2); font-weight: 600; letter-spacing: 0; color: var(--hud-tx); }
 .podium-star { font-style: normal; color: var(--hud-accent); margin-right: 6px; }

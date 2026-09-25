@@ -105,6 +105,8 @@ describe("stage C: podium, placement, stats", () => {
       row("me", 0, { kills: 20, score: 900 }), row("a", 1, { kills: 5, score: 1500 }), row("b", 0, { kills: 12, score: 1200 }), row("c", 1, { kills: 30, score: 400 }),
     ];
     expect(podium(base({ players })).map((p) => p.id)).toEqual(["a", "b", "me"]); // team modes: points
+    expect(podium(base({ players })).map((p) => p.team)).toEqual([1, 0, 0]); // each step on its side's colour
+    expect(podium(base({ mode: "ffa", players })).every((p) => p.team === null)).toBe(true);
     expect(podium(base({ mode: "ffa", players })).map((p) => p.id)).toEqual(["c", "me", "b"]); // ffa: kills
     expect(podium(base({ mode: "ffa", players }))[0]).toMatchObject({ rank: 1, value: "30" });
     const rungs = players.map((p, i) => ({ ...p, score: [3, 14, 9, 1][i] }));
