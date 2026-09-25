@@ -393,14 +393,20 @@ export interface HistorySlot {
 }
 
 /**
- * The history strip of a round mode: one slot per round the match can run to, filled only from
+ * The history strip of a round mode: one slot per round the match is planned to run to — more when
+ * it runs longer (a duel's drawn rounds) — filled only from
  * the rounds this client observed (`hud.roundHistory`) — a round before I joined is an empty slot,
  * never a guess (Principle 13). Null where there is no strip: continuous modes, and the tournament,
  * whose rounds belong to one pair at a time (the bracket is its history).
  */
 export function historySlots(mode: GameMode, history: readonly { round: number; winner: Team | -1; reason: string }[], current: number): HistorySlot[] | null {
-  const total = mode === "bomb" ? BOMB.maxRounds : mode === "duel" ? 2 * DUEL.wins - 1 : mode === "ostrzyzeni" ? OSTRZYZENI.rounds : 0;
-  if (!total) return null;
+  const planned = mode === "bomb" ? BOMB.maxRounds : mode === "duel" ? 2 * DUEL.wins - 1 : mode === "ostrzyzeni" ? OSTRZYZENI.rounds : 0;
+  if (!planned) return null;
+  // The planned length is a floor, not a cap: a duel round can be drawn (a trade, or even health on
+  // the clock — nobody scores it) and the duel has no round cap, so a real duel can run to round 12
+  // and past it. The strip grows to the round being played and to the last round seen, so the
+  // round in the header always has its slot and every seen result is drawn.
+  const total = Math.max(planned, Math.floor(current) || 0, ...history.map((r) => r.round));
   const seen = new Map(history.map((r) => [r.round, r]));
   return Array.from({ length: total }, (_, i): HistorySlot => {
     const n = i + 1;

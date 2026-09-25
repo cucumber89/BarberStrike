@@ -246,7 +246,7 @@
 .sb-mid-sub i { font-style: normal; }
 
 /* The round history: 18 px slots, the reason's icon in the winner's colour, a gap at the swap. */
-.sb-history { list-style: none; margin: 0; padding: 0; display: flex; justify-content: center; gap: 3px; }
+.sb-history { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; }
 .sb-slot { box-sizing: border-box; width: 18px; height: 18px; display: grid; place-items: center; background: rgba(175, 192, 202, .05); border: 1px solid rgba(175, 192, 202, .16); }
 .sb-slot svg { width: 12px; height: 12px; }
 .sb-slot.gap { margin-right: 12px; }

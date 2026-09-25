@@ -5,7 +5,7 @@ import type { MatchReward } from "../game/progression/profile";
 import { keepMountedState } from "./hud/useKeepMounted";
 import {
   BOARD_DENSITY_MAX, RESULT_EXIT_MS, RESULT_VIEW0, STAGE_SECONDS, boardSplit, keyStats, matchOutcome, matchWhy, nextDensity, placement, podium,
-  resultInput, resultStage, resultWhy, scoreLine, splitColumns, stageC, stageCWords, topReward, verdict, verdictWhy, verdictWords,
+  historySlots, resultInput, resultStage, resultWhy, scoreLine, splitColumns, stageC, stageCWords, topReward, verdict, verdictWhy, verdictWords,
   type BoardDensity, type Outcome, type ResultCtx,
 } from "./resultText";
 
@@ -303,5 +303,50 @@ describe("the Tab board never scrolls (held with the pointer locked: a hidden ro
     expect(splitColumns([1])).toEqual([[1], []]);
     // Nobody is dropped or repeated.
     expect(splitColumns(ranked).flat()).toEqual(ranked);
+  });
+});
+
+describe("the Tab board's round history: a slot for every round, however long the match runs", () => {
+  const played = (n: number, drawn: number[] = []) =>
+    Array.from({ length: n }, (_, i) => ({ round: i + 1, winner: (drawn.includes(i + 1) ? -1 : (i % 2) as Team) as Team | -1, reason: drawn.includes(i + 1) ? "TRADE" : "ELIMINATED" }));
+
+  it("draws the planned length of each round mode, and none in the continuous modes or the tournament", () => {
+    expect(historySlots("bomb", [], 1)).toHaveLength(BOMB.maxRounds);
+    expect(historySlots("duel", [], 1)).toHaveLength(2 * DUEL.wins - 1);
+    expect(historySlots("ostrzyzeni", [], 1)).toHaveLength(OSTRZYZENI.rounds);
+    for (const m of ["tdm", "ffa", "gungame", "turniej"] as GameMode[]) expect(historySlots(m, [], 3), m).toBeNull();
+  });
+
+  it("a duel that drew a round runs past 2·wins−1: round 12 has its slot, marked now (audit a3)", () => {
+    const s = historySlots("duel", played(11, [4]), 12)!;
+    expect(s).toHaveLength(12);
+    expect(s[11]).toMatchObject({ n: 12, now: true, winner: null });
+    expect(s.filter((x) => x.now).map((x) => x.n)).toEqual([12]);
+    expect(s.filter((x) => x.winner === -1).map((x) => x.n)).toEqual([4]);
+    expect(s.slice(0, 11).every((x) => x.winner !== null)).toBe(true);
+  });
+
+  it("every round seen is drawn, even past the plan and past the current round", () => {
+    const s = historySlots("duel", played(15, [2, 7, 9, 13]), 15)!;
+    expect(s).toHaveLength(15);
+    expect(s.map((x) => x.n)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
+    expect(s.filter((x) => x.winner === -1).map((x) => x.n)).toEqual([2, 7, 9, 13]);
+    expect(s.some((x) => x.now)).toBe(false); // round 15 is seen: it is over, not being played
+    const t = historySlots("duel", played(15), 16)!;
+    expect(t).toHaveLength(16);
+    expect(t[15]).toMatchObject({ n: 16, now: true });
+  });
+
+  it("the duel's side swaps keep their gap every DUEL.halfRounds past the plan, and the last slot has none", () => {
+    const s = historySlots("duel", played(13), 14)!;
+    expect(s.filter((x) => x.gapAfter).map((x) => x.n)).toEqual([3, 6, 9, 12].filter((n) => n % DUEL.halfRounds === 0 && n < 14));
+    expect(s[s.length - 1].gapAfter).toBe(false);
+  });
+
+  it("the bomb strip keeps its halftime gap and its length within the cap", () => {
+    const s = historySlots("bomb", played(BOMB.halfRounds + 1), BOMB.halfRounds + 2)!;
+    expect(s).toHaveLength(BOMB.maxRounds);
+    expect(s.filter((x) => x.gapAfter).map((x) => x.n)).toEqual([BOMB.halfRounds]);
+    expect(s[BOMB.halfRounds + 1].now).toBe(true);
   });
 });
