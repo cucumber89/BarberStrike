@@ -1,70 +1,98 @@
-import { memo, useEffect, useRef, useState } from "react";
-import { MatchPhase, type GameMode } from "@frankibarber/shared";
-import { useHud, useHudSlice, type HudState } from "../../game/store";
-import { roundEnd } from "./roundText";
+import { Fragment, memo, useLayoutEffect, useRef, useState } from "react";
+import { DUEL, MatchPhase, type Team } from "@frankibarber/shared";
+import { useHud, type HudState } from "../../game/store";
+import { roundBannerCopy, turniejPair, type BannerCopy, type RoundBannerCopy } from "./roundText";
 import type { PhaseModel } from "./phase";
 import type { ZoneProps } from "./types";
 
 /**
- * Drop U, P0 (seed for P5): the round-end banner (zone `banner`), moved here from
- * `MatchResult.tsx` (`RoundBreak`) verbatim, with the gate that mounted it in `Hud.tsx`
- * (docs/UI_U_SPEC.md §7 P0 0d).
+ * Drop U, P5: the banner (docs/UI_U_SPEC.md §3.7) and the round-end card drawn in it.
+ *
+ * `BannerFrame` is every banner's shape: a full-width band (zone `veil`) and, centred on it, the
+ * content box (zone `banner`) with exactly three rows — the eyebrow chips (t1), the title (t5, one
+ * line) and one line (t2) whose parts are joined with „ · ”. The band and the box are siblings in a
+ * stage that has no zone, so zones never nest and the band is exactly as tall as the box.
  *
  * `RoundBanner({h, model?, standalone?})` is the frozen standalone signature `uiFit.tsx` mounts
- * (§7.0); in P0 it draws the card from `h` alone. `RoundBannerLayer` is the HUD's mount: it watches
- * the phase from the HUD's mount on and shows the card in the break.
+ * (§7.0): the round-end card for the state `h`, classes `round-end` plus `mine` / `theirs` /
+ * `even` / `watch` (`multiplayer.spec.ts:160-163`). In the HUD, `<Moments>` decides when it shows
+ * (the moment bus, `bus.ts`) and mounts it; `standalone` draws it with no timing at all.
  */
 
 /**
- * Between rounds (Bomb, 1 v 1, Ostrzyżeni): who took the round, why, the score, the clock to the
- * next one. Shown only during the break that follows a round — `breakEndsAt` is the deadline of
- * the first Prep window after Playing, so the buy window that follows (a second Prep with a new
- * deadline) never shows a stale reason.
+ * A title longer than this does not fit the banner box at t5 in Bebas Neue (measured at 1600×900:
+ * „RUNDA DLA OCALENI”, 17, is 543 of the box's 576 px), so it is set at t4 instead. Wide glyphs can
+ * overflow sooner („RUNDA DLA WWWWWWW” is 658 px): the frame measures its title once, before the
+ * paint, and drops to t4 whenever it does not fit.
  */
-export function RoundBanner({ h }: { h: HudState; model?: PhaseModel; standalone?: boolean }) {
-  // `roundResult` and not `bomb.result`: the bomb block is only mirrored in Bomb, so the 1 v 1 —
-  // which runs on the same round machine — was passing "" here and the card NEVER appeared. Its
-  // players were told who won a round nowhere at all.
-  const end = roundEnd(h.mode as GameMode, h.roundResult, h.roundWinner, h.bomb ? (h.bomb.attackTeam as 0 | 1) : -1, h.myTeam);
-  if (!end) return null;
-  const [a, b] = h.mode === "ostrzyzeni" ? ["OCALENI", "OSTRZYŻENI"] : ["FADE", "TAPER"];
-  const left = Math.max(0, Math.ceil((h.phaseEndsAt - h.serverNow) / 1000));
-  // The 1 v 1 carries a loadout between rounds (CS's rule), and whether YOURS carried is decided
-  // by whether you are standing here. That is worth one line: it is the difference between the
-  // next round being a rifle round and a pistol round.
-  const carry = h.mode === "duel" ? (h.alive ? "Przeżyłeś — broń i płyta zostają z tobą" : "Zginąłeś — broń przepada, wracasz z pistoletem") : "";
+const LONG_TITLE = 17;
+
+export function BannerFrame({ copy, testid, className, glow }: { copy: BannerCopy; testid: string; className?: string; glow?: boolean }) {
+  const titleRef = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState<string | null>(null);
+  const long = copy.title.length > LONG_TITLE || overflows === copy.title;
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (el && !long && el.scrollWidth > el.clientWidth + 1) setOverflows(copy.title);
+  }, [copy.title, long]);
   return (
-    <div className={`round-end ${end.mine === null ? "even" : end.mine ? "mine" : "theirs"}`} data-zone="banner" data-testid="round-end" role="status">
-      <div className="round-end-title">{end.title}</div>
-      <div className="round-end-why">{end.why}</div>
-      {carry && <div className="round-end-carry" data-testid="round-end-carry">{carry}</div>}
-      <div className="round-end-score">{a} <b>{h.scoreA}</b> : <b>{h.scoreB}</b> {b}</div>
-      <div className="round-end-next">następna runda za {left} s</div>
+    <div className="moment-stage">
+      <div className={`moment-band rule-${copy.rule}`} data-zone="veil" aria-hidden="true" />
+      <div className={`moment-banner${className ? ` ${className}` : ""}`} data-zone="banner" data-testid={testid} role="status">
+        <div className={`mb-eyebrow${glow ? " glow" : ""}`}>
+          {copy.eyebrow.map((c) => <span key={c.text} className={`mb-chip tone-${c.tone}`}>{c.text}</span>)}
+        </div>
+        <div ref={titleRef} className={`mb-title tone-${copy.titleTone}${long ? " long" : ""}`}>{copy.title}</div>
+        <div className="mb-line">
+          {copy.line.map((p, i) => (
+            <Fragment key={p.text}>
+              {i > 0 && <span className="mb-sep" aria-hidden="true"> · </span>}
+              <span className={p.testid ? `mb-part ${p.testid}` : "mb-part"} data-testid={p.testid}>{p.text}</span>
+            </Fragment>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
 /**
- * Between rounds: who took it and why, from the round's real signals. The break after a round is
- * the FIRST Prep window after Playing; the buy window that follows is a second Prep with a new
- * deadline. Remembering the break's deadline is what tells them apart.
+ * The round-end card's words for a state: the round's result and winner, the pair in turniej
+ * (and whether I only watch it), the carry, the side swap, the MVP; at the match's end (Ended,
+ * stage A) the final-round form. Null when the state does not say who took the round.
  */
-export const RoundBannerLayer = memo(function RoundBannerLayer({ model }: ZoneProps) {
-  const phase = useHudSlice((s) => s.phase);
-  const phaseEndsAt = useHudSlice((s) => s.phaseEndsAt);
-  const shopOpen = useHudSlice((s) => s.shopOpen);
-  const prevPhase = useRef(phase);
-  const [breakEndsAt, setBreakEndsAt] = useState(0);
-  useEffect(() => {
-    if (prevPhase.current === MatchPhase.Playing && phase === MatchPhase.Prep) setBreakEndsAt(phaseEndsAt);
-    prevPhase.current = phase;
-  }, [phase, phaseEndsAt]);
-  const inBreak = phase === MatchPhase.Prep && breakEndsAt !== 0 && breakEndsAt === phaseEndsAt;
-  return inBreak && !shopOpen ? <RoundBannerMount model={model} /> : null;
-});
+export function roundBannerOf(h: HudState, model?: PhaseModel): RoundBannerCopy | null {
+  const pair = h.mode === "turniej" ? turniejPair(h.bracket) : null;
+  const myName = h.players.find((p) => p.id === h.myId)?.name ?? "";
+  const duel = h.mode === "duel" || h.mode === "turniej";
+  return roundBannerCopy({
+    mode: h.mode, result: h.roundResult, roundWinner: h.roundWinner,
+    attackTeam: h.bomb ? (h.bomb.attackTeam as Team) : -1, myTeam: h.myTeam,
+    names: pair?.names ?? null, watching: !!pair && !!myName && !pair.names.includes(myName),
+    alive: h.alive,
+    sideSwap: model ? model.sideSwap : duel && h.round > 0 && h.round % DUEL.halfRounds === 0,
+    mvp: h.roundMvp,
+    final: model ? model.moment === "ended" : h.phase === MatchPhase.Ended,
+  });
+}
 
-/** The card needs the whole state (`roundEnd` reads six fields and the clock); only while it shows. */
-function RoundBannerMount({ model }: ZoneProps) {
+export function RoundBanner({ h, model }: { h: HudState; model?: PhaseModel; standalone?: boolean }) {
+  const copy = roundBannerOf(h, model);
+  if (!copy) return null;
+  const final = model ? model.moment === "ended" : h.phase === MatchPhase.Ended;
+  return <BannerFrame copy={copy} testid="round-end" className={`round-end ${copy.cls}${final ? " final" : ""}`} />;
+}
+
+/** The HUD's live round-end card: the whole state (the MVP may land a moment after the break). */
+export function RoundBannerLive({ model }: ZoneProps) {
   const h = useHud();
   return <RoundBanner h={h} model={model} />;
 }
+
+/**
+ * `Hud.tsx` (frozen) still mounts the round banner's old layer here. The card now shows only when
+ * the moment bus gives it the banner slot, so `<Moments>` mounts it; this mount draws nothing.
+ */
+export const RoundBannerLayer = memo(function RoundBannerLayer(_props: ZoneProps) {
+  return null;
+});
