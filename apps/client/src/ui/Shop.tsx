@@ -8,7 +8,7 @@ import { MatchPhase,
 import type { HudState } from "../game/store";
 import { uiSound } from "../game/audio";
 import { feelOf } from "../game/combat/weaponFeel";
-import { SHOP_ART } from "./shopArt";
+import { ShopIcon } from "./shopArt";
 import { money } from "./hud/format";
 import { CAT_INFO, ITEM_ROLE, SHOP_CATS, catForCode, itemName, itemStats, keyForPos, posForCode, shopCatalog, tileTag, type ShopCat } from "./shopCatalog";
 
@@ -186,7 +186,6 @@ export function Shop({ h, api, now, live = true }: Props) {
   });
 
   const tile = (id: ShopItemId, cat: ShopCat, pos: number, s: TileState) => {
-    const Art = SHOP_ART[id];
     const busy = isPending(id);
     const reason = s.v.ok ? "" : s.v.reason;
     const short = reason === "money" ? buyShortfall(wallet, id, ctx) : 0;
@@ -215,7 +214,7 @@ export function Shop({ h, api, now, live = true }: Props) {
         onMouseEnter={() => setFocus(id)}>
         <button className="tile-hit" disabled={!buyable} data-testid={`buy-${id}`} aria-label={label}
           onClick={() => request(id, () => api.buy(id))} onFocus={() => setFocus(id)} />
-        <span className="tile-art" aria-hidden="true"><Art /></span>
+        <span className="tile-art" aria-hidden="true"><ShopIcon id={id} /></span>
         <span className="tile-name">{itemName(id)}{s.badge && <small className="tile-badge">{s.badge}</small>}{s.scope && <Scope />}</span>
         {/* The foot: the one tag on its own line, then the key and the price — the tag beside the
             price, never in its place (§5.2 #49). On a short tile (TDM's six rows on a small screen)
@@ -295,7 +294,6 @@ export function Shop({ h, api, now, live = true }: Props) {
 
   /** The strip's item: the tile under the mouse, else the gun in hand's slot (primary first). */
   const detailId: ShopItemId | null = focus ?? primary ?? secondary ?? null;
-  const DetailArt = detailId ? SHOP_ART[detailId] : null;
   const killPay = cs && detailId && (isWeaponId(detailId) || (isGrenadeId(detailId) && GRENADES[detailId].slot === "lethal"))
     ? csKillReward(detailId) : 0;
 
@@ -363,9 +361,9 @@ export function Shop({ h, api, now, live = true }: Props) {
           ))}
         </div>
 
-        {detailId && DetailArt && (
+        {detailId && (
           <div className="shop-detail" data-testid="shop-detail" title={itemStats(detailId).map((s) => `${s.label}: ${s.value}`).join(" · ")}>
-            <span className="shop-detail-art" aria-hidden="true"><DetailArt /></span>
+            <span className="shop-detail-art" aria-hidden="true"><ShopIcon id={detailId} /></span>
             <b className="shop-detail-name">{itemName(detailId)}</b>
             <span className="shop-detail-role">{ITEM_ROLE[detailId]}</span>
             {killPay > 0 && <b className="shop-detail-pay">+{money(killPay)} ZA ZABÓJSTWO</b>}

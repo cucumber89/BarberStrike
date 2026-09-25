@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import type { ShopItemId } from "@frankibarber/shared";
+import { isWeaponId, type ShopItemId, type WeaponId } from "@frankibarber/shared";
 
 /**
  * Flat silhouettes. Each one is drawn on a 64 × 28 sheet, but its `viewBox` is the drawing's own
@@ -7,24 +7,55 @@ import type { ShopItemId } from "@frankibarber/shared";
  * covers 26 × 21 units of a 64 × 28 sheet showed as a thumbnail in a slot that was three times its
  * width, so the "large silhouette" the row promises was mostly margin. Same aspect handling as
  * before (`xMidYMid meet`), so nothing is stretched.
+ *
+ * The FOURTEEN weapons are the exception: their tiles carry a rendered three-quarter PNG
+ * (`assets/weapons/<id>.png`, built by `e2e/tools/weapon-icons.mjs` from the real procedural
+ * geometry) instead of an inline `<path>`, so the shop shows the actual gun. Grenades, gear and
+ * perks keep the flat SVG silhouettes below — they were never the placeholders P8a set out to fix.
  */
 const box = (x: number, y: number, w: number, h: number) =>
   ({ viewBox: `${x - 1} ${y - 1} ${w + 2} ${h + 2}`, fill: "currentColor", "aria-hidden": true }) as const;
 
-const Pistol = (): ReactElement => <svg {...box(6, 7, 50, 20)}><path d="M8 7h35v5H30v4H19l-2 11H9l3-12H6V9h2zm35 2h13v3H43zM20 16h8l-3 4h-6z" /></svg>;
-const Revolver = (): ReactElement => <svg {...box(6, 6, 51, 21)}><path d="M6 9h13V7h12l5 3h21v4H36l-5 3h-7l-4 10h-8l5-12H6z" /><circle cx="27" cy="12" r="6" /></svg>;
-const MachinePistol = (): ReactElement => <svg {...box(7, 6, 50, 21)}><path d="M7 6h36v9H29l-2 12h-8l2-12H11v4H7zm36 3h14v4H43zM33 15h7l4 12h-8z" /><path d="M48 6h3v3h-3zm5 0h3v3h-3z" /></svg>;
-const Smg = (): ReactElement => <svg {...box(3, 3, 58, 24)}><path d="M3 9h9l8-6h5v5h27v8H31l-3 11h-8l2-11H13L3 21zm49 2h9v3h-9zM35 16h7v7h-7z" /></svg>;
-const Smg2 = (): ReactElement => <svg {...box(4, 3, 57, 24)}><path d="M4 10h9l9-7h4v6h27v7H34l4 11h-8l-6-11H13L4 21zm49-2h8v9h-8zM8 12h12v2H8z" /></svg>;
-const Carbine = (): ReactElement => <svg {...box(2, 7, 60, 20)}><path d="M4 7h20l7 3h22v7H30l-7-3H10l-5 7H2V9zM53 11h9v3h-9zM14 14h7l3 13h-8zM31 17h7l-2 8h-7z" /></svg>;
-const Rifle = (): ReactElement => <svg {...box(2, 3, 61, 24)}><path d="M2 9h10l9-6h6v5h27v8H32l-4 11h-8l3-11H13L2 21zm52 2h9v3h-9zM36 16h8l4 11h-9zM29 5h18v2H29z" /></svg>;
-const Lmg = (): ReactElement => <svg {...box(2, 3, 61, 24)}><path d="M2 8h12l8-5h7v4h27v9H32l-4 11h-8l3-11H13L2 20zm54 3h7v4h-7zM34 15h15v12H34zM28 3h21v3H28z" /></svg>;
-const Shotgun = (): ReactElement => <svg {...box(2, 4, 60, 23)}><path d="M2 10h15l8-6h7v5h30v4H34v6h-9l-5 8h-9l7-11H2zM31 15h31v3H31zM37 13h12v7H37z" /></svg>;
-const AutoShotgun = (): ReactElement => <svg {...box(2, 3, 60, 24)}><path d="M2 8h17l8-5h8v4h27v5H36v7H26l-5 8h-9l7-11H2zm34 6h26v3H36zM38 4h17v3H38zM30 18h7l3 9h-8z" /></svg>;
-const Dmr = (): ReactElement => <svg {...box(2, 2, 60, 25)}><path d="M2 10h14l9-6h7v5h30v4H37l-6 6h-9l-7 8H5l10-12H2zm25-8h22v4H27zm15 13h8l3 12h-9z" /></svg>;
-const Sniper = (): ReactElement => <svg {...box(1, 2, 61, 25)}><path d="M1 11h16l9-5h36v4H35v6H24l-8 11H5l10-13H1zm24-9h25v4H25zm22 1h7v2h-7zM39 16h7l3 11h-8zM52 14h2l4 9h-3z" /></svg>;
-const Launcher = (): ReactElement => <svg {...box(4, 3, 58, 24)}><path d="M4 6h47l8 4v9l-8 3H4zM51 8h11v12H51zM16 21h9l-4 6H12zm18 0h7v6h-7zM8 3h21v3H8z" /></svg>;
-const Clippers = (): ReactElement => <svg {...box(12, 1, 40, 26)}><path d="M19 8h27v19H19zM15 3h35v7H15zM16 1h4v5h4V1h4v5h4V1h4v5h4V1h4v5h4V1h4v8H12V6h4zM25 13h15v3H25z" /></svg>;
+// Every weapon portrait, resolved to its bundled URL at build time (Vite `import.meta.glob`).
+// Keyed by weapon id so a tile picks its own PNG without fourteen literal imports.
+const WEAPON_PNG = import.meta.glob<string>("../assets/weapons/*.png", { eager: true, query: "?url", import: "default" });
+const weaponPngUrl = (id: WeaponId): string | undefined => WEAPON_PNG[`../assets/weapons/${id}.png`];
+
+/**
+ * The shop/HUD icon for any item, tagged `shop-icon-<id>` (the e2e contract, §8). A weapon renders
+ * its rendered PNG portrait; everything else renders its flat SVG silhouette. One component so the
+ * shop, the kill feed, the inventory strip and the death card all draw an item the same way.
+ */
+export function ShopIcon({ id, className }: { id: ShopItemId; className?: string }): ReactElement {
+  const url = isWeaponId(id) ? weaponPngUrl(id) : undefined;
+  if (url) return <img className={className} src={url} alt="" aria-hidden="true" draggable={false} data-testid={`shop-icon-${id}`} />;
+  const Draw = SHOP_ART[id];
+  return <span className={className} data-testid={`shop-icon-${id}`}>{Draw ? <Draw /> : null}</span>;
+}
+
+// The weapons: a rendered PNG portrait, NOT an inline `<path>` (P8a criterion — the shop cards must
+// carry the real gun). `weaponImg` builds the same `<img>` for every weapon so a missing PNG is a
+// build error, not fourteen chances to forget one. The image is the item's silhouette wherever
+// `SHOP_ART[id]` is used (shop tile, kill feed, inventory, death card).
+const weaponImg = (id: WeaponId): (() => ReactElement) => {
+  const url = weaponPngUrl(id);
+  const Draw = (): ReactElement => <img className="art-img" src={url} alt="" aria-hidden="true" draggable={false} />;
+  return Draw;
+};
+const Pistol = weaponImg("pistol");
+const Revolver = weaponImg("revolver");
+const MachinePistol = weaponImg("machinepistol");
+const Smg = weaponImg("smg");
+const Smg2 = weaponImg("smg2");
+const Carbine = weaponImg("carbine");
+const Rifle = weaponImg("rifle");
+const Lmg = weaponImg("lmg");
+const Shotgun = weaponImg("shotgun");
+const AutoShotgun = weaponImg("autoshotgun");
+const Dmr = weaponImg("dmr");
+const Sniper = weaponImg("sniper");
+const Launcher = weaponImg("launcher");
+const Clippers = weaponImg("clippers");
 
 const Frag = (): ReactElement => <svg {...box(13, 1, 26, 21)}><path d="M18 6h13l4 5-3 11H17l-4-11zm4-5h8v5h-8zm8 1h9v3h-9z" /></svg>;
 const Molotov = (): ReactElement => <svg {...box(14, 2, 25, 20)}><path d="M20 2h9v6l5 6v8H14v-8l6-6zm11 0 8 3-5 5z" /></svg>;

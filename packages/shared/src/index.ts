@@ -33,3 +33,4 @@ export * from "./bomb";
 export * from "./boys";
 export * from "./rng";
 export * from "./skinsField";
+export * from "./weaponArt";

@@ -72,6 +72,7 @@
 .death-gun { display: flex; align-items: center; gap: 8px; font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
 .death-art { display: block; color: var(--hud-tx); }
 .death-art svg { display: block; height: 22px; width: auto; max-width: 76px; }
+.death-art img.art-img { display: block; height: 34px; width: auto; max-width: 76px; object-fit: contain; }
 .death-hs { display: block; color: var(--hud-danger); }
 .death-hs svg { display: block; width: 19px; height: 16px; }
 
