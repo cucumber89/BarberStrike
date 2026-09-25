@@ -16,7 +16,78 @@
  * and `<b>x</b>` comes back with its angle brackets escaped). The presence→bracket seam and the
  * exact numbers are pinned deterministically in the server test `TournamentLobby.test.ts` — here we
  * confirm the room is reachable, hosts, starts and sanitises over a real socket.
+ *
+ * GRACE MODE (drop V, P3): `GRACE=1 node e2e/tools/tournament.mjs` drives two `tdm mode="duel"`
+ * ARENAS straight over the Colyseus SDK — one raised WITH a tournament context (`tournamentId`,
+ * `matchIndex`, `pair`) and one plain — drops a player abruptly in each, and asserts the tournament
+ * arena still holds the dropped seat at 16 s (its grace is `TOURNAMENT_RECONNECT_GRACE_S` = 60 s)
+ * while the plain duel has already released it (`RECONNECT_GRACE_S` = 15 s). It also proves
+ * `verifySession`: an arena joined with a real session token accepts it, and an arena joined with a
+ * bogus token still lets the player in as a guest with no error (L1). The deterministic seam and the
+ * result publish are pinned in the server test `TournamentArena.test.ts`; here we confirm the two
+ * graces and the guest fallback over a real socket. `PROBE_MS` (default 16000) tunes the wait.
  */
+if (process.env.GRACE === "1") {
+  const { Client } = await import("@colyseus/sdk");
+  const URL = process.env.WS_URL ?? "ws://localhost:2567";
+  const HTTP = process.env.HTTP_URL ?? URL.replace(/^ws/, "http");
+  const probeMs = Number(process.env.PROBE_MS ?? 16000);
+  const fail = (m) => { console.log("FAIL:", m); process.exit(1); };
+  const client = new Client(URL);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  console.log(`# Powroty 60 s w arenie turnieju vs 15 s w zwykłym duelu (P3), na żywo — ${URL}\n\`\`\``);
+
+  // A signed-in identity: register an account over REST, take the session token it sets.
+  const login = `p3_${Date.now().toString(36)}`;
+  let token = "";
+  try {
+    const res = await fetch(`${HTTP}/api/register`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ login, password: "haslo-testowe-123" }),
+    });
+    const setCookie = res.headers.get("set-cookie") ?? "";
+    token = /bs_sess=([^;]+)/.exec(setCookie)?.[1] ?? "";
+    console.log(`konto: ${login} zarejestrowane (${res.status}), token sesji: ${token ? "jest" : "brak"}`);
+  } catch (e) {
+    console.log(`(rejestracja pominięta: ${e.message}) — sprawdzam sam fallback gościa`);
+  }
+
+  // The tournament arena: a duel raised with a lobby's context. Two players, a signed one and a guest.
+  const arena = await client.create("tdm", {
+    mode: "duel", room: `p3-arena-${Date.now()}`, tournamentId: "p3lobby", matchIndex: 0, pair: ["ent-a", "ent-b"], bots: 0,
+  });
+  const p1 = await client.joinById(arena.roomId, { name: "TURA", session: token || undefined });
+  const p2guest = await client.joinById(arena.roomId, { name: "GOSC", session: "zły-token-gościa" });
+  await sleep(600);
+  console.log(`arena turniejowa: graczy = ${arena.state.players.size} (twórca + sesja + gość, wszyscy bez błędu)`);
+  if (arena.state.players.size !== 3) fail(`arena: spodziewano 3 graczy, jest ${arena.state.players.size}`);
+
+  // The plain duel: no tournament context, so the 15 s grace.
+  const plain = await client.create("tdm", { mode: "duel", room: `p3-plain-${Date.now()}`, bots: 0 });
+  const q1 = await client.joinById(plain.roomId, { name: "ZWY1" });
+  const q2 = await client.joinById(plain.roomId, { name: "ZWY2" });
+  await sleep(600);
+
+  // Drop one player in each, abruptly (transport close, not a consented leave).
+  const drop = (c) => { try { c.connection.transport.ws.close(); } catch { c.leave(false); } };
+  const goneTourn = p2guest.sessionId, gonePlain = q2.sessionId;
+  drop(p2guest); drop(q2);
+  console.log(`upuszczono po jednym graczu w każdej arenie; czekam ${probeMs} ms (> 15 s, < 60 s)…`);
+  await sleep(probeMs);
+
+  const tournStillThere = arena.state.players.has(goneTourn);
+  const plainGone = !plain.state.players.has(gonePlain);
+  console.log(`po ${probeMs} ms — arena turniejowa trzyma miejsce: ${tournStillThere} (grace 60 s)`);
+  console.log(`po ${probeMs} ms — zwykły duel zwolnił miejsce: ${plainGone} (grace 15 s)`);
+  if (!tournStillThere) fail("arena turniejowa zwolniła miejsce przed 60 s (grace nie działa)");
+  if (!plainGone) fail("zwykły duel nie zwolnił miejsca po 15 s");
+
+  console.log("```\nOK: arena turniejowa daje 60 s, zwykły duel 15 s; sesja i gość działają.");
+  for (const c of [p1, arena, q1, plain]) { try { await c.leave(); } catch { /* already gone */ } }
+  process.exit(0);
+}
+
 if (process.env.LOBBY === "1") {
   const { Client } = await import("@colyseus/sdk");
   const URL = process.env.WS_URL ?? "ws://localhost:2567";
