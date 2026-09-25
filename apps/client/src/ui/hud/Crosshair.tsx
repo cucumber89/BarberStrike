@@ -6,14 +6,17 @@ import type { Settings } from "../../settings";
 import type { ZoneProps } from "./types";
 
 /**
- * Drop U, P0 (seed for P4): the aim point and the full-screen layers around it, moved out of
- * `Hud.tsx` verbatim (docs/UI_U_SPEC.md §7 P0 0d, §4.2).
+ * Drop U, P4 (docs/UI_U_SPEC.md §7 P4 WORK 4, §4.2): the aim point and the full-screen layers
+ * around it.
  *
- * Zones: the crosshair, the cook ring and the sprint meter are `crosshair`; smoke, the damage
- * arrow, the scope and flash (with the flask's haze) are full-screen layers, `veil`, and they are
- * siblings of the zone roots, never inside one. They render in three pieces because the HUD paints
- * its children in DOM order and none of them has a z-index: the smoke under everything, the flash
- * over nearly everything, exactly where `Hud.tsx` had them.
+ * Zones: the crosshair, the cook ring, the sprint meter and the scope's breath hint are
+ * `crosshair`; smoke, the damage arrow, the scope and flash (with the flask's haze) are full-screen
+ * layers, `veil`, and they are siblings of the zone roots, never inside one. They render in three
+ * pieces because the HUD paints its children in DOM order and none of them has a z-index: the smoke
+ * under everything, the flash over nearly everything, exactly where `Hud.tsx` had them.
+ *
+ * The crosshair stays MOUNTED while I am dead: the §4.5 row `data-alive=false` hides it with the
+ * §3.8 hide rule (corners.css), as it hides the rest of my corners, instead of unmounting it.
  */
 
 /** Smoke in front of the eyes: the first child of the HUD, under every other piece of it. */
@@ -79,7 +82,7 @@ export const Crosshair = memo(function Crosshair({ settings }: CrosshairProps) {
       {/* Crosshair (hidden in ADS, and while a frag cooks: there the ring takes its place).
           Shape, size, thickness, gap and colour come from the player's own settings — this is the
           one piece of UI they look at every second of the match. */}
-      {alive && pointerLocked && !aiming && !cookRing && (
+      {pointerLocked && !aiming && !cookRing && (
         <div
           className={`crosshair ch-${ch.style} ${ch.outline ? "outlined" : ""} ${hitAge < 180 ? (hitKill ? "kill" : hitHead ? "head" : hitArmor ? "armor" : "hit") : ""} ${protectedNow ? "shield" : ""}`}
           data-zone="crosshair"
@@ -112,9 +115,15 @@ export const Crosshair = memo(function Crosshair({ settings }: CrosshairProps) {
         <div className={`scope ${scopeStyle === "ring" ? "ring" : ""}`} data-zone="veil" data-testid="scope" data-style={scopeStyle ?? ""}>
           <div className="scope-mask" />
           <div className={`scope-reticle ${hitAge < 180 ? "hit" : ""}`}><span className="v" /><span className="hz" /><span className="dot" /></div>
-          {scopeStyle === "tube" && (
-            <div className="scope-breath"><div className="scope-breath-fill" style={{ "--v": breath } as React.CSSProperties} /><span>{breath <= 0 ? "ZADYSZKA" : "SHIFT · WSTRZYMAJ ODDECH"}</span></div>
-          )}
+        </div>
+      )}
+      {/* The SR-50's breath: „[SHIFT] WSTRZYMAJ ODDECH” at t1 with the bar UNDER the words (§5.2
+          row 44), in the `crosshair` zone beside the scope veil, not inside it. Out of breath it
+          reads „ZADYSZKA” over an empty bar. */}
+      {alive && scoped && scopeStyle === "tube" && (
+        <div className="breath" data-zone="crosshair" data-spent={breath <= 0 || undefined}>
+          <span className="breath-line">{breath <= 0 ? "ZADYSZKA" : <><kbd className="breath-key">SHIFT</kbd> WSTRZYMAJ ODDECH</>}</span>
+          <span className="breath-bar"><span className="breath-fill" style={{ "--v": Math.max(0, Math.min(1, breath)) } as React.CSSProperties} /></span>
         </div>
       )}
     </>
