@@ -142,6 +142,13 @@ export interface HudState {
   aiming: boolean;
   /** Dev telemetry published by the perf module (empty in production). */
   telemetry: Record<string, string | number>;
+  /**
+   * Drop V (P8c): live performance readout, published every window IN PRODUCTION TOO (the `if(dev)`
+   * gate around telemetry is lifted for these fields). `frameMs` is the median frame time; `warn`
+   * latches once FPS sits under 40 for ≥3 s, driving the „sprzęt ledwo nadąża" banner. A client-side
+   * field only — never a Colyseus schema field (L6).
+   */
+  perfStat: { fps: number; frameMs: number; warn: boolean };
   /** True while the connection dropped and the client is trying to resume the session. */
   reconnecting: boolean;
   // ---- drop 2: wallet, shop, grenades
@@ -235,7 +242,7 @@ export const initialHud: HudState = {
   players: [], killFeed: [], teamResult: null, plan: null, planId: 0,
   hitAt: 0, hitKill: false, hitHead: false, damageAt: 0, damageAngle: 0,
   ping: 0, fps: 0, pointerLocked: false, serverNow: 0, spawnProtectedUntil: 0,
-  loadStage: "connecting", crosshairSpread: 0, aiming: false, telemetry: {}, reconnecting: false,
+  loadStage: "connecting", crosshairSpread: 0, aiming: false, telemetry: {}, perfStat: { fps: 0, frameMs: 0, warn: false }, reconnecting: false,
   money: 0, owned: ["pistol"], lethal: "", lethalCount: 0, tactical: "", tacticalCount: 0,
   buyWindowLeft: 0, nearStation: false, shopOpen: false, shopResult: null, moneyToasts: [],
   cookingKind: "", cooking: 0, flashStrength: 0, flashUntil: 0, flashAt: 0,

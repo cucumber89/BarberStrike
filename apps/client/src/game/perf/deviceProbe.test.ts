@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tierFromMeasurement } from "./deviceProbe";
+import { presetFromDevice, tierFromMeasurement } from "./deviceProbe";
 
 describe("choosing a starting level from measured frames", () => {
   it("keeps the guess when the frames agree with it", () => {
@@ -35,5 +35,17 @@ describe("choosing a starting level from measured frames", () => {
     expect(tierFromMeasurement("high", 14, 60)).toBe("high");
     expect(tierFromMeasurement("high", 14, 120)).toBe("low");
     expect(tierFromMeasurement("high", 10, 120)).toBe("medium");
+  });
+});
+
+describe("mapping a device report to a starting preset (drop V, P8c)", () => {
+  it("routes a WEAK machine to the minimal preset, below anything the auto director picks", () => {
+    expect(presetFromDevice({ tier: "low", weak: true })).toBe("minimal");
+  });
+
+  it("leaves a capable machine on its measured tier", () => {
+    expect(presetFromDevice({ tier: "low", weak: false })).toBe("low");
+    expect(presetFromDevice({ tier: "medium", weak: false })).toBe("medium");
+    expect(presetFromDevice({ tier: "high", weak: false })).toBe("high");
   });
 });

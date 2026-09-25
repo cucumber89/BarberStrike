@@ -4,6 +4,7 @@ import { hud } from "../store";
 import { DynamicScale } from "./dynamicScale";
 import { AutoQuality, type AutoTier } from "./autoQuality";
 import { tierFromMeasurement } from "./deviceProbe";
+import { FpsMeter } from "./fpsMeter";
 import { applyQualityPreset } from "../../settings";
 
 /**
@@ -40,6 +41,9 @@ export const installPerf: GameModule = (ctx) => {
   // value is cumulative (the 1.0 playtest F3 showed "1 972 685"). Report the per-window delta.
   const drawCalls = () => (engine as unknown as { _drawCalls?: { current: number } })._drawCalls?.current ?? 0;
   let lastDraws = drawCalls();
+  // Drop V (P8c): the median-frame-time meter behind the perf badge and the "sprzęt ledwo nadąża"
+  // banner. Fed the same rendered frames as the auto director; its reading is published every window.
+  const meter = new FpsMeter();
 
   const applyScale = (s: number) => {
     if (s === currentScale) return;
@@ -103,6 +107,7 @@ export const installPerf: GameModule = (ctx) => {
     if (now - readinessAt > 500) { ready = scene.isReady(); readinessAt = now; }
     acc += dt; frames++;
     if (dt > worst) worst = dt;
+    meter.push(dt);
     if (ctx.settings.graphics.auto && ready) {
       // A change the director asked for while the player was alive lands the moment it is free.
       if (pending && safeToRestyle()) applyTier(pending.tier, pending.why);
@@ -129,11 +134,15 @@ export const installPerf: GameModule = (ctx) => {
     }
     if (now - last < 500) return;
     const fps = frames > 0 ? Math.round(1000 / (acc / frames)) : 0;
+    // Drop V (P8c): the perf badge and the „sprzęt ledwo nadąża" banner ship in the RELEASE build, so
+    // the FPS number and the meter's median/warn go to the store unconditionally — the `if(dev)` gate
+    // is now only around the heavy F3 telemetry table below, which stays a dev-only diagnostic.
+    const reading = meter.reading();
+    hud.set({ fps, perfStat: { fps, frameMs: +reading.frameMs.toFixed(2), warn: meter.warn } });
     if (dev) {
       let particles = 0;
       for (const ps of scene.particleSystems) particles += ps.getActiveCount();
       hud.set({
-        fps,
         telemetry: {
           "frame ms": (acc / frames).toFixed(1),
           "worst ms": worst.toFixed(1),
@@ -149,8 +158,6 @@ export const installPerf: GameModule = (ctx) => {
           quality: `${ctx.settings.graphics.preset}${ctx.settings.graphics.auto ? " (auto)" : ""}`,
         },
       });
-    } else {
-      hud.set({ fps });
     }
     acc = 0; frames = 0; worst = 0; last = now; lastDraws = drawCalls();
   });
