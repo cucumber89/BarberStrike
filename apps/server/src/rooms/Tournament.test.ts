@@ -140,6 +140,31 @@ it("a walkover in the pair being played, and a strike-out anywhere else", async 
   expect(h.room.handlerErrors).toBe(0);
 });
 
+it("a pair decided by a walkover leaves bomb.result empty and every player dead", async () => {
+  // A walkover in a FREEZE has no Playing→Prep edge and scores below DUEL.wins, so a client can only
+  // tell "between pairs" from "a round break" by the state: nobody alive, and no round reason.
+  const cs = await tournament(4);
+  await h.until(MatchPhase.Playing);
+  const [x, y] = onBoard();
+  kill(x, y);
+  await h.tick(3);
+  expect(h.state.bomb.result, "round 1's break has its reason").not.toBe("");
+  await h.advance(DUEL.breakMs + 100);
+  expect(h.state.phase).toBe(MatchPhase.Prep);
+  expect(onBoard(), "round 2's freeze").toHaveLength(2);
+  expect(h.state.bomb.result, "which carries no reason").toBe("");
+  const at = bracket().at;
+  cs.find((c) => c.sessionId === x.id)!.drop(1000);   // gone for good: a walkover
+  await h.tick(2);
+  expect(bracket().at, "the pair was decided").toBe(at + 1);
+  expect(Math.max(h.state.scoreA, h.state.scoreB), "below DUEL.wins").toBeLessThan(DUEL.wins);
+  expect(h.state.phase, "the bracket card is a Prep").toBe(MatchPhase.Prep);
+  expect(h.state.phaseEndsAt - h.now()).toBeGreaterThan(TOURNAMENT.breakMs - 100);
+  expect(h.state.bomb.result, "between pairs, not a round break").toBe("");
+  expect(all().every((p) => !p.alive), "every player dead").toBe(true);
+  expect(h.room.handlerErrors).toBe(0);
+});
+
 it("does not judge a round by the people waiting their turn", async () => {
   // The bug this is written for: the round judge reads every player in the room, and six waiting
   // bodies are dead on both sides — so every round would be scored the instant it went live.

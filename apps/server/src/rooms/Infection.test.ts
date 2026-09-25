@@ -106,6 +106,38 @@ it("(d) converting the last unshaved head ends the round for the chasers, and th
   for (const s of survivors()) expect(s.alive).toBe(true);
 });
 
+it("the break carries SURVIVORS HELD / ALL SHAVED and the freeze clears it", async () => {
+  // Drop U's break signal, with no new field: `bomb.result` names the round's outcome through the
+  // break and is empty through the freeze, so the two Preps can be told apart after a reconnect.
+  await round(3);
+  expect(h.state.bomb.result, "round 1's freeze").toBe("");
+  await live();
+  const chaser = shaved()[0];
+  for (const s of [...survivors()]) killWith(chaser, s, "clippers");
+  await h.tick(2);
+  expect(h.state.phase).toBe(MatchPhase.Prep);
+  expect(h.state.bomb.result).toBe("ALL SHAVED");
+  await h.advance(OSTRZYZENI.breakMs - 200);
+  expect(h.state.bomb.result, "for the whole break").toBe("ALL SHAVED");
+  await h.advance(400);
+  expect(h.state.phase).toBe(MatchPhase.Prep);
+  expect(h.state.bomb.result, "round 2's freeze").toBe("");
+  // Every other round the survivors run the clock out — including the deciding one.
+  for (let r = 2; r <= OSTRZYZENI.rounds; r++) {
+    await live();
+    expect(h.state.bomb.result, `round ${r} live`).toBe("");
+    await h.advance(OSTRZYZENI.roundMs + 200);
+    expect(h.state.bomb.result, `round ${r} over`).toBe("SURVIVORS HELD");
+    if (r === OSTRZYZENI.rounds) break;
+    expect(h.state.phase).toBe(MatchPhase.Prep);
+    await h.advance(OSTRZYZENI.breakMs + 200);
+    expect(h.state.bomb.result, `round ${r + 1}'s freeze`).toBe("");
+  }
+  expect(h.state.phase).toBe(MatchPhase.Ended);
+  expect(h.state.bomb.result, "the deciding round keeps its reason").toBe("SURVIVORS HELD");
+  expect(h.room.handlerErrors).toBe(0);
+});
+
 it("(e) the clock running out with an unshaved head still standing gives the round to the survivors, and pays them for it", async () => {
   await round(3);
   await live();

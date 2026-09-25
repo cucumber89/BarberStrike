@@ -184,6 +184,39 @@ it("scores a kill as a round, keeps the dead player down until the next round, t
   expect(h.room.handlerErrors).toBe(0);
 });
 
+it("bomb.result is empty through the freeze and holds the reason through the break", async () => {
+  // Drop U's break signal, with no new field: the freeze and the break are both a Prep, and a client
+  // that joins or reconnects in one has only the replicated state to tell them apart.
+  const { a, b } = await duel();
+  expect(h.state.phase).toBe(MatchPhase.Prep);
+  expect(h.state.bomb.result, "round 1's freeze").toBe("");
+  await h.until(MatchPhase.Playing);
+  expect(h.state.bomb.result, "a live round").toBe("");
+  kill(P(a), P(b));
+  await h.tick(2);
+  expect(h.state.phase).toBe(MatchPhase.Prep);
+  expect(h.state.bomb.result, "the break names the round's reason").toBe("ELIMINATED");
+  await h.advance(DUEL.breakMs - 200);
+  expect(h.state.phase).toBe(MatchPhase.Prep);
+  expect(P(b).alive, "still the break").toBe(false);
+  expect(h.state.bomb.result, "for the whole break").toBe("ELIMINATED");
+  // The same phase, the next window: round 2's freeze, and only `result` says which.
+  await h.advance(400);
+  expect(h.state.phase).toBe(MatchPhase.Prep);
+  expect(P(b).alive, "the freeze has respawned both").toBe(true);
+  expect(h.state.bomb.result, "round 2's freeze").toBe("");
+  await h.advance(DUEL.prepMs - 1000);
+  expect(h.state.phase).toBe(MatchPhase.Prep);
+  expect(h.state.bomb.result, "for the whole freeze").toBe("");
+  // A trade is a round too: its break says so rather than reading as a freeze.
+  await h.until(MatchPhase.Playing);
+  kill(P(a), P(b)); kill(P(b), P(a));
+  await h.tick(2);
+  expect(h.state.phase).toBe(MatchPhase.Prep);
+  expect(h.state.bomb.result).toBe("TRADE");
+  expect(h.room.handlerErrors).toBe(0);
+});
+
 it("settles the clock on health and scores nothing on an even round", async () => {
   const { a, b } = await duel();
   await h.until(MatchPhase.Playing);

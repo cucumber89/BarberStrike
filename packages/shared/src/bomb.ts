@@ -9,10 +9,24 @@ import type { Team } from "./types";
  * round went live — so a Bomb player and a duel player were learning two different games. It is
  * now `mp_freezetime`, with `CS_ROUND.buyTailMs` of buying past the release.
  */
-export const BOMB = { roundMs: 115000, fuseMs: 40000, plantMs: 3200, defuseMs: 10000, breakMs: 5000,
+export const BOMB = { roundMs: 115000, fuseMs: 40000, plantMs: 3200, defuseMs: 10000,
+  /**
+   * The break after a round: CS's `mp_round_restart_delay`, 7 s. It was 5 s, which ended the
+   * round-end banner before anybody had read the reason on it (drop U, `UI_U_SPEC.md` §6.4).
+   * Bounded by an e2e poll — see "BOMB.breakMs stays ≤ 9000" in `bomb.test.ts`.
+   */
+  breakMs: 7000,
+  /**
+   * The break after round `halfRounds` instead: CS's `mp_halftime_duration`, 15 s — the round's
+   * own banner, then the side swap long enough to be a moment rather than a flicker.
+   * Read it through `bombBreakMs`, never by hand.
+   */
+  halftimeMs: 15000,
   buyMs: CS_ROUND.freezeMs, buyTailMs: CS_ROUND.buyTailMs,
   halfRounds: 6, maxRounds: 12, wins: 7,
   startMoney: CS_ECONOMY.start, winMoney: CS_ECONOMY.win, useRadius: 2.5 } as const;
+/** How long the break after `round` (the round just finished, 1-based) lasts: halftime, or a plain break. */
+export const bombBreakMs = (round: number): number => round === BOMB.halfRounds ? BOMB.halftimeMs : BOMB.breakMs;
 export const bombAttackTeam = (round: number): Team => round <= BOMB.halfRounds ? 0 : 1;
 /**
  * Which spawn SET a player uses in Bomb — attackers take the south (team-0) points, defenders the
