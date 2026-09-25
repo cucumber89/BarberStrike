@@ -53,26 +53,26 @@ if (process.env.GRACE === "1") {
     console.log(`(rejestracja pominięta: ${e.message}) — sprawdzam sam fallback gościa`);
   }
 
-  // The tournament arena: a duel raised with a lobby's context. Two players, a signed one and a guest.
+  // The tournament arena: a duel raised with a lobby's context. A duel seats TWO, so the signed
+  // creator plus one guest join IS the room; the guest is the seat we drop to watch the 60 s grace.
   const arena = await client.create("tdm", {
     mode: "duel", room: `p3-arena-${Date.now()}`, tournamentId: "p3lobby", matchIndex: 0, pair: ["ent-a", "ent-b"], bots: 0,
+    name: "TURA", session: token || undefined,
   });
-  const p1 = await client.joinById(arena.roomId, { name: "TURA", session: token || undefined });
-  const p2guest = await client.joinById(arena.roomId, { name: "GOSC", session: "zły-token-gościa" });
+  const guest = await client.joinById(arena.roomId, { name: "GOSC", session: "zły-token-gościa" });
   await sleep(600);
-  console.log(`arena turniejowa: graczy = ${arena.state.players.size} (twórca + sesja + gość, wszyscy bez błędu)`);
-  if (arena.state.players.size !== 3) fail(`arena: spodziewano 3 graczy, jest ${arena.state.players.size}`);
+  console.log(`arena turniejowa: graczy = ${arena.state.players.size} (sesja + gość, oboje bez błędu)`);
+  if (arena.state.players.size !== 2) fail(`arena: spodziewano 2 graczy, jest ${arena.state.players.size}`);
 
-  // The plain duel: no tournament context, so the 15 s grace.
-  const plain = await client.create("tdm", { mode: "duel", room: `p3-plain-${Date.now()}`, bots: 0 });
-  const q1 = await client.joinById(plain.roomId, { name: "ZWY1" });
-  const q2 = await client.joinById(plain.roomId, { name: "ZWY2" });
+  // The plain duel: no tournament context, so the 15 s grace. Creator + one join = the two seats.
+  const plain = await client.create("tdm", { mode: "duel", room: `p3-plain-${Date.now()}`, bots: 0, name: "ZWY1" });
+  const plainB = await client.joinById(plain.roomId, { name: "ZWY2" });
   await sleep(600);
 
   // Drop one player in each, abruptly (transport close, not a consented leave).
   const drop = (c) => { try { c.connection.transport.ws.close(); } catch { c.leave(false); } };
-  const goneTourn = p2guest.sessionId, gonePlain = q2.sessionId;
-  drop(p2guest); drop(q2);
+  const goneTourn = guest.sessionId, gonePlain = plainB.sessionId;
+  drop(guest); drop(plainB);
   console.log(`upuszczono po jednym graczu w każdej arenie; czekam ${probeMs} ms (> 15 s, < 60 s)…`);
   await sleep(probeMs);
 
@@ -84,7 +84,7 @@ if (process.env.GRACE === "1") {
   if (!plainGone) fail("zwykły duel nie zwolnił miejsca po 15 s");
 
   console.log("```\nOK: arena turniejowa daje 60 s, zwykły duel 15 s; sesja i gość działają.");
-  for (const c of [p1, arena, q1, plain]) { try { await c.leave(); } catch { /* already gone */ } }
+  for (const c of [arena, plain]) { try { await c.leave(); } catch { /* already gone */ } }
   process.exit(0);
 }
 
