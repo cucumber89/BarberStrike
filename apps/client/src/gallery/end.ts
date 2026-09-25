@@ -116,7 +116,10 @@ export const scenarios: Scenario[] = [
     moment: "Turniej: ZDZICHU wygrał z tobą finał 6 : 4 — koniec drabinki, etap C",
     state: turniej(TOUR.done, ["me", "bot-1"], {
       mapId: DUEL_MAP.id, phase: MatchPhase.Ended, phaseEndsAt: S + MATCH.endedMs - 8_000, matchEndsAt: pairMatchEnds(10), round: 10, scoreA: 4, scoreB: 6,
-      roundWinner: 1, winner: 1, winnerId: "bot-1", winnerName: seat("bot-1").name, reward: REWARD_LOSS,
+      // The final's last round: ZDZICHU eliminated me. The server leaves its reason in `bomb.result`
+      // at the end (TdmRoom.ts:1655 → :1659 → :1539 endMatch never clears it), so this is the state
+      // a decided final really leaves; the card must still name the final, not that round.
+      roundWinner: 1, roundResult: "ELIMINATED", winner: 1, winnerId: "bot-1", winnerName: seat("bot-1").name, reward: REWARD_LOSS,
     }, { dead: ["me"] }),
     radar: radarFor(DUEL_MAP, 0, 0.5, { alive: false, mates: [] }),
   },
@@ -212,7 +215,8 @@ export const pins: PinSet = {
   "match-end-turniej": {
     expect: ["[data-testid=result][data-outcome=loss][data-stage=C]", "[data-testid=result-tab-bracket]", "[data-testid=podium] .podium-step.r1"],
     caseText: ["ZDZICHU wygrał finał drabinki", "Kowal 4 — 6 ZDZICHU", "DRABINKA"],
-    textAbsent: GONE,
+    // The fixture carries the final's round reason (ELIMINATED): the card names the final, not the round.
+    textAbsent: [...GONE, { text: "w ostatniej rundzie", zone: "result" }, { text: "Przeciwnik wyeliminowany", zone: "result" }],
     zoneWords: { result: C_ROUND },
   },
   "new-match-warmup": {

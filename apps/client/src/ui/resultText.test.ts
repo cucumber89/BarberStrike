@@ -75,6 +75,22 @@ describe("match outcome and why", () => {
     // Continuous modes keep the match's rule.
     expect(resultWhy(base({ scoreA: MATCH.scoreLimit, roundResult: "BOMB DEFUSED" }))).toBe(`Pierwsi do ${MATCH.scoreLimit} zabójstw`);
   });
+
+  it("a tournament's why names its final, whatever reason the final's last round left", () => {
+    // The server leaves the final's deciding-round reason in `bomb.result` at the end
+    // (TdmRoom.ts:1655 → :1659 finishPair → :1539 endMatch, which never clears it), so a decided
+    // tournament always carries one; a walkover final (decided in a freeze, :1560) carries "".
+    // Every one of them reads the bracket's words: §5.2 #63 and §7 P6 WORK 2.
+    for (const roundResult of ["ELIMINATED", "TRADE", "TIME · MORE HEALTH", "TIME · EVEN", ""]) {
+      const c = base({ mode: "turniej", winner: 1, winnerId: "foe", winnerName: "ZDZICHU", bracket: FINISHED, scoreA: 4, scoreB: 6, roundResult });
+      expect(resultWhy(c), roundResult).toBe("ZDZICHU wygrał finał drabinki");
+      expect(verdictWhy(c), roundResult).toBe("Finał drabinki");
+      expect(verdict(c).why, roundResult).toBe("Finał drabinki");
+      expect(resultWhy(c)).not.toMatch(/w ostatniej rundzie/);
+    }
+    // The duel it is built on still names its deciding round.
+    expect(resultWhy(base({ mode: "duel", scoreA: 4, scoreB: 6, winner: 1, roundResult: "ELIMINATED" }))).toBe("Przeciwnik wyeliminowany w ostatniej rundzie");
+  });
 });
 
 /** A finished bracket of four: Kowal beat xXPiotrekXx 6:3, ZDZICHU beat RYSIEK 6:4, ZDZICHU took the final 6:4. */

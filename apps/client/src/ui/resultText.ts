@@ -128,14 +128,28 @@ export function matchWhy(c: ResultCtx): string {
 }
 
 /**
+ * The deciding round's server reason when the match's why names it, else "". Bomb, the 1 v 1 and
+ * Ostrzyżeni are decided by their last round. A tournament is not: it is decided by its FINAL, and
+ * the server leaves the final's deciding-round reason in `bomb.result` at the end
+ * (`TdmRoom.ts:1655` sets it, `:1659` → `finishPair` → `:1539` `endMatch`, which never clears it)
+ * — so a decided tournament always carries one, and reading it would replace „ZDZICHU wygrał finał
+ * drabinki” (§5.2 #63) and „Finał drabinki” (§7 P6 WORK 2) with a sentence about one round of one
+ * pair. Stage A (P5's final-round banner) still names that round.
+ */
+function decidingRound(c: ResultCtx): string {
+  if (!isRoundModeResult(c.mode) || c.mode === "turniej") return "";
+  return c.roundResult ?? "";
+}
+
+/**
  * Stage C's why (`result-why`). In a round mode the match was decided by its last round, so the
  * line names it — `${short} w ostatniej rundzie` (graft) — and falls back to the match's rule when
  * the state holds no reason (a duel capped during a freeze: the server clears `bomb.result` at
- * every freeze).
+ * every freeze). The tournament reads its final (`decidingRound`).
  */
 export function resultWhy(c: ResultCtx): string {
-  const rr = c.roundResult ?? "";
-  if (isRoundModeResult(c.mode) && rr !== "") return `${roundReasonShort(rr)} w ostatniej rundzie`;
+  const rr = decidingRound(c);
+  if (rr !== "") return `${roundReasonShort(rr)} w ostatniej rundzie`;
   return matchWhy(c);
 }
 
@@ -146,8 +160,8 @@ export function resultWhy(c: ResultCtx): string {
  * there) and „Walkower” when a side left (what the pair card calls it, §5.2 #31).
  */
 export function verdictWhy(c: ResultCtx): string {
-  const rr = c.roundResult ?? "";
-  if (isRoundModeResult(c.mode) && rr !== "") return roundReasonShort(rr);
+  const rr = decidingRound(c);
+  if (rr !== "") return roundReasonShort(rr);
   if (c.mode === "turniej") return "Finał drabinki";
   if (c.mode === "gungame") {
     const lead = c.players.find((p) => p.id === c.winnerId);
