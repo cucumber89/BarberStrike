@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { NIGHT_DISTRICT, boxFrom, sitesOf } from "@frankibarber/shared";
-import { MINIMAP, RADAR_LAYERS, radarBomb, radarOffset, rimPin, toMap, type RadarLayer } from "./minimapGeometry";
+import { MARK, NIGHT_DISTRICT, boxFrom, sitesOf } from "@frankibarber/shared";
+import { MINIMAP, RADAR_LAYERS, markPin, radarBomb, radarOffset, rimPin, toMap, type RadarLayer } from "./minimapGeometry";
 
 /** Drop 5: minimap maths. Drop U (P3): the compass strip is gone; the rim carries its marks. */
 
@@ -75,5 +75,34 @@ describe("minimap maths", () => {
     // Within range a mark stays where it is.
     expect(rimPin(out, 10, -20, rim)).toBe(false);
     expect(out).toEqual([10, -20]);
+  });
+
+  it("markPin keeps a far mark on the radar, one pin inside the rim, in its own direction", () => {
+    // Residual of the compass strip's removal: a mark reaches MARK.maxRange (60 m), the radar
+    // shows 24 m, and a far mark was drawn nowhere. Now it is pinned — every bearing, all the way
+    // out to 60 m — at `rim − pinStep`, so it never sits on a site's rim letter (which is at `rim`).
+    const half = MINIMAP.size / 2, pxPerM = half / MINIMAP.range, rim = half - MINIMAP.rimInset;
+    const inner = rim - MINIMAP.pinStep;
+    const out: [number, number] = [0, 0];
+    for (let deg = 0; deg < 360; deg += 15) {
+      const a = (deg * Math.PI) / 180;
+      for (const dist of [MINIMAP.range + 1, 40, MARK.maxRange]) {
+        const [ox, oy] = radarOffset(0, 0, 0.7, Math.sin(a) * dist, Math.cos(a) * dist, pxPerM);
+        expect(markPin(out, ox, oy, half), `${deg}° ${dist} m is pinned`).toBe(true);
+        expect(Math.hypot(out[0], out[1])).toBeCloseTo(inner);
+        expect(Math.atan2(out[1], out[0])).toBeCloseTo(Math.atan2(oy, ox));
+        expect(rim - Math.hypot(out[0], out[1]), "clear of a rim letter's 10 px disc (a mark's is 9)").toBeGreaterThanOrEqual(10 + 9);
+      }
+    }
+    // In range a mark stays exactly where it is — out to `markEdge` px from the disc's edge, as
+    // the pre-fix radar drew it.
+    const [nx, ny] = radarOffset(0, 0, 0, 3, 10, pxPerM);
+    expect(markPin(out, nx, ny, half)).toBe(false);
+    expect(out).toEqual([nx, ny]);
+    const edge = half - MINIMAP.markEdge;
+    expect(markPin(out, 0, -edge, half)).toBe(false);
+    expect(out).toEqual([0, -edge]);
+    expect(markPin(out, 0, -(edge + 0.5), half)).toBe(true);
+    expect(out[1]).toBeCloseTo(-inner);
   });
 });
