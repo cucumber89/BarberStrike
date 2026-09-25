@@ -3,7 +3,7 @@ import { GRENADES, WEAPONS, killerName, type GrenadeId, type ShopItemId, type We
 import { useHudSlice } from "../../game/store";
 import { SHOP_ART } from "../shopArt";
 import { upperPl } from "./format";
-import { IconBomb } from "./icons";
+import { IconBomb, IconFlash, IconFrag, IconKnife, IconMolotov, IconSmoke, type IconProps } from "./icons";
 import type { ZoneProps } from "./types";
 
 /**
@@ -11,7 +11,7 @@ import type { ZoneProps } from "./types";
  * - zone `inv`: one 240×64 plate, the weapon's silhouette, the magazine at t4 and „/ 90” at t2.
  *   It is the same width in every state: a reload dims the magazine and runs a 3 px bar, it never
  *   swaps the digits for PRZEŁADOWANIE (the plate used to jump from ~130 to ~240 px).
- * - zone `gear`: only what I carry — a 13 px keycap, the grenade's silhouette and ×N — and the C4
+ * - zone `gear`: only what I carry — a 13 px keycap, the grenade's icon and ×N — and the C4
  *   with [T] when the bomb is mine, blinking on a site. Empty slots are `display: none`; the
  *   `slot-lethal` / `slot-tactical` testids stay in the DOM.
  * - zone `weapon`: the weapon's name at t1 for a moment after a switch (`lastSwitchAt`).
@@ -78,13 +78,25 @@ function usePrevious(weapon: string): string | null {
   return prev && prev.to === weapon ? prev.from : null;
 }
 
+/**
+ * The gear row's glyphs: the HUD's own 24×24 icons (icons.tsx), one family, each its own shape.
+ * The shop's silhouettes (`SHOP_ART`) drew the flash and the smoke as the same striped canister,
+ * which at 20 px fills in solid: with the words FLASH / SMOKE gone from the row, the player could
+ * no longer tell which tactical grenade they held. The launcher's shell has no icon and never sits
+ * in a slot; it would fall back to its silhouette.
+ */
+const GRENADE_ICON: Partial<Record<GrenadeId, (p: IconProps) => React.ReactElement>> = {
+  frag: IconFrag, molotov: IconMolotov, knife: IconKnife, flash: IconFlash, smoke: IconSmoke,
+};
+
 /** One grenade slot: hidden (`display: none`) while empty, the testid always in the DOM. */
 function Slot({ testId, keyCap, id, count, cooking }: { testId: string; keyCap: string; id: GrenadeId | ""; count: number; cooking: boolean }) {
+  const Icon = id ? GRENADE_ICON[id] : undefined;
   return (
-    <div className="gear-item" data-testid={testId} data-empty={!id || undefined} data-cooking={cooking || undefined}
+    <div className="gear-item" data-testid={testId} data-empty={!id || undefined} data-cooking={cooking || undefined} data-grenade={id || undefined}
       aria-label={id ? GRENADES[id].name : undefined}>
       <kbd className="p4-key">{keyCap}</kbd>
-      {id && <Art id={id} className="gear-art" />}
+      {id && (Icon ? <span className="gear-art"><Icon /></span> : <Art id={id} className="gear-art" />)}
       {id && count > 1 && <span className="gear-n">×{count}</span>}
     </div>
   );
