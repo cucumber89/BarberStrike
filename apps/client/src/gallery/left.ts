@@ -49,7 +49,9 @@ export const scenarios: Scenario[] = [
       plan: { options: planOffer(5), tally: [2, 1], chosen: 0, appliesAt: S + 9_400, votingTeam: 0, round: 5, at: T - 5_600 },
       perks: { flask: S + 45_000, roids: S + 45_000, energy: S + 45_000, fade: 0 },
       moneyToasts: [{ key: 9, delta: 300, reason: "sell", total: 3_450, at: T - 900 }],
-      // The newest message is long enough to wrap at every size: it is shown whole, never cut.
+      // The newest message is long enough to wrap at every size, so the box is capped in LINES
+      // (§4.2: 6 lines × 22 at 1600 — this one takes 2, and the oldest message gives way; 4 at
+      // 1280; 2 at 1024 under the plan card, where it is cut after its second line).
       chat: chatLines(0, [
         [8_300, "p1", "biorę A"], [7_100, "p2", "ja środkiem"], [5_800, "p5", "powodzenia", true],
         [4_600, "me", "głosujcie F1, mur"], [3_200, "p6", "gl hf", true], [1_500, "p1", "ok, F1 — idę zaułkiem, flash nad murem"],
@@ -102,13 +104,13 @@ export const pins: PinSet = {
     zoneWords: { wallet: 5 },
   },
   // §5.2 #47: six lines with Polish tags, one merged toast with no reason word, the plan card.
-  // The newest message wraps and is shown whole at every size (`text` reads what is rendered;
-  // `noScroll` fails when the list is cut), and the vote is round 5's real one, plans 2 and 3.
+  // The newest message wraps; the chat's box is capped in visual lines, not messages (§4.2), so
+  // at 1024×576 under the plan card that message is cut after its 2nd line — `text` still finds
+  // it (`innerText` reads a clamped line whole). The vote is round 5's real one, plans 2 and 3.
   "chat-busy": {
     expect: ["[data-testid=chat] [data-testid=chat-line]", "[data-testid=plan-vote]", "[data-testid=wallet] .wallet-toast", "[data-testid=plan-option-2]", "[data-testid=plan-option-3]"],
     caseText: ["[DRUŻYNA]", "[WSZYSCY]", "+$300"],
     text: ["ok, F1 — idę zaułkiem, flash nad murem"],
-    noScroll: ["[data-testid=chat] .chat-lines"],
     textAbsent: [...noEnglish("plan", "chat"), { text: "SPRZEDAŻ", zone: "wallet" }],
     zoneWords: { wallet: 4, plan: 24 },
   },

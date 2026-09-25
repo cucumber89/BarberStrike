@@ -112,11 +112,13 @@
 .plan.compact .plan-option { padding: 2px 4px; }
 
 /* ---------------------------------------------------------------- chat (zone `chat`)
-   Bottom left, 12 px over the perks: ≤ 6 messages, 4 at ≤ 760 px high, 3 at ≤ 600 and 2 there
-   while the plan shows (§4.2); a one-line message is 20 px on a 22 px pitch. A message is never
-   cut (Principle 14): the nick is whole and the text wraps. Older messages give way instead —
-   `Chat.tsx` hides, whole, the ones that do not fit 12 px under the left column (`data-over`). */
-.chat { position: absolute; left: var(--hud-edge); bottom: var(--hud-chat-bottom); width: var(--hud-chat-w); display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+   Bottom left, 12 px over the perks. §4.2 caps the BOX in visual lines × 22: 6 lines, 4 at
+   ≤ 760 px high, 3 at ≤ 600 and 2 there while the plan shows (`--chat-lines`, which `Chat.tsx`
+   reads); a one-line message is 20 px on a 22 px pitch, a wrapped one counts every line. The
+   nick is whole and the text wraps; older messages give way — `Chat.tsx` hides, whole, the ones
+   over the line cap or nearer than 12 px to the left column (`data-over`). The message caps
+   below are the same caps before `Chat.tsx` has measured (a message is at least one line). */
+.chat { --chat-lines: 6; position: absolute; left: var(--hud-edge); bottom: var(--hud-chat-bottom); width: var(--hud-chat-w); display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
 .chat-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .chat-lines > li {
   flex: none; padding: 0 8px; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere;
@@ -126,8 +128,9 @@
 }
 .chat-lines > li.me { box-shadow: inset 2px 0 0 var(--hud-accent); }
 .chat-lines > li:nth-last-child(n+7), .chat-lines > li[data-over] { display: none; }
-/* Only when the newest message alone is taller than the room: cut at the room, under a fade. */
-.chat-lines[data-clip] { overflow: hidden; mask-image: linear-gradient(to bottom, #000 calc(100% - 10px), transparent); }
+/* Only when the newest message alone is longer than the box: cut after its last whole line, with an
+   ellipsis (`Chat.tsx` sets the clamp to the lines that fit; the full text is the line's title). */
+.chat-lines > li[data-clip] { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
 .chat-tag { color: var(--hud-tx2); letter-spacing: var(--hud-track-label); white-space: nowrap; }
 /* A nick is at most 16 characters (MAX_NAME_LENGTH): it stays whole, on one line. */
 .chat-name { white-space: nowrap; } .chat-name.t0 { color: var(--hud-team0); } .chat-name.t1 { color: var(--hud-team1); } .chat-name.ffa { color: var(--hud-tx); }
@@ -140,8 +143,13 @@
 .chat-kind { flex: none; font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); letter-spacing: var(--hud-track-label); color: var(--hud-accent); }
 .chat-form input { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: var(--hud-tx); font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); }
 .chat-form input::placeholder { color: var(--hud-tx2); }
-@media (max-height: 760px) { .chat-lines > li:nth-last-child(n+5) { display: none; } }
+@media (max-height: 760px) {
+  .chat { --chat-lines: 4; }
+  .chat-lines > li:nth-last-child(n+5) { display: none; }
+}
 @media (max-height: 600px) {
+  .chat { --chat-lines: 3; }
+  .chat.with-plan { --chat-lines: 2; }
   .chat-lines > li:nth-last-child(n+4) { display: none; }
   .chat.with-plan .chat-lines > li:nth-last-child(n+3) { display: none; }
 }

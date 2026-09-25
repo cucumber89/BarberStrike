@@ -20,8 +20,10 @@ export const CHAT_TAG = { team: "[DRUŻYNA]", all: "[WSZYSCY]" } as const;
 export const CHAT_PLACEHOLDER = "Napisz… Enter wysyła, Esc zamyka";
 /** §4.3: `chat` × `wallet` and `plan` × `chat` keep 12 px. */
 const CLEAR_PX = 12;
-/** One line of a message (`left.css`: 20 px); less room than this is not a supported screen. */
-const ONE_LINE_PX = 20;
+/** §4.2: a chat line is 22 px of box — 20 px of text (`left.css` line-height) on a 22 px pitch. */
+const PITCH_PX = 22;
+/** The smallest supported screen (§4.2: 1024×576). Below it the column may reach past the chat. */
+const MIN_SUPPORTED_H = 576;
 
 /**
  * Text chat (drop 5), zone `chat`, bottom left above the perks (drop U P3, docs/UI_U_SPEC.md §7 P3
@@ -29,16 +31,17 @@ const ONE_LINE_PX = 20;
  * sends, Escape drops it. While the box is open the game ignores every key (InputState.typing).
  *
  * Drop U: Polish tags — „[DRUŻYNA]” for your side only, „[WSZYSCY]” for everyone (none in a mode
- * without teams, where every line is to everyone) — at t1, at most 6 messages, 4 on a screen
- * ≤ 760 px high, 3 at ≤ 600 and 2 there while the plan card shows (`left.css`).
+ * without teams, where every line is to everyone) — at t1.
  *
- * A message is player content, and none of it is ever cut (Principle 14): the nick is whole and
- * the text wraps, as it did before the drop. What gives way is HISTORY: newest first, only the
- * messages that fit WHOLE above the chat's bottom and 12 px under the left column (the money, the
- * buy row, the plan card) are shown, so the chat never runs into the column at any size (§4.3).
- * Only when the newest message alone is taller than all that room — a long message on a short
- * screen while the plan card is up — is it cut at the room's edge, under a fade, until the card
- * leaves and the room comes back.
+ * §4.2 caps the zone's BOX, in visual lines × 22 px: 6 lines, 4 on a screen ≤ 760 px high, 3 at
+ * ≤ 600 and 2 there while the plan card shows (`--chat-lines` in `left.css`). A wrapped message
+ * counts every line it takes, and the open input box takes its own height out of the same box.
+ * The chat also keeps 12 px under the left column (the money, the buy row, the plan card; §4.3).
+ * A message's nick is whole and its text wraps; what gives way is HISTORY: newest first, only the
+ * messages that fit WHOLE in both the line cap and the room are shown (`fitChat`). Only when the
+ * newest message alone is longer than that — a long message on a short screen while the plan
+ * card is up — is it cut after its last whole line, with an ellipsis (its full text is its `title`),
+ * until the card leaves and the lines come back.
  */
 export function Chat({ lines, open, teams, myId, api, planUp = false, column }: Props) {
   const [text, setText] = useState("");
@@ -92,37 +95,48 @@ export function Chat({ lines, open, teams, myId, api, planUp = false, column }: 
 }
 
 /**
- * Newest first, keep the messages that fit whole in the room between the chat's bottom and 12 px
- * under the column; hide the rest (`data-over`, whole messages only, so the history never has a
- * gap). If even the newest does not fit, cut the list at the room (`data-clip`: overflow and a
- * fade). React never writes these two attributes or the list's max-height, so they are ours.
+ * Newest first, keep the messages that fit whole in the box: at most `--chat-lines` visual lines
+ * (§4.2: the box is lines × 22, the input included), and never nearer than 12 px under the column
+ * (§4.3). The rest are hidden whole (`data-over`), so the history never has a gap. If even the
+ * newest does not fit, it is cut after its last whole line that does, with an ellipsis
+ * (`data-clip`: a line clamp); with no whole line of room it is hidden too. React never writes
+ * these two attributes or the line clamp, so they are ours. The lines shown are written to `data-lines` (a probe
+ * reads them).
  */
-function fitChat(root: HTMLElement, list: HTMLElement, column: HTMLElement | null): void {
+function fitChat(root: HTMLElement, list: HTMLElement, column: HTMLElement | null): number {
   const items = Array.from(list.children) as HTMLElement[];
-  for (const li of items) li.removeAttribute("data-over");
-  list.removeAttribute("data-clip");
-  list.style.maxHeight = "";
-  if (!column) return;
+  for (const li of items) { li.removeAttribute("data-over"); li.removeAttribute("data-clip"); li.style.removeProperty("-webkit-line-clamp"); }
+  const rootCs = getComputedStyle(root);
+  const capLines = parseInt(rootCs.getPropertyValue("--chat-lines"), 10) || 6;
   const gap = parseFloat(getComputedStyle(list).rowGap) || 0;
   const form = root.querySelector<HTMLElement>(".chat-form");
-  const formH = form ? form.offsetHeight + (parseFloat(getComputedStyle(root).rowGap) || 0) : 0;
-  const room = root.getBoundingClientRect().bottom - formH - (column.getBoundingClientRect().bottom + CLEAR_PX);
-  // Below the smallest supported screen (1024×576) the column can reach past the chat's bottom
-  // altogether (the e2e suite plays at 640×360). There is no room to keep, so hide nothing: the
-  // chat stays readable, over the column, as it was before the drop.
-  if (room < ONE_LINE_PX) return;
-  let used = 0, shown = 0, full = false;
+  const formH = form ? form.offsetHeight + (parseFloat(rootCs.rowGap) || 0) : 0;
+  // The box's height for messages: the cap, less the input; and the room over the column.
+  let budget = capLines * PITCH_PX - formH;
+  if (column) {
+    const room = root.getBoundingClientRect().bottom - formH - (column.getBoundingClientRect().bottom + CLEAR_PX);
+    // Below the smallest supported screen (the e2e suite plays at 640×360) the column can reach
+    // past the chat's bottom altogether: there the line cap alone rules, as before the drop.
+    if (room >= PITCH_PX || window.innerHeight >= MIN_SUPPORTED_H) budget = Math.min(budget, room);
+  }
+  const maxLines = Math.floor((budget + gap) / PITCH_PX);
+  let used = 0, lines = 0, shown = 0, full = false;
   for (let k = items.length - 1; k >= 0; k--) {
     const li = items[k];
     const h = li.offsetHeight;
-    if (!h) continue; // capped by the line count in CSS
+    if (!h) continue; // hidden by the message cap in CSS
+    const lh = parseFloat(getComputedStyle(li).lineHeight) || PITCH_PX - gap;
+    const n = Math.max(1, Math.round(h / lh));
     const need = used + (shown ? gap : 0) + h;
-    if (!full && need <= room) { used = need; shown++; continue; }
-    if (!full && shown === 0) {
-      list.style.maxHeight = `${Math.max(0, Math.floor(room))}px`;
-      list.setAttribute("data-clip", "");
+    if (!full && lines + n <= maxLines && need <= budget + 0.5) { used = need; lines += n; shown++; continue; }
+    if (!full && shown === 0 && maxLines >= 1) {
+      li.style.setProperty("-webkit-line-clamp", String(maxLines));
+      li.setAttribute("data-clip", "");
+      lines = maxLines;
       shown++;
     } else li.setAttribute("data-over", "");
     full = true;
   }
+  root.setAttribute("data-lines", String(lines));
+  return lines;
 }
