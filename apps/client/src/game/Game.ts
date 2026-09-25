@@ -33,7 +33,7 @@ import { installAudio } from "./audio";
 import { installPostFx } from "./world/postfx";
 import { installPerf } from "./perf";
 import { hud, type ChatLine, type HudFlag, type HudMark, type HudSpectating, type HudState, type ScoreRow } from "./store";
-import { LifeDamage, RoundWatch, buyContextFor, flagNoticeFor, killerFrom, lateJoinFor, nearBombFor, respawnAtFor, siteAt } from "./hudFeed";
+import { LifeDamage, LifeSync, RoundWatch, buyContextFor, flagNoticeFor, killerFrom, lateJoinFor, nearBombFor, respawnAtFor, shavedAfterKill, siteAt, spawnHealthFor } from "./hudFeed";
 import { BLINK_MS, NO_SPECTATE, cycle, spectating, stepSpectate, type SpectateCtx, type SpectateState } from "./spectate";
 import { deathCamPose, startDeathCam, type DeathCam, type Pose } from "./player/deathCam";
 import { ERR } from "../ui/hud/copy";
@@ -156,6 +156,8 @@ export class Game {
   private readonly rounds = new RoundWatch();
   /** An `S2C.Kill` with me as the victim since my last spawn (a late joiner has none). */
   private killSeen = false;
+  /** Alive as the spawn, the kill and the patches say it together (`hudFeed.LifeSync`). */
+  private life = new LifeSync();
   /** The death cam of this death, and where its killer was last seen (they may leave the room). */
   private deathCam: DeathCam | null = null;
   private deathKillerId = "";
@@ -242,6 +244,7 @@ export class Game {
     if (me) {
       this.local.spawnAt(me.x, me.y, me.z, dequantAngle(me.yaw));
       this.local.alive = me.alive;
+      this.life = new LifeSync(me.alive);
       this.weapons.syncFrom(me);
       this.throwing.syncFrom(me);
     }
@@ -327,7 +330,10 @@ export class Game {
         if (me) { this.weapons.syncFrom(me); this.throwing.syncFrom(me); }
         this.throwing.cancel();
         this.endDeath();
-        hud.set({ respawnAt: 0, killerName: "", flashUntil: 0, flashStrength: 0, diedAt: 0, killer: null, spectating: null, lateJoin: false });
+        // Alive NOW, in the same write that clears the death: the patch that says so comes later,
+        // and the card must fade its last frame, not redraw the dead copy (`LifeSync`).
+        this.life.spawned();
+        hud.set({ alive: true, health: spawnHealthFor((c.state.mode ?? "tdm") as GameMode, me), respawnAt: 0, killerName: "", flashUntil: 0, flashStrength: 0, diedAt: 0, killer: null, spectating: null, lateJoin: false });
         this.events.emit("localSpawn", e);
       } else {
         const r = this.remotes.get(e.id);
@@ -355,6 +361,7 @@ export class Game {
       const feed = [...hud.get().killFeed, { ...e, at: performance.now(), key: ++this.killFeedKey }].slice(-6);
       const patch: Partial<HudState> = { killFeed: feed };
       if (e.victim === c.sessionId) {
+        this.life.killed();
         this.local.alive = false;
         this.input.clearAll();
         this.throwing.cancel();
@@ -575,6 +582,7 @@ export class Game {
     const t = s.t;
     s.players.forEach((p, id) => {
       if (id === this.conn.sessionId) {
+        if (this.life.patch(p.alive)) this.silentDeath();
         this.local.reconcile(p, this.conn.ack);
         this.weapons.syncFrom(p);
         this.throwing.syncFrom(p);
@@ -680,7 +688,7 @@ export class Game {
     // the 5 s tail after the release, and turniej buying like the duel it is (`hudFeed.roundBuy`).
     const windowLeft = me ? buyWindowLeft(this.buyContext(me, near)) : 0;
     const cur = hud.get();
-    const alive = me?.alive ?? false;
+    const alive = me ? this.life.alive(me.alive) : false;
     const myTeam = (me?.team ?? 0) as Team;
     const b = this.local.body;
     const players = samePlayers(cur.players, rows) ? cur.players : rows;
@@ -714,7 +722,8 @@ export class Game {
     this.local.phaseEndsAt = s.phaseEndsAt;
     hud.set({
       boysClass: me?.boysClass ?? 1, nextClass: me?.nextClass ?? 1,
-      health: me?.health ?? 0, alive, myTeam,
+      // Until the spawn's patch lands, the spawn's own health (`spawnHealthFor`), not the corpse's 0.
+      health: this.life.pending ? cur.health : me?.health ?? 0, alive, myTeam,
       weapon: this.weapons.weapon, ammo: this.weapons.ammo, reserve: this.weapons.reserve, reloading: this.weapons.reloading,
       phase: s.phase, phaseEndsAt: s.phaseEndsAt, matchEndsAt: s.matchEndsAt, scoreA: s.scoreA, scoreB: s.scoreB, winner: s.winner as Team | -1,
       mode: s.mode ?? "tdm", flags, inFlag, winnerId: s.winnerId ?? "", winnerName: s.winnerName ?? "",
@@ -770,9 +779,11 @@ export class Game {
     const me = this.conn.me();
     const k = e.killer && e.killer !== e.victim ? s.players.get(e.killer) : undefined;
     const killer = killerFrom(e, this.conn.sessionId, k ? { health: k.health, armor: k.armor ?? 0 } : null, this.lifeDamage, now);
-    // The shaved come back on the short timer; a shave converts before the server sets it.
-    const respawnAt = respawnAtFor((s.mode ?? "tdm") as GameMode, s.phase as MatchPhase, now,
-      { shaved: !!e.shave || !!me?.shaved, fade: perkActive(this.myPerks, "fade", this.conn.serverNow()) });
+    // The shaved come back on the short timer; any clippers kill converts before the server sets
+    // it (`hudFeed.shavedAfterKill`), frontal or backstab, and my `shaved` is not replicated yet.
+    const mode = (s.mode ?? "tdm") as GameMode;
+    const respawnAt = respawnAtFor(mode, s.phase as MatchPhase, now,
+      { shaved: shavedAfterKill(mode, s.phase as MatchPhase, e, !!me?.shaved), fade: perkActive(this.myPerks, "fade", this.conn.serverNow()) });
     this.killSeen = true;
     const cam = this.local.camera;
     this.deathCam = startDeathCam({ x: cam.position.x, y: cam.position.y, z: cam.position.z, yaw: cam.rotation.y, pitch: cam.rotation.x }, this.local.body.y, now);
@@ -784,6 +795,23 @@ export class Game {
       alive: false, health: 0, respawnAt, diedAt: now, killer, spectating: null, lateJoin: false,
       killerName: killer ? e.killerName : "", killerWeapon: e.weapon,
     };
+  }
+
+  /**
+   * A death no `S2C.Kill` announced (`LifeSync.patch`): the late joiner the room spawns and puts
+   * down in one tick, a tournament bystander. The body stops, the card stays away (no killer, no
+   * `diedAt`), and `lateJoin` — dead with no kill seen — hands the frame loop to the spectator.
+   */
+  private silentDeath(): void {
+    this.local.alive = false;
+    this.input.clearAll();
+    this.throwing.cancel();
+    this.weapons.cancel();
+    if (this.shopOpen) this.setShopOpen(false, false);
+    this.deathCam = null;
+    this.deathKillerId = "";
+    this.resetSpectate();
+    hud.set({ alive: false, health: 0, respawnAt: 0, diedAt: 0, killer: null, spectating: null });
   }
 
   /** A spawn ends the death: the cam, the spectator and this life's ledger. */

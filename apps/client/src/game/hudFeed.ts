@@ -1,5 +1,5 @@
 import {
-  BOMB, DUEL, MatchPhase, TEAM_NAMES, respawnDelayMs,
+  BOMB, DUEL, MatchPhase, OSTRZYZENI, PLAYER, TEAM_NAMES, boysClass, convertsOnKill, respawnDelayMs,
   type BombSite, type BuyContext, type GameMode, type KillEvent, type Team,
 } from "@frankibarber/shared";
 import type { HudKiller, HudRoundMvp, HudRoundRecord } from "./store";
@@ -89,6 +89,66 @@ export function respawnAtFor(mode: GameMode, phase: MatchPhase, diedAt: number, 
   const warmUp = phase === MatchPhase.Waiting || phase === MatchPhase.Countdown;
   const returns = warmUp || (phase === MatchPhase.Playing && (!ROUND_MODES.has(mode) || (mode === "ostrzyzeni" && o.shaved)));
   return returns ? diedAt + respawnDelayMs(mode, o) : 0;
+}
+
+/**
+ * Am I shaved AFTER this kill — the `shaved` that `respawnAtFor` takes. The room converts BEFORE it
+ * sets the timer (`TdmRoom.kill`), on ANY clippers kill of an unshaved victim in a live round
+ * (`convertsOnKill`), frontal or not; the event's `shave` flag marks only a backstab
+ * (`haircuts.isShave`), and my `shaved` replicates only with the NEXT patch, after the immediate
+ * `S2C.Kill`. So it is decided here, by the room's own rule, from what the event carries.
+ * `shavedBefore` is my side as the state had it when the kill arrived.
+ */
+export function shavedAfterKill(mode: GameMode, phase: MatchPhase, e: Pick<KillEvent, "weapon" | "shave">, shavedBefore: boolean): boolean {
+  if (shavedBefore || !!e.shave) return true;
+  return mode === "ostrzyzeni" && convertsOnKill(e.weapon, false, phase === MatchPhase.Playing);
+}
+
+/**
+ * The health a spawn gives, by the room's rule (`TdmRoom.spawn`): the boys class about to be
+ * played, a chaser's 220, everyone else's 100. `S2C.Spawn` carries no health and the patch that
+ * does comes later; without this the HUD would read 0 HP — and draw the low-health edge — on
+ * every respawn until it arrived.
+ */
+export function spawnHealthFor(mode: GameMode, me: { nextClass?: number; shaved?: boolean } | null | undefined): number {
+  if (mode === "boys") return boysClass(me?.nextClass).health;
+  if (mode === "ostrzyzeni" && me?.shaved) return OSTRZYZENI.shavedHealth;
+  return PLAYER.maxHealth;
+}
+
+/**
+ * Am I alive, as the HUD and the frame loop should believe it (§7 P1 (b), (g), (h)). The room says
+ * it in two channels that do not arrive together: `S2C.Spawn` is sent at once, `alive` rides the
+ * next patch. So:
+ * - from a spawn until the first patch after it, the spawn is the truth (the card must not redraw
+ *   the dead copy for the half second a stale `alive: false` would otherwise hold it up);
+ * - after that the patch is: a patch that says dead while I think I live is a death no
+ *   `S2C.Kill` announced — the late joiner the room spawns and puts down in the same tick
+ *   (`TdmRoom.ts:377-382`), or a tournament bystander; it must spectate, not stand frozen.
+ * `S2C.Kill` itself stays the earliest word of a death: `killed()` ends the life before the patch.
+ */
+export class LifeSync {
+  private settling = false;
+  private life = false;
+  /** Seeds from the state at startup (no spawn to wait for). */
+  constructor(alive = false) { this.life = alive; }
+  /** `S2C.Spawn` for me. */
+  spawned(): void { this.life = true; this.settling = true; }
+  /** `S2C.Kill` with me as the victim. */
+  killed(): void { this.life = false; this.settling = false; }
+  /**
+   * A patch arrived with my replicated `alive`. Returns true when it ended a life no kill
+   * announced (the caller puts the local player down).
+   */
+  patch(serverAlive: boolean): boolean {
+    if (this.settling) { this.settling = false; if (serverAlive) return false; }
+    if (!serverAlive && this.life) { this.life = false; return true; }
+    return false;
+  }
+  /** Alive, for the HUD: the spawn until its patch, then the room's word and mine together. */
+  alive(serverAlive: boolean): boolean { return this.settling ? this.life : this.life && serverAlive; }
+  /** Waiting for the first patch after a spawn. */
+  get pending(): boolean { return this.settling; }
 }
 
 // ------------------------------------------------------------------------------------ (c) killer

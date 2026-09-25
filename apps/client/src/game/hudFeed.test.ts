@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  BOMB, BOMB_SITES, DUEL, MatchPhase, NIGHT_DISTRICT, buyWindowLeft, sitesOf,
+  BOMB, BOMB_SITES, DUEL, MatchPhase, NIGHT_DISTRICT, OSTRZYZENI, PLAYER, boysClass, buyWindowLeft, sitesOf,
   type GameMode, type KillEvent, type Team,
 } from "@frankibarber/shared";
 import {
-  LifeDamage, RoundWatch, buyContextFor, flagNoticeFor, killerFrom, lateJoinFor, nearBombFor, respawnAtFor, siteAt,
+  LifeDamage, LifeSync, RoundWatch, buyContextFor, flagNoticeFor, killerFrom, lateJoinFor, nearBombFor, respawnAtFor, shavedAfterKill, siteAt, spawnHealthFor,
   type RoundView,
 } from "./hudFeed";
+import { deathCard } from "../ui/hud/deathText";
 
 /**
  * The HUD's live state (UI_U_SPEC §7 P1 (a)–(g)): each producer `Game` calls, driven the way the
@@ -73,6 +74,68 @@ describe("hudFeed: respawn", () => {
       expect(respawnAtFor(mode, live, at, no), mode).toBe(0);
       expect(respawnAtFor(mode, MatchPhase.Waiting, at, no), `${mode} warm-up`).toBe(at + 3_200);
     }
+  });
+
+  it("ostrzyżeni: a FRONTAL clippers kill converts, and the card reads WRACASZ Z MASZYNKĄ ZA 3", () => {
+    // The event of a frontal clippers kill: `shave` is set only for a backstab (haircuts.isShave),
+    // and my `shaved` is still false in the state when S2C.Kill arrives (it rides the next patch).
+    const at = 50_000, live = MatchPhase.Playing;
+    const frontal = { weapon: "clippers" as const, shave: undefined };
+    expect(shavedAfterKill("ostrzyzeni", live, frontal, false), "any clippers kill converts (convertsOnKill)").toBe(true);
+    expect(shavedAfterKill("ostrzyzeni", live, { weapon: "clippers", shave: true }, false), "backstab").toBe(true);
+    expect(shavedAfterKill("ostrzyzeni", live, { weapon: "rifle", shave: undefined }, false), "a gun does not shave").toBe(false);
+    expect(shavedAfterKill("ostrzyzeni", live, { weapon: "rifle", shave: undefined }, true), "a chaser stays a chaser").toBe(true);
+    expect(shavedAfterKill("ostrzyzeni", MatchPhase.Prep, frontal, false), "no conversion outside a live round").toBe(false);
+    expect(shavedAfterKill("tdm", live, frontal, false), "only ostrzyżeni converts").toBe(false);
+    const respawnAt = respawnAtFor("ostrzyzeni", live, at, { shaved: shavedAfterKill("ostrzyzeni", live, frontal, false), fade: false });
+    expect(respawnAt).toBe(at + 3_000);
+    const killer = { id: "bot-3", name: "RYSIEK", team: 1 as Team, weapon: "clippers" as const, headshot: false, assists: [], hp: 220, armor: 0, dealt: 18, dealtHits: 1, taken: 100, takenHits: 3, at };
+    const card = deathCard({ killer, respawnAt, now: at + 800, clippers: true, standing: "" });
+    expect(card.live).toBe("WRACASZ Z MASZYNKĄ ZA 3");
+    expect(card.footer, "not the next-round line").toBe("");
+    expect(card.damage, "no damage row on a 3 s card").toBe("");
+  });
+});
+
+describe("hudFeed: alive across the spawn and the patch (LifeSync)", () => {
+  it("respawn: alive from S2C.Spawn on, before the patch says so — no dead copy in between", () => {
+    const life = new LifeSync(true);
+    life.killed();
+    expect(life.alive(true), "S2C.Kill ends the life before the patch").toBe(false);
+    expect(life.patch(false)).toBe(false);
+    expect(life.alive(false)).toBe(false);
+    // TDM respawn: S2C.Spawn arrives at once; until the next patch the state still reads dead.
+    life.spawned();
+    expect(life.alive(false), "the stale alive:false does not bring the card back").toBe(true);
+    expect(life.patch(true), "the patch confirms the spawn").toBe(false);
+    expect(life.alive(true)).toBe(true);
+  });
+
+  it("late join: the patch after the spawn that says dead is a death no kill announced — spectate", () => {
+    // TdmRoom C2S.Ready: spawn() broadcasts S2C.Spawn, then alive = false in the same tick.
+    const life = new LifeSync(false);
+    life.spawned();
+    expect(life.patch(false), "the late joiner is put down").toBe(true);
+    const alive = life.alive(false);
+    expect(alive).toBe(false);
+    expect(lateJoinFor("bomb", MatchPhase.Playing, alive, false), "…and it is a late join, so the bar and the spectator run").toBe(true);
+    expect(life.patch(false), "once").toBe(false);
+    // A tournament bystander (never spawned for this pair) is put down the same way.
+    const bystander = new LifeSync(true);
+    expect(bystander.patch(false)).toBe(true);
+    // An ordinary alive patch never kills.
+    const ok = new LifeSync(true);
+    expect(ok.patch(true)).toBe(false);
+    expect(ok.alive(true)).toBe(true);
+  });
+
+  it("spawn health is the room's (TdmRoom.spawn), so a respawn never reads 0 HP before its patch", () => {
+    expect(spawnHealthFor("tdm", { shaved: false })).toBe(PLAYER.maxHealth);
+    expect(spawnHealthFor("ostrzyzeni", { shaved: true }), "a chaser").toBe(OSTRZYZENI.shavedHealth);
+    expect(spawnHealthFor("ostrzyzeni", { shaved: false })).toBe(PLAYER.maxHealth);
+    expect(spawnHealthFor("boys", { nextClass: 2 }), "the class about to be played").toBe(boysClass(2).health);
+    expect(spawnHealthFor("bomb", null)).toBe(PLAYER.maxHealth);
+    expect(PLAYER.maxHealth).toBeGreaterThan(30); // above Hud's low-health edge (health ≤ 30)
   });
 });
 

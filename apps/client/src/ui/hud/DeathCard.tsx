@@ -1,5 +1,5 @@
 import { memo, useEffect, useReducer, useRef, useState, type ReactElement } from "react";
-import { MODES, MatchPhase, type Team } from "@frankibarber/shared";
+import { MODES, MatchPhase, convertsOnKill, type Team } from "@frankibarber/shared";
 import { useHudSlice, type HudState } from "../../game/store";
 import { BLINK_MS, CARD_IN_MS, CARD_OUT_MS, DEATH_BEAT_MS, spectating as watching } from "../../game/spectate";
 import { standing } from "../Bracket";
@@ -100,7 +100,10 @@ function DeathScreen({ now, out, zone, zoneOut, inBreak }: { now: number; out: b
   const phase = useHudSlice((s) => s.phase);
   const tour = useHudSlice(standingOf);
   const targetTeam = useHudSlice((s) => (s.spectating ? s.players.find((r) => r.id === s.spectating!.id)?.team ?? -1 : -1));
-  const clippers = useHudSlice((s) => s.mode === "ostrzyzeni" && !!s.players.find((r) => r.id === s.myId)?.shaved);
+  // Shaved already, or shaved by this very kill: the room converts on any clippers kill in a live
+  // round (`convertsOnKill`), and my `shaved` only rides the next patch — the card may be up first.
+  const clippers = useHudSlice((s) => s.mode === "ostrzyzeni" && (!!s.players.find((r) => r.id === s.myId)?.shaved
+    || (!!s.killer && convertsOnKill(s.killer.weapon, false, s.phase === MatchPhase.Playing))));
   // The HUD clock ticks at 4 Hz; the card's two edges are woken for exactly.
   useWakeAt(diedAt + CARD_IN_MS);
   useWakeAt(diedAt + CARD_OUT_MS);
