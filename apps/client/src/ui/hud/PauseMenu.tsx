@@ -23,6 +23,10 @@ import type { ZoneProps } from "./types";
  *   it, and the resume prompt „KLIKNIJ, ŻEBY GRAĆ” (zone `prompt`) stands in its place until a
  *   click takes the pointer or Escape opens the menu.
  *
+ * The menu never crosses a match's end (`pausedAfterPhase`): Escape during Ended only frees the
+ * pointer, and a menu open when the match ended is shut on that edge, so the new match starts
+ * unpaused and the resume prompt is the only thing on screen.
+ *
  * It publishes `uiFlags.overlay.pause` while the column shows, which hides the other zones (§4.5).
  */
 export interface PauseMenuProps extends ZoneProps {
@@ -45,6 +49,22 @@ export const NEW_MATCH_QUIET_MS = 2500;
 const CLOSE_MS = 160;
 const SETTINGS_CLOSE_MS = 120;
 
+/**
+ * Pure: whether the menu is still asked for after the phase went `was` → `now`. Any edge into or
+ * out of Ended clears it: the result card has the screen during Ended, and a new match starts
+ * unpaused (§6.1 New match) — a `paused` carried through Ended would open the column (and its
+ * dim) on the first Waiting frame, beside „KLIKNIJ, ŻEBY GRAĆ”.
+ */
+export function pausedAfterPhase(paused: boolean, was: MatchPhase, now: MatchPhase): boolean {
+  if (was === now) return paused;
+  return was === MatchPhase.Ended || now === MatchPhase.Ended ? false : paused;
+}
+
+/** Pure: whether Escape asks for the menu in `phase`. During Ended it only frees the pointer. */
+export function escapeAsksMenu(phase: MatchPhase): boolean {
+  return phase !== MatchPhase.Ended;
+}
+
 export const PauseMenu = memo(function PauseMenu({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, onChooseTeam, dormant }: PauseMenuProps) {
   const pointerLocked = useHudSlice((s) => s.pointerLocked);
   const connected = useHudSlice((s) => s.connected);
@@ -52,6 +72,8 @@ export const PauseMenu = memo(function PauseMenu({ settings, onSettings, onLeave
   const shopOpen = useHudSlice((s) => s.shopOpen);
   const chatOpen = useHudSlice((s) => s.chatOpen);
   const [paused, setPaused] = useState(false);
+  /** The phase `paused` was last squared with; the edge is taken DURING render (see below). */
+  const [seenPhase, setSeenPhase] = useState(phase);
   /** The resume prompt after a new match (see the header). */
   const [prompt, setPrompt] = useState(false);
   /** `performance.now()` until which a free pointer does not arm the menu (see the header). */
@@ -81,7 +103,6 @@ export const PauseMenu = memo(function PauseMenu({ settings, onSettings, onLeave
     lastPhase.current = phase;
     if (was !== MatchPhase.Ended || phase === MatchPhase.Ended) return;
     quietUntil.current = performance.now() + NEW_MATCH_QUIET_MS;
-    setPaused(false);
   }, [phase]);
 
   useEffect(() => {
@@ -95,12 +116,12 @@ export const PauseMenu = memo(function PauseMenu({ settings, onSettings, onLeave
         e.preventDefault();
         setPrompt(false);
         if (paused) void resume();
-        else { onPause(); setPaused(true); }
+        else { onPause(); if (escapeAsksMenu(phase)) setPaused(true); }
       }
     };
     window.addEventListener("keydown", down);
     return () => window.removeEventListener("keydown", down);
-  }, [shopOpen, chatOpen, paused, resume, onPause, dormant]);
+  }, [shopOpen, chatOpen, paused, resume, onPause, dormant, phase]);
 
   // Escape releases pointer lock (browser) → show pause overlay; clicking resume re-locks.
   // The shop and the chat box release / hold the lock on purpose, so they never count as a pause.
@@ -124,7 +145,16 @@ export const PauseMenu = memo(function PauseMenu({ settings, onSettings, onLeave
     if (pointerLocked || shopOpen || chatOpen) setPaused(false);
   }, [dormant, pointerLocked, connected, phase, shopOpen, chatOpen, prompt]);
 
-  const open = paused && phase !== MatchPhase.Ended;
+  // The phase edge is squared with `paused` in the same render (React's "adjust state on a prop
+  // change" pattern), and `open` reads the squared value: an effect would be a frame late, and
+  // that one frame of `open` would already have started the column's 160 ms exit below.
+  let pausedNow = paused;
+  if (seenPhase !== phase) {
+    pausedNow = pausedAfterPhase(paused, seenPhase, phase);
+    setSeenPhase(phase);
+    if (pausedNow !== paused) setPaused(pausedNow);
+  }
+  const open = pausedNow && phase !== MatchPhase.Ended;
   const mount = useKeepMounted(open, CLOSE_MS);
   // Published before paint, so nothing that waits on the pause is a frame late.
   useLayoutEffect(() => { uiFlags.set({ overlay: { pause: open } }); }, [open]);
