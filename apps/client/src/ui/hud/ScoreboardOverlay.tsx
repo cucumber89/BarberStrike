@@ -2,8 +2,8 @@ import { memo, useEffect, useLayoutEffect, useRef, useState, type RefObject } fr
 import { BOMB, MODES, MatchPhase, OSTRZYZENI, type GameMode, type Team } from "@frankibarber/shared";
 import { useHudSlice } from "../../game/store";
 import { BracketPanel } from "../Bracket";
-import { HistoryStrip, Scoreboard, pairOrFinal } from "../Scoreboard";
-import { boardSplit, historySlots, nextDensity, sideNames, type BoardDensity } from "../resultText";
+import { HistoryStrip, Scoreboard } from "../Scoreboard";
+import { boardSides, boardSplit, historySlots, nextDensity, type BoardDensity } from "../resultText";
 import { MODE_TITLE, mapTitle } from "./copy";
 import { fmtClock } from "./format";
 import { clockMs, type PhaseModel } from "./phase";
@@ -139,12 +139,12 @@ function Header({ model, mode, myTeam, bracket }: { model: PhaseModel; mode: Gam
   const scoreB = useHudSlice((s) => s.scoreB);
   const mapId = useHudSlice((s) => s.mapId);
   const serverNow = useHudSlice((s) => s.serverNow);
-  const names = mode === "turniej" ? pairOrFinal(bracket) ?? sideNames(mode) : sideNames(mode);
+  // Names, score and round of ONE pair: between a tournament's pairs, the pair now up at 0 : 0.
+  const { names, score, round: roundOn } = boardSides(mode, bracket, model.betweenPairs, scoreA, scoreB);
   const sides = MODES[mode].teams;
   const mine = myTeam;
-  const score = [scoreA, scoreB];
   const roundOf = mode === "bomb" ? ` / ${BOMB.maxRounds}` : mode === "ostrzyzeni" ? ` / ${OSTRZYZENI.rounds}` : "";
-  const round = model.roundMode && model.round > 0 ? `RUNDA ${model.round}${roundOf}` : "";
+  const round = roundOn && model.roundMode && model.round > 0 ? `RUNDA ${model.round}${roundOf}` : "";
   const clock = model.clockKind === "warmup" ? "ROZGRZEWKA" : model.clockKind === "none" ? "" : fmtClock(clockMs(model, serverNow));
   const map = mapTitle(mapId);
   const side = (t: Team, end: "l" | "r") => (

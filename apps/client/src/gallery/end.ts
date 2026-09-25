@@ -206,14 +206,14 @@ export const pins: PinSet = {
   },
   "match-end-ffa": {
     // No score line: the podium is FFA's score (#1 is the winner), and I am 7th, so my place shows.
-    expect: ["[data-testid=result][data-outcome=loss][data-stage=C]", ".result-top [data-testid=result-score] [data-testid=podium]", ".result-top [data-testid=placement]", ...KAD],
+    expect: ["[data-testid=result][data-outcome=loss][data-stage=C]", ".result-top [data-testid=result-score] [data-testid=podium]", ".result-top [data-testid=placement]", "[data-testid=podium] .podium-step.r1 .podium-star", ...KAD],
     absent: [".result-summary [data-testid=podium]"],
     caseText: ["MIEJSCE #7 Z 10", "xXPiotrekXx", "Pierwszy do 30 zabójstw"],
     textAbsent: [...GONE, { text: "bierze tę noc", zone: "result" }],
     zoneWords: { result: C_CONTINUOUS },
   },
   "match-end-turniej": {
-    expect: ["[data-testid=result][data-outcome=loss][data-stage=C]", "[data-testid=result-tab-bracket]", "[data-testid=podium] .podium-step.r1"],
+    expect: ["[data-testid=result][data-outcome=loss][data-stage=C]", "[data-testid=result-tab-bracket]", "[data-testid=podium] .podium-step.r1 .podium-star"],
     caseText: ["ZDZICHU wygrał finał drabinki", "Kowal 4 — 6 ZDZICHU", "DRABINKA"],
     // The fixture carries the final's round reason (ELIMINATED): the card names the final, not the round.
     textAbsent: [...GONE, { text: "w ostatniej rundzie", zone: "result" }, { text: "Przeciwnik wyeliminowany", zone: "result" }],

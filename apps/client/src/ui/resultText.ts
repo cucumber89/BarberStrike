@@ -203,16 +203,39 @@ export function keyStats(mode: GameMode, row: ScoreRow | undefined): KeyStat[] {
   return (objective ? [objective, k, a, d] : [k, a, d]).slice(0, 3);
 }
 
-/** One step of the podium: who, the number that ranked them, their side (team modes), and whether it is me. */
-export interface PodiumStep { id: string; name: string; value: string; rank: 1 | 2 | 3; me: boolean; team: Team | null }
+/**
+ * One step of the podium: who, the number that ranked them, their side (team modes), whether it is
+ * me, and whether it carries the ★. `rank` is shared by a dead heat (1, 1, 3), so a draw the server
+ * ruled (FFA or gun game level on both of its keys, `winnerId` "") crowns nobody.
+ */
+export interface PodiumStep { id: string; name: string; value: string; rank: 1 | 2 | 3; me: boolean; team: Team | null; star: boolean }
 
-const byScore = (a: ScoreRow, b: ScoreRow): number => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths;
-const byKills = (a: ScoreRow, b: ScoreRow): number => b.kills - a.kills || a.deaths - b.deaths;
+/**
+ * The server's own order (TdmRoom.endMatch): FFA by kills, then score; gun game, Ostrzyżeni and
+ * every points board by score, then kills. Two rows level on both keys are a dead heat — the
+ * server's draw. Deaths only settle the ORDER on screen of a heat, never its place.
+ */
+const scoreKeys = (r: ScoreRow): [number, number] => [r.score, r.kills];
+const killKeys = (r: ScoreRow): [number, number] => [r.kills, r.score];
+export const rankKeys = (mode: GameMode): ((r: ScoreRow) => [number, number]) => (mode === "ffa" ? killKeys : scoreKeys);
+export const rankCompare = (mode: GameMode) => {
+  const k = rankKeys(mode);
+  return (a: ScoreRow, b: ScoreRow): number => {
+    const [a1, a2] = k(a), [b1, b2] = k(b);
+    return b1 - a1 || b2 - a2 || a.deaths - b.deaths;
+  };
+};
+const byScore = rankCompare("tdm");
 
 /** Everybody, best first, by the number the podium shows for the mode (turniej by the bracket). */
-export function ranking(c: ResultCtx): { row: ScoreRow; value: number }[] {
-  if (c.mode === "ffa") return [...c.players].sort(byKills).map((row) => ({ row, value: row.kills }));
-  if (c.mode === "gungame") return [...c.players].sort(byScore).map((row) => ({ row, value: Math.min(GUN_GAME.ladder.length, row.score) }));
+export function ranking(c: ResultCtx): { row: ScoreRow; value: number; place: number }[] {
+  return placed(c, orderRows(c));
+}
+
+function orderRows(c: ResultCtx): { row: ScoreRow; value: number; key: number[] }[] {
+  const keyed = (row: ScoreRow, value: number, lead: number[] = []) => ({ row, value, key: [...lead, ...rankKeys(c.mode)(row)] });
+  if (c.mode === "ffa") return [...c.players].sort(rankCompare("ffa")).map((row) => keyed(row, row.kills));
+  if (c.mode === "gungame") return [...c.players].sort(byScore).map((row) => keyed(row, Math.min(GUN_GAME.ladder.length, row.score)));
   if (c.mode === "turniej") {
     // The champion, the finalist, then everyone knocked out earlier by the rounds they took in the
     // pair that knocked them out — all of it read off the bracket the server replicates.
@@ -227,27 +250,72 @@ export function ranking(c: ResultCtx): { row: ScoreRow; value: number }[] {
         if (!prev || prev.depth <= m.round) out.set(w, { depth: m.round + 1, took: tw });
       });
       const at = (r: ScoreRow) => out.get(r.name) ?? { depth: -1, took: 0 };
-      return [...c.players].sort((a, b) => at(b).depth - at(a).depth || at(b).took - at(a).took || byScore(a, b)).map((row) => ({ row, value: at(row).took }));
+      return [...c.players].sort((a, b) => at(b).depth - at(a).depth || at(b).took - at(a).took || byScore(a, b))
+        .map((row) => keyed(row, at(row).took, [at(row).depth, at(row).took]));
     }
   }
-  return [...c.players].sort(byScore).map((row) => ({ row, value: row.score }));
+  return [...c.players].sort(byScore).map((row) => keyed(row, row.score));
 }
 
-/** The top three (fewer when fewer played), #1 first. */
+/**
+ * Places, competition style: a row level with the one above it on every key shares its place.
+ * Where the server named a winner (`winnerId`) that row stands first and alone, whatever the rows
+ * say — the card never crowns somebody the server did not.
+ */
+function placed(c: ResultCtx, rows: { row: ScoreRow; value: number; key: number[] }[]): { row: ScoreRow; value: number; place: number }[] {
+  const named = MODES[c.mode].winner === "player" && c.winnerId !== "" ? rows.findIndex((r) => r.row.id === c.winnerId) : -1;
+  if (named > 0) rows.unshift(...rows.splice(named, 1));
+  const same = (x: number[], y: number[]) => x.length === y.length && x.every((v, i) => v === y[i]);
+  const out: { row: ScoreRow; value: number; place: number }[] = [];
+  rows.forEach((r, i) => {
+    const prev = rows[i - 1];
+    const tied = i > 0 && !(i === 1 && named >= 0) && same(prev.key, r.key);
+    out.push({ row: r.row, value: r.value, place: tied ? out[i - 1].place : i + 1 });
+  });
+  return out;
+}
+
+/** True when the server ruled no single winner for the match (a player mode's dead heat). */
+const noChampion = (c: ResultCtx): boolean => MODES[c.mode].winner === "player" && c.mode !== "turniej" && c.winnerId === "";
+
+/** The top three (fewer when fewer played), #1 first; a shared place shares its step height, and a draw has no ★. */
 export function podium(c: ResultCtx): PodiumStep[] {
   // A tournament's rows sit on team 0/1 only while their pair plays: no side to show at the end.
   const sided = MODES[c.mode].teams && c.mode !== "turniej";
-  return ranking(c).slice(0, 3).map(({ row, value }, i) => ({
-    id: row.id, name: row.name, value: String(value), rank: (i + 1) as 1 | 2 | 3, me: row.id === c.myId, team: sided ? row.team : null,
+  const all = ranking(c);
+  const top = all.slice(0, 3);
+  const sole = top.length > 0 && top.filter((r) => r.place === 1).length === 1;
+  return top.map(({ row, value, place }) => ({
+    id: row.id, name: row.name, value: String(value), rank: Math.min(3, place) as 1 | 2 | 3, me: row.id === c.myId, team: sided ? row.team : null,
+    star: place === 1 && sole && !noChampion(c),
   }));
 }
 
-/** „MIEJSCE #n Z m” (§5.2 #62), in FFA and gun game only, and only when I am off the podium. */
+/** „MIEJSCE #n Z m” (§5.2 #62), in FFA and gun game only, and only when I am off the podium; n is my shared place. */
 export function placement(c: ResultCtx): string | null {
   if (hasScoreLine(c.mode)) return null;
   const all = ranking(c);
   const i = all.findIndex((r) => r.row.id === c.myId);
-  return i >= 3 ? `MIEJSCE #${i + 1} Z ${all.length}` : null;
+  return i >= 3 ? `MIEJSCE #${all[i].place} Z ${all.length}` : null;
+}
+
+/**
+ * The Tab board header's two ends: names and scores that belong to the SAME pair. In a tournament
+ * the break between pairs is the one moment they part: the server has moved the bracket on to the
+ * next pair (`finishPair`) but leaves the finished pair's `scoreA`/`scoreB` and round until the
+ * next `startPair` resets them. There the ends read the pair now up, off the bracket (0 : 0), and
+ * `round` is false: the round belongs to the pair that is over. Once the draw is done, the final.
+ */
+export function boardSides(mode: GameMode, bracket: string, betweenPairs: boolean, scoreA: number, scoreB: number):
+  { names: readonly [string, string]; score: readonly [number, number]; round: boolean } {
+  if (mode !== "turniej") return { names: sideNames(mode), score: [scoreA, scoreB], round: true };
+  const view = parseBracket(bracket);
+  const now = view?.matches[view.at];
+  const pair = now && now.a && now.b ? now : null;
+  const last = view?.matches[view.matches.length - 1];
+  const names = pair ? [pair.a, pair.b] as const : last && last.a && last.b ? [last.a, last.b] as const : sideNames(mode);
+  if (betweenPairs && pair) return { names, score: [pair.scoreA, pair.scoreB], round: false };
+  return { names, score: [scoreA, scoreB], round: true };
 }
 
 /** „+790 XP · POZIOM 4” — the XP and the level it left you on. */

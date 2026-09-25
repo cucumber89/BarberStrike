@@ -4,7 +4,7 @@ import type { ScoreRow } from "../game/store";
 import type { MatchReward } from "../game/progression/profile";
 import { keepMountedState } from "./hud/useKeepMounted";
 import {
-  BOARD_DENSITY_MAX, RESULT_EXIT_MS, RESULT_VIEW0, STAGE_SECONDS, boardSplit, keyStats, matchOutcome, matchWhy, nextDensity, placement, podium,
+  BOARD_DENSITY_MAX, RESULT_EXIT_MS, RESULT_VIEW0, STAGE_SECONDS, boardSides, boardSplit, keyStats, matchOutcome, matchWhy, nextDensity, placement, podium,
   historySlots, resultInput, resultStage, resultWhy, scoreLine, splitColumns, stageC, stageCWords, topReward, verdict, verdictWhy, verdictWords,
   type BoardDensity, type Outcome, type ResultCtx,
 } from "./resultText";
@@ -142,6 +142,63 @@ describe("stage C: podium, placement, stats", () => {
     expect(placement(base({ mode: "gungame", players: ten.map((r, i) => ({ ...r, score: 14 - i })) }))).toBe("MIEJSCE #7 Z 10");
     // Team modes have a score line and no placement.
     expect(placement(base({ players: ten }))).toBeNull();
+  });
+});
+
+describe("the podium follows the server's ruling (TdmRoom.endMatch)", () => {
+  // A kills tie at time-out: the server's FFA order is kills, then SCORE (TdmRoom.ts:1938) — not deaths.
+  const tie = [
+    row("me", 0, { name: "Kowal", kills: 12, score: 1300, deaths: 9 }),
+    row("z", 0, { name: "ZDZICHU", kills: 12, score: 1100, deaths: 2 }),
+    row("r", 0, { name: "RYSIEK", kills: 8, score: 900 }),
+  ];
+  const ffa = (over: Partial<ResultCtx> = {}) => base({ mode: "ffa", winnerId: "me", winnerName: "Kowal", players: tie, ...over });
+
+  it("an FFA kills tie goes to the higher score, as the server rules it: verdict, title and ★ #1 agree", () => {
+    const c = ffa();
+    expect(verdict(c)).toMatchObject({ title: "ZWYCIĘSTWO", score: "★ Kowal" });
+    expect(stageC(c, null, 0).title).toBe("ZWYCIĘSTWO");
+    expect(podium(c).map((p) => [p.rank, p.name, p.value, p.star])).toEqual([[1, "Kowal", "12", true], [2, "ZDZICHU", "12", false], [3, "RYSIEK", "8", false]]);
+    // The same order places me off the podium: ZDZICHU's fewer deaths do not lift him over me.
+    const crowd = [...tie, row("a", 0, { kills: 20 }), row("b", 0, { kills: 15 }), row("c", 0, { kills: 14 })];
+    expect(placement(ffa({ winnerId: "a", winnerName: "A", players: crowd }))).toBe("MIEJSCE #4 Z 6");
+    expect(placement(ffa({ winnerId: "a", winnerName: "A", myId: "z", players: crowd }))).toBe("MIEJSCE #5 Z 6");
+  });
+
+  it("the ★ stands on whoever the server named, even when the rows would say otherwise", () => {
+    const c = ffa({ winnerId: "z", winnerName: "ZDZICHU" });
+    expect(podium(c)[0]).toMatchObject({ name: "ZDZICHU", rank: 1, star: true });
+    expect(podium(c)[1]).toMatchObject({ name: "Kowal", rank: 2, star: false });
+  });
+
+  it("a draw the server ruled (level on kills AND score, winnerId '') shares first place and crowns nobody", () => {
+    const level = tie.map((r) => (r.id === "r" ? r : { ...r, score: 1200 }));
+    const c = ffa({ winnerId: "", winnerName: "", players: level });
+    expect(verdict(c).title).toBe("REMIS");
+    expect(podium(c).map((p) => [p.rank, p.value, p.star])).toEqual([[1, "12", false], [1, "12", false], [3, "8", false]]);
+    const gun = base({ mode: "gungame", winnerId: "", winnerName: "", players: level.map((r) => ({ ...r, score: r.id === "r" ? 7 : 10, kills: r.id === "r" ? 7 : 12 })) });
+    expect(stageC(gun, null, 0).title).toBe("REMIS");
+    expect(podium(gun).map((p) => [p.rank, p.value, p.star])).toEqual([[1, "10", false], [1, "10", false], [3, "7", false]]);
+    // Ostrzyżeni names a player too: level on points and kills, no ★.
+    expect(podium(base({ mode: "ostrzyzeni", winnerId: "", players: level })).some((p) => p.star)).toBe(false);
+    // A sole winner keeps it: team modes crown the best player of the match.
+    expect(podium(base({ players: tie }))[0]).toMatchObject({ name: "Kowal", rank: 1, star: true });
+    // The tournament's champion comes off the bracket.
+    const entrants = [row("me", 0, { name: "Kowal" }), row("p5", 1, { name: "xXPiotrekXx" }), row("z", 0, { name: "ZDZICHU" }), row("r", 1, { name: "RYSIEK" })];
+    expect(podium(base({ mode: "turniej", winnerId: "z", winnerName: "ZDZICHU", players: entrants, bracket: FINISHED })).map((p) => p.star)).toEqual([true, false, false]);
+  });
+});
+
+describe("the Tab board header names, scores and rounds one pair", () => {
+  const TO_FINAL = "4|2;Kowal|xXPiotrekXx|6|3|a;ZDZICHU|RYSIEK|6|4|a;Kowal|ZDZICHU|0|0|-";
+  const SEMI2 = "4|1;Kowal|xXPiotrekXx|6|3|a;ZDZICHU|RYSIEK|4|3|-;Kowal||0|0|-";
+  it("between pairs it reads the pair now up at 0 : 0 and no round (the state still holds the last pair's 6 : 4, round 10)", () => {
+    expect(boardSides("turniej", TO_FINAL, true, 6, 4)).toEqual({ names: ["Kowal", "ZDZICHU"], score: [0, 0], round: false });
+  });
+  it("while a pair plays it reads the live score and round", () => {
+    expect(boardSides("turniej", SEMI2, false, 5, 4)).toEqual({ names: ["ZDZICHU", "RYSIEK"], score: [5, 4], round: true });
+    expect(boardSides("turniej", FINISHED, false, 4, 6)).toEqual({ names: ["Kowal", "ZDZICHU"], score: [4, 6], round: true });
+    expect(boardSides("bomb", "", false, 3, 2)).toMatchObject({ score: [3, 2], round: true });
   });
 });
 

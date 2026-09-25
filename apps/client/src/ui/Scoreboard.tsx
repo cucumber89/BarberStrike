@@ -1,10 +1,10 @@
 import React from "react";
-import { boysClass, MODES, parseBracket, type GameMode, type Team } from "@frankibarber/shared";
+import { boysClass, MODES, type GameMode, type Team } from "@frankibarber/shared";
 import type { ScoreRow } from "../game/store";
 import { IconSkull } from "./hud/icons";
 import { money } from "./hud/format";
 import { pairNames } from "./Bracket";
-import { ranking, shavesOf, sideNames, splitColumns, type HistoryKind, type HistorySlot } from "./resultText";
+import { rankCompare, ranking, shavesOf, sideNames, splitColumns, type HistoryKind, type HistorySlot } from "./resultText";
 
 /**
  * A straight razor, drawn rather than spelled.
@@ -62,8 +62,9 @@ export function HeadShot({ className, title }: { className?: string; title?: str
 interface Table { key: string; cls: string; head: string; rows: ScoreRow[]; mine: boolean }
 
 /** Best first: points, then kills (the table's order in every team mode, and the podium's). */
-const byScore = (a: ScoreRow, b: ScoreRow): number => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths;
-const byKills = (a: ScoreRow, b: ScoreRow): number => b.kills - a.kills || a.deaths - b.deaths;
+// The server's end-of-match order (resultText.rankCompare): FFA by kills then score, else score then kills.
+const byScore = rankCompare("tdm");
+const byKills = rankCompare("ffa");
 
 function tablesOf(rows: readonly ScoreRow[], myId: string, myTeam: Team, mode: GameMode, bracket: string, split: boolean): Table[] {
   if (mode === "turniej") {
@@ -206,13 +207,4 @@ export function HistoryStrip({ slots, mode }: { slots: readonly HistorySlot[]; m
       ))}
     </ol>
   );
-}
-
-/** Two names of a finished or running tournament's pair, for a header that has no teams. */
-export function pairOrFinal(bracket: string): readonly [string, string] | null {
-  const now = pairNames(bracket);
-  if (now) return now;
-  const view = parseBracket(bracket);
-  const last = view?.matches[view.matches.length - 1];
-  return last && last.a && last.b ? [last.a, last.b] : null;
 }
