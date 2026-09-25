@@ -1,130 +1,121 @@
 import React, { memo } from "react";
-import { DUEL, MATCH, MODES, MatchPhase, OSTRZYZENI } from "@frankibarber/shared";
-import { useHudSlice, type HudState } from "../../game/store";
-import { roundReasonText } from "../resultText";
-import { fmtTime, sideNamesOf } from "./TopStrip";
+import { scoreLimitFor, type BombData, type Team } from "@frankibarber/shared";
+import { useHudSlice, type HudState, type ScoreRow } from "../../game/store";
+import { modeGoal } from "./copy";
+import { sideNamesOf } from "./TopStrip";
+import type { PhaseModel } from "./phase";
 import type { ZoneProps } from "./types";
 
 /**
- * Drop U, P0 (seed for P2): the mode line under the strip (zone `top-line`) — the bomb round's
- * line, Ostrzyżeni's and the 1 v 1's — and the mode's objective in the warm-up and the countdown.
- * Moved out of `Hud.tsx` verbatim (docs/UI_U_SPEC.md §7 P0 0d, §4.2). `ModeLine` and `Objective`
- * mount at the two places the lines had in the HUD's paint order.
+ * Drop U, P2: the mode line under the strip (zone `top-line`, docs/UI_U_SPEC.md §4.2, §5.3) — at
+ * most six words at t2 that say what to do NOW. Everything else the old lines printed has its own
+ * place: the round and the side are on the strip, the buy window in the wallet, the round's end on
+ * the banner, my own plant or defuse in the action slot.
+ *
+ * The testid follows the mode: `objective` in the warm-up and the countdown, `bomb-hud` in bomb,
+ * `duel-line` in duel and turniej (match point only), `mode-line` in ostrzyżeni and a TDM wave's
+ * freeze. Nothing is rendered in a break, between pairs or in Ended (§8.4); while I am dead or an
+ * overlay is up, top.css hides it (§4.5).
+ *
+ * `ModeLine` and `Objective` stay two components because `Hud.tsx` (frozen) mounts both: the first
+ * says the round's line, the second the goal before the match starts.
  */
 
-const inRound = (h: HudState): boolean => h.phase === MatchPhase.Playing || h.phase === MatchPhase.Prep;
-const timeLeftOf = (h: HudState): number => (h.phaseEndsAt ? h.phaseEndsAt - h.serverNow : 0);
+/** What the line says, in which testid and tone; `bar` is a teammate's or enemy's plant/defuse (0..1). */
+export interface ModeLineView {
+  testid: "objective" | "bomb-hud" | "duel-line" | "mode-line";
+  text: string;
+  /** `warn`: match point (amber); `danger`: the bomb is planted (red); "" plain. */
+  tone: "" | "warn" | "danger";
+  bar: number | null;
+  /** The bar's colour: whose hands the bomb is in. */
+  barTeam: Team | -1;
+  /** A teammate's nick that opens the line („Kasia_Brzytwa ROZBRAJA”): drawn in its own case and tracking. */
+  nick: string;
+}
 
-export const ModeLine = memo(function ModeLine(_props: ZoneProps) {
-  const bomb = useHudSlice((s) => !!s.bomb && inRound(s));
-  const infection = useHudSlice((s) => s.mode === "ostrzyzeni" && inRound(s));
-  const duel = useHudSlice((s) => s.mode === "duel" && inRound(s));
-  return <>{bomb && <BombLine />}{infection && <InfectionLine />}{duel && <DuelLine />}</>;
+type LineInput = Pick<HudState, "mode" | "bomb" | "myId" | "myTeam" | "players" | "bracket" | "connected">;
+
+/** Pure: the mode line for this moment, or null when the moment has no line. */
+export function modeLineOf(model: PhaseModel, h: LineInput): ModeLineView | null {
+  const line = (testid: ModeLineView["testid"], text: string, tone: ModeLineView["tone"] = "", bar: number | null = null, barTeam: Team | -1 = -1, nick = ""): ModeLineView =>
+    ({ testid, text, tone, bar, barTeam, nick });
+  const { mode } = h;
+  if (model.moment === "warmup" || model.moment === "countdown") {
+    // Domination and the Boys: the flag row IS the objective (its three letters would take the
+    // line over its six words), and the goal's number is on the strip („DO 100”).
+    if (!h.connected || mode === "dom" || mode === "boys") return null;
+    return line("objective", modeGoal(mode, scoreLimitFor(mode, h.players.length)));
+  }
+  if (model.moment !== "freeze" && model.moment !== "live") return null;
+  if (mode === "bomb") return model.moment === "live" && h.bomb ? bombLine(h.bomb, h, line) : null;
+  if (mode === "duel" || mode === "turniej") {
+    if (model.matchPoint < 0) return null;
+    if (model.matchPoint === 2) return line("duel-line", "MECZBOL DLA OBU", "warn");
+    return line("duel-line", `MECZBOL · ${sideNamesOf(mode, h.bracket)[model.matchPoint as Team]}`, "warn");
+  }
+  if (mode === "ostrzyzeni") return line("mode-line", model.mySide === "ostrzyzony" ? "GOŃ I GOL" : "UCIEKAJ PRZED MASZYNKĄ");
+  if (model.moment === "freeze") return line("mode-line", "ZAMROŻENIE");
+  return null;
+}
+
+/** Every live bomb state today's HUD prints (§5.3), each in at most six words. */
+function bombLine(b: BombData, h: LineInput, line: (t: ModeLineView["testid"], s: string, tone?: ModeLineView["tone"], bar?: number | null, barTeam?: Team | -1, nick?: string) => ModeLineView): ModeLineView {
+  const attack = b.attackTeam === h.myTeam;
+  const planted = b.stage === "planted";
+  // Somebody else's plant or defuse: who, what, and how far (Principle 14 keeps the enemy's too).
+  if (b.actor && b.actor !== h.myId) {
+    const actor: ScoreRow | undefined = h.players.find((r) => r.id === b.actor);
+    const actorTeam = (planted ? 1 - b.attackTeam : b.attackTeam) as Team;
+    const nick = actorTeam === h.myTeam ? (actor?.name ?? "") : "";
+    const who = actorTeam === h.myTeam ? nick : "WRÓG";
+    return line("bomb-hud", `${who} ${planted ? "ROZBRAJA" : "PODKŁADA"}`.trim(), planted ? "danger" : "", Math.max(0, Math.min(1, b.progress)), actorTeam, nick);
+  }
+  if (planted) return line("bomb-hud", `ŁADUNEK NA ${b.site} — ${attack ? "PILNUJ" : "ROZBRÓJ [T]"}`, "danger");
+  if (b.carrier === h.myId) return line("bomb-hud", "MASZ ŁADUNEK");
+  if (!attack) return line("bomb-hud", "BROŃ PUNKTÓW A / B");
+  if (b.stage === "dropped") return line("bomb-hud", "ŁADUNEK UPUSZCZONY — PODNIEŚ GO");
+  return line("bomb-hud", "OSŁANIAJ NIOSĄCEGO ŁADUNEK");
+}
+
+/** The line itself: one row at t2, a 3 px bar under it while somebody else plants or defuses. */
+function Line({ view }: { view: ModeLineView }) {
+  return (
+    <div className={`mode-line${view.testid === "bomb-hud" ? " bomb-hud" : ""}${view.tone === "danger" ? " armed" : ""}${view.tone === "warn" ? " warn" : ""}`}
+      data-zone="top-line" data-testid={view.testid}>
+      <span className="ml-text">{view.nick && view.text.startsWith(view.nick)
+        ? <><span className="ml-nick">{view.nick}</span>{view.text.slice(view.nick.length)}</>
+        : view.text}</span>
+      {view.bar !== null && <i className={`ml-bar t${view.barTeam}`} style={{ "--v": view.bar } as React.CSSProperties} />}
+    </div>
+  );
+}
+
+const lineInput = (s: HudState): LineInput => s;
+
+export const ModeLine = memo(function ModeLine({ model }: ZoneProps) {
+  const view = useLineView(model);
+  if (!view || view.testid === "objective") return null;
+  return <Line view={view} />;
 });
 
-function BombLine() {
-  const bomb = useHudSlice((s) => s.bomb);
-  const phase = useHudSlice((s) => s.phase);
-  const myTeam = useHudSlice((s) => s.myTeam);
-  const myId = useHudSlice((s) => s.myId);
-  const alive = useHudSlice((s) => s.alive);
-  const buyWindowLeft = useHudSlice((s) => s.buyWindowLeft);
-  const timeLeft = useHudSlice(timeLeftOf);
-  if (!bomb) return null;
-  return (
-    <div className={`bomb-hud ${bomb.stage === "planted" ? "armed" : ""}`} data-zone="top-line" data-testid="bomb-hud">
-      <b>RUNDA {bomb.round} / 12 · {bomb.attackTeam === myTeam ? "ATAK" : "OBRONA"} · DO 7</b>
-      {/* The objective ALWAYS, and while CS's buy tail runs it carries that too — the shop being
-          open a few seconds into the round is no use to anybody who does not know it is, and the
-          first five seconds of a round is exactly when a player needs to be told their job. */}
-      <span>{bomb.stage === "buy" ? `${bomb.round === 7 ? "ZMIANA STRON · " : ""}B: SKLEP · START ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
-        : phase === MatchPhase.Prep ? `${roundReasonText(bomb.result)} · NASTĘPNA RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`
-        : (bomb.stage === "planted" ? `ŁADUNEK NA ${bomb.site} · ${bomb.attackTeam === myTeam ? "PILNUJ ŁADUNKU" : "PRZYTRZYMAJ T, ŻEBY ROZBROIĆ"}`
-          : bomb.carrier === myId ? "MASZ ŁADUNEK · PRZYTRZYMAJ T NA A / B, ŻEBY PODŁOŻYĆ"
-          : bomb.attackTeam !== myTeam ? "BROŃ PUNKTÓW A / B"
-          : bomb.stage === "dropped" ? "ŁADUNEK UPUSZCZONY · PODEJDŹ, ŻEBY PODNIEŚĆ" : "OSŁANIAJ NIOSĄCEGO ŁADUNEK")
-          + (alive && buyWindowLeft > 0 ? ` · SKLEP (B) JESZCZE ${Math.max(0, Math.ceil(buyWindowLeft / 1000))}s` : "")}</span>
-      {bomb.actor && <><div className="bomb-progress"><i style={{ "--v": bomb.progress } as React.CSSProperties} /></div><small>{bomb.actor === myId ? "TRZYMAJ T · NIE RUSZAJ SIĘ" : bomb.stage === "planted" ? "ROZBRAJANIE" : "PODKŁADANIE"}</small></>}
-    </div>
-  );
-}
-
-/** Ostrzyżeni (drop D): the round, how many heads are left, and which side the clock favours. */
-function InfectionLine() {
-  const phase = useHudSlice((s) => s.phase);
-  const round = useHudSlice((s) => s.round);
-  const players = useHudSlice((s) => s.players);
-  const myId = useHudSlice((s) => s.myId);
-  const timeLeft = useHudSlice(timeLeftOf);
-  // The sides are the teams, so the only new reads are who is still unshaved (counted from the
-  // scoreboard rows the HUD already has) and which side I am on.
-  const meShaved = !!players.find((r) => r.id === myId)?.shaved;
-  const unshavedLeft = players.filter((r) => r.connected && r.alive && !r.shaved).length;
-  return (
-    <div className={`bomb-hud infection ${meShaved ? "shaved" : ""}`} data-zone="top-line" data-testid="infection-line">
-      <b>RUNDA {Math.min(OSTRZYZENI.rounds, round + 1)} / {OSTRZYZENI.rounds} · {unshavedLeft} NIEOSTRZYŻONYCH · {fmtTime(timeLeft)}</b>
-      <span>{phase === MatchPhase.Prep
-        ? (meShaved ? "OSTRZYSZ ICH ZA CHWILĘ — maszynka w dłoni" : `PRZYGOTOWANIE · B: SKLEP · RUNDA ZA ${Math.max(0, Math.ceil(timeLeft / 1000))}s`)
-        : meShaved ? "JESTEŚ OSTRZYŻONY — goń ich z maszynką"
-        : "PRZEŻYJ — nie daj się ostrzyc"}</span>
-    </div>
-  );
-}
-
-/**
- * GÓRA's 1 v 1: the round number, the score, the clock; one life a round. Two different Preps run
- * through here — the fifteen-second FREEZE you buy in, and the three-second BREAK after a round —
- * and they used to print the same words ("B: SKLEP · RUNDA ZA 3s") while the shop was shut in one
- * of them. What tells them apart is the buy window itself, which the HUD already knows:
- * `buyWindowLeft`.
- */
-function DuelLine() {
-  const mode = useHudSlice((s) => s.mode);
-  const phase = useHudSlice((s) => s.phase);
-  const round = useHudSlice((s) => s.round);
-  const myTeam = useHudSlice((s) => s.myTeam);
-  const alive = useHudSlice((s) => s.alive);
-  const buyWindowLeft = useHudSlice((s) => s.buyWindowLeft);
-  const scoreA = useHudSlice((s) => s.scoreA);
-  const scoreB = useHudSlice((s) => s.scoreB);
-  const roundResult = useHudSlice((s) => s.roundResult);
-  const bracket = useHudSlice((s) => s.bracket);
-  const timeLeft = useHudSlice(timeLeftOf);
-  const sideNames = sideNamesOf(mode, bracket);
-  const secs = Math.max(0, Math.ceil(timeLeft / 1000));
-  const buying = buyWindowLeft > 0 && alive;
-  const buySecs = buyWindowLeft === Infinity ? null : Math.max(0, Math.ceil(buyWindowLeft / 1000));
-  const mine = myTeam === 0 ? scoreA : scoreB, theirs = myTeam === 0 ? scoreB : scoreA;
-  const matchPoint = Math.max(mine, theirs) === DUEL.wins - 1;
-  const swapping = round > 0 && round % DUEL.halfRounds === 0;
-  return (
-    <div className="bomb-hud duel" data-zone="top-line" data-testid="duel-line">
-      <b>RUNDA {round + 1} · {sideNames[myTeam]} {mine} : {theirs} · DO {DUEL.wins}{matchPoint ? (mine > theirs ? " · MECZBOL" : " · BRONISZ MECZBOLU") : ""} · {fmtTime(timeLeft)}</b>
-      <span>{phase === MatchPhase.Prep
-        ? buying
-          ? `${swapping ? "ZMIANA STRON · " : ""}ZAMROŻENIE · B: SKLEP · START ZA ${secs}s`
-          : `${roundResult ? `${roundReasonText(roundResult)} · ` : ""}NASTĘPNA RUNDA ZA ${secs}s`
-        : buying
-          // CS's buy time runs past the freeze; say so, or nobody uses it.
-          ? `SKLEP OTWARTY JESZCZE ${buySecs}s · B, ŻEBY DOKUPIĆ`
-          : "JEDNO ŻYCIE · po czasie wygrywa więcej zdrowia"}</span>
-    </div>
-  );
-}
-
-/**
- * The mode's goal in one sentence, while there is nothing else to read: the warm-up and the
- * countdown. Once the match runs, the mode's own line (bomb, rounds, flags) takes over.
- */
-export const Objective = memo(function Objective(_props: ZoneProps) {
-  const phase = useHudSlice((s) => s.phase);
-  const connected = useHudSlice((s) => s.connected);
-  const mode = useHudSlice((s) => s.mode);
-  if (!((phase === MatchPhase.Waiting || phase === MatchPhase.Countdown) && connected)) return null;
-  return (
-    <div className="center-sub objective" data-zone="top-line" data-testid="objective">
-      {phase === MatchPhase.Waiting && <b>ROZGRZEWKA · czekamy na graczy (potrzeba {MATCH.minPlayers})</b>}
-      <span>{MODES[mode].objective}</span>
-    </div>
-  );
+/** The goal before the match starts (the warm-up and the countdown), in the same place and look. */
+export const Objective = memo(function Objective({ model }: ZoneProps) {
+  const view = useLineView(model);
+  if (!view || view.testid !== "objective") return null;
+  return <Line view={view} />;
 });
+
+/**
+ * The view, selected as one primitive key (so the line re-renders only when its words, tone or bar
+ * change — a new object per store commit would loop, §7.0) and rebuilt from it.
+ */
+function useLineView(model: PhaseModel): ModeLineView | null {
+  const key = useHudSlice((s) => {
+    const v = modeLineOf(model, lineInput(s));
+    return v ? `${v.testid}\u0001${v.text}\u0001${v.tone}\u0001${v.bar ?? ""}\u0001${v.barTeam}\u0001${v.nick}` : "";
+  });
+  if (!key) return null;
+  const [testid, text, tone, bar, barTeam, nick] = key.split("\u0001");
+  return { testid: testid as ModeLineView["testid"], text, tone: tone as ModeLineView["tone"], bar: bar === "" ? null : Number(bar), barTeam: Number(barTeam) as Team | -1, nick };
+}
