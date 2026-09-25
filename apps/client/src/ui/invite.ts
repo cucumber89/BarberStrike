@@ -65,6 +65,28 @@ export function inviteLink(base: string, room: string, mode: GameMode, map: stri
   return url.toString();
 }
 
+/**
+ * The invite to a tournament WAITING-ROOM (drop V, P5): the same `/r/<room>` shape as a match link,
+ * but with `mode=lobby` in the query so the page opens straight into the lobby-join flow instead of
+ * a match. The map rides along the same way a match link's does — the lobby plays its pairs on the
+ * duel arena regardless, but carrying it keeps every link one shape. Without a room it is the bare
+ * `?mode=lobby`, which still lands whoever opens it on "join a tournament".
+ */
+export function lobbyLink(base: string, room: string, map: string = DEFAULT_MAP_ID): string {
+  const url = new URL(base);
+  url.search = "";
+  url.hash = "";
+  const name = room.trim();
+  url.pathname = name ? `/r/${encodeURIComponent(name)}` : "/";
+  url.search = new URLSearchParams({ mode: "lobby", map: isMapId(map) ? map : DEFAULT_MAP_ID }).toString();
+  return url.toString();
+}
+
+/** True when `?mode=lobby` is on the address — the link is to a tournament waiting-room, not a match. */
+export function isLobbyInvite(search: string): boolean {
+  return new URLSearchParams(search).get("mode") === "lobby";
+}
+
 /** A room name nobody will collide with by accident: two words and a number, readable out loud. */
 export function suggestRoomName(rand: () => number = Math.random): string {
   const a = ["late", "night", "fresh", "sharp", "razor", "velvet", "brass", "neon", "quiet", "loud"];
