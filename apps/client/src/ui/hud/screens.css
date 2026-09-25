@@ -108,7 +108,8 @@
 .pause-confirm-row .pause-btn { justify-content: center; padding: 0 10px; white-space: nowrap; }
 /* Short screens (1024×576): the column keeps every button on screen with the picker open. */
 @media (max-height: 700px) {
-  .pause, .pause-settings { padding-top: 24px; }
+  .pause { padding-top: 24px; }
+  .pause-settings { padding-top: 12px; }
   .pause-nav { margin-top: 14px; gap: 2px; }
   .pause-btn { min-height: 38px; }
   .teams { gap: 6px; padding: 8px 10px; }
@@ -116,9 +117,12 @@
 }
 /* Settings beside the column (zone `settings`): the panel is SettingsPanel, untouched and out of
    scope (§9); only its box is P7's. The wrapper is the one scroll — the panel's own cap and inner
-   scroll are lifted here, so nothing scrolls inside something that scrolls. */
-.pause-settings { position: absolute; left: 380px; top: 0; width: min(760px, calc(100vw - 420px)); max-height: 100%; overflow-y: auto;
-  padding: clamp(24px, 9vh, 96px) 28px 24px; background: rgba(5,15,20,.9); border-right: var(--hud-plate-line);
+   scroll are lifted here, so nothing scrolls inside something that scrolls. It starts BELOW the
+   strip (§4.5: under pause the strip stays visible — the match runs on): `max(10vh, 96px)` clears
+   today's strip (bottom 91 px) and §4.1's (16 + 56 = 72 px), as the Tab board's top does (§4.4). */
+.pause-settings { --set-top: max(10vh, 96px); position: absolute; left: 380px; top: var(--set-top); width: min(760px, calc(100vw - 420px));
+  max-height: calc(100% - var(--set-top)); overflow-y: auto;
+  padding: 16px 28px 24px; background: rgba(5,15,20,.94); border: var(--hud-plate-line); border-left: 0;
   animation: p7-slide-in-short 160ms var(--hud-ease) both; }
 .pause-settings .settings { max-height: none; }
 .pause-settings .set-body { overflow: visible; padding-right: 0; }
