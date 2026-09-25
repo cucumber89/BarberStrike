@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { ERR, ERROR_TEXT, type ErrCode } from "./hud/copy";
+import { DEFAULT_MAP_ID, DUEL_MAP_ID, GAME_MODES } from "@frankibarber/shared";
+import { ERR, ERROR_TEXT, mapTitle, type ErrCode } from "./hud/copy";
 import { errorCode, humanError } from "./errors";
+import { pickedMap } from "./Loading";
 
 /**
  * Drop U §5.5 (P7): the menu's error line is always one of the Polish `ERROR_TEXT` sentences.
@@ -79,5 +81,21 @@ describe("humanError (ui/errors.ts)", () => {
       expect(Object.values(ERROR_TEXT), m).toContain(out);
       expect(englishIn(out), `${m} → ${out}`).toEqual([]);
     }
+  });
+});
+
+/**
+ * The loading card must not name a map the room will not play (§5.2 #64, audit P7-1): the server puts
+ * a duel and a tournament on the 1 v 1 arena whatever the lobby asked (`TdmRoom.ts` `get duel()`).
+ * Here because P7 owns no test file for the loading card, and a wrong card is what the menu then
+ * shows as the match's first words.
+ */
+describe("loading card map", () => {
+  it("duel and turniej load GÓRA whatever the menu picked; other modes keep the menu's map", () => {
+    expect(pickedMap("duel", DEFAULT_MAP_ID)).toBe(DUEL_MAP_ID);
+    expect(pickedMap("turniej", DEFAULT_MAP_ID)).toBe(DUEL_MAP_ID);
+    expect(mapTitle(pickedMap("duel", DEFAULT_MAP_ID))).toBe("GÓRA (DACH)");
+    for (const m of GAME_MODES.filter((g) => g !== "duel" && g !== "turniej")) expect(pickedMap(m, DEFAULT_MAP_ID), m).toBe(DEFAULT_MAP_ID);
+    expect(pickedMap(undefined, "")).toBe("");
   });
 });

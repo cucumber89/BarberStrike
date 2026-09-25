@@ -8,7 +8,7 @@ import { Menu } from "./ui/Menu";
 import { Hud } from "./ui/Hud";
 import type { ShopApi } from "./ui/Shop";
 import type { ChatApi } from "./ui/Chat";
-import { Loading } from "./ui/Loading";
+import { Loading, pickedMap } from "./ui/Loading";
 import { Fade, useFade } from "./ui/Fade";
 import { humanError } from "./ui/errors";
 import { ERR } from "./ui/hud/copy";
@@ -132,7 +132,9 @@ export function App() {
     hud.reset();
     // Joining a room by its id: the room has its own mode and map, and the menu's pick is not them
     // (§5.2 #64) — the loading card says „DOŁĄCZANIE DO POKOJU” until the room itself tells us.
-    setPicked(mode === "join" ? {} : { gameMode, mapId });
+    // A duel and a tournament are always played on the 1 v 1 arena, whatever the menu's map says:
+    // the server overrides the lobby's map for them (`TdmRoom.ts` `duel`, `MAPS[DUEL_MAP_ID]`).
+    setPicked(mode === "join" ? {} : { gameMode, mapId: pickedMap(gameMode, mapId) });
     // The connection starts now; the screen changes under the black (§6.1 menu → loading). The
     // ENGINE waits for the loading card to be on screen (`shown`): building the scene holds the
     // main thread for seconds, and started under the black it froze the black in place — the card

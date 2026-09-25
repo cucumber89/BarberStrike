@@ -1,5 +1,5 @@
 import type React from "react";
-import { MODES, TEAM_NAMES, scoreLimitFor, type GameMode } from "@frankibarber/shared";
+import { DUEL_MAP_ID, MODES, TEAM_NAMES, scoreLimitFor, type GameMode } from "@frankibarber/shared";
 import { useHudSlice } from "../game/store";
 import { MODE_TITLE, mapTitle, modeGoal } from "./hud/copy";
 
@@ -29,6 +29,15 @@ const STAGE_LABEL: Record<(typeof STAGES)[number], string> = {
 /** Sides a loading card may name. Ostrzyżeni's are drawn at the round, the 1 v 1 has no team. */
 const NAMED_SIDES = new Set<GameMode>(["tdm", "dom", "boys", "bomb"]);
 
+/**
+ * The map the room will really play (§5.2 #64). The server puts a duel and a tournament on the 1 v 1
+ * arena whatever the lobby asked for (`TdmRoom.ts` `get duel()` → `MAPS[DUEL_MAP_ID]`), so for them
+ * the menu's map is not the truth — and `store.mapId` has no producer yet, so the card cannot wait
+ * for the room to correct it. `App.play` passes this, and the card applies it to the room's mode too.
+ */
+export const pickedMap = (gameMode: GameMode | undefined, mapId: string): string =>
+  gameMode === "duel" || gameMode === "turniej" ? DUEL_MAP_ID : mapId;
+
 export interface LoadingProps {
   ready?: boolean;
   /** WEJDŹ DO MECZU was pressed: the black is coming in over this card. */
@@ -50,7 +59,7 @@ export function Loading({ ready = false, entering = false, gameMode, mapId, onEn
   const bodies = useHudSlice((s) => s.players.length);
   const myTeam = useHudSlice((s) => s.myTeam);
   const mode: GameMode | undefined = synced ? roomMode : gameMode;
-  const map = mapTitle((synced && roomMap) || mapId || "");
+  const map = mapTitle(pickedMap(mode, (synced && roomMap) || mapId || ""));
   const progress = idx / (STAGES.length - 1);
   const label = ready ? STAGE_LABEL.ready : entering ? "WCHODZISZ" : STAGE_LABEL[STAGES[idx]];
   return (
