@@ -1,16 +1,193 @@
-/* ui/hud/corners.css — health, armour, perks, ammo, grenades, kill feed, crosshair, scope and the
-   full-screen veils (seeded by P0 for P4).
-   Drop U P0 0e moved these rules VERBATIM from ui/styles.css and then ui/cinematic.css, each in
-   its original order, without collapsing the later layer into the earlier one. index.css imports
-   the hud/*.css files between styles.css and cinematic.css, so the cascade is the one they had. */
+/* ui/hud/corners.css — P4 (docs/UI_U_SPEC.md §7 P4): the bottom corners and the top right —
+   health, armour, perks (bottom left), ammo, grenades, the C4 and the weapon name (bottom right),
+   the kill feed (top right), the crosshair and the full-screen veils around it.
 
-.hud.low-health::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 120px rgba(217, 74, 58, 0.45); animation: pulse 1.2s ease-in-out infinite; }
-.damage-dir { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
-.damage-dir::before { content: ""; position: absolute; left: -60px; top: -180px; width: 120px; height: 40px; background: radial-gradient(ellipse at 50% 100%, rgba(217, 74, 58, 0.9), transparent 70%); }
+   Every size, colour, plate, edge and duration is a §3 token from hud.css; nothing here sets a
+   literal font size or changes letter case (G4: pinned words are uppercased in JS). The zones sit
+   on the shared geometry (§3.6), so the own pairs hold by construction at every width:
+     vitals 300×64 at (edge, edge)        perks  h 36 at bottom --hud-row2-bottom   → 12 px apart
+     ammo   240×64 at (edge, edge)        gear   h 36 at bottom --hud-row2-bottom   → 12 px apart
+     weapon name at bottom --hud-weapon-bottom, above the gear row                  → 12 px apart
+     feed   exactly --hud-feed-w wide, so it keeps 16 px from the strip (§4.3).                      */
 
-/* The crosshair is drawn from the player's own settings: --len arm length, --w thickness,
-   --gap the resting gap, --ch-color the colour. The outline is a shadow rather than a border so a
-   1 px arm keeps its exact width against a bright wall. */
+/* ---------------------------------------------------------------- §4.5: when my corners hide
+   The §3.8 hide rule, applied from the root's attributes: dead (my own zones — the feed stays),
+   Tab / shop / ESC (everything of mine), the final round (all but the feed) and the verdict and
+   result stages (the feed too). A zone that comes back fades in over --hud-base. The veils are not
+   zones that hide: a flash or a smoke never lifts because a menu opened. */
+.hud :is(.vitals, .perks, .ammo, .gear, .feed, .breath, .cook, .tac-meter) { transition: opacity var(--hud-base) var(--hud-ease); }
+.hud[data-alive="false"] :is([data-zone="vitals"], [data-zone="perks"], [data-zone="inv"], [data-zone="gear"], [data-zone="weapon"], [data-zone="crosshair"]),
+.hud:is([data-overlay~="tab"], [data-overlay~="shop"], [data-overlay~="pause"]) :is([data-zone="vitals"], [data-zone="perks"], [data-zone="inv"], [data-zone="gear"], [data-zone="weapon"], [data-zone="feed"], [data-zone="crosshair"]),
+.hud[data-moment="ended"] :is([data-zone="vitals"], [data-zone="perks"], [data-zone="inv"], [data-zone="gear"], [data-zone="weapon"], [data-zone="crosshair"]),
+.hud:is([data-stage="B"], [data-stage="C"]) [data-zone="feed"] {
+  opacity: 0; visibility: hidden; transition: opacity var(--hud-fast), visibility 0s linear var(--hud-fast);
+}
+
+/* ---------------------------------------------------------------- shared */
+/* Read by assistive tech and by e2e's textContent („FLASZKA”, multiplayer.spec.ts:465), never
+   seen. t1, so the tool's font floor holds for it too (§3.10 counts it). */
+.hud .p4-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; font: 600 var(--hud-t1)/1 var(--font-ui); }
+/* A keycap: the one text allowed at 13 px (--hud-key). */
+.hud .p4-key { display: inline-grid; place-items: center; box-sizing: border-box; min-width: 18px; height: 18px; padding: 0 4px;
+  font: 600 var(--hud-key)/1 var(--font-ui); color: var(--hud-tx2); border: 1px solid rgba(175, 192, 202, .45); border-radius: var(--hud-radius); }
+@keyframes p4-fade-in { from { opacity: 0; } }
+@keyframes p4-fade-out { to { opacity: 0; } }
+@keyframes p4-rise { from { opacity: 0; transform: translateY(6px); } }
+@keyframes p4-blink { 50% { opacity: .35; } }
+
+/* ---------------------------------------------------------------- bottom left: vitals */
+.vitals { --vt-c: var(--hud-ok);
+  position: absolute; left: var(--hud-edge); bottom: var(--hud-edge); width: 300px; height: 64px; box-sizing: border-box;
+  display: flex; align-items: center; gap: 14px; padding: 0 14px 0 12px;
+  background: var(--hud-plate); border: var(--hud-plate-line); border-left: 2px solid var(--vt-c); border-radius: var(--hud-radius);
+  backdrop-filter: blur(var(--hud-blur)); color: var(--hud-tx); }
+.vitals[data-band="hurt"] { --vt-c: var(--hud-warn); }
+.vitals[data-band="critical"] { --vt-c: var(--hud-danger); }
+.vt-hp { flex: none; width: 132px; display: flex; flex-direction: column; gap: 4px; }
+.vt-hp-row { display: flex; align-items: center; gap: 8px; }
+.vt-cross { flex: none; color: var(--vt-c); }
+.vt-num { font-family: var(--font-display); font-size: var(--hud-t4); line-height: .9; letter-spacing: var(--hud-track-num);
+  font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
+.vitals[data-band="critical"] .vt-num { color: var(--hud-danger); }
+.hud[data-alive="true"] .vitals[data-band="critical"] .vt-num { animation: pulse 900ms ease-in-out infinite; }
+.vt-bar { width: 132px; height: 4px; overflow: hidden; background: rgba(244, 240, 231, .12); }
+.vt-fill { height: 100%; background: var(--vt-c); transform-origin: left; transform: scaleX(var(--v, 1)); transition: transform var(--hud-base) var(--hud-ease); }
+.vt-side { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+/* Boys: the class over „→ the next one” (Vitals.tsx BoysHeader), at t1 in its own case, above the
+   armour. The column is 125 px, so the header is two lines, never one cut line: the widest,
+   „→ Marksman”, is under 110 px at the t1 cap. Two lines at line-height 1 and the armour's digits
+   at .75 fit the 62 px inside the plate up to the t1/t3 caps (17 + 17 + 2 + 25.5 = 61.5 px). A
+   line is clipped sideways only (overflow-x: clip keeps the descender of „Heavy”). */
+.vt-class { display: flex; flex-direction: column; font: 600 var(--hud-t1)/1 var(--font-ui); color: var(--hud-tx2); }
+.vt-cls, .vt-next { white-space: nowrap; overflow-x: clip; text-overflow: ellipsis; }
+.vt-class ~ .armor .armor-num { line-height: .75; }
+.armor { display: flex; align-items: center; gap: 6px; }
+.armor-icon { position: relative; display: inline-flex; flex: none; color: var(--hud-tx2); }
+.armor-num { font-family: var(--font-display); font-size: var(--hud-t3); line-height: 1; letter-spacing: var(--hud-track-num); font-variant-numeric: tabular-nums; }
+/* Broken: the plate greys out and cracks for 900 ms, with no word (§5.2 row 43). */
+.armor[data-broke] .armor-icon { color: rgba(175, 192, 202, .5); }
+.armor-crack { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--hud-danger); }
+
+/* ---------------------------------------------------------------- bottom left: perk chips */
+.perks { position: absolute; left: var(--hud-edge); bottom: var(--hud-row2-bottom); height: 36px; display: flex; align-items: center; gap: 8px; }
+.perk { position: relative; display: flex; align-items: center; gap: 6px; height: 36px; }
+.perk-ring { --c: var(--hud-tx); position: relative; flex: none; width: 36px; height: 36px; box-sizing: border-box; display: grid; place-items: center;
+  border-radius: 50%; background: var(--hud-plate); color: var(--hud-tx); }
+/* The time left is the ring: it drains clockwise from the top. */
+.perk-ring::before { content: ""; position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(var(--c) calc(var(--v, 1) * 360deg), rgba(244, 240, 231, .14) 0);
+  -webkit-mask: radial-gradient(circle, transparent 14.5px, #000 15px); mask: radial-gradient(circle, transparent 14.5px, #000 15px); }
+.perk-ring svg { position: relative; display: block; width: 22px; height: 20px; }
+.perk[data-perk="roids"] .perk-ring { --c: var(--hud-ok); }
+/* The steroids' two-second gate after a hit: the ring is grey until it heals again. */
+.perk[data-gated] .perk-ring { --c: rgba(175, 192, 202, .5); color: var(--hud-tx2); }
+.perk[data-ending] .perk-ring { --c: var(--hud-danger); }
+.perk-secs { font: 600 var(--hud-t1)/1 var(--font-ui); color: var(--hud-danger); font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
+/* The fade's spawn shield (a bubble, not the plate) is protection, not a perk running out: brass,
+   like the shield ring round the crosshair, for its three seconds. */
+.perk[data-perk="shield"] .perk-ring { --c: var(--hud-accent); }
+.perk[data-perk="shield"] .perk-secs { color: var(--hud-accent); }
+
+/* ---------------------------------------------------------------- bottom right: the ammo plate */
+.ammo { position: absolute; right: var(--hud-edge); bottom: var(--hud-edge); width: 240px; height: 64px; box-sizing: border-box;
+  display: flex; align-items: center; gap: 12px; padding: 0 12px 0 14px;
+  background: var(--hud-plate); border: var(--hud-plate-line); border-right: 2px solid var(--hud-accent); border-radius: var(--hud-radius);
+  backdrop-filter: blur(var(--hud-blur)); color: var(--hud-tx); }
+.ammo-art { flex: 1 1 auto; min-width: 0; display: grid; justify-items: start; align-items: center; color: var(--hud-tx2); }
+.ammo-gun { grid-area: 1 / 1; display: block; }
+.ammo-gun svg { display: block; height: 26px; width: auto; max-width: 92px; }
+.ammo-gun .art-name { font: 600 var(--hud-t1)/1 var(--font-ui); letter-spacing: var(--hud-track-label); }
+/* A switch cross-fades the two silhouettes in 120 ms (§5.2 row 45). */
+.ammo-gun.in { animation: p4-fade-in var(--hud-fast) linear; }
+.ammo-gun.out { animation: p4-fade-out var(--hud-fast) linear forwards; }
+.ammo-count { flex: none; display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.ammo .mag { font-family: var(--font-display); font-size: var(--hud-t4); line-height: .9; letter-spacing: var(--hud-track-num);
+  font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); transition: opacity var(--hud-fast); }
+.ammo .res { font-family: var(--font-display); font-size: var(--hud-t2); letter-spacing: var(--hud-track-num); color: var(--hud-tx2); font-variant-numeric: tabular-nums; }
+.ammo .sep { opacity: .6; }
+.ammo[data-mag="low"] .mag { color: var(--hud-warn); }
+.ammo[data-mag="empty"] .mag { color: var(--hud-danger); }
+/* A reload keeps the digits: the magazine dims to 40 % and a 3 px bar runs along the plate's foot.
+   The bar is redrawn from the clock (Inventory.tsx), so it is right with or without motion. */
+.ammo[data-reloading] .mag { opacity: .4; }
+.ammo-reload { position: absolute; left: 14px; right: 14px; bottom: 5px; height: 3px; overflow: hidden; background: rgba(244, 240, 231, .12); }
+.ammo-reload-fill { display: block; height: 100%; background: var(--hud-accent); transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform 100ms linear; }
+
+/* ---------------------------------------------------------------- bottom right: grenades and the C4 */
+.gear { position: absolute; right: var(--hud-edge); bottom: var(--hud-row2-bottom); height: 36px; box-sizing: border-box;
+  display: flex; align-items: center; gap: 14px; padding: 0 12px;
+  background: var(--hud-plate); border: var(--hud-plate-line); border-radius: var(--hud-radius); backdrop-filter: blur(var(--hud-blur)); }
+/* Only what I carry: an empty slot is gone (its testid stays in the DOM), and so is an empty row. */
+.gear[data-none], .gear-item[data-empty] { display: none; }
+.gear-item { display: flex; align-items: center; gap: 6px; color: var(--hud-tx); }
+.gear-art svg { display: block; height: 20px; width: auto; }
+.gear-n { font-family: var(--font-display); font-size: var(--hud-t2); line-height: 1; letter-spacing: var(--hud-track-num); }
+.gear-item[data-cooking] { color: var(--hud-danger); }
+.gear-item[data-cooking] .p4-key { border-color: var(--hud-danger); color: var(--hud-danger); }
+.gear-c4 { display: block; color: var(--hud-tx); }
+/* On a site the bomb blinks: plant it here. Under reduced motion it is a steady warn colour. */
+.gear-item[data-site] .gear-c4 { color: var(--hud-warn); animation: p4-blink 1s ease-in-out infinite; }
+.gear-item[data-site] .p4-key { border-color: var(--hud-warn); color: var(--hud-warn); }
+
+/* ---------------------------------------------------------------- the weapon's name after a switch */
+.weapon-name { position: absolute; right: var(--hud-edge); bottom: var(--hud-weapon-bottom); max-width: 240px;
+  font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0; visibility: hidden; transition: opacity 300ms var(--hud-ease-in), visibility 0s linear 300ms; }
+/* `inherit`, not `visible`: a visible child shows through a hidden parent, so the name stayed on
+   screen over a dormant HUD (`.hud.dormant`, the loading screen's READY step). */
+.weapon-name[data-on] { opacity: 1; visibility: inherit; transition: none; animation: p4-rise var(--hud-fast) var(--hud-ease); }
+
+/* ---------------------------------------------------------------- top right: the kill feed */
+/* The column is the --hud-feed-w token, snapped down to the half pixel: at 1024 the token is
+   50·10.24 − 27·10.24 − 40 = 195.52 px, which the spec states as 195.5 (§3.6); the snap makes the
+   rendered column that number and keeps the 16 px to the strip whole. */
+.feed { position: absolute; top: var(--hud-edge); right: var(--hud-edge); width: var(--hud-feed-w); margin: 0; padding: 0; list-style: none;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px; container: p4-feed / inline-size; }
+@supports (width: round(down, 1px, 1px)) { .feed { width: round(down, var(--hud-feed-w), .5px); } }
+/* A row is one line, 30 px, at every width (§4.2: ≤ 5 rows × 30 + 4; only the width changes on
+   narrow screens), so a full feed is 5 × 30 + 4 × 4 = 166 px tall. The gallery pins it: `noScroll`
+   on every row (gallery/corners.ts, tdm-live) fails the moment a row needs a second line. */
+.kf-row { box-sizing: border-box; max-width: 100%; height: 30px; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(auto, max-content); align-items: center;
+  column-gap: 7px; padding: 0 10px; overflow: hidden;
+  background: var(--hud-plate); border: 1px solid transparent; border-radius: var(--hud-radius);
+  font: 600 var(--hud-t1)/1.2 var(--font-ui); color: var(--hud-tx); white-space: nowrap;
+  animation: slide-in 160ms var(--hud-ease); transition: opacity 400ms linear; }
+.kf-row[data-me="killer"] { border-color: var(--hud-accent); }
+.kf-row[data-me="victim"] { border-color: var(--hud-danger); }
+.kf-row[data-out] { opacity: 0; }
+/* A row wider than the column (the 195.5 px column at 1024 holds about 180 px of row) shares the
+   room fairly instead of wrapping. The halves are flattened (display: contents), so the killer, the
+   assist, the weapon and the victim are the row's grid columns, each minmax(auto, max-content): a
+   nick's minimum is 0 (min-width: 0), the weapon's is its own width (it never shrinks), and the grid
+   hands out the rest in equal shares, each column stopping at its own width. So a short nick is
+   whole and the long ones split what is left alike; a cut nick ends in „…” and its full text stays
+   in the DOM for the screen reader. At 1600 and 1280 every gallery row is whole (a grid's
+   max-content is exactly the sum of its columns; a flex row with basis-0 items came out 3–7 px
+   short in Chromium and cut the assist even at 1600). */
+.kf-who, .kf-what { display: contents; }
+.kf-nick, .kf-assist { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.kf-nick.t0, .kf-assist.t0 { color: var(--hud-team0); }
+.kf-nick.t1, .kf-assist.t1 { color: var(--hud-team1); }
+.kf-nick.ffa, .kf-assist.ffa { color: var(--hud-tx); }
+.kf-assist { opacity: .75; }
+.kf-plus { color: var(--hud-tx2); }
+.kf-weapon { display: inline-flex; align-items: center; gap: 5px; color: var(--hud-tx); }
+.kf-art svg { display: block; height: 15px; width: auto; }
+.kf-art-name { font: 600 var(--hud-t1)/1 var(--font-ui); color: var(--hud-tx2); }
+.kf-head { flex: none; color: var(--hud-tx); }
+.kf-razor { flex: none; }
+/* The 1024-wide column (195.5 px): tighter row, smaller silhouette, so the nicks keep their letters. */
+@container p4-feed (max-width: 260px) {
+  .kf-row { column-gap: 5px; padding: 0 7px; }
+  .kf-art svg { height: 12px; }
+}
+
+/* ---------------------------------------------------------------- the aim point
+   The crosshair is drawn from the player's own settings: --len arm length, --w thickness, --gap
+   the resting gap, --ch-color the colour. These rules also draw the settings panel's preview
+   (SettingsPanel.tsx `.ch-preview .crosshair`), so they are not scoped to the HUD. The outline is
+   a shadow rather than a border so a 1 px arm keeps its exact width against a bright wall. */
 .crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --gap: 5px; --len: 8px; --w: 2px; --ch-color: #fff; }
 .crosshair span { position: absolute; background: var(--ch-color); }
 .crosshair.outlined span { box-shadow: 0 0 0 1px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.9); }
@@ -26,8 +203,8 @@
 .ch-dot { left: calc(-1 * var(--w) / 2); top: calc(-1 * var(--w) / 2); width: var(--w); height: var(--w); border-radius: 50%; }
 /* Base 100 px ring, scaled to (2*gap + len). Same reason as the arms: a scale is composited, a
    width/height change is a layout. The scale is built from UNITLESS copies of the two numbers
-   (`--gap-n`, `--len-n`, set alongside the px ones in Hud.tsx) because CSS `calc()` cannot divide
-   by a length — `calc(40px / 100px)` is invalid and silently drops the whole declaration. */
+   (`--gap-n`, `--len-n`, set alongside the px ones in Crosshair.tsx) because CSS `calc()` cannot
+   divide by a length — `calc(40px / 100px)` is invalid and silently drops the whole declaration. */
 .ch-circle { left: -50px; top: -50px; width: 100px; height: 100px;
   transform: scale(calc((2 * var(--gap-n, 5) + var(--len-n, 8)) / 100));
   border: calc(var(--w) * 100 / (2 * var(--gap-n, 5) + var(--len-n, 8))) solid var(--ch-color);
@@ -36,89 +213,59 @@
 .crosshair span { transition: transform 60ms linear; will-change: transform; }
 /* C1: the pellet cone drawn at its true radius, which the four-line gap caps out well below. */
 .crosshair .ch-ring { --r: 30px; left: calc(-1 * var(--r)); top: calc(-1 * var(--r)); width: calc(2 * var(--r)); height: calc(2 * var(--r)); border: 1px solid rgba(255,255,255,.55); border-radius: 50%; background: none; box-shadow: 0 0 2px rgba(0,0,0,.9); transition: none; }
-.crosshair.head .hitmarker::before, .crosshair.head .hitmarker::after { background: var(--brass); }
-.ch-shield { left: -22px; top: -22px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(217,164,65,.7); background: none !important; box-shadow: none !important; animation: pulse 0.8s ease-in-out infinite; }
-.hitmarker { left: -8px; top: -8px; width: 16px; height: 16px; background: none !important; box-shadow: none !important; }
-.hitmarker::before, .hitmarker::after { content: ""; position: absolute; left: 7px; top: -2px; width: 2px; height: 20px; background: #fff; }
-.hitmarker::before { transform: rotate(45deg); } .hitmarker::after { transform: rotate(-45deg); }
-.crosshair.kill .hitmarker::before, .crosshair.kill .hitmarker::after { background: var(--red); height: 24px; top: -4px; }
+.hud .crosshair.head .hitmarker::before, .hud .crosshair.head .hitmarker::after { background: var(--hud-accent); }
+.hud .ch-shield { left: -22px; top: -22px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(231, 182, 46, .7); background: none !important; box-shadow: none !important; animation: pulse .8s ease-in-out infinite; }
+.hud .hitmarker { left: -8px; top: -8px; width: 16px; height: 16px; background: none !important; box-shadow: none !important; }
+.hud .hitmarker::before, .hud .hitmarker::after { content: ""; position: absolute; left: 7px; top: -2px; width: 2px; height: 20px; background: #fff; }
+.hud .hitmarker::before { transform: rotate(45deg); } .hud .hitmarker::after { transform: rotate(-45deg); }
+.hud .crosshair.kill .hitmarker::before, .hud .crosshair.kill .hitmarker::after { background: var(--hud-danger); height: 24px; top: -4px; }
+/* A hit on a plate tints the arms armour-blue for the hit marker's 180 ms: feedback, not text. */
+.hud .crosshair.armor span { background: #8fd3ff; }
 
-.killfeed { position: absolute; top: 18px; right: 22px; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
-.killfeed li { display: flex; gap: 8px; align-items: center; padding: 4px 10px; background: rgba(10,10,12,.7); font-size: 13px; animation: slide-in 160ms ease-out; }
-.killfeed li.me-victim { border-right: 3px solid var(--red); } .killfeed li.me-killer { border-right: 3px solid var(--brass); }
-.kf-name.t0 { color: var(--team0); } .kf-name.t1 { color: var(--team1); }
-.kf-weapon { color: var(--tx-2); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; }
+/* The frag's cook ring, in the crosshair's place (Rule G9). */
+.cook { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%;
+  background: conic-gradient(var(--hud-danger) var(--p), rgba(255,255,255,.12) 0);
+  -webkit-mask: radial-gradient(circle, transparent 17px, #000 18px); mask: radial-gradient(circle, transparent 17px, #000 18px); }
+/* Tactical sprint budget (drop 4): only while it is running or refilling. */
+.tac-meter { position: absolute; left: 50%; top: calc(50% + 36px); transform: translateX(-50%); width: 64px; height: 3px; background: rgba(255,255,255,.15); }
+.tac-fill { height: 100%; width: 100%; background: var(--hud-tx2); transform-origin: left; transform: scaleX(var(--v, 0)); }
+.tac-meter.on .tac-fill { background: var(--hud-accent); }
+.tac-meter.empty .tac-fill { background: var(--hud-danger); }
 
-.health { position: absolute; left: 26px; bottom: 26px; display: flex; align-items: flex-end; gap: 12px; }
-.health-num { font-family: var(--font-display); font-size: 44px; line-height: 1; color: var(--tx); text-shadow: 0 2px 6px rgba(0,0,0,.8); min-width: 64px; }
-.health-bar { width: 180px; height: 6px; background: rgba(255,255,255,.12); margin-bottom: 8px; }
-.health-fill { height: 100%; width: 100%; background: var(--tx); transform-origin: left; transform: scaleX(var(--v, 1)); transition: transform 160ms ease-out; }
-.low-health .health-fill { background: var(--red); }
+/* The SR-50's breath: the words at t1, the bar UNDER them, below the tube's window. */
+.breath { position: absolute; left: 50%; top: calc(50% + min(34vw, 34vh) + 14px); transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.breath-line { display: flex; align-items: center; gap: 8px; white-space: nowrap;
+  font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx); text-shadow: 0 1px 2px #000; }
+.breath-key { display: inline-grid; place-items: center; box-sizing: border-box; height: 22px; padding: 0 6px;
+  font: 600 var(--hud-t1)/1 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx);
+  border: 1px solid rgba(244, 240, 231, .5); border-radius: var(--hud-radius); }
+.breath-bar { width: 220px; height: 4px; overflow: hidden; background: rgba(244, 240, 231, .16); }
+.breath-fill { display: block; height: 100%; background: var(--hud-tx); transform-origin: left; transform: scaleX(var(--v, 0)); }
+.breath[data-spent] .breath-line { color: var(--hud-danger); }
 
-.ammo { position: absolute; right: 26px; bottom: 26px; text-align: right; }
-.weapon-name { font-size: 12px; letter-spacing: 0.22em; color: var(--tx-2); text-transform: uppercase; display: flex; justify-content: flex-end; gap: 10px; align-items: center; }
-.weapon-name .slot { display: inline-block; border: 1px solid var(--line); padding: 0 5px; font-family: var(--font-mono); font-size: 10px; }
-.ammo-num { font-family: var(--font-display); font-size: 44px; line-height: 1; text-shadow: 0 2px 6px rgba(0,0,0,.8); }
-.ammo-num .sep { color: var(--tx-3); margin: 0 6px; font-size: 30px; }
-.ammo-num .res { color: var(--tx-2); font-size: 30px; }
-.ammo-num.empty .mag { color: var(--red); }
-.ammo-num .reloading { font-size: 22px; letter-spacing: 0.25em; color: var(--brass); }
-
-/* ---------- Reload / telemetry ---------- */
-.reload-bar { height: 3px; width: 160px; background: rgba(255,255,255,.12); margin: 6px 0 0 auto; overflow: hidden; }
-.reload-fill { height: 100%; width: 100%; background: var(--brass); transform-origin: left; animation: reload-fill linear forwards; }
-.health-num, .ammo-num { font-variant-numeric: tabular-nums; }
-.gear { position: absolute; right: 26px; bottom: 100px; display: flex; gap: 8px; }
-.gear-slot { display: flex; align-items: center; gap: 6px; padding: 4px 8px; background: rgba(10,10,12,.6); border: 1px solid var(--line); font-size: 11px; letter-spacing: 0.15em; color: var(--tx-2); min-width: 86px; }
-.gear-slot .key { font-family: var(--font-mono); color: var(--brass); }
-.gear-slot .count { font-family: var(--font-display); font-size: 18px; color: var(--tx); margin-left: auto; }
-.gear-slot.empty { opacity: 0.35; }
-.gear-slot.cooking { border-color: var(--red); }
-.cook { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: conic-gradient(var(--red) var(--p), rgba(255,255,255,.12) 0); -webkit-mask: radial-gradient(circle, transparent 17px, #000 18px); mask: radial-gradient(circle, transparent 17px, #000 18px); }
+/* ---------------------------------------------------------------- the veils (full screen, zone `veil`) */
+/* Low health: the edges of the screen pulse red (the root's `.low-health`, §8.5). */
+.hud.low-health::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 120px rgba(223, 73, 56, .45); animation: pulse 1.2s ease-in-out infinite; }
+.damage-dir { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+.damage-dir::before { content: ""; position: absolute; left: -60px; top: -180px; width: 120px; height: 40px; background: radial-gradient(ellipse at 50% 100%, rgba(223, 73, 56, .9), transparent 70%); }
 .flash-out { position: absolute; inset: 0; background: #fff; pointer-events: none; }
 .smoke-screen { position: absolute; inset: 0; background: radial-gradient(ellipse at 45% 45%, #747a7b, #4e5556); pointer-events: none; }
-
-/* ---------- Drop 3: armour, perks, scope ---------- */
-.armor-fill { position: absolute; left: 0; top: -4px; height: 3px; width: 100%; background: #8fd3ff; transform-origin: left; transform: scaleX(var(--v, 0)); }
-.health-bar { position: relative; }
-.armor-num { font-family: var(--font-display); font-size: 20px; color: #8fd3ff; margin-left: 4px; text-shadow: 0 2px 6px rgba(0,0,0,.8); }
-.armor-num.broke { color: var(--red); animation: pulse 0.3s ease-in-out 3; }
-.perk-list { position: absolute; left: 26px; bottom: 190px; display: flex; flex-direction: column; gap: 6px; }
-.perk { position: relative; display: flex; align-items: center; gap: 8px; padding: 4px 10px 6px; background: rgba(10,10,12,.65); border: 1px solid var(--line); font-size: 11px; letter-spacing: 0.18em; color: var(--tx-2); min-width: 170px; overflow: hidden; }
-.perk-glyph { font-size: 14px; }
-.perk-name { color: var(--tx); }
-.perk-time { margin-left: auto; font-family: var(--font-mono); color: var(--brass); }
-.perk-bar { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--brass); transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform 250ms linear; }
-.perk-flask .perk-bar { background: #d9a441; } .perk-roids .perk-bar { background: #7dff9a; } .perk-energy .perk-bar { background: #8fd3ff; } .perk-fade .perk-bar { background: var(--purple); }
-/* What the perk is doing right now, next to its name: the steroids' healing rate, or the gate
-   they are waiting on. Small and dim — the countdown on the right is still the headline. */
-.perk-note { font-size: 10px; color: var(--tx-3); letter-spacing: 0.1em; }
-.perk-roids .perk-note { color: #7dff9a; }
-.perk.held .perk-note { color: var(--tx-3); }
-/* The last five seconds. The bar alone shrank towards nothing and said nothing about it. */
-.perk.ending { border-color: var(--red); animation: pulse 900ms ease-in-out infinite; }
-.perk.ending .perk-time { color: var(--red); }
-.crosshair.armor span { background: #8fd3ff; }
-/* `--v` thins the haze over the perk's last four seconds (Hud.tsx), so the resistance wearing off
-   is visible rather than instant. It never reaches zero while the perk is up: the floor is the
-   difference between "nearly gone" and "gone". */
-.flask-haze { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 140px 40px rgba(217,164,65,.22); backdrop-filter: blur(0px); opacity: var(--v, 1); transition: opacity 250ms linear; }
+/* `--v` thins the haze over the flask's last four seconds (Crosshair.tsx), so the resistance wearing
+   off is visible rather than instant. It never reaches zero while the perk is up: the floor is the
+   difference between "nearly gone" and "gone". No backdrop-filter: nothing full-screen blurs
+   (Principle 15). */
+.flask-haze { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 140px 40px rgba(231, 182, 46, .22); opacity: var(--v, 1); transition: opacity 250ms linear; }
 /* `contain: paint` + its own layer keeps the full-viewport gradient below from being re-rasterised
-   with every HUD re-render (the HUD re-renders each frame: fps, timer, breath).
-   NOT measured as a win here: SwiftShader is CPU-bound at 2-5 fps, and hiding this overlay entirely
-   changed the frame rate by nothing, so any compositor cost is invisible on this machine. It is
-   cheap insurance for a real GPU running at 144, not a fix for a diagnosed problem. */
+   with every HUD re-render (the HUD re-renders each frame: fps, timer, breath). */
 .scope { position: absolute; inset: 0; pointer-events: none; contain: paint; will-change: opacity; }
 .scope-mask { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, transparent 0, transparent min(34vw, 34vh), rgba(0,0,0,.96) calc(min(34vw, 34vh) + 3px), #000 100%); }
 .scope-reticle { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
 .scope-reticle span { position: absolute; background: rgba(0,0,0,.9); }
 .scope-reticle .v { left: -0.5px; top: -40vh; width: 1px; height: 80vh; }
 .scope-reticle .hz { top: -0.5px; left: -40vw; height: 1px; width: 80vw; }
-.scope-reticle .dot { left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: var(--red); }
+.scope-reticle .dot { left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: var(--hud-danger); }
 .scope-reticle.hit .dot { background: #fff; box-shadow: 0 0 6px #fff; }
-.scope-breath { position: absolute; left: 50%; top: calc(50% + min(34vw, 34vh) + 14px); transform: translateX(-50%); width: 220px; height: 16px; background: rgba(10,10,12,.7); border: 1px solid var(--line); font-size: 9px; letter-spacing: 0.25em; color: var(--tx-2); display: flex; align-items: center; justify-content: center; }
-.scope-breath-fill { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(143,211,255,.35); width: 100%; transform-origin: left; transform: scaleX(var(--v, 0)); }
-.scope-breath span { position: relative; }
 /* Drop B (D-B2): the M-1's ring. A thin circle over a mostly clear view — the DMR is a rifle you
    keep your surroundings in, not a tube you disappear down. Its reticle lines are short crops
    rather than the sniper's full-screen cross. */
@@ -127,79 +274,13 @@
 .scope.ring .scope-reticle .v { top: -12vh; height: 24vh; }
 .scope.ring .scope-reticle .hz { left: -12vw; width: 24vw; }
 
-.tac-meter { position: absolute; left: 50%; top: calc(50% + 36px); transform: translateX(-50%); width: 64px; height: 3px; background: rgba(255,255,255,.15); }
-.tac-fill { height: 100%; width: 100%; background: var(--tx-2); transform-origin: left; transform: scaleX(var(--v, 0)); }
-.tac-meter.on .tac-fill { background: var(--brass); }
-.tac-meter.empty .tac-fill { background: var(--red); }
-.kf-name.ffa { color: var(--tx); }
-.health { padding:12px 16px; border-radius:8px; background:#10151edb; bottom:22px; }
-.health-bar { width:120px; height:8px; }
-@media(max-width:900px) {
-  .killfeed { top:115px; max-width:40vw; }
+/* ---------------------------------------------------------------- reduced motion (R3)
+   No animation and no transition anywhere in my zones or veils; every state still reads, because
+   nothing of mine says anything by moving: the reload bar and the perk rings are drawn from the
+   clock, the low-health edge and the critical number are steady red, the C4 is steady amber. */
+@media (prefers-reduced-motion: reduce) {
+  .hud.low-health::after,
+  .hud :is([data-zone="vitals"], [data-zone="perks"], [data-zone="inv"], [data-zone="gear"], [data-zone="weapon"], [data-zone="feed"], [data-zone="crosshair"]),
+  .hud :is([data-zone="vitals"], [data-zone="perks"], [data-zone="inv"], [data-zone="gear"], [data-zone="weapon"], [data-zone="feed"], [data-zone="crosshair"]) *,
+  .hud :is(.flask-haze, .damage-dir, .scope, .scope *, .smoke-screen, .flash-out) { animation: none !important; transition: none !important; }
 }
-
-.health, .ammo, .gear-slot {
-  background: var(--plate); border: 1px solid var(--plate-line); border-radius: 10px;
-  box-shadow: 0 4px 18px rgba(0,0,0,.38);
-}
-
-/* --- bottom left: health, then money above it --- */
-.health { left: var(--edge); bottom: var(--edge); padding: var(--plate-pad); gap: 12px; align-items: center; }
-.health-num { font-size: 40px; min-width: 58px; text-align: right; letter-spacing: 0.02em; transition: color 200ms ease-out; }
-.health-bars { display: flex; flex-direction: column; gap: 4px; }
-.health-bar { width: 132px; height: 7px; border-radius: 4px; overflow: hidden; background: rgba(255,255,255,.10); }
-.armor-bar { width: 132px; height: 4px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,.08); }
-.armor-fill { position: static; top: auto; height: 100%; background: #8fd3ff; }
-/* Colour IS the reading. Green while it does not matter, amber when it starts to, red when it does. */
-.hp-ok      .health-num { color: #d8f5e0; } .hp-ok      .health-fill { background: #7dff9a; }
-.hp-hurt    .health-num { color: #ffd79a; } .hp-hurt    .health-fill { background: #e5ae52; }
-.hp-critical .health-num { color: #ff9a8c; } .hp-critical .health-fill { background: var(--red); }
-
-/* --- bottom right: the weapon, then its grenades above --- */
-.ammo { right: var(--edge); bottom: var(--edge); padding: var(--plate-pad); }
-.ammo-num { font-size: 40px; letter-spacing: 0.02em; }
-.ammo-num .sep, .ammo-num .res { font-size: 24px; }
-.weapon-name { font-size: 11px; letter-spacing: 0.18em; color: var(--tx-2); margin-bottom: 2px; }
-.gear { right: var(--edge); bottom: calc(var(--edge) + 84px); gap: 8px; }
-/* These were all but invisible at 0.35 opacity on a dark map; an empty slot should read as EMPTY,
-   not as absent. */
-.gear-slot { padding: 6px 10px; font-size: 10px; letter-spacing: 0.14em; color: var(--tx); min-width: 96px; }
-.gear-slot.empty { opacity: 1; color: var(--tx-3); border-style: dashed; }
-.gear-slot.empty .key { color: var(--tx-3); }
-.gear-slot .count { font-size: 17px; }
-
-/* --- kill feed: one column, one width, quiet until it is about you --- */
-.killfeed { top: var(--edge); right: var(--edge); gap: 3px; }
-.killfeed li { background: rgba(13,17,23,.82); border: 1px solid transparent; border-radius: 6px;
-  padding: 3px 9px; font-size: 12px; }
-.killfeed li.me-victim { border-color: var(--red); border-right-width: 1px; }
-.killfeed li.me-killer { border-color: var(--brass); border-right-width: 1px; }
-
-/* ---------------------------------------------------------------- Drop E: the shave */
-
-/* The razor in the kill feed replaces the weapon's name, so the column is a flex box that centres
-   it on the line and a feed of mixed rows does not jump. It inherits `currentColor`, which the feed
-   already colours per row (your own death red, your own kill gold), so the icon says WHOSE shave it
-   was for free. */
-.killfeed .kf-weapon { display: inline-flex; align-items: center; gap: 4px; }
-
-/* Headshot: the head icon sits on the same flex line as the weapon's name, so a row with one is the
-   same height as a row without. Brass rather than `currentColor`, because unlike the razor a headshot
-   is a property of the SHOT and not of whose head it was — it should read the same on every row. */
-.killfeed .kf-head { color: var(--brass); flex: none; }
-
-/* Assists: "KILLER + HELPER". Dimmer and a shade smaller than the killer's own name, because the
-   feed's first job is still to say who got the kill — the assist is context, not the headline. It
-   keeps the killer's team colour by inheriting it, so a row still reads as one side's work. */
-.killfeed .kf-assist { opacity: .72; font-size: .92em; }
-
-/* ---------------------------------------- from ui/cinematic.css, which loaded after styles.css */
-.health, .ammo, .gear-slot {
-  border-radius: 2px; backdrop-filter: blur(8px);
-  box-shadow: 0 8px 28px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.03);
-}
-.health { border-left: 3px solid #7dff9a; }
-.hp-hurt.health { border-left-color: #e5ae52; }
-.hp-critical.health { border-left-color: var(--red); }
-.ammo { border-right: 3px solid var(--brass); }
-.killfeed li { border-radius: 1px; backdrop-filter: blur(6px); }
