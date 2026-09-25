@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { BOMB, OSTRZYZENI } from "@frankibarber/shared";
-import { freezeCopy, halftimeCard, mvpText, roleCopy, roundBannerCopy, roundEnd, roundReason, roundReasonShort, roundReasonText, type RoundBannerInput } from "./roundText";
+import { BOMB, DUEL, OSTRZYZENI } from "@frankibarber/shared";
+import {
+  freezeCopy, halftimeCard, mvpText, roleCopy, roundBannerCopy, roundEnd, roundReason, roundReasonShort, roundReasonText, roundTakerOf, roundWinnerSeen, turniejPair,
+  type RoundBannerInput, type RoundSight,
+} from "./roundText";
 import { countWords } from "./format";
 
 // Moved verbatim from `ui/resultText.test.ts` (its 'round end' suite) with the functions it pins.
@@ -154,5 +157,68 @@ describe("the freeze start and the role card", () => {
   it("the role card: the chaser shaves, a survivor survives and learns who has the clippers", () => {
     expect(roleCopy(false, "RYSIEK")).toMatchObject({ title: "PRZETRWAJ", line: [{ text: "RYSIEK MA MASZYNKĘ" }] });
     expect(roleCopy(true, "Kowal")).toMatchObject({ title: "MASZ MASZYNKĘ", line: [{ text: "OGOL WSZYSTKICH" }] });
+  });
+});
+
+describe("who took a 1 v 1 round, as the client saw it", () => {
+  const pr = (name: string, team: 0 | 1, alive = true, health?: number) => ({ name, team, alive, connected: true, health });
+  const sight = (o: Partial<RoundSight>): RoundSight => ({
+    mode: "duel", result: "ELIMINATED", scoreA: 3, scoreB: 2, before: null, ended: false, players: [pr("Kowal", 0), pr("RYSIEK", 1, false)], ...o,
+  });
+
+  it("a winner's reason with the store's -1 is NOT a draw: the card says nothing until somebody is known", () => {
+    // The deciding round has no Prep event and a reload starts from -1 (`store.ts` initialHud):
+    // before the drop's fix this read „RUNDA BEZ ROZSTRZYGNIĘCIA” (audit cases A, B).
+    expect(roundEnd("duel", "ELIMINATED", -1, -1, 0)).toBeNull();
+    expect(roundEnd("turniej", "TIME · MORE HEALTH", -1, -1, 0, ["Kowal", "RYSIEK"])).toBeNull();
+    // A trade, or even health at the time, is a draw whatever `roundWinner` holds.
+    expect(roundEnd("duel", "TRADE", 0, -1, 0)).toEqual({ title: "RUNDA BEZ ROZSTRZYGNIĘCIA", why: "Obaj padli — runda bez punktu", mine: null });
+    expect(roundEnd("duel", "TIME · EVEN", 1, -1, 0)?.mine).toBeNull();
+  });
+
+  it("the score that went up since the round was being played names the side", () => {
+    expect(roundWinnerSeen(sight({ before: { a: 2, b: 2 }, players: [] }))).toBe(0);
+    expect(roundWinnerSeen(sight({ before: { a: 3, b: 1 }, players: [] }))).toBe(1);
+    // Draw reasons first: a trade takes no point, whatever else is seen.
+    expect(roundWinnerSeen(sight({ result: "TRADE", before: { a: 2, b: 2 } }))).toBe(-1);
+    expect(roundWinnerSeen(sight({ result: "TIME · EVEN" }))).toBe(-1);
+    expect(roundWinnerSeen(sight({ result: "" }))).toBeNull(); // no round has ended
+  });
+
+  it("at the match's end, the side at DUEL.wins took the deciding round", () => {
+    expect(roundWinnerSeen(sight({ ended: true, scoreA: 4, scoreB: DUEL.wins, players: [] }))).toBe(1);
+    // A match that ended on the clock below DUEL.wins proves nothing by the score alone.
+    expect(roundWinnerSeen(sight({ ended: true, result: "TIME · MORE HEALTH", scoreA: 4, scoreB: 3, players: [] }))).toBeNull();
+  });
+
+  it("after a reload: the one standing after ELIMINATED, the healthier one after TIME · MORE HEALTH", () => {
+    expect(roundWinnerSeen(sight({}))).toBe(0);
+    expect(roundWinnerSeen(sight({ players: [pr("Kowal", 0, false), pr("RYSIEK", 1)] }))).toBe(1);
+    expect(roundWinnerSeen(sight({ players: [pr("Kowal", 0), pr("RYSIEK", 1)] }))).toBeNull(); // both up: not an elimination to read
+    expect(roundWinnerSeen(sight({ result: "TIME · MORE HEALTH", players: [pr("Kowal", 0, true, 30), pr("RYSIEK", 1, true, 64)] }))).toBe(1);
+    // Before P1 writes `ScoreRow.health` the rows carry none: unknown, never a guess.
+    expect(roundWinnerSeen(sight({ result: "TIME · MORE HEALTH", players: [pr("Kowal", 0), pr("RYSIEK", 1)] }))).toBeNull();
+    // Turniej: only the pair on the board counts — the bystanders are dead bodies on both sides.
+    const rows = [pr("Kowal", 0, false), pr("xXPiotrekXx", 1, false), pr("ZDZICHU", 0), pr("RYSIEK", 1, false)];
+    expect(roundWinnerSeen(sight({ mode: "turniej", players: rows, pair: ["ZDZICHU", "RYSIEK"] }))).toBe(0);
+    // Not a 1 v 1: the result names the side there.
+    expect(roundWinnerSeen(sight({ mode: "bomb", result: "BOMB DEFUSED" }))).toBeNull();
+  });
+
+  it("the deciding round's taker is the round's, not the match's (the verdict stinger under stage A)", () => {
+    // Audit case D: Ostrzyżeni's fifth round went to the shaved (ALL SHAVED) while the match went to
+    // the survivors 3 : 2 — the Ended event's winner (0) is the match's; the round was team 1's.
+    const base = { scoreA: 3, scoreB: 2, before: { a: 3, b: 1 }, ended: true, players: [], roundWinner: -1 as const, attackTeam: -1 as const };
+    expect(roundTakerOf({ ...base, mode: "ostrzyzeni", result: "ALL SHAVED" })).toBe(OSTRZYZENI.shavedTeam);
+    // Bomb's twelfth round won by the defence while the match ends 6 : 6 (a draw for the match).
+    expect(roundTakerOf({ ...base, mode: "bomb", result: "ATTACKERS ELIMINATED", scoreA: 6, scoreB: 6, attackTeam: 0 })).toBe(1);
+    // The duel: the score the Ended event found, and the one the sync brought.
+    expect(roundTakerOf({ ...base, mode: "duel", result: "ELIMINATED", scoreA: 5, scoreB: 6, before: { a: 5, b: 5 } })).toBe(1);
+    expect(roundTakerOf({ ...base, mode: "duel", result: "", scoreA: 4, scoreB: 3 })).toBeNull(); // capped in a freeze: no round
+  });
+
+  it("turniej: a settled bracket (the final just reported) still names the final's pair", () => {
+    expect(turniejPair("4|3;Kowal|xXPiotrekXx|6|3|a;ZDZICHU|RYSIEK|6|4|a;Kowal|ZDZICHU|4|6|b")).toEqual({ names: ["Kowal", "ZDZICHU"], stage: "FINAŁ" });
+    expect(turniejPair("4|1;Kowal|xXPiotrekXx|6|3|a;ZDZICHU|RYSIEK|4|3|-;Kowal||0|0|-")).toEqual({ names: ["ZDZICHU", "RYSIEK"], stage: "PÓŁFINAŁ" });
   });
 });

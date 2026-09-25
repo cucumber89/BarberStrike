@@ -1,7 +1,7 @@
 import { DUEL, GUN_GAME, MATCH, MatchPhase, BOMB, OSTRZYZENI, bombBreakMs, type Team } from "@frankibarber/shared";
 import type { HudState } from "../../game/store";
 import { createPhaseTracker, type PhaseModel } from "./phase";
-import { roundEnd, turniejPair } from "./roundText";
+import { roundEnd, roundWinnerSeen, turniejPair } from "./roundText";
 import { uiFlags } from "./uiFlags";
 
 /**
@@ -17,9 +17,17 @@ import { uiFlags } from "./uiFlags";
  *   delayed: it shows for whatever part of its window is left, and is gone once that has passed.
  * - `createMomentTracker` is the OBSERVER. Fed every store state in order, it turns what it sees
  *   into items: the phase model's breaks, freezes and final round (their windows follow from the
- *   server's deadlines, so a rejoin mid-break still gets its banner), and the edges it observed —
- *   the plant, a flag notice, a gun-game rung reaching the last weapon, a shave with me as the
- *   victim, Countdown→Waiting, Countdown→Playing, Ended→Waiting — plus `reconnecting`.
+ *   server's deadlines, so a rejoin mid-break still gets its banner and a join mid-freeze does not
+ *   get a late one), and the edges it observed — the plant, a flag notice, a gun-game rung reaching
+ *   the last weapon, a shave with me as the victim, Countdown→Waiting, Countdown→Playing,
+ *   Ended→Waiting — plus `reconnecting`.
+ *
+ * The store is written in two steps (`Game.ts:351-356` then the 10 Hz `syncHud`): a MatchEvent
+ * brings the phase and its deadline at once, and everything else (the round, the sides, the
+ * result, the score) arrives with the next sync after the Colyseus patch. A sync that runs between
+ * the event and the patch even writes the OLD phase and deadline back. So the tracker reads a
+ * phase it was already told has ended as stale (`STALE_MS`), and takes a freeze's words only once
+ * the state agrees it is a freeze (P-SRV's signal: the result cleared, the bomb out of `resolved`).
  *
  * `publishBannerUp` is how the rest of the HUD hears it: `uiFlags.bannerUp` (§4.5 `data-banner`).
  */
@@ -154,6 +162,16 @@ export interface MomentView {
   digit: number;
 }
 
+/**
+ * Who took the round a round card (`roundEnd`, `final`) was pushed for, as the tracker SAW it
+ * (`roundWinnerSeen` in the 1 v 1; the store's own value elsewhere): the card is drawn with this,
+ * never with the store's `roundWinner` alone. -1 for a draw, or for an item that carries none.
+ */
+export const itemWinner = (it: BusItem | null): Team | -1 => {
+  const w = it?.data?.winner;
+  return w === 0 || w === 1 ? w : -1;
+};
+
 const sameItem = (a: BusItem | null, b: BusItem | null): boolean => a === b || (!!a && !!b && a.key === b.key && a.end === b.end);
 
 const duelLike = (mode: string): boolean => mode === "duel" || mode === "turniej";
@@ -165,12 +183,37 @@ export function breakLength(model: PhaseModel): number {
   return OSTRZYZENI.breakMs;
 }
 
+/**
+ * The freeze's full length (`TdmRoom.ts:1594,1701,1828`): its start is its deadline minus this, so
+ * the freeze-start banner keeps the §6.5 window (+0 → +2000) whenever the HUD first sees it.
+ */
+export function freezeLength(model: PhaseModel): number {
+  if (model.mode === "bomb") return BOMB.buyMs;
+  if (duelLike(model.mode)) return DUEL.prepMs;
+  return OSTRZYZENI.prepMs;
+}
+
+/**
+ * The state says this Prep is a freeze, not the break before it (P-SRV): the round's result is
+ * cleared at every duel, turniej and Ostrzyżeni freeze, and a bomb round starts in `buy`. Until the
+ * sync after the freeze's event brings that, the round, the sides and the result are the break's.
+ */
+const freezeAgreed = (h: MomentInput): boolean => (h.mode === "bomb" ? !!h.bomb && h.bomb.stage !== "resolved" : h.roundResult === "");
+
+/**
+ * How long after a MatchEvent a state that still holds the phase and deadline it replaced is read
+ * as a stale sync rather than a real return: the patch trails the event by ≤ 50 ms (`patchRate`,
+ * `TdmRoom.ts:355`) and a sync runs every 100 ms, so 400 ms is a wide margin, while no real phase
+ * comes back to the very deadline it left that soon.
+ */
+export const STALE_MS = 400;
+
 /** The gun-game rung that hands out the last weapon. */
 const LAST_RUNG = GUN_GAME.ladder.length - 1;
 
-/** Could the round card name the round this state is about? (No banner for a card with no words.) */
-const roundCardSays = (h: MomentInput): boolean =>
-  roundEnd(h.mode, h.roundResult, h.roundWinner, h.bomb ? (h.bomb.attackTeam as Team) : -1, h.myTeam, h.mode === "turniej" ? turniejPair(h.bracket)?.names : null) !== null;
+/** Could the round card name the round this state is about, with `winner`? (No banner for a card with no words.) */
+const roundCardSays = (h: MomentInput, winner: Team | -1): boolean =>
+  roundEnd(h.mode, h.roundResult, winner, h.bomb ? (h.bomb.attackTeam as Team) : -1, h.myTeam, h.mode === "turniej" ? turniejPair(h.bracket)?.names : null) !== null;
 
 export interface MomentTracker {
   /** Fold the next store state in (in order) and say what the screen shows. Same state, same object. */
@@ -186,20 +229,49 @@ export interface MomentTracker {
 export function createMomentTracker(): MomentTracker {
   const bus = new MomentBus();
   const phase = createPhaseTracker();
+  let raw: MomentInput | null = null;
   let prev: MomentInput | null = null;
-  let prevModel: PhaseModel | null = null;
   let view: MomentView | null = null;
   let lastServerNow = Number.NaN;
   let offset = 0;
-  /** The freeze on screen: when it was first seen (the banner's anchor), while it lasts. */
-  let freezeAnchor: number | null = null;
   /** The countdown: the instant it ended (its intro leaves for `MOMENT_MS.out` from there). */
   let countdownEndedAt: number | null = null;
+  /**
+   * The phase on screen (phase and deadline); the one it replaced, with when a sync still holding
+   * that one stops being read as stale; and whether a state sync has confirmed the phase on screen
+   * (the event alone brings no `serverNow`, so a new `serverNow` with this phase and deadline is the
+   * sync after the patch: the round, the sides and the result are this phase's).
+   */
+  let shown: { phase: MatchPhase; endsAt: number; since: number } | null = null;
+  let replaced: { phase: MatchPhase; endsAt: number; until: number } | null = null;
+  let synced = false;
+  /** The score while the current round was being played (its freeze or its fight), as seen here. */
+  let scoreBefore: { a: number; b: number } | null = null;
+  /** Who took the round each round card names, latched per card the moment it is known. */
+  const winners = new Map<string, Team | -1>();
+  /** The freeze-start (role) banner: its key, and when this HUD could first show it. */
+  let freezeSeen: { key: string; at: number } | null = null;
 
-  const read = (h: MomentInput, localNow: number): MomentView => {
-    if (h === prev && view) return view;
-    if (h.serverNow !== lastServerNow) { lastServerNow = h.serverNow; offset = h.serverNow - localNow; }
+  /** The state with a stale sync's phase and deadline replaced by the ones the last event brought. */
+  const unstale = (h: MomentInput, localNow: number): MomentInput => {
+    if (!shown) { shown = { phase: h.phase, endsAt: h.phaseEndsAt, since: h.serverNow }; synced = true; return h; }
+    if (h.phase !== shown.phase || h.phaseEndsAt !== shown.endsAt) {
+      if (replaced && h.phase === replaced.phase && h.phaseEndsAt === replaced.endsAt && localNow < replaced.until) {
+        return { ...h, phase: shown.phase, phaseEndsAt: shown.endsAt };
+      }
+      replaced = { phase: shown.phase, endsAt: shown.endsAt, until: localNow + STALE_MS };
+      shown = { phase: h.phase, endsAt: h.phaseEndsAt, since: h.serverNow };
+      synced = false;
+    } else if (h.serverNow !== shown.since) synced = true;
+    return h;
+  };
+
+  const read = (store: MomentInput, localNow: number): MomentView => {
+    if (store === raw && view) return view;
+    raw = store;
+    if (store.serverNow !== lastServerNow) { lastServerNow = store.serverNow; offset = store.serverNow - localNow; }
     const now = localNow + offset;
+    const h = unstale(store, localNow);
     const model = phase.read(h);
     const p = prev;
 
@@ -227,6 +299,28 @@ export function createMomentTracker(): MomentTracker {
     }
     if (h.phase === MatchPhase.Countdown) countdownEndedAt = null;
     bus.reconnect(h.reconnecting, now);
+    // The score a round started from: kept while rounds are being played (a freeze, a fight), and
+    // forgotten over a lost connection, whose gap may hold rounds this client never saw.
+    if (h.reconnecting || (p?.reconnecting && !h.reconnecting)) scoreBefore = null;
+    else if (model.moment === "freeze" || model.moment === "live" || model.moment === "countdown" || model.moment === "warmup") scoreBefore = { a: h.scoreA, b: h.scoreB };
+    /**
+     * Who took the round the state is about: the result names the side in bomb and Ostrzyżeni. The
+     * 1 v 1: in a break, the Prep event's `roundWinner` (`Game.ts:355`, the server's own word — the
+     * freeze's event resets it to -1, so a value other than -1 in a break is this break's) beside a
+     * reason that names a winner; otherwise, and at Ended (no Prep event), as SEEN (`roundWinnerSeen`).
+     */
+    const winnerFor = (key: string): Team | -1 => {
+      const known = winners.get(key);
+      if (known !== undefined) return known;
+      if (!duelLike(h.mode)) return h.roundWinner;
+      const pair = h.mode === "turniej" ? turniejPair(h.bracket)?.names ?? null : null;
+      const sight = { mode: h.mode, result: h.roundResult, scoreA: h.scoreA, scoreB: h.scoreB, before: scoreBefore, ended: model.moment === "ended", players: h.players, pair };
+      const seen = roundWinnerSeen(sight);
+      const w = model.inBreak && h.roundWinner !== -1 && seen !== -1 && h.roundResult !== "" ? h.roundWinner : seen;
+      if (w === null) return -1;
+      winners.set(key, w);
+      return w;
+    };
 
     // ---- items whose window follows from a server deadline or a stamped event
     const b = h.bomb;
@@ -257,11 +351,12 @@ export function createMomentTracker(): MomentTracker {
     } else { bus.retain("shaved"); bus.retain("fight"); }
 
     // The round end and the halftime card: the break's windows, from its deadline.
-    if (model.inBreak && h.phaseEndsAt > 0 && roundCardSays(h)) {
+    const endKey = `end:${h.phaseEndsAt}`;
+    const endWinner = model.inBreak && h.phaseEndsAt > 0 ? winnerFor(endKey) : -1;
+    if (model.inBreak && h.phaseEndsAt > 0 && roundCardSays(h, endWinner)) {
       const start = h.phaseEndsAt - breakLength(model);
-      const endKey = `end:${h.phaseEndsAt}`;
       const halftime = model.moment === "halftime";
-      bus.push({ kind: "roundEnd", key: endKey, start: start + MOMENT_MS.roundEndDelay, end: halftime ? start + MOMENT_MS.halftimeCardAt : h.phaseEndsAt });
+      bus.push({ kind: "roundEnd", key: endKey, start: start + MOMENT_MS.roundEndDelay, end: halftime ? start + MOMENT_MS.halftimeCardAt : h.phaseEndsAt, data: { winner: endWinner } });
       bus.retain("roundEnd", endKey);
       if (halftime) {
         const halfKey = `half:${h.phaseEndsAt}`;
@@ -270,25 +365,38 @@ export function createMomentTracker(): MomentTracker {
       } else bus.retain("halftime");
     } else { bus.retain("roundEnd"); bus.retain("halftime"); }
 
-    // The freeze start (or Ostrzyżeni's role card): from the instant this freeze was first seen —
-    // the edge that opened it, or the join that found it — and never past its release.
-    if (model.moment === "freeze" && model.roundMode) {
-      if (freezeAnchor === null || prevModel?.moment !== "freeze") freezeAnchor = now;
+    // The freeze start (or Ostrzyżeni's role card): the freeze's first 2000 (2500) ms, counted from
+    // its real start — its deadline minus its length — so a HUD that joins, reloads or reconnects
+    // 3 s into a freeze shows no late „RUNDA n”. It is taken only once a sync has brought this
+    // freeze's state and that state agrees it is the freeze (`freezeAgreed`): the event alone still
+    // carries the break's round, sides and result (at halftime: „RUNDA 6 / ATAKUJESZ”).
+    if (model.moment === "freeze" && model.roundMode && h.phaseEndsAt > 0) {
+      const start = h.phaseEndsAt - freezeLength(model);
       const role = model.mode === "ostrzyzeni" && model.mySide !== null;
       const kind: BannerKind = role ? "role" : "freeze";
-      const key = `${kind}:${freezeAnchor}`;
-      const end = freezeAnchor + (role ? MOMENT_MS.roleCard : MOMENT_MS.freezeStart);
-      bus.push({ kind, key, start: freezeAnchor, end: h.phaseEndsAt > freezeAnchor ? Math.min(end, h.phaseEndsAt) : end });
-      bus.retain(kind, key); bus.retain(role ? "freeze" : "role");
-    } else { freezeAnchor = null; bus.retain("freeze"); bus.retain("role"); }
+      const key = `${kind}:${h.phaseEndsAt}`;
+      if (freezeSeen?.key === key || (synced && freezeAgreed(h))) {
+        if (freezeSeen?.key !== key) freezeSeen = { key, at: now };
+        // The sync that brings the freeze trails its start by up to ~150 ms: a banner held back by
+        // that alone still gets its whole length (§6.1: in 320, hold 1440, out 240 — and §6.5's
+        // reading budget counts the time it is on screen). First seen later than that is a join,
+        // which keeps the freeze's own window, so a HUD 3.6 s into the freeze shows nothing.
+        const lag = freezeSeen.at - start;
+        const len = role ? MOMENT_MS.roleCard : MOMENT_MS.freezeStart;
+        bus.push({ kind, key, start, end: Math.min(start + len + (lag > 0 && lag <= STALE_MS ? lag : 0), h.phaseEndsAt) });
+        bus.retain(kind, key); bus.retain(role ? "freeze" : "role");
+      }
+    } else { bus.retain("freeze"); bus.retain("role"); }
 
     // Match end, stage A (round modes): the final round, 0–3000 ms of Ended.
-    if (model.moment === "ended" && model.roundMode && h.phaseEndsAt > 0 && roundCardSays(h)) {
+    const finalKey = `final:${h.phaseEndsAt}`;
+    const finalWinner = model.moment === "ended" && model.roundMode && h.phaseEndsAt > 0 ? winnerFor(finalKey) : -1;
+    if (model.moment === "ended" && model.roundMode && h.phaseEndsAt > 0 && roundCardSays(h, finalWinner)) {
       const start = h.phaseEndsAt - MATCH.endedMs;
-      const key = `final:${h.phaseEndsAt}`;
-      bus.push({ kind: "final", key, start, end: start + MOMENT_MS.finalRound });
-      bus.retain("final", key);
+      bus.push({ kind: "final", key: finalKey, start, end: start + MOMENT_MS.finalRound, data: { winner: finalWinner } });
+      bus.retain("final", finalKey);
     } else bus.retain("final");
+    for (const k of winners.keys()) if (!bus.get(k) && k !== endKey && k !== finalKey) winners.delete(k);
 
     bus.prune(now);
     const st = bus.at(now, model.moment === "betweenPairs");
@@ -299,7 +407,7 @@ export function createMomentTracker(): MomentTracker {
     const left = h.phaseEndsAt - now;
     const digit = model.moment === "countdown" && h.phaseEndsAt > 0 && left > 0 && left <= MOMENT_MS.digitFrom ? Math.ceil(left / 1000) : 0;
 
-    prev = h; prevModel = model;
+    prev = h;
     // One object while nothing on screen changes, so `useSyncExternalStore` re-renders only then.
     if (view && view.model === model && sameItem(view.banner, st.banner) && view.bannerOut === bannerOut && sameItem(view.alert, st.alert)
         && view.alertOut === alertOut && view.actionMode === st.actionMode && view.intro === intro && view.digit === digit) return view;

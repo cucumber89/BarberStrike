@@ -9,7 +9,7 @@
  *                            `settings` event does it)
  *   primeAudio()           — optional explicit resume from a button handler
  */
-import { WEAPONS, MatchPhase, isPerkId, parseBracket, type GameMode, type Team, type WeaponId } from "@frankibarber/shared";
+import { WEAPONS, MatchPhase, isPerkId, type GameMode, type Team, type WeaponId } from "@frankibarber/shared";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { GameContext, GameModule } from "../context";
 import { loadSettings, type Settings } from "../../settings";
@@ -22,6 +22,7 @@ import { RemoteAudio } from "./remotes";
 import { runSelfTest, type SelfTestReport } from "./selftest";
 import { beepTimes, bombBeepInterval } from "./beeps";
 import { hud, type HudState } from "../store";
+import { roundTakerOf, turniejPair } from "../../ui/hud/roundText";
 import * as sfx from "./sfx";
 import type { UiSoundKind } from "./sfx";
 
@@ -71,13 +72,26 @@ const STAGE_A_MS = 3000;
 
 /**
  * Turniej: am I one of the pair on the board? Everyone else is watching it, and a watcher's round
- * has no verdict. (The Prep event lands before the 10 Hz state moves the bracket on.)
+ * has no verdict. (The Prep event lands before the 10 Hz state moves the bracket on; at the match's
+ * end the settled bracket still names the final's pair — `turniejPair`.)
  */
 function inPairOnBoard(h: HudState): boolean {
-  const view = parseBracket(h.bracket);
-  const pair = view?.matches[view.at];
+  const pair = turniejPair(h.bracket);
   const me = h.players.find((p) => p.id === h.myId)?.name;
-  return !!pair && !!me && (pair.a === me || pair.b === me);
+  return !!pair && !!me && pair.names.includes(me);
+}
+
+/**
+ * The deciding round's taker at the match's end (stage A): the Ended event carries the MATCH's
+ * winner, which is not always the last round's (Ostrzyżeni's fifth round, a duel or bomb that ran
+ * out of rounds or time). Read from the state the sync after the event brings, and the score the
+ * event found (`before`), exactly as the final-round banner reads it. Null when not known.
+ */
+function decidingRoundTaker(h: HudState, before: { a: number; b: number }): Team | -1 | null {
+  return roundTakerOf({
+    mode: h.mode, result: h.roundResult, scoreA: h.scoreA, scoreB: h.scoreB, before, ended: true, players: h.players,
+    pair: h.mode === "turniej" ? turniejPair(h.bracket)?.names ?? null : null, roundWinner: h.roundWinner, attackTeam: h.bomb ? (h.bomb.attackTeam as Team) : -1,
+  });
 }
 
 export const installAudio: GameModule = (ctx) => {
@@ -245,6 +259,15 @@ export const installAudio: GameModule = (ctx) => {
     if (winner === -1 || (h.mode === "turniej" && !inPairOnBoard(h))) return;
     countdownTimers.push(window.setTimeout(() => play(sfx.roundStinger(winner === h.myTeam), Priority.ui, 0.8), ROUND_END_DELAY_MS));
   };
+  /** The deciding round's verdict, read when the final-round banner comes in (the sync has brought its result by then). */
+  const finalVerdict = (before: { a: number; b: number }): void => {
+    countdownTimers.push(window.setTimeout(() => {
+      const h = hud.get();
+      const winner = decidingRoundTaker(h, before);
+      if (winner === null || winner === -1 || (h.mode === "turniej" && !inPairOnBoard(h))) return;
+      play(sfx.roundStinger(winner === h.myTeam), Priority.ui, 0.8);
+    }, ROUND_END_DELAY_MS));
+  };
   on("matchPhase", (m) => {
     clearCountdown();
     // The beeps count down to the phase's own deadline — the countdown's and a freeze's, never a
@@ -265,7 +288,9 @@ export const installAudio: GameModule = (ctx) => {
         // A round mode ends on its deciding round: its verdict under the final-round banner (stage A),
         // then the match's stinger with the verdict screen (stage B, 3 s on). Elsewhere stage B is now.
         if (ROUND_MODES.has(hud.get().mode) && prevPhase === MatchPhase.Playing) {
-          verdict(m.winner);
+          // The store still holds the score the round started from: the sync with the new one follows the event.
+          const found = hud.get();
+          finalVerdict({ a: found.scoreA, b: found.scoreB });
           countdownTimers.push(window.setTimeout(() => play(sfx.stinger("end"), Priority.ui, 0.9), STAGE_A_MS));
         } else play(sfx.stinger("end"), Priority.ui, 0.9);
         setMusic(true);

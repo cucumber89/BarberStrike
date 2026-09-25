@@ -22,26 +22,50 @@ import type { ZoneProps } from "./types";
 /**
  * A title longer than this does not fit the banner box at t5 in Bebas Neue (measured at 1600×900:
  * „RUNDA DLA OCALENI”, 17, is 543 of the box's 576 px), so it is set at t4 instead. Wide glyphs can
- * overflow sooner („RUNDA DLA WWWWWWW” is 658 px): the frame measures its title once the display
- * face is loaded, and drops to t4 whenever it does not fit.
+ * overflow sooner („RUNDA DLA WWWWWWW” is 658 px): the frame measures its title at t5 and drops it
+ * to t4 when it does not fit.
  */
 const LONG_TITLE = 17;
 
-export function BannerFrame({ copy, testid, className, glow }: { copy: BannerCopy; testid: string; className?: string; glow?: boolean }) {
-  const titleRef = useRef<HTMLDivElement>(null);
-  const [overflows, setOverflows] = useState<string | null>(null);
-  const long = copy.title.length > LONG_TITLE || overflows === copy.title;
+/** The font shorthand an element's text is drawn in, for `document.fonts.check` / `load`. */
+const fontOf = (el: Element): string => {
+  const cs = getComputedStyle(el);
+  return `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+};
+
+/**
+ * Is the title, drawn at t5, wider than its box? Measured in the face it is drawn in; when that is
+ * not the display face yet (Bebas Neue is fetched on its first use, so a banner that is the first
+ * Bebas text on the page — a HUD mounted mid-break — is laid out in a wider fallback), the face is
+ * loaded and the title measured again (`gen`), so a title that fits is never left at t4.
+ */
+function useTitleOverflows(titleRef: { current: HTMLDivElement | null }, title: string, skip: boolean): boolean {
+  const [gen, setGen] = useState(0);
+  const [over, setOver] = useState<string | null>(null);
+  /** Titles whose face was already asked for: one load per title, so a face that never comes cannot loop. */
+  const asked = useRef(new Set<string>());
+  const key = `${gen}|${title}`;
   useLayoutEffect(() => {
     const el = titleRef.current;
-    if (!el || long) return;
-    const check = () => { if (el.isConnected && el.scrollWidth > el.clientWidth + 1) setOverflows(copy.title); };
-    // Measured in Bebas Neue only: a fallback face is wider, and would drop a title that fits.
+    if (!el || skip) return;
+    // This render has no latch for `key`, so the title is at t5 now.
+    if (el.isConnected && el.scrollWidth > el.clientWidth + 1) setOver(key);
     const fonts = typeof document !== "undefined" ? document.fonts : undefined;
-    if (!fonts || fonts.status === "loaded") { check(); return; }
-    let live = true;
-    void fonts.ready.then(() => { if (live) check(); });
-    return () => { live = false; };
-  }, [copy.title, long]);
+    if (!fonts || asked.current.has(title)) return;
+    asked.current.add(title);
+    let font = "";
+    try { font = fontOf(el); if (fonts.check(font, title)) return; } catch { return; }
+    // Not cancelled on cleanup: StrictMode's second run skips the load it already asked for, and a
+    // state update after unmount is a no-op.
+    fonts.load(font, title).then(() => setGen((g) => g + 1), () => {});
+  }, [key, skip]);
+  return over === key;
+}
+
+export function BannerFrame({ copy, testid, className, glow }: { copy: BannerCopy; testid: string; className?: string; glow?: boolean }) {
+  const titleRef = useRef<HTMLDivElement>(null);
+  const byLength = copy.title.length > LONG_TITLE;
+  const long = useTitleOverflows(titleRef, copy.title, byLength) || byLength;
   return (
     <div className="moment-stage">
       <div className={`moment-band rule-${copy.rule}`} data-zone="veil" aria-hidden="true" />
@@ -90,10 +114,14 @@ export function RoundBanner({ h, model }: { h: HudState; model?: PhaseModel; sta
   return <BannerFrame copy={copy} testid="round-end" className={`round-end ${copy.cls}${final ? " final" : ""}`} />;
 }
 
-/** The HUD's live round-end card: the whole state (the MVP may land a moment after the break). */
-export function RoundBannerLive({ model }: ZoneProps) {
+/**
+ * The HUD's live round-end card: the whole state (the MVP may land a moment after the break), with
+ * the round's winner as the moment bus SAW it (`winner`, `bus.ts` `roundWinnerSeen`): the store's
+ * `roundWinner` is only the Prep event's, which the deciding round never sends and a reload never had.
+ */
+export function RoundBannerLive({ model, winner }: ZoneProps & { winner: Team | -1 }) {
   const h = useHud();
-  return <RoundBanner h={h} model={model} />;
+  return <RoundBanner h={h.roundWinner === winner ? h : { ...h, roundWinner: winner }} model={model} />;
 }
 
 /**

@@ -2,7 +2,7 @@ import { memo, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { OSTRZYZENI, type GameMode, type Team } from "@frankibarber/shared";
 import { hud, useHudSlice, type HudState } from "../../game/store";
 import { MODE_TITLE, mapTitle } from "./copy";
-import { createMomentTracker, publishBannerUp, type AlertKind, type BannerKind, type BusItem, type MomentTracker, type MomentView } from "./bus";
+import { createMomentTracker, itemWinner, publishBannerUp, type AlertKind, type BannerKind, type BusItem, type MomentTracker, type MomentView } from "./bus";
 import { freezeCopy, halftimeCard, roleCopy, sideNames, turniejPair, type BannerCopy, type Tone } from "./roundText";
 import { BannerFrame, RoundBannerLive } from "./RoundBanner";
 import type { PhaseModel } from "./phase";
@@ -156,7 +156,9 @@ export const Moments = memo(function Moments(_props: ZoneProps) {
       {view.alert && <Alert key={view.alert.key} item={view.alert} leaving={view.alertOut} />}
       {b ? (
         <div key={b.key} className={`moment-slot${view.bannerOut ? " out" : ""}`}>
-          {b.kind === "roundEnd" || b.kind === "final" ? <RoundBannerLive model={view.model} /> : <MomentBanner kind={b.kind} model={view.model} />}
+          {b.kind === "roundEnd" || b.kind === "final"
+            ? <RoundBannerLive model={view.model} winner={itemWinner(b)} />
+            : <MomentBanner kind={b.kind} model={view.model} />}
         </div>
       ) : view.digit > 0 && <Digit n={view.digit} />}
     </>

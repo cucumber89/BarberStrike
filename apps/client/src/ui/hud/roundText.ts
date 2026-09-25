@@ -1,4 +1,5 @@
-import { BOMB, OSTRZYZENI, TEAM_NAMES, bombAttackTeam, parseBracket, roundName, type GameMode, type Team } from "@frankibarber/shared";
+import { BOMB, DUEL, OSTRZYZENI, TEAM_NAMES, bombAttackTeam, parseBracket, roundName, type GameMode, type Team } from "@frankibarber/shared";
+import type { ScoreRow } from "../../game/store";
 import { money, plPlural } from "./format";
 
 /**
@@ -61,11 +62,16 @@ export function roundReason(mode: GameMode, result: string, roundWinner: Team | 
 
 const duelLike = (mode: GameMode): boolean => mode === "duel" || mode === "turniej";
 
+/** The 1 v 1's reasons that name nobody (`duelRoundWinner`, shared `modes.ts`): a trade, or even health at the time. */
+const DUEL_DRAWS: ReadonlySet<string> = new Set(["TRADE", "TIME · EVEN"]);
+
 /**
  * Which team took the round, or -1 for a round without one (a duel trade); null when the state
- * does not say. Bomb names it through the result and the attacking side; the duel (and so the
- * tournament) through the winner the Prep event carried; Ostrzyżeni through its result, else that
- * winner.
+ * does not say. Bomb names it through the result and the attacking side; Ostrzyżeni through its
+ * result, else the winner the Prep event carried. The duel (and so the tournament): its reason says
+ * whether anybody took the round, and `roundWinner` who — where -1 beside a reason that names a
+ * winner means "not known" (the deciding round has no Prep event, a reload starts from -1), never
+ * a draw: see `roundWinnerSeen`, which is how the HUD finds out.
  */
 function roundTaker(mode: GameMode, result: string, roundWinner: Team | -1, attackTeam: Team | -1): Team | -1 | null {
   if (mode === "bomb") {
@@ -73,7 +79,7 @@ function roundTaker(mode: GameMode, result: string, roundWinner: Team | -1, atta
     const attackers = result === "BOMB DETONATED" || result === "DEFENDERS ELIMINATED";
     return (attackers ? attackTeam : 1 - attackTeam) as Team;
   }
-  if (duelLike(mode)) return result ? roundWinner : null;
+  if (duelLike(mode)) return !result ? null : DUEL_DRAWS.has(result) ? -1 : roundWinner === -1 ? null : roundWinner;
   if (mode === "ostrzyzeni") {
     const t = result === "SURVIVORS HELD" ? OSTRZYZENI.survivorTeam : result === "ALL SHAVED" ? OSTRZYZENI.shavedTeam : roundWinner;
     return t === -1 ? null : t;
@@ -82,6 +88,64 @@ function roundTaker(mode: GameMode, result: string, roundWinner: Team | -1, atta
 }
 
 export interface RoundEnd { title: string; why: string; mine: boolean | null }
+
+/**
+ * Who took the round a state's result describes, in any round mode — the round banner's side and
+ * the verdict stinger's (`game/audio`): the bomb by its result and the attacking side, Ostrzyżeni by
+ * its result (else the Prep event's winner), the 1 v 1 as `roundWinnerSeen` sees it. -1 for a draw;
+ * null when the state does not say.
+ */
+export function roundTakerOf(s: RoundSight & { roundWinner: Team | -1; attackTeam: Team | -1 }): Team | -1 | null {
+  if (duelLike(s.mode)) return roundWinnerSeen(s);
+  return roundTaker(s.mode, roundReason(s.mode, s.result, s.roundWinner), s.roundWinner, s.attackTeam);
+}
+
+/**
+ * What this client can see of a finished 1 v 1 round beyond its reason — the store's `roundWinner`
+ * is only the Prep event's, and the deciding round has none (it goes Playing → Ended) while a
+ * reload starts from -1 (`store.ts` `initialHud`).
+ */
+export interface RoundSight {
+  mode: GameMode;
+  /** `bomb.result`: the round's reason. */
+  result: string;
+  scoreA: number;
+  scoreB: number;
+  /** The score while that round was being played, as this client saw it; null when it did not. */
+  before: { a: number; b: number } | null;
+  /** The match is over (Ended): whoever stands at `DUEL.wins` took the round that decided it. */
+  ended: boolean;
+  /** The rows as they stand after the round: who is alive, and (once P1 writes it) with what health. */
+  players: readonly Pick<ScoreRow, "name" | "team" | "alive" | "connected" | "health">[];
+  /** Turniej: the pair that played the round (team 0 first); only its two rows count. */
+  pair?: readonly [string, string] | null;
+}
+
+/**
+ * Who took a finished 1 v 1 round (duel or turniej), from what the client really saw: -1 when its
+ * reason names nobody, the team whose score went up since the round was being played, the one at
+ * `DUEL.wins` at the match's end, the one still standing after „ELIMINATED”, the healthier one
+ * after „TIME · MORE HEALTH”. Null when none of that is known — the round card then says nothing
+ * rather than calling the round a draw. Other modes: null (their result names the side).
+ */
+export function roundWinnerSeen(s: RoundSight): Team | -1 | null {
+  if (!duelLike(s.mode) || !s.result) return null;
+  if (DUEL_DRAWS.has(s.result)) return -1;
+  if (s.before) {
+    const upA = s.scoreA > s.before.a, upB = s.scoreB > s.before.b;
+    if (upA !== upB) return upA ? 0 : 1;
+  }
+  if (s.ended && Math.max(s.scoreA, s.scoreB) >= DUEL.wins) return s.scoreA > s.scoreB ? 0 : 1;
+  const rows = s.players.filter((p) => p.connected && (!s.pair || s.pair.includes(p.name)));
+  const side = (t: Team) => rows.filter((p) => p.team === t && p.alive);
+  const [a, b] = [side(0), side(1)];
+  if (s.result === "ELIMINATED" && (a.length > 0) !== (b.length > 0)) return a.length > 0 ? 0 : 1;
+  if (s.result === "TIME · MORE HEALTH" && a.length && b.length && [...a, ...b].every((p) => typeof p.health === "number")) {
+    const hp = (xs: typeof a) => xs.reduce((n, p) => n + (p.health ?? 0), 0);
+    if (hp(a) !== hp(b)) return hp(a) > hp(b) ? 0 : 1;
+  }
+  return null;
+}
 
 /**
  * The round card: who took the round and why, from the mode's real signals — the bomb's `result`
@@ -207,10 +271,14 @@ export interface FreezeInput {
   bracket: string;
 }
 
-/** Turniej: the pair on the board, team 0 first, and its stage („PÓŁFINAŁ”); null when unreadable. */
+/**
+ * Turniej: the pair on the board, team 0 first, and its stage („PÓŁFINAŁ”); null when unreadable.
+ * Once the bracket is settled (`at` past the last match: the final was just reported, `endMatch`),
+ * the pair is the final's — the one that played the match's last round.
+ */
 export function turniejPair(bracket: string): { names: readonly [string, string]; stage: string } | null {
   const view = parseBracket(bracket);
-  const m = view?.matches[view.at];
+  const m = view?.matches[Math.min(view.at, view.matches.length - 1)];
   if (!view || !m || !m.a || !m.b) return null;
   const rounds = view.matches.reduce((n, x) => Math.max(n, x.round), 0) + 1;
   return { names: [m.a, m.b], stage: roundName(rounds - m.round) };
