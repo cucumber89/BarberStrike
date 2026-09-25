@@ -16,6 +16,7 @@ import { uiFlags } from "./ui/hud/uiFlags";
 import { useHudSlice } from "./game/store";
 import { enterFullscreen, exitImmersion, isFullscreen, lockKeyboard } from "./game/input/immersion";
 import { hud } from "./game/store";
+import { installProfileSync, refreshMe } from "./net/accountApi";
 
 /**
  * The screens, in the order a match goes through them. `entering` is the click on WEJDŹ DO MECZU
@@ -49,6 +50,13 @@ const FADE = {
 export function App() {
   const [screen, setScreen] = useState<Screen>({ kind: "menu" });
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
+  // Drop V (P6): wire the profile save chokepoint to the cloud, then ask the server who we are. A
+  // guest (or an unreachable server) leaves the account store as null — the guest state the UI
+  // already renders. Runs once, on the client's first mount.
+  useEffect(() => {
+    installProfileSync();
+    void refreshMe();
+  }, []);
   const canvasHost = useRef<HTMLDivElement>(null);
   /**
    * What goes fullscreen. It has to be the whole app, not the canvas host: a fullscreen element is

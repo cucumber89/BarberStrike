@@ -126,8 +126,42 @@ export function loadProfile(): Profile {
   }
 }
 
+/**
+ * Drop V (P6): the one save chokepoint branches on who is signed in.
+ *
+ * localStorage is written EVERY time, signed in or not — it stays the fast local source of truth and
+ * the offline fallback. When an account is signed in, the same blob is ALSO pushed to the server, but
+ * debounced: a match end can call `saveProfile` several times in a tick, and the cloud does not need
+ * every intermediate — only the last state, a beat later. A guest never touches the network.
+ *
+ * The branch is injected rather than imported so this module keeps no dependency on the net layer (it
+ * runs in the match hot path and in node tests). `App`/`Account` call `setProfileSync` on boot to
+ * wire the real "am I signed in?" check and the real `PUT /api/profile`.
+ */
+type ProfileSync = { isLoggedIn: () => boolean; push: (p: Profile) => void };
+let profileSync: ProfileSync | null = null;
+
+/** Wires the server-sync branch of `saveProfile`. Called once on client boot; no-op in tests. */
+export function setProfileSync(sync: ProfileSync | null): void {
+  profileSync = sync;
+}
+
 export function saveProfile(p: Profile): void {
   try { localStorage.setItem(KEY, JSON.stringify(p)); } catch { /* private mode, quota: play anyway */ }
+  // Signed in → also debounce the same blob up to the cloud. Guest → localStorage only (above).
+  try { if (profileSync?.isLoggedIn()) profileSync.push(p); } catch { /* a failed cloud save must never cost the local one */ }
+}
+
+/**
+ * Adopts a profile the server handed back (on sign-in) as the local source of truth.
+ *
+ * Runs it through `loadProfile`'s repair path first — the same defaulting every read gets — so a blob
+ * from an older or newer build cannot poison the wardrobe, then writes it locally. Does NOT push back
+ * up (it just came from there); it writes localStorage directly to avoid a needless echo PUT.
+ */
+export function mergeServerProfile(server: Profile): Profile {
+  try { localStorage.setItem(KEY, JSON.stringify(server)); } catch { /* private mode: adopt in memory only */ }
+  return loadProfile();
 }
 
 /** What the summary screen shows after a match. */

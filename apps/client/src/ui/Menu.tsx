@@ -8,6 +8,7 @@ import { SettingsPanel } from "./SettingsPanel";
 import { MODE_ART, NAV_ART, mapArt } from "./menuArt";
 import { Armoury } from "./Armoury";
 import { Crates } from "./Crates";
+import { Account } from "./Account";
 import "./menu.css";
 
 interface Props {
@@ -31,7 +32,7 @@ const CONTROLS: [string, string, string][] = [
 ];
 const CONTROL_GROUPS: [string, string][] = [["move", "MOVEMENT"], ["fight", "COMBAT"], ["team", "TEAM & MATCH"]];
 
-type Panel = "main" | "lobby" | "settings" | "controls" | "armoury";
+type Panel = "main" | "lobby" | "settings" | "controls" | "armoury" | "account";
 
 /** Touch-only devices (phones/tablets) cannot play: no pointer lock, no keyboard. */
 const touchOnly = (): boolean =>
@@ -253,6 +254,12 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                     <i className="mm-nav-no">04</i><span className="mm-nav-art"><NAV_ART.armoury /></span>
                     <b>SZAFA</b><em>Strój, sylwetka, skiny i skrzynki</em><span className="mm-nav-go">▸</span>
                   </button>
+                  {/* Drop V (P6): KONTO — own block, disjoint from the tournament entry (P5) and the
+                      title block (:219-257). Sign in to carry progress between browsers. */}
+                  <button className="mm-nav-btn" onClick={() => setPanel("account")} data-testid="btn-account">
+                    <i className="mm-nav-no">05</i><span className="mm-nav-art"><NAV_ART.armoury /></span>
+                    <b>KONTO</b><em>Zaloguj się i zabierz postępy ze sobą</em><span className="mm-nav-go">▸</span>
+                  </button>
                 </nav>
               )}
             </div>
@@ -316,7 +323,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
         <div className="mm-shell">
           <header className="mm-bar">
             <button className="mm-back" onClick={() => setPanel("main")} data-testid="btn-back">◂ WSTECZ</button>
-            <div className="mm-bar-brand"><b>BARBERSTRIKE</b><span>{panel === "lobby" ? "LOBBY" : panel === "settings" ? "USTAWIENIA" : panel === "armoury" ? "SZAFA" : "STEROWANIE"}</span></div>
+            <div className="mm-bar-brand"><b>BARBERSTRIKE</b><span>{panel === "lobby" ? "LOBBY" : panel === "settings" ? "USTAWIENIA" : panel === "armoury" ? "SZAFA" : panel === "account" ? "KONTO" : "STEROWANIE"}</span></div>
             {panel === "lobby" ? status : <span className="mm-version">v{GAME_VERSION}</span>}
           </header>
 
@@ -534,6 +541,14 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
 
           {panel === "armoury" && (
             <div className="mm-content armoury-content"><Armoury onHaircut={setHaircut} onBuild={setBuild} onOutfit={setOutfit} /></div>
+          )}
+
+          {/* Drop V (P6): the account panel — sign in / up / out and the migration banner. */}
+          {panel === "account" && (
+            <div className="mm-content account-content">
+              <Account />
+              <p className="acc-hof-link">Zobacz <a href="/stats" data-testid="link-stats">tablicę sławy ▸</a></p>
+            </div>
           )}
         </div>
       )}
