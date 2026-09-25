@@ -1,114 +1,342 @@
-/* ui/hud/result.css — the match result, its summary and the Tab scoreboard (seeded by P0 for P6).
-   Drop U P0 0e moved these rules VERBATIM from ui/styles.css and then ui/cinematic.css, each in
-   its original order, without collapsing the later layer into the earlier one. index.css imports
-   the hud/*.css files between styles.css and cinematic.css, so the cascade is the one they had. */
+/* ui/hud/result.css — P6: the match result in three stages (zone `result`) and the Tab scoreboard
+   (zone `scoreboard`). docs/UI_U_SPEC.md P6, §4.4, §4.5, §6.1.
+   Every size is a §3.1 token, every colour a §3.4 token or a tint of one, every duration a §3.8
+   token or the spec's own number; nothing here uppercases (the strings are uppercase in JS). */
 
-/* Match summary (2.0): what the match paid, on the result screen. */
-.summary { display: flex; flex-direction: column; gap: 10px; margin: 0; text-align: left; }
-.summary-total { font-family: var(--font-display); font-size: 24px; color: var(--brass); font-weight: normal; margin-left: auto; }
-.summary-headline { font-size: 14px; color: var(--brass); letter-spacing: 0.04em; }
-.summary-toggle { align-self: flex-start; background: transparent; border: 1px solid var(--line); color: var(--tx-2); font-family: var(--font-display); font-size: 13px; letter-spacing: 0.14em; padding: 6px 10px; cursor: pointer; }
-.summary-toggle:hover { color: var(--tx); border-color: var(--tx-3); }
-.summary-detail { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(220px, 1fr); gap: 12px 28px; }
-.summary-lines { display: flex; flex-direction: column; gap: 4px; font-family: var(--font-mono); font-size: 13px; min-width: 0; }
-.summary-line { display: flex; justify-content: space-between; gap: 16px; color: var(--tx-2); }
-.summary-line b { color: var(--tx); font-weight: normal; }
-.summary-line.total { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); color: var(--tx); }
-.summary-line.total b { color: var(--brass); }
-.summary-level { display: flex; flex-direction: column; justify-content: center; gap: 8px; }
-.summary-rank { display: flex; align-items: baseline; gap: 10px; }
-.summary-lvl { font-family: var(--font-display); font-size: 44px; line-height: 1; color: var(--tx); }
-.summary-title { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.22em; color: var(--brass); }
-.summary-up { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em; color: var(--gold, var(--brass)); border: 1px solid currentColor; padding: 2px 6px; }
-.summary-bar { height: 6px; background: rgba(255,255,255,.12); overflow: hidden; }
-.summary-bar-fill { height: 100%; width: 100%; background: var(--brass); transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform .6s ease-out; }
-.summary-xp { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--tx-2); }
-.summary-badges { display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; }
-.summary-badge { border: 1px solid var(--brass); padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; }
-.summary-badge b { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.18em; color: var(--brass); font-weight: normal; }
-.summary-badge span { font-size: 11px; color: var(--tx-2); }
-@media (max-width: 720px) { .summary { grid-template-columns: 1fr; } }
-
-/* Match end. A card with a fixed top (verdict, score, why), fixed tabs, a scrolling body and a
-   fixed footer, so the verdict and LEAVE are on screen whatever the body holds: twelve players
-   with long nicks, two level-ups, three badges. `e2e/tools/ui-fit.mjs` measures the cases. */
-.result { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(6,6,8,.82); pointer-events: auto; }
-.result-card { width: min(920px, 94vw); max-height: min(92vh, 860px); display: flex; flex-direction: column; box-sizing: border-box;
-  background: var(--bg); border: 1px solid var(--line); border-top: 2px solid var(--brass); padding: 18px 26px 14px; gap: 10px;
-  animation: result-in 220ms ease-out; }
-.result-top { flex: 0 0 auto; text-align: center; display: flex; flex-direction: column; gap: 4px; }
-.result-title { font-family: var(--font-display); font-size: 72px; letter-spacing: 0.18em; line-height: 1; }
-.result-title.win { color: var(--brass); } .result-title.loss { color: var(--tx-2); } .result-title.draw { color: var(--tx); } .result-title.over { color: var(--tx-2); }
-.result-score { font-family: var(--font-mono); font-size: 20px; color: var(--tx); }
-.result-score b { color: var(--brass); font-weight: normal; }
-.result-why { font-size: 15px; color: var(--tx-2); }
-.result-tabs { flex: 0 0 auto; display: flex; gap: 6px; border-bottom: 1px solid var(--line); }
-.result-tabs button { background: transparent; border: 1px solid transparent; border-bottom: none; color: var(--tx-3); font-family: var(--font-display); font-size: 16px; letter-spacing: 0.16em; padding: 8px 14px; cursor: pointer; }
-.result-tabs button.on { color: var(--brass); border-color: var(--line); border-bottom: 1px solid var(--bg); margin-bottom: -1px; }
-.result-tabs kbd { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0; padding: 1px 4px; border: 1px solid var(--line); color: var(--tx-3); margin-left: 6px; }
-.result-body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 4px 2px; }
-.result-body .scoreboard { background: transparent; border: none; padding: 0; flex-wrap: wrap; }
-.result-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.result-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 8px; background: var(--bg-2); border: 1px solid var(--line); }
-.result-stat b { font-family: var(--font-display); font-size: 36px; line-height: 1; font-weight: normal; color: var(--tx); }
-.result-stat span { font-size: 13px; letter-spacing: 0.1em; color: var(--tx-2); text-transform: uppercase; }
-.result-note { margin: 0; font-size: 14px; color: var(--tx-2); text-align: center; }
-.result-foot { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 16px; border-top: 1px solid var(--line); padding-top: 10px; }
-.result-next { font-size: 14px; color: var(--tx-2); letter-spacing: 0.04em; }
-.result-next b { color: var(--brass); font-family: var(--font-mono); font-weight: normal; }
-.result-foot .menu-btn { margin: 0; width: auto; min-width: 200px; }
-@media (max-height: 640px) { .result-card { padding: 12px 20px 10px; gap: 6px; } .result-title { font-size: 56px; } .result-stat b { font-size: 30px; } }
-@media (max-width: 760px) { .result-title { font-size: 48px; } .result-stats { grid-template-columns: 1fr 1fr 1fr; } .result-foot { flex-direction: column; align-items: stretch; } }
-@media (prefers-reduced-motion: reduce) { .result-card { animation: none; } .summary-bar-fill { transition: none; } }
-
-.scoreboard-wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-/* An open-lobby deathmatch can hold forty bodies, so the board has to survive a roster that is
-   taller than the screen: it scrolls, and the column heads stay put while it does. At 6 v 6 —
-   every fixed-roster mode — nothing about this is visible. */
-.scoreboard { display: flex; gap: 16px; background: rgba(10,10,12,.86); padding: 18px; border: 1px solid var(--line); max-height: 82vh; overflow-y: auto; }
-.scoreboard .sb-team thead th { position: sticky; top: 0; z-index: 1; background: rgba(10,10,12,.96); }
-.sb-team { border-collapse: collapse; min-width: 300px; }
-.sb-team th { font-family: var(--font-display); letter-spacing: 0.2em; font-size: 14px; color: var(--tx-2); padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--line); }
-.sb-team th.sb-name, .sb-team td.sb-name { text-align: left; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sb-team.t0 th.sb-name { color: var(--team0); } .sb-team.t1 th.sb-name { color: var(--team1); }
-.sb-team td { padding: 6px 10px; text-align: right; font-family: var(--font-mono); font-size: 13px; }
-.sb-team tr.me td { color: var(--brass); }
-.sb-team tr.dc td { color: var(--tx-3); font-style: italic; }
-
-.sb-team.ffa th.sb-name { color: var(--red); }
-.result-score b { color: var(--brass); font-weight: normal; }
-
-.sb-team td.sb-money { color: #7dd68a; }
-.sb-bot { display: inline-block; margin-left: 6px; padding: 0 4px; border: 1px solid var(--line); font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: var(--tx-2); vertical-align: middle; }
-.result-rounds { color: var(--tx-2); font-family: var(--font-mono); font-size: 12px; }
-
-/* Scoreboard shave column. The dot for "never done" is dimmed by its OWN class rather than by
-   `:not(:empty)` — the cell always has content, so an emptiness test never fires (code review). */
-.sb-shaved { text-align: center; color: #e6b980; }
-td.sb-shaved { font-variant-numeric: tabular-nums; }
-td.sb-shaved.none { opacity: 0.4; }
-.sb-shaved svg { display: block; margin: 0 auto; }
-
-/* The match award. One row, the razor at the left, the name and what they are wearing at the right;
-   it sits above the badges because it is about the match, not about the local profile. */
-.summary-award {
-  display: flex; align-items: center; gap: 10px;
-  margin: 10px 0 2px; padding: 8px 12px;
-  border: 1px solid rgba(230, 185, 128, 0.45);
-  border-left: 3px solid #e6b980;
-  background: rgba(230, 185, 128, 0.08);
-  color: #e6b980;
+/* ================================================================ the match result (zone result)
+   Stage A: mounted and invisible (the final round's banner has the screen). Stage B: the dim and
+   the verdict. Stage C: the card. Hidden by OPACITY only (§4.5): e2e reads `summary` from t = 0. */
+.hud > .result, .result {
+  position: absolute; inset: 0; z-index: var(--z-result);
+  display: grid; place-items: center;
+  pointer-events: none;
+  --result-c: var(--hud-tx2);
 }
-.summary-award .award-icon { flex: 0 0 auto; width: 26px; height: 13px; }
-.summary-award > div { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
-.summary-award b { font-size: 12px; letter-spacing: 0.08em; }
-.summary-award span { font-size: 11px; color: #cbbfae; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.summary-badge.cut { border-color: rgba(230, 185, 128, 0.45); }
-.result-goal { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border: 1px solid var(--line); background: var(--bg-2); }
-.result-goal-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em; color: var(--tx-3); }
-.result-goal-text { font-size: 14px; color: var(--tx); }
-.result-goal-text b { color: var(--brass); font-weight: normal; font-family: var(--font-mono); }
-.result-goal-bar { height: 4px; background: rgba(255,255,255,.1); }
-.result-goal-bar i { display: block; height: 100%; width: 100%; background: var(--brass); transform-origin: left; transform: scaleX(var(--v, 0)); }
-/* The bracket as a tab of the result card: it scrolls with the body rather than floating over it. */
+/* Stage A: the whole layer is invisible — mounted for e2e, not for the eye. */
+.result[data-stage="A"] { opacity: 0; }
+.result.o-win { --result-c: var(--hud-accent); }
+.result.o-loss { --result-c: var(--hud-danger); }
+.hud > .result[data-stage="C"]:not(.closing), .result[data-stage="C"]:not(.closing) { pointer-events: auto; }
+/* Ended → Waiting: the card fades out over 400 ms, mounted, its listeners already off (§6.1). */
+.result.closing { opacity: 0; transition: opacity 400ms var(--hud-ease-in); }
+
+/* The dim: 0 → .6 in 400 ms as the verdict lands, and it stays under the card. No backdrop-filter
+   on a full-screen layer (Principle 15). */
+.result-dim { position: absolute; inset: 0; background: rgba(3, 8, 11, .6); opacity: 0; transition: opacity 400ms var(--hud-ease); }
+.result:is([data-stage="B"], [data-stage="C"]) .result-dim { opacity: 1; }
+
+/* ---------------------------------------------------------------- stage B: the verdict
+   The banner's band (§3.7): full width, dark in the middle, a 2 px rule top and bottom in the
+   result's colour. The word lands from 1.15 to 1 with the fade, 400 ms. */
+.result-verdict {
+  position: absolute; left: 0; right: 0; top: 50%; translate: 0 -50%;
+  display: grid; justify-items: center; gap: 8px; padding: 26px 16px 28px; text-align: center;
+  background: linear-gradient(90deg, transparent, rgba(5, 15, 20, .86) 20%, rgba(5, 15, 20, .86) 80%, transparent);
+  opacity: 0; scale: 1.15;
+  transition: opacity 400ms var(--hud-ease), scale 400ms var(--hud-ease);
+}
+.result-verdict::before, .result-verdict::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--result-c) 25%, var(--result-c) 75%, transparent);
+}
+.result-verdict::before { top: 0; }
+.result-verdict::after { bottom: 0; }
+.result[data-stage="B"] .result-verdict { opacity: 1; scale: 1; }
+.result[data-stage="C"] .result-verdict { scale: 1; transition: opacity var(--hud-out) var(--hud-ease-in); }
+.result-verdict-title {
+  font-family: var(--font-display); font-size: var(--hud-t5); line-height: .95;
+  letter-spacing: var(--hud-track-label); color: var(--result-c);
+}
+.result-verdict-score { font-family: var(--font-display); font-size: var(--hud-t3); line-height: 1; letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
+.result-verdict-why { font-size: var(--hud-t2); font-weight: 600; color: var(--hud-tx2); }
+.result .t0 { color: var(--hud-team0); }
+.result .t1 { color: var(--hud-team1); }
+/* A nickname is never set in the display face: Bebas has no lower case („Kowal” would read KOWAL). */
+.result .nick { font-family: var(--font-ui); font-size: var(--hud-t2); font-weight: 600; letter-spacing: 0; }
+
+/* ---------------------------------------------------------------- stage C: the card
+   min(1080px, 94vw) × ≤ 86vh (§4.4): a fixed top (verdict, score, why), fixed tabs, a body that
+   may scroll, a fixed footer — the verdict and LEAVE are on screen whatever the body holds. */
+.result-card {
+  position: relative; box-sizing: border-box;
+  width: min(1080px, 94vw); max-height: 86vh;
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 18px 28px 14px;
+  background: rgba(5, 15, 20, .94); border: var(--hud-plate-line); border-top: 3px solid var(--result-c); border-radius: var(--hud-radius);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .55);
+  opacity: 0;
+}
+/* B → C: the card's plate and its body fade in over 320 ms around the title, which stays solid —
+   it is the verdict's word, moved up into the card by MatchResult's FLIP (the verdict's own copy
+   leaves at once, so one word travels, not two). */
+.result[data-stage="C"] .result-card { opacity: 1; animation: result-card-in var(--hud-in) var(--hud-ease); }
+.result[data-stage="C"] :is(.result-card > :not(.result-top), .result-top > :not(.result-title)) { animation: result-fade-in var(--hud-in) var(--hud-ease) backwards; }
+.result[data-stage="C"] .result-verdict-title { opacity: 0; }
+@keyframes result-card-in { from { background-color: transparent; border-color: transparent; box-shadow: none; } }
+@keyframes result-fade-in { from { opacity: 0; } }
+
+.result-top { flex: 0 0 auto; display: grid; justify-items: center; gap: 6px; text-align: center; }
+.result-title { font-family: var(--font-display); font-size: var(--hud-t4); line-height: 1; letter-spacing: var(--hud-track-label); color: var(--result-c); transform-origin: center; }
+.result-score { font-family: var(--font-display); font-size: var(--hud-t3); line-height: 1; letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
+.result-why { font-size: var(--hud-t2); font-weight: 600; color: var(--hud-tx2); }
+.result-placement { font-size: var(--hud-t2); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-tx); }
+
+.result-tabs { flex: 0 0 auto; display: flex; gap: 2px; border-bottom: var(--hud-plate-line); }
+.result-tabs button {
+  margin: 0 0 -1px; padding: 8px 16px; background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer;
+  font-family: var(--font-ui); font-size: var(--hud-t1); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-tx2);
+}
+.result-tabs button:hover { color: var(--hud-tx); }
+.result-tabs button.on { color: var(--hud-accent); border-bottom-color: var(--hud-accent); }
+
+.result-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 2px; }
+/* The summary: the podium across the top (team modes; in FFA it is the score, up in the header),
+   then my three numbers beside the XP, then the match award. */
+.result-summary { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); align-items: start; gap: 12px; }
+.result-summary > :is(.podium, .summary-award, .result-note), .result-summary.no-xp > .result-stats { grid-column: 1 / -1; }
+.result-note { margin: 0; font-size: var(--hud-t2); font-weight: 600; color: var(--hud-tx2); text-align: center; }
+
+/* The podium: #2, #1 in the middle on the highest step with its star, #3 — steps of three heights
+   standing on one line, the nick on top of each; my own step outlined. */
+.podium {
+  list-style: none; margin: 0 auto; padding: 0; width: min(660px, 100%);
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 6px;
+  --step1: 104px; --step2: 88px; --step3: 76px;
+}
+.result-score.is-podium { width: 100%; font: inherit; }
+.result-top .podium { margin-top: 6px; --step1: 88px; --step2: 76px; --step3: 66px; }
+.podium-step {
+  box-sizing: border-box; min-width: 0; height: var(--step3);
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 10px 0;
+  background: linear-gradient(180deg, rgba(175, 192, 202, .12), rgba(175, 192, 202, .03));
+  border-top: 3px solid rgba(175, 192, 202, .35);
+}
+.podium-step.r1 { order: 2; height: var(--step1); padding-top: 14px; border-top-color: var(--hud-accent); background: linear-gradient(180deg, rgba(231, 182, 46, .2), rgba(231, 182, 46, .04)); }
+.podium-step.r2 { order: 1; height: var(--step2); border-top-color: rgba(175, 192, 202, .75); }
+.podium-step.r3 { order: 3; }
+.podium-step.t0 { box-shadow: inset 0 -3px 0 var(--hud-team0); }
+.podium-step.t1 { box-shadow: inset 0 -3px 0 var(--hud-team1); }
+.podium-step.me { outline: 1px solid var(--hud-accent); outline-offset: -1px; }
+.podium-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-ui); font-size: var(--hud-t2); font-weight: 600; letter-spacing: 0; color: var(--hud-tx); }
+.podium-star { font-style: normal; color: var(--hud-accent); margin-right: 6px; }
+.podium-value { font-family: var(--font-display); font-weight: normal; font-size: var(--hud-t3); line-height: 1; letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
+.podium-step.r1 .podium-value { color: var(--hud-accent); }
+
+/* My three numbers: the objective first, then K, A, D (one order in every mode). */
+.result-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.result-stat { min-width: 0; display: grid; justify-items: center; align-content: center; gap: 6px; padding: 12px 6px 10px; background: rgba(175, 192, 202, .06); border: var(--hud-plate-line); }
+.result-stat b { font-family: var(--font-display); font-weight: normal; font-size: var(--hud-t3); line-height: 1; letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
+.result-stat span { font-size: var(--hud-t1); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+
+/* „+790 XP · POZIOM 4”, the bar, AWANS, and SZCZEGÓŁY at the end of the same line. */
+.summary { box-sizing: border-box; display: grid; align-content: center; gap: 10px; padding: 10px 14px 12px; background: rgba(175, 192, 202, .06); border: var(--hud-plate-line); }
+.summary-level { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+.summary-total { font-family: var(--font-display); font-weight: normal; font-size: var(--hud-t3); line-height: 1; letter-spacing: var(--hud-track-num); color: var(--hud-accent); }
+.summary-sep { font-style: normal; color: var(--hud-tx2); }
+.summary-lvl { font-size: var(--hud-t2); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-tx); }
+.summary-lvl b { font-weight: 600; }
+.summary-up { padding: 1px 8px; border: 1px solid currentColor; font-size: var(--hud-t1); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-ok); }
+.summary-bar { height: 6px; background: rgba(255, 255, 255, .12); overflow: hidden; }
+.summary-bar-fill { height: 100%; width: 100%; background: var(--hud-accent); transform-origin: left; transform: scaleX(var(--v, 0)); transition: transform var(--hud-in) var(--hud-ease); }
+.summary-toggle {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; cursor: pointer;
+  background: none; border: var(--hud-plate-line);
+  font-family: var(--font-ui); font-size: var(--hud-t1); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-tx2);
+}
+.summary-toggle i { font-style: normal; }
+.summary-toggle:hover, .summary-toggle[aria-expanded="true"] { color: var(--hud-tx); border-color: rgba(175, 192, 202, .5); }
+.summary-detail { display: grid; gap: 12px; padding-top: 10px; border-top: var(--hud-plate-line); }
+.summary-lines, .summary-side { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.summary-line { display: flex; justify-content: space-between; gap: 16px; font-size: var(--hud-t1); font-weight: 600; color: var(--hud-tx2); }
+.summary-line b { font-family: var(--font-mono); font-weight: 500; color: var(--hud-tx); }
+.summary-line.total { margin-top: 4px; padding-top: 6px; border-top: var(--hud-plate-line); color: var(--hud-tx); }
+.summary-line.total b { color: var(--hud-accent); }
+.summary-headline { font-size: var(--hud-t1); font-weight: 600; color: var(--hud-accent); }
+.summary-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.summary-badge { display: grid; gap: 2px; padding: 6px 10px; border: 1px solid var(--hud-accent); }
+.summary-badge b { font-size: var(--hud-t1); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-accent); }
+.summary-badge span { font-size: var(--hud-t1); font-weight: 600; color: var(--hud-tx2); }
+.summary-badge.cut { border-color: rgba(231, 182, 46, .45); }
+.result-goal { display: grid; gap: 6px; padding: 8px 12px; border: var(--hud-plate-line); background: rgba(175, 192, 202, .06); }
+.result-goal-label { font-size: var(--hud-t1); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+.result-goal-text { font-size: var(--hud-t1); font-weight: 600; color: var(--hud-tx); }
+.result-goal-text b { font-family: var(--font-mono); font-weight: 500; color: var(--hud-accent); }
+.result-goal-bar { height: 4px; background: rgba(255, 255, 255, .1); }
+.result-goal-bar i { display: block; height: 100%; width: 100%; background: var(--hud-accent); transform-origin: left; transform: scaleX(var(--v, 0)); }
+
+/* The match award: the razor, the label, the nick in its own case, the count. */
+.summary-award {
+  display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 12px;
+  border-left: 3px solid var(--hud-accent); background: rgba(231, 182, 46, .07);
+  font-size: var(--hud-t1); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-tx2);
+}
+.summary-award .award-icon { flex: 0 0 auto; width: 26px; height: 13px; color: var(--hud-accent); }
+.summary-award b { font-weight: 600; }
+.summary-award .award-nick { letter-spacing: 0; color: var(--hud-tx); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.summary-award .award-n { letter-spacing: var(--hud-track-num); color: var(--hud-accent); }
+
 .result-bracket { display: grid; justify-items: center; padding: 10px 0 4px; overflow: auto; }
+
+/* The footer: the real time to the warm-up, and LEAVE. */
+.result-foot { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-top: 12px; border-top: var(--hud-plate-line); }
+.result-next { font-size: var(--hud-t2); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+.result-next b { font-family: var(--font-mono); font-weight: 500; letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
+.result-leave {
+  padding: 11px 22px; cursor: pointer; background: rgba(175, 192, 202, .08); border: var(--hud-plate-line); border-radius: var(--hud-radius);
+  font-family: var(--font-ui); font-size: var(--hud-t2); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-tx);
+}
+.result-leave:hover { background: var(--hud-accent); border-color: var(--hud-accent); color: rgb(20, 16, 8); }
+
+/* A short screen (720p at 125 %, 576 high): the same card, tighter. */
+@media (max-height: 640px) {
+  .result-card { gap: 8px; padding: 12px 20px 10px; }
+  .result-top { gap: 2px; }
+  .result-tabs button { padding: 6px 14px; }
+  .result-summary { gap: 8px; }
+  .podium-step { padding: 6px 8px 6px; gap: 2px; }
+  .podium-step.r1 { padding-top: 14px; }
+  .podium-step.r2 { padding-top: 10px; }
+  .result-stat { padding: 8px 6px 6px; gap: 4px; }
+  .summary-level { padding: 6px 10px; }
+  .summary-award { padding: 6px 10px; }
+  .result-foot { padding-top: 8px; }
+  .result-leave { padding: 8px 18px; }
+}
+@media (max-width: 760px) {
+  .result-summary.with-podium { grid-template-columns: minmax(0, 1fr); }
+  .result-foot { flex-direction: column; align-items: stretch; }
+}
+
+/* ================================================================ the Tab scoreboard (zone scoreboard)
+   Centred under the strip — its top is max(10vh, 88px) — min(1000px, 92vw) wide, ≤ 80vh tall, above
+   the shop (z 45 > 40). It fades in from .98 in 120 ms and leaves in 100 (§6.1). */
+.sb {
+  position: absolute; top: max(10vh, 88px); left: 0; right: 0; margin-inline: auto; z-index: var(--z-scoreboard);
+  box-sizing: border-box; width: min(1000px, 92vw); max-height: 80vh; overflow: auto;
+  display: grid; gap: 10px; align-content: start; padding: 12px 18px 14px;
+  background: rgb(6, 15, 20); border: var(--hud-plate-line); border-radius: var(--hud-radius);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .5);
+  animation: sb-in var(--hud-fast) var(--hud-ease);
+}
+/* It takes the pointer while it is up, so nothing under it (the shop's tiles) can be clicked through it. */
+.hud > .sb, .sb { pointer-events: auto; }
+.sb.closing { animation: sb-out 100ms var(--hud-ease-in) forwards; pointer-events: none; }
+@keyframes sb-in { from { opacity: 0; scale: .98; } }
+@keyframes sb-out { to { opacity: 0; scale: .98; } }
+/* §4.5: the board steps back under the pause column. */
+.hud[data-overlay~="pause"] .sb { opacity: 0; visibility: hidden; transition: opacity var(--hud-fast), visibility 0s linear var(--hud-fast); }
+
+/* The header: my side and score, the round and the clock over the mode and the map, theirs. */
+.sb-header { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; padding-bottom: 10px; border-bottom: var(--hud-plate-line); }
+.sb-side { min-width: 0; display: flex; align-items: center; gap: 14px; }
+.sb-side.r { justify-content: flex-end; }
+.sb-side-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--hud-t2); font-weight: 600; letter-spacing: var(--hud-track-label); }
+.sb-side.t0 .sb-side-name { color: var(--hud-team0); }
+.sb-side.t1 .sb-side-name { color: var(--hud-team1); }
+.sb-side.nicks .sb-side-name { letter-spacing: 0; }
+.sb-side-score { font-family: var(--font-display); font-size: var(--hud-t3); line-height: 1; letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
+.sb-mid { grid-column: 2; display: grid; justify-items: center; gap: 2px; text-align: center; }
+.sb-mid-top { display: flex; align-items: baseline; gap: 14px; }
+.sb-round { font-size: var(--hud-t2); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-tx); }
+.sb-clock { font-family: var(--font-mono); font-weight: 500; font-size: var(--hud-t2); letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
+.sb-clock:is(.freeze) { color: var(--hud-warn); }
+.sb-clock:is(.bomb) { color: var(--hud-danger); }
+.sb-clock:is(.break, .countdown, .warmup) { color: var(--hud-tx2); }
+.sb-mid-sub { font-size: var(--hud-t1); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-tx2); white-space: nowrap; }
+.sb-mid-sub i { font-style: normal; }
+
+/* The round history: 18 px slots, the reason's icon in the winner's colour, a gap at the swap. */
+.sb-history { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; }
+.sb-slot { box-sizing: border-box; width: 18px; height: 18px; display: grid; place-items: center; background: rgba(175, 192, 202, .05); border: 1px solid rgba(175, 192, 202, .16); }
+.sb-slot svg { width: 12px; height: 12px; }
+.sb-slot.gap { margin-right: 12px; }
+.sb-slot.w0 { color: var(--hud-team0); background: rgba(231, 182, 46, .14); border-color: rgba(231, 182, 46, .5); }
+.sb-slot.w1 { color: var(--hud-team1); background: rgba(143, 118, 224, .16); border-color: rgba(143, 118, 224, .55); }
+.sb-slot.even { color: var(--hud-tx2); }
+.sb-slot.now { border-color: var(--hud-tx); }
+
+/* The tables: t1 Inter with tabular numerals; my side first; the dead at half strength. */
+.sb-tables { display: grid; gap: 10px; }
+/* Fixed columns, so K A D sit in the same place in both tables whatever each one holds. */
+.sb-team { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--hud-t1); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sb-team th.sb-n { width: 44px; }
+.sb-team th.sb-shaved { width: 48px; }
+.sb-team th.sb-money { width: 96px; }
+.sb-team th.sb-pts { width: 88px; }
+.sb-team th.sb-ping { width: 64px; }
+.sb-team th {
+  position: sticky; top: 0; z-index: 1; padding: 4px 10px; text-align: right; white-space: nowrap;
+  background: rgb(8, 18, 23); border-bottom: var(--hud-plate-line);
+  font-size: var(--hud-t1); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-tx2);
+}
+.sb-team :is(th, td).sb-name { text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-team.t0 th.sb-name { color: var(--hud-team0); }
+.sb-team.t1 th.sb-name { color: var(--hud-team1); }
+.sb-team td { padding: 5px 10px; text-align: right; white-space: nowrap; color: var(--hud-tx); border-bottom: 1px solid rgba(175, 192, 202, .08); }
+.sb-team.t0 td.sb-name { box-shadow: inset 3px 0 0 var(--hud-team0); }
+.sb-team.t1 td.sb-name { box-shadow: inset 3px 0 0 var(--hud-team1); }
+.sb-team tr.me td { background: rgba(231, 182, 46, .1); }
+.sb-team tr.me .sb-nick { color: var(--hud-accent); }
+.sb-team tr.dead > td { opacity: .5; }
+.sb-team tr.dc td { color: var(--hud-tx2); font-style: italic; }
+.sb-skull { margin-right: 8px; vertical-align: -2px; color: var(--hud-danger); }
+.sb-tag { display: inline-block; margin-left: 8px; padding: 0 6px; border: var(--hud-plate-line); font-size: var(--hud-t1); font-weight: 600; color: var(--hud-tx2); vertical-align: 1px; }
+.sb-team td.sb-money { font-family: var(--font-mono); font-weight: 500; color: var(--hud-money); }
+.sb-team :is(th, td).sb-ping { color: var(--hud-tx2); }
+.sb-team .sb-shaved { text-align: center; color: var(--hud-warn); }
+.sb-team td.sb-shaved.none { color: rgba(229, 174, 82, .4); }
+.sb-team .sb-shaved svg { display: block; margin: 0 auto; }
+
+/* ---------------------------------------------------------------- density: the board never scrolls
+   Tab is held with the pointer locked and the wheel on the weapons, so a row under the fold is a row
+   nobody can reach. ScoreboardOverlay measures the board and draws it at the first density that fits
+   (`BoardDensity`, resultText.ts): 0 the roomy board above; 1 rows at the t1 line with no air and a
+   tighter frame; 2 the two sides side by side, mine on the left (a solo ranking in two columns);
+   3 the frame at its floor. The type never shrinks (§3.1): only the air and the layout do. */
+.sb:not([data-density="0"]) { gap: 6px; padding: 10px 16px 10px; }
+.sb:not([data-density="0"]) .sb-header { padding-bottom: 6px; }
+.sb:not([data-density="0"]) .sb-tables { gap: 6px; }
+.sb:not([data-density="0"]) .sb-team th { padding-block: 2px; }
+.sb:not([data-density="0"]) .sb-team td { padding-block: 1px; }
+/* One line height for every cell: the mono money cell would otherwise make my side's rows taller. */
+.sb:not([data-density="0"]) .sb-team :is(th, td) { line-height: 1.2; }
+/* The BOT / class tag sits inside the text line, so it never makes its row taller than the others. */
+.sb:not([data-density="0"]) .sb-tag { line-height: 1; padding-block: 0; vertical-align: top; }
+.sb[data-density="3"] { gap: 4px; padding: 8px 14px 8px; }
+.sb[data-density="3"] .sb-header { padding-bottom: 4px; }
+.sb[data-density="3"] .sb-mid { gap: 0; }
+.sb[data-density="3"] .sb-team :is(th, td) { padding-block: 0; }
+/* At the floor the rows lose their hairlines (a pixel a row) and alternate a faint band instead. */
+.sb[data-density="3"] .sb-team td { border-bottom: 0; }
+.sb[data-density="3"] .sb-team tbody tr:nth-child(even):not(.me) > td { background: rgba(175, 192, 202, .05); }
+/* Side by side: two equal columns, each table with narrower number columns and less air (a fixed
+   table's column width here is the whole cell's), so a 16-character nick keeps ~135 px at 1024
+   wide (it ellipsizes past that, as everywhere). */
+.sb-tables.split { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; align-items: start; }
+.sb-tables.split .sb-team :is(th, td) { padding-inline: 6px; }
+.sb-tables.split .sb-team th.sb-n { width: 32px; }
+.sb-tables.split .sb-team th.sb-shaved { width: 30px; }
+.sb-tables.split .sb-team th.sb-money { width: 72px; }
+.sb-tables.split .sb-team th.sb-pts { width: 56px; }
+/* Gun game has no wallet, and its points column is headed SZCZEBEL. */
+.sb-tables.split .sb-team:not(:has(th.sb-money)) th.sb-pts { width: 100px; }
+.sb-tables.split .sb-team th.sb-ping { width: 56px; }
+.sb-tables.split .sb-skull { margin-right: 4px; }
+.sb-tables.split .sb-tag { margin-left: 4px; padding-inline: 4px; }
+
+/* The draw under the pair (turniej), and the result's DRABINKA tab: P2's BracketPanel, set in this
+   zone's type (t1, no text under 14 px) — its own sheet sizes it for the pair card. */
+.sb-bracket { display: grid; justify-items: center; padding-top: 4px; border-top: var(--hud-plate-line); }
+:is(.sb-bracket, .result-bracket) .bracket-round h4 { font-family: var(--font-ui); font-size: var(--hud-t1); font-weight: 600; letter-spacing: var(--hud-track-label); color: var(--hud-tx2); }
+:is(.sb-bracket, .result-bracket) .bracket-pair span { font-size: var(--hud-t1); }
+:is(.sb-bracket, .result-bracket) .bracket-pair b { font-family: var(--font-ui); font-size: var(--hud-t1); font-weight: 600; letter-spacing: 0; }
+:is(.sb-bracket, .result-bracket) .bracket-pair i { font-size: var(--hud-t1); }
+:is(.sb-bracket, .result-bracket) .bracket.compact .bracket-pair { min-width: 150px; }
+
+/* ================================================================ reduced motion (R3)
+   Nothing moves in either zone; every stage still shows its state (the opacities above). */
+@media (prefers-reduced-motion: reduce) {
+  .sb, .sb.closing { animation: none; }
+  .result, .result.closing, .result-dim, .result-verdict, .result-card, .summary-bar-fill { transition: none; }
+  .result[data-stage="C"] :is(.result-card, .result-card > :not(.result-top), .result-top > :not(.result-title)) { animation: none; }
+}

@@ -1,7 +1,10 @@
 import React from "react";
-import { boysClass, MODES, TEAM_NAMES, parseHaircut, type GameMode } from "@frankibarber/shared";
+import { boysClass, MODES, type GameMode, type Team } from "@frankibarber/shared";
 import type { ScoreRow } from "../game/store";
-import { OSTRZYZENI_SIDES } from "./resultText";
+import { IconSkull } from "./hud/icons";
+import { money } from "./hud/format";
+import { pairNames } from "./Bracket";
+import { rankCompare, ranking, shavesOf, sideNames, splitColumns, type HistoryKind, type HistorySlot } from "./resultText";
 
 /**
  * A straight razor, drawn rather than spelled.
@@ -49,55 +52,159 @@ export function HeadShot({ className, title }: { className?: string; title?: str
   );
 }
 
-/** One scoreboard row (drop 5): K / D / A / shaves / $ / score / ping, a BOT tag, a dash for a bot's ping. */
-function ScoreTr({ r, myId }: { r: ScoreRow; myId: string }) {
-  const shaves = parseHaircut(r.haircut).shaves;
+/**
+ * Drop U (P6): the table as CS2 draws it — one table per side, MY side first, the columns K A D ✂ $
+ * PKT PING in that order, rows at t1 with tabular numerals, the dead at half strength with a skull,
+ * and money only where CS2 shows it: my own side's (the enemy's wallet is not mine to read).
+ */
+
+/** Which rows, in which tables: my side and then theirs; one table where there are no sides. */
+interface Table { key: string; cls: string; head: string; rows: ScoreRow[]; mine: boolean }
+
+/** Best first: points, then kills (the table's order in every team mode, and the podium's). */
+// The server's end-of-match order (resultText.rankCompare): FFA by kills then score, else score then kills.
+const byScore = rankCompare("tdm");
+const byKills = rankCompare("ffa");
+
+function tablesOf(rows: readonly ScoreRow[], myId: string, myTeam: Team, mode: GameMode, bracket: string, split: boolean): Table[] {
+  if (mode === "turniej") {
+    // A tournament's sides are two PEOPLE: the pair on the board, and nobody else (the bystanders are
+    // in the bracket below it). Once the draw is over there is no pair: everyone, by how far they got.
+    const pair = pairNames(bracket);
+    const on = pair ? pair.map((n) => rows.find((r) => r.name === n)).filter((r): r is ScoreRow => !!r) : [];
+    const list = on.length ? on : ranking({ mode, winner: -1, winnerId: "", winnerName: "", myId, myTeam, scoreA: 0, scoreB: 0, players: rows, bracket }).map((x) => x.row);
+    return [{ key: "pair", cls: "pair", head: "", rows: list, mine: false }];
+  }
+  if (!MODES[mode].teams) {
+    const ranked = [...rows].sort(mode === "gungame" ? byScore : byKills);
+    // A crowd side by side: the ranking reads down the left column, then down the right one.
+    if (split && ranked.length > 1) return splitColumns(ranked).map((part, i) => ({ key: `all${i}`, cls: "ffa", head: "", rows: part, mine: false }));
+    return [{ key: "all", cls: "ffa", head: "", rows: ranked, mine: false }];
+  }
+  const names = sideNames(mode);
+  const side = (t: Team): Table => ({ key: `t${t}`, cls: `t${t} ${t === myTeam ? "mine" : "theirs"}`, head: names[t], rows: rows.filter((r) => r.team === t).sort(byScore), mine: t === myTeam });
+  return [side(myTeam), side((1 - myTeam) as Team)];
+}
+
+/** One row: the name (a skull when down, the BOT tag), K A D, shaves, money on my side, points, ping. */
+function ScoreTr({ r, myId, showMoney, moneyCol, live }: { r: ScoreRow; myId: string; showMoney: boolean; moneyCol: boolean; live: boolean }) {
+  const shaves = shavesOf(r);
+  const dead = live && r.connected && !r.alive;
+  const cls = [r.id === myId ? "me" : "", r.connected ? "" : "dc", dead ? "dead" : ""].filter(Boolean).join(" ");
   return (
-    <tr className={r.id === myId ? "me" : r.connected ? "" : "dc"} data-testid="sb-row" data-bot={r.bot ? "1" : "0"}>
-      <td className="sb-name">{r.name}{r.boysClass && <span className="sb-bot">{boysClass(r.boysClass).name}</span>}{r.bot && <span className="sb-bot">BOT</span>}</td>
-      <td>{r.kills}</td><td>{r.deaths}</td><td>{r.assists}</td>
+    <tr className={cls || undefined} data-testid="sb-row" data-bot={r.bot ? "1" : "0"}>
+      <td className="sb-name">
+        {dead && <IconSkull className="sb-skull" size={14} title="nie żyje" />}
+        <span className="sb-nick">{r.name}</span>
+        {r.boysClass ? <span className="sb-tag">{boysClass(r.boysClass).name}</span> : null}
+        {r.bot && <span className="sb-tag">BOT</span>}
+      </td>
+      <td>{r.kills}</td><td>{r.assists}</td><td>{r.deaths}</td>
       {/* Drop E: how many times this head has been done. A dot rather than a 0, so the column reads
           as "who got done" at a glance instead of as a wall of zeroes. */}
       <td className={`sb-shaved ${shaves > 0 ? "" : "none"}`} data-testid="sb-shaved">{shaves > 0 ? shaves : "·"}</td>
-      <td className="sb-money">{r.money}</td><td>{r.score}</td><td>{r.bot ? "–" : r.ping}</td>
+      {moneyCol && <td className="sb-money">{showMoney ? money(r.money) : ""}</td>}
+      <td className="sb-pts">{r.score}</td><td className="sb-ping">{r.bot ? "–" : r.ping}</td>
     </tr>
   );
 }
 
-/**
- * Best first. The FFA table always did this; a team table used to print the roster in the order
- * people joined, which reads fine at 6 v 6 and not at all once a deathmatch holds a crowd — the
- * name you are looking for is your own, and it should be near the top or near the bottom, not
- * somewhere in twenty rows of arrival order.
- */
-const byKills = (a: ScoreRow, b: ScoreRow): number => b.kills - a.kills || a.deaths - b.deaths;
+export interface ScoreboardProps {
+  rows: readonly ScoreRow[];
+  myId: string;
+  /** My side (my table first); the side of my own row when not given. */
+  myTeam?: Team;
+  mode: GameMode;
+  /** The tournament's bracket ("" elsewhere): the pair on the board is the table. */
+  bracket?: string;
+  /** Mid-match: the dead are dimmed with a skull. The result card's table is not (the match is over). */
+  live?: boolean;
+  /**
+   * The Tab board's densest layouts (`boardSplit`): the tables side by side, my side on the left —
+   * a solo ranking in two columns — so a crowd fits the board without scrolling.
+   */
+  split?: boolean;
+}
 
-export function Scoreboard({ rows, myId, mode }: { rows: readonly ScoreRow[]; myId: string; mode: GameMode }) {
-  if (!MODES[mode].teams) {
-    // FFA (drop 4): one table, most kills first. Gun Game (drop D): highest rung first, the score column is the rung.
-    const gun = mode === "gungame";
-    const sorted = [...rows].sort((a, b) => (gun ? b.score - a.score || b.kills - a.kills : byKills(a, b)));
-    return (
-      <div className="scoreboard">
-        <table className="sb-team ffa">
-          <thead><tr><th className="sb-name">{MODES[mode].name}</th><th>K</th><th>D</th><th>A</th><th className="sb-shaved"><Razor title="OGOLONY" /></th><th>$</th><th>{gun ? "SZCZEBEL" : "PKT"}</th><th>PING</th></tr></thead>
-          <tbody>
-            {sorted.map((r) => <ScoreTr key={r.id} r={r} myId={myId} />)}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
+/** The tables: my side first, then theirs (`.sb-team` each, the class `multiplayer.spec.ts` counts). */
+export function Scoreboard({ rows, myId, myTeam = rows.find((r) => r.id === myId)?.team ?? 0, mode, bracket = "", live = false, split = false }: ScoreboardProps) {
+  const moneyCol = MODES[mode].shop !== "none";
+  const gun = mode === "gungame";
+  const tables = tablesOf(rows, myId, myTeam, mode, bracket, split);
   return (
-    <div className="scoreboard">
-      {[0, 1].map((team) => (
-        <table key={team} className={`sb-team t${team}`}>
-          <thead><tr><th className="sb-name">{(mode === "ostrzyzeni" ? OSTRZYZENI_SIDES : TEAM_NAMES)[team]}</th><th>K</th><th>D</th><th>A</th><th className="sb-shaved"><Razor title="OGOLONY" /></th><th>$</th><th>PKT</th><th>PING</th></tr></thead>
+    <div className={`sb-tables${split && tables.length > 1 ? " split" : ""}`}>
+      {tables.map((t) => (
+        <table key={t.key} className={`sb-team ${t.cls}`}>
+          <thead>
+            <tr>
+              <th className="sb-name">{t.head}</th><th className="sb-n">K</th><th className="sb-n">A</th><th className="sb-n">D</th>
+              <th className="sb-shaved"><Razor title="OGOLONY" /></th>
+              {moneyCol && <th className="sb-money">$</th>}
+              <th className="sb-pts">{gun ? "SZCZEBEL" : "PKT"}</th><th className="sb-ping">PING</th>
+            </tr>
+          </thead>
           <tbody>
-            {rows.filter((r) => r.team === team).sort(byKills).map((r) => <ScoreTr key={r.id} r={r} myId={myId} />)}
+            {t.rows.map((r) => (
+              <ScoreTr key={r.id} r={r} myId={myId} moneyCol={moneyCol} live={live}
+                showMoney={MODES[mode].teams && mode !== "turniej" ? t.mine : r.id === myId} />
+            ))}
           </tbody>
         </table>
       ))}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- the history strip's icons
+
+/** ✹ The charge went off. */
+function IconBurst({ size = 14 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true" focusable="false">
+      <path d="M12 1.5l2.2 6.1 5.6-3.3-3.3 5.6 6.1 2.1-6.1 2.2 3.3 5.6-5.6-3.3L12 22.5l-2.2-6.1-5.6 3.3 3.3-5.6L1.5 12l6.1-2.1-3.3-5.6 5.6 3.3z" />
+    </svg>
+  );
+}
+/** ✂ The wire was cut. */
+function IconCut({ size = 14 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true" focusable="false">
+      <circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M8.5 7.8L21 18M8.5 16.2L21 6" />
+    </svg>
+  );
+}
+/** ⏱ The clock ran out. */
+function IconClock({ size = 14 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="13.5" r="8" /><path d="M12 9v4.5l3 2M9.5 2.5h5" />
+    </svg>
+  );
+}
+const KIND_ICON: Record<HistoryKind, () => React.ReactElement> = {
+  detonation: () => <IconBurst />,
+  defuse: () => <IconCut />,
+  elimination: () => <IconSkull size={14} />,
+  time: () => <IconClock />,
+};
+const KIND_WORD: Record<HistoryKind, string> = { detonation: "wybuch", defuse: "rozbrojenie", elimination: "eliminacja", time: "czas" };
+
+/**
+ * The round history strip (`sb-history`): one 18 px slot a round, the reason's icon in the winner's
+ * colour, a gap where the sides swap. Every word is in `aria-label`, none in the text: the strip is
+ * read by its shapes, as in CS2.
+ */
+export function HistoryStrip({ slots, mode }: { slots: readonly HistorySlot[]; mode: GameMode }) {
+  const names = sideNames(mode);
+  return (
+    <ol className="sb-history" data-testid="sb-history" aria-label="Historia rund">
+      {slots.map((s) => (
+        <li key={s.n} data-slot={s.n} data-reason={s.kind ?? undefined}
+          className={["sb-slot", s.winner === null ? "empty" : s.winner === -1 ? "even" : `w${s.winner}`, s.now ? "now" : "", s.gapAfter ? "gap" : ""].filter(Boolean).join(" ")}
+          aria-label={s.winner === null ? `Runda ${s.n}` : `Runda ${s.n}: ${s.winner === -1 ? "remis" : names[s.winner]} · ${s.kind ? KIND_WORD[s.kind] : ""}`}>
+          {s.kind ? KIND_ICON[s.kind]() : null}
+        </li>
+      ))}
+    </ol>
   );
 }
