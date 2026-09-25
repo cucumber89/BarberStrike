@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { Viewer } from "./ui/Viewer";
+import { TutorialMount } from "./ui/onboarding/TutorialOverlay";
 import "@fontsource/bebas-neue";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
@@ -26,5 +27,8 @@ const viewing = /^\/viewer\/?$/.test(location.pathname);
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     {viewing ? <Viewer /> : <App />}
+    {/* P8b onboarding: the five-step tutorial overlay lives at the app root, a sibling of <App/>,
+        so it outlives the menu that starts it and lays itself over the live match. */}
+    {!viewing && <TutorialMount />}
   </React.StrictMode>,
 );
