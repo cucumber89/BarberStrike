@@ -126,6 +126,28 @@ describe("breaks", () => {
     expect([back.moment, back.breakSource]).toEqual(["break", "fallback"]);
   });
 
+  it("fallback against P-SRV's break signal: a reason through every break, empty through every freeze", () => {
+    // P-SRV (TdmRoom `beginDuelRound` / `beginInfectionRound`) clears `bomb.result` at every freeze
+    // and writes the round's reason at every round end, SURVIVORS HELD / ALL SHAVED included, so a
+    // HUD mounted mid-Prep reads the state alone right in each mode (R7). Bomb keeps last round's
+    // reason into the freeze, which is why its fallback reads the stage and not the reason.
+    const fb = (over: Partial<HudState>) => derivePhase(st({ phase: MatchPhase.Prep, phaseEndsAt: NOW + 4_000, ...over }));
+    expect([fb({ mode: "ostrzyzeni", round: 2, roundResult: "SURVIVORS HELD" }).moment, fb({ mode: "ostrzyzeni", round: 2, roundResult: "ALL SHAVED" }).moment]).toEqual(["break", "break"]);
+    expect(fb({ mode: "ostrzyzeni", round: 2, roundResult: "" }).moment).toBe("freeze");
+    for (const r of ["ELIMINATED", "TRADE", "TIME · EVEN", "TIME · MORE HEALTH"]) expect(fb({ mode: "duel", round: 3, roundResult: r }).breakSource, r).toBe("fallback");
+    expect(fb({ mode: "bomb", roundResult: "BOMB DEFUSED", bomb: bomb({ round: 5, stage: "buy", result: "BOMB DEFUSED" }) }).moment, "bomb freeze with last round's reason").toBe("freeze");
+    // Turniej: a round break inside a pair has somebody alive (the winner of the round), so it is a
+    // round break and not the bracket; the pair's freeze has an empty reason and both alive.
+    const pair = [row("Kowal", 0), row("Rysiek", 1, false), row("Zdzichu", 0, false), row("Kasia", 1, false)];
+    const tb = fb({ mode: "turniej", round: 3, roundResult: "ELIMINATED", players: pair, bracket: bracket(0), scoreA: 2, scoreB: 1 });
+    expect([tb.moment, tb.betweenPairs, tb.breakSource]).toEqual(["break", false, "fallback"]);
+    const tf = fb({ mode: "turniej", round: 3, roundResult: "", players: pair.map((p, i) => ({ ...p, alive: i < 2 })), bracket: bracket(0), scoreA: 2, scoreB: 1 });
+    expect([tf.moment, tf.inBreak]).toEqual(["freeze", false]);
+    // The first freeze after the countdown is not an edge (Countdown → Prep), and its reason is empty.
+    const first = run(st({ mode: "duel", phase: MatchPhase.Countdown, phaseEndsAt: NOW + 1_000 }), st({ mode: "duel", phase: MatchPhase.Prep, phaseEndsAt: NOW + DUEL.prepMs }));
+    expect([first.moment, first.inBreak]).toEqual(["freeze", false]);
+  });
+
   it("duel freeze with an empty result is not a break", () => {
     const d = derivePhase(st({ mode: "duel", phase: MatchPhase.Prep, phaseEndsAt: NOW + 12_000, round: 0, roundResult: "" }));
     expect([d.moment, d.inBreak, d.breakSource, d.clockKind]).toEqual(["freeze", false, null, "freeze"]);
