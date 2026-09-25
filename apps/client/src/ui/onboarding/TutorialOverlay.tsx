@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useHud } from "../../game/store";
+import { hud, useHud } from "../../game/store";
 import { TUTORIAL_STEPS, TUTORIAL_LAST_STEP, stepDone, type TutorialContext } from "./tutorialRules";
 import { tutorial, useTutorial } from "./tutorialStore";
 import "./onboarding.css";
@@ -72,14 +72,15 @@ export function TutorialOverlay() {
       const s = tutorial.get();
       if (!s.active) return;
       const cur = s.step;
+      const hs = hud.get();
       const ctx: TutorialContext = {
-        alive: h.alive,
-        connected: h.connected,
+        alive: hs.alive,
+        connected: hs.connected,
         moved: seen.current.moved,
-        aiming: h.aiming,
+        aiming: hs.aiming,
         fired: seen.current.fired,
-        reloaded: reloadedRef.current || h.reloading,
-        switched: seen.current.switched || h.weapon !== weaponAtStep.current,
+        reloaded: reloadedRef.current || hs.reloading,
+        switched: seen.current.switched || hs.weapon !== weaponAtStep.current,
       };
       if (stepDone(cur, ctx)) {
         const next = cur + 1;
@@ -88,7 +89,7 @@ export function TutorialOverlay() {
       }
     }, 200);
     return () => window.clearInterval(id);
-  }, [active, h]);
+  }, [active]);
 
   if (!active) return null;
   const def = TUTORIAL_STEPS[Math.min(step, TUTORIAL_LAST_STEP) - 1];
