@@ -4,8 +4,10 @@ import type { HudState } from "../game/store";
 import { loadSeen, nextHint, saveSeen, type HintDef } from "./hintRules";
 
 /**
- * One short line, bottom-centre, during a player's first match. See `hints.ts` for the rules; this
- * is only the plumbing: watch the state, show what `nextHint` returns, remember it, let it go.
+ * One short line, bottom-centre, during a player's first match. See `hintRules.ts` for the rules;
+ * this is only the plumbing: watch the state, show what `nextHint` returns, remember it, let it go.
+ * Drop U (P3): zone `hint`, at the bottom edge between the health and the ammo plates, in at most
+ * two lines of t1 and never cut short with an ellipsis (docs/UI_U_SPEC.md §7 P3 WORK 5).
  *
  * It never takes the keyboard and never blocks a click — `pointer-events: none` in the CSS — so
  * the worst a hint can do at the wrong moment is be ignored.
@@ -39,9 +41,6 @@ export function Hints({ h }: { h: HudState }) {
         connected: h.connected && h.phase !== MatchPhase.Ended,
         shopOpen: h.shopOpen,
         buyWindowLeft: h.buyWindowLeft,
-        mode: h.mode,
-        bombStage: h.bomb?.stage ?? "",
-        carrying: !!h.bomb && h.bomb.carrier === h.myId,
         planVoteMine: !!h.plan && h.plan.options.length > 0 && h.plan.chosen === 0 && h.plan.votingTeam === h.myTeam,
         teamTotals: totals,
         myTeam: h.myTeam,
@@ -57,5 +56,5 @@ export function Hints({ h }: { h: HudState }) {
   }, [current, seen]);
 
   if (!current) return null;
-  return <div className="hint" data-testid="hint" role="status">{current.text}</div>;
+  return <div className="hint" data-zone="hint" data-testid="hint" role="status">{current.text}</div>;
 }

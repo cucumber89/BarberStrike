@@ -4,8 +4,8 @@
  * The brief asks for "short, discreet hints during the first game, without a long compulsory
  * tutorial", so the rules here are deliberately strict:
  *
- *  - a hint fires only when its moment arrives (the shop is open, the bomb is down, a plan vote
- *    started) — never a wall of text at spawn;
+ *  - a hint fires only when its moment arrives (the buy window is open, a plan vote started, a
+ *    side is short) — never a wall of text at spawn;
  *  - each one is shown ONCE, ever, and remembered across sessions;
  *  - one at a time, and it leaves on its own;
  *  - nothing blocks play, and nothing has to be dismissed to continue.
@@ -22,12 +22,16 @@ export interface HintDef {
   ms: number;
 }
 
+/**
+ * Drop U (P3, docs/UI_U_SPEC.md §7 P3 WORK 5): the two bomb hints („zanieś ładunek na A lub B…”,
+ * „ładunek podłożony — dobiegnij…”) are gone. They said what the mode line and the action slot
+ * already say at that moment („MASZ ŁADUNEK”, „PRZYTRZYMAJ [T] · PODŁÓŻ”, „ROZBRÓJ [T]”), and
+ * one question gets one place (§2 Principle 1).
+ */
 export const HINTS: readonly HintDef[] = [
   { id: "move", text: "WASD — ruch · mysz — rozglądanie · lewy przycisk — strzał", ms: 7000 },
   { id: "buy", text: "B otwiera sklep — potem dwie cyfry (dział, pozycja) albo kliknij", ms: 8000 },
   { id: "pause", text: "ESC to pauza i menu: tam zmienisz stronę i ustawienia.", ms: 7000 },
-  { id: "objective", text: "Zanieś ładunek na A lub B i przytrzymaj T, żeby go podłożyć", ms: 8000 },
-  { id: "defuse", text: "Ładunek podłożony — dobiegnij i przytrzymaj T, żeby go rozbroić", ms: 8000 },
   { id: "plan", text: "Twoja drużyna wybiera zmianę mapy na tę rundę — F1 albo F2", ms: 8000 },
   { id: "team", text: "Za dużo was? ESC → zmiana strony. Kasa i sprzęt idą z tobą.", ms: 8000 },
 ];
@@ -41,11 +45,6 @@ export interface HintContext {
   shopOpen: boolean;
   /** Ms of buy window left; > 0 means buying is possible right now. */
   buyWindowLeft: number;
-  mode: string;
-  /** "buy" | "carried" | "dropped" | "planted" | "resolved" | "" */
-  bombStage: string;
-  /** True when this player carries the charge. */
-  carrying: boolean;
   /** A plan vote is open and this player's team is the one voting. */
   planVoteMine: boolean;
   /** Team sizes as the picker shows them. */
@@ -67,8 +66,6 @@ export function nextHint(ctx: HintContext, seen: ReadonlySet<string>): HintDef |
   if (ctx.planVoteMine) { const h = pick("plan"); if (h) return h; }
   if (ctx.shopOpen) return null;                       // the menu explains itself; do not talk over it
   if (ctx.buyWindowLeft > 0 && ctx.alive) { const h = pick("buy"); if (h) return h; }
-  if (ctx.mode === "bomb" && ctx.carrying) { const h = pick("objective"); if (h) return h; }
-  if (ctx.mode === "bomb" && ctx.bombStage === "planted" && ctx.alive) { const h = pick("defuse"); if (h) return h; }
   // A side two or more bodies short is worth mentioning once.
   const other = ctx.myTeam === 0 ? 1 : 0;
   if (ctx.teamTotals[ctx.myTeam] - ctx.teamTotals[other] >= 2) { const h = pick("team"); if (h) return h; }
