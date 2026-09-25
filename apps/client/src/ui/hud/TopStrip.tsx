@@ -4,11 +4,11 @@ import {
   type GameMode, type Team,
 } from "@frankibarber/shared";
 import { useHudSlice, type HudState, type ScoreRow } from "../../game/store";
-import { bracketStage, pairNames } from "../Bracket";
+import { bracketStage, stripPair } from "../Bracket";
 import { OSTRZYZENI_SIDES } from "./roundText";
 import { SIDE_WORD } from "./copy";
 import { fmtClock } from "./format";
-import { IconBomb, IconClippers, IconShield, IconSword } from "./icons";
+import { IconBomb, IconShield, IconSword } from "./icons";
 import { clockMs, stripSides, urgent, type PhaseModel } from "./phase";
 import type { ZoneProps } from "./types";
 
@@ -34,9 +34,13 @@ export const fmtTime = (ms: number): string => {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 };
 
-/** Drop T: in a tournament the two sides are two people, so the bar carries their nicknames. */
+/**
+ * Drop T: in a tournament the two sides are two people, so the bar carries their nicknames — the
+ * pair on the board, and after the final the final's pair, whose score the strip still holds in the
+ * match end's stage A (`stripPair`; never FADE / TAPER beside a final score, Principle 9).
+ */
 export const sideNamesOf = (mode: GameMode, bracket: string): readonly [string, string] =>
-  mode === "ostrzyzeni" ? OSTRZYZENI_SIDES : (bracket ? pairNames(bracket) : null) ?? TEAM_NAMES;
+  mode === "ostrzyzeni" ? OSTRZYZENI_SIDES : (mode === "turniej" ? stripPair(bracket) : null) ?? TEAM_NAMES;
 
 /** A nick as the strip prints it: its own case, cut at 12 characters (§5.2 row 28). */
 export const cutNick = (name: string, max = 12): string => (name.length > max ? `${name.slice(0, max - 1)}…` : name);
@@ -83,10 +87,11 @@ export const PIP_MAX = 5;
 /**
  * The pips of `team` (round modes only): the players of that side, one pip each, filled while
  * alive and outlined once dead; a disconnected player has none. In a tournament only the pair on
- * the board has a side — the entrants waiting their turn (bystanders) have no pip.
+ * the board has a side (after the final, the final's pair: `stripPair`) — the entrants waiting
+ * their turn (bystanders) have no pip.
  */
 export function pipsOf(players: readonly ScoreRow[], team: Team, mode: GameMode, bracket: string): Pips {
-  const pair = mode === "turniej" ? pairNames(bracket) : null;
+  const pair = mode === "turniej" ? stripPair(bracket) : null;
   const rows = players.filter((r) => r.connected && (mode === "turniej" ? !!pair && r.name === pair[team] : r.team === team));
   const alive = rows.filter((r) => r.alive).length;
   if (rows.length > PIP_MAX) return { pips: [alive > 0 ? "alive" : "dead"], alive, many: true };
@@ -191,10 +196,15 @@ export function badgeUp(model: PhaseModel, h: Pick<HudState, "bomb" | "serverNow
   return h.serverNow - start < BADGE_LIVE_MS;
 }
 
-/** The icon of a side: the sword for the side that attacks, the shield for the one that holds. */
+/**
+ * The icon of a side, in bomb only: the sword for the side that attacks, the shield for the one
+ * that holds (§5.2 row 10, Principle 7). Ostrzyżeni draws none (§5.2 row 39: „OCALENI 1 · 0:06 · 0
+ * OSTRZYŻENI”): its names are the longest in the game, and at 553 px an icon beside five pips took
+ * the room OSTRZYŻENI needs to be printed whole (Principle 9). Its side is named by the chip, the
+ * colour and the badge.
+ */
 function RoleIcon({ mode, team, attackTeam }: { mode: GameMode; team: Team; attackTeam: number }) {
   if (mode === "bomb" && attackTeam >= 0) return team === attackTeam ? <IconSword className="ts-role" size={18} /> : <IconShield className="ts-role" size={18} />;
-  if (mode === "ostrzyzeni") return team === OSTRZYZENI.shavedTeam ? <IconClippers className="ts-role" size={18} /> : <IconShield className="ts-role" size={18} />;
   return null;
 }
 
@@ -222,7 +232,7 @@ export const TopStrip = memo(function TopStrip({ model }: ZoneProps) {
   } else if (teams) {
     const names = sideNamesOf(mode, bracket);
     const myName = players.find((r) => r.id === myId)?.name ?? "";
-    const pair = mode === "turniej" ? pairNames(bracket) : null;
+    const pair = mode === "turniej" ? stripPair(bracket) : null;
     const mineTeam: Team | -1 = mode === "turniej" ? (pair ? (pair[0] === myName ? 0 : pair[1] === myName ? 1 : -1) : -1) : myTeam;
     const pipsShown = model.roundMode;
     sides = teamSlots(model, myTeam, mineTeam).map((s) => (
@@ -260,9 +270,14 @@ export const TopStrip = memo(function TopStrip({ model }: ZoneProps) {
         {face.kind === "bomb" && <IconBomb className="ts-bomb" size={26} />}
         <span key={face.tick || face.kind} className={`ts-digits${face.tick ? " tick" : ""}`}>{face.text}</span>
       </div>
-      {badge && model.mySide && <span className={`ts-badge t${myTeam}`} data-testid="role-badge">{SIDE_WORD[model.mySide]}</span>}
+      {/* Row 2 is its own three-track grid: my badge in the first track, under my side, and the line
+          in the middle one — centred while the badge leaves it room, pushed right by the badge when
+          not, never touching it (the tracks' gap; ostrzyżeni's long line and „OSTRZYŻONY”). */}
       <div className={`ts-row2${row2.wide ? " wide" : ""}`}>
-        {row2.parts.map((p, i) => <React.Fragment key={p.testid}>{i > 0 && " · "}<span data-testid={p.testid}>{p.text}</span></React.Fragment>)}
+        {badge && model.mySide && <span className={`ts-badge t${myTeam}`} data-testid="role-badge">{SIDE_WORD[model.mySide]}</span>}
+        <span className="ts-line">
+          {row2.parts.map((p, i) => <React.Fragment key={p.testid}>{i > 0 && " · "}<span data-testid={p.testid}>{p.text}</span></React.Fragment>)}
+        </span>
       </div>
     </div>
   );

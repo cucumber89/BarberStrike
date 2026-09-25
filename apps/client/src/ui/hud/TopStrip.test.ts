@@ -1,11 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { BOMB, DUEL, MatchPhase, OSTRZYZENI, type BombData, type Team } from "@frankibarber/shared";
-import { initialHud, type HudState, type ScoreRow } from "../../game/store";
+import { BOMB, DUEL, MatchPhase, OSTRZYZENI, TEAM_NAMES, type BombData, type Team } from "@frankibarber/shared";
+import { hud, initialHud, type HudState, type ScoreRow } from "../../game/store";
 import { derivePhase } from "./phase";
 import { countWords } from "./format";
-import { PIP_MAX, PipRow, badgeUp, clockFace, cutNick, ffaSides, pipsOf, row2Of, rungLabel, teamSlots } from "./TopStrip";
+import { PIP_MAX, PipRow, TopStrip, badgeUp, clockFace, cutNick, ffaSides, pipsOf, row2Of, rungLabel, sideNamesOf, teamSlots } from "./TopStrip";
 import { modeLineOf } from "./ModeLine";
 import { actionOf } from "./ActionPrompt";
 
@@ -98,10 +98,58 @@ describe("pips", () => {
     const players = [row("Kowal", 0), row("RYSIEK", 1, { alive: false }), row("ZDZICHU", 0, { alive: false }), row("Kasia", 0, { alive: false }), row("Piotrek", 1, { alive: false })];
     expect(pipsOf(players, 0, "turniej", bracket)).toEqual({ pips: ["alive"], alive: 1, many: false });
     expect(pipsOf(players, 1, "turniej", bracket)).toEqual({ pips: ["dead"], alive: 0, many: false });
-    // With no pair on the board (between pairs, or after the final) nobody has a pip.
+    // With no bracket (the warm-up before the draw) nobody has a pip.
     expect(pipsOf(players, 0, "turniej", "").pips).toEqual([]);
     // The same rows in a duel room count by team, as a duel has no bystanders.
     expect(pipsOf(players, 0, "duel", "").pips).toHaveLength(3);
+  });
+});
+
+describe("names (Principle 9)", () => {
+  it("turniej after the final: the strip names the final's pair beside its score, never FADE / TAPER", () => {
+    // ZDZICHU took the final 6 : 4 from Kowal; `at` (3) is past the last pair, so nobody is on the
+    // board, and the match end's stage A still shows the strip with the final's score 4 : 6.
+    const done = "4|3;Kowal|xXPiotrekXx|6|3|a;ZDZICHU|RYSIEK|6|4|a;Kowal|ZDZICHU|4|6|b";
+    expect(sideNamesOf("turniej", done)).toEqual(["Kowal", "ZDZICHU"]);
+    // The pips belong to the same pair: my own (Kowal, down) and the winner's; the others have none.
+    const players = [row("Kowal", 0, { alive: false }), row("ZDZICHU", 1), row("RYSIEK", 0, { alive: false }), row("xXPiotrekXx", 1, { alive: false })];
+    expect([pipsOf(players, 0, "turniej", done), pipsOf(players, 1, "turniej", done)]).toEqual([
+      { pips: ["dead"], alive: 0, many: false }, { pips: ["alive"], alive: 1, many: false },
+    ]);
+    // While a pair is on the board it is that pair; before the draw there is nobody to name.
+    expect(sideNamesOf("turniej", "4|1;Kowal|xXPiotrekXx|6|3|a;ZDZICHU|RYSIEK|4|3|-;Kowal||0|0|-")).toEqual(["ZDZICHU", "RYSIEK"]);
+    expect(sideNamesOf("turniej", "")).toEqual(TEAM_NAMES);
+    // A bracket string never renames another mode's teams.
+    expect(sideNamesOf("duel", done)).toEqual(TEAM_NAMES);
+    expect(sideNamesOf("ostrzyzeni", done)).toEqual(["OCALENI", "OSTRZYŻENI"]);
+  });
+
+  it("ostrzyżeni: whole team names, no role icon, and the badge in row 2's own grid beside the line", () => {
+    // The chaser in the freeze, five shaved: the case that printed „OSTRZYŻ…” on the chip and ran
+    // „OSTRZYŻONY” into „RUNDA 2 / 5 · …” (audit P2-1, M1 / M2). The pixels are measured in the
+    // browser (e2e/out/u/p2/probe.mjs); what the CSS relies on is pinned here.
+    const players = [
+      row("me", 1, { shaved: true }), ...[1, 2, 3, 4].map((i) => row(`s${i}`, 1, { shaved: true })), ...[1, 2, 3, 4, 5].map((i) => row(`o${i}`, 0)),
+    ];
+    const state = st({ mode: "ostrzyzeni", phase: MatchPhase.Prep, phaseEndsAt: NOW + 6_000, round: 1, myId: "me", myTeam: 1, players, connected: true, alive: true });
+    // The store notifies on the next frame; a test has no frames, so it notifies at once.
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => { cb(0); return 0; });
+    hud.set(state);
+    try {
+      const html = renderToStaticMarkup(createElement(TopStrip, { model: derivePhase(state) }));
+      // Team names are plain `.ts-name` (flex: none in top.css, never cut); only nicks may end in „…”.
+      expect(html.match(/class="ts-name[^"]*"/g)).toEqual(['class="ts-name"', 'class="ts-name"']);
+      expect(textOf(html)).toContain("OSTRZYŻENI");
+      expect(html, "§5.2 row 39 draws no role icon").not.toContain("ts-role");
+      // Row 2: the badge first, then the line in its own track — two grid items, never one run of text.
+      const row2 = html.slice(html.indexOf('<div class="ts-row2'));
+      expect(row2).toMatch(/^<div class="ts-row2 wide"><span class="ts-badge t1" data-testid="role-badge">OSTRZYŻONY<\/span><span class="ts-line"><span data-testid="infection-line">RUNDA 2 \/ 5 · 5 NIEOSTRZYŻONYCH<\/span><\/span><\/div>/);
+      // The pips: five on my side, five on theirs, and the counts only in attributes.
+      expect(html.match(/data-count="5"/g)).toHaveLength(2);
+    } finally {
+      hud.reset();
+      vi.unstubAllGlobals();
+    }
   });
 });
 

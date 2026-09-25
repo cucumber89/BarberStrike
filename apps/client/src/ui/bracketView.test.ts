@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DUEL, bracketString, currentMatch, reportWinner, seedBracket, withdraw, type Bracket } from "@frankibarber/shared";
 import { mulberry32 } from "@frankibarber/shared";
-import { bracketLine, bracketStage, pairCard, pairNames, standing } from "./Bracket";
+import { bracketLine, bracketStage, pairCard, pairNames, standing, stripPair } from "./Bracket";
 import { countWords } from "./hud/format";
 
 /**
@@ -96,6 +96,32 @@ describe("the pair card and the strip's stage (drop U, P2)", () => {
   // case counts them (§6.5: „xXPiotrekXx”); a nick with spaces in it (`sanitizeName` allows them)
   // adds its extra words to the eyebrow and the next-pair line.
   const EIGHT = ["xXPiotrekXx_1234", "Kasia_Brzytwa", "Jan_Kowalski", "ZDZICHU", "RYSIEK", "Gruby_Wojtek", "Młody_Tomek", "GRAZYNA"];
+
+  it("stripPair: the pair on the board, and after the final the final's pair (the strip's stage A)", () => {
+    // Driven through the room's own bracket functions, the way the string reaches the client.
+    let b = draw(FOUR, 4);
+    const side = (i: number) => [b.names[b.matches[i].a], b.names[b.matches[i].b]];
+    expect(stripPair(bracketString(b)), "semi-final 1, a is team 0").toEqual(side(0));
+    b = reportWinner(b, currentMatch(b)!.a, 6, 2);
+    expect(stripPair(bracketString(b)), "semi-final 2").toEqual(side(1));
+    b = reportWinner(b, currentMatch(b)!.b, 3, 6);
+    const final = side(2);
+    expect(stripPair(bracketString(b)), "the final on the board").toEqual(final);
+    b = reportWinner(b, currentMatch(b)!.b, 4, 6);
+    // Nobody is on the board any more (pairNames, frozen for P6, says so), but the room still holds
+    // the final's 4 : 6, and the strip names the two who played it — never FADE / TAPER.
+    expect(pairNames(bracketString(b))).toBeNull();
+    expect(stripPair(bracketString(b))).toEqual(final);
+    // A walkover in the final names the final's pair the same way.
+    let w = draw(FOUR, 4);
+    w = reportWinner(w, currentMatch(w)!.a, 6, 0);
+    w = reportWinner(w, currentMatch(w)!.a, 6, 1);
+    const wFinal = [w.names[w.matches[2].a], w.names[w.matches[2].b]];
+    w = withdraw(w, w.matches[2].a);
+    expect(stripPair(bracketString(w))).toEqual(wFinal);
+    // No bracket: nothing to name.
+    expect(stripPair("")).toBeNull();
+  });
 
   it("bracketStage names the round without the pair", () => {
     let b = draw(FOUR, 4);

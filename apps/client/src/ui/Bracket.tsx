@@ -85,6 +85,31 @@ export function bracketLine(bracket: string): string {
 }
 
 /**
+ * Drop U (P2): the pair the strip's two scores belong to. While a pair is on the board it is that
+ * pair (`pairNames`). Once the final has been played (`at` past the last match) the room still holds
+ * the final's score for the match end's stage A, so the strip names the final's two players beside
+ * it, never the FADE / TAPER fallback (Principle 9, §5.2 row 28). null when neither is known: no
+ * bracket yet, or a pair on the board with an empty slot.
+ */
+export function stripPair(bracket: string): readonly [string, string] | null {
+  const now = pairNames(bracket);
+  if (now) return now;
+  const view = parseBracket(bracket);
+  if (!view || view.at < view.matches.length) return null;
+  const last = lastDecided(view, view.matches.length);
+  return last ? [last.a, last.b] : null;
+}
+
+/** The last REAL decided pair before index `before` (a pair of two names with a winner); byes are walked past. */
+function lastDecided(view: BracketView, before: number): BracketView["matches"][number] | null {
+  for (let i = Math.min(before, view.matches.length) - 1; i >= 0; i--) {
+    const m = view.matches[i];
+    if (m.a && m.b && m.winner) return m;
+  }
+  return null;
+}
+
+/**
  * Drop U: the stage of the pair on the board and nothing else — „PÓŁFINAŁ”, „FINAŁ” (in a draw of
  * eight also „ĆWIERĆFINAŁ”). The strip's second row carries it beside the round number, and the pair
  * card's title names the NEXT pair's stage with it; the two names are on the strip's sides already.
@@ -139,11 +164,7 @@ const STANDING_TEXT: Record<ReturnType<typeof standing>, string> = {
 export function pairCard(bracket: string, myName: string, roundResult: string): PairCard | null {
   const view = parseBracket(bracket);
   if (!view) return null;
-  let done: BracketView["matches"][number] | null = null;
-  for (let i = Math.min(view.at, view.matches.length) - 1; i >= 0 && !done; i--) {
-    const m = view.matches[i];
-    if (m.a && m.b && m.winner) done = m;
-  }
+  const done = lastDecided(view, view.at);
   if (!done) return null;
   const winner = done.winner === "a" ? done.a : done.b;
   const [won, lost] = done.winner === "a" ? [done.scoreA, done.scoreB] : [done.scoreB, done.scoreA];

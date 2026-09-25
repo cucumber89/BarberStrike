@@ -326,6 +326,8 @@ export const pins: PinSet = {
     expect: ["[data-testid=infection-line]", "[data-testid=mode-line]", `${TIMER}[data-kind=freeze]`, "[data-testid=role-badge]"],
     caseText: ["RUNDA 2 / 5 · 9 NIEOSTRZYŻONYCH", "0:06", "UCIEKAJ PRZED MASZYNKĄ", "OCALONY", "OCALENI", "OSTRZYŻENI"],
     textAbsent: [{ text: "07:50" }, { text: "RUNDA ZA" }],
+    // My badge is its own item in row 2, left of the full-width line and never run into it.
+    leftOf: ["[data-testid=role-badge]", "[data-testid=infection-line]"],
   },
   "gungame-live": {
     expect: ["[data-testid=ladder]", "[data-testid=ladder-gun]", "[data-testid=score-b]"],

@@ -19,24 +19,32 @@
   color: var(--hud-tx); white-space: nowrap;
   transition: opacity var(--hud-fast);
 }
+/* Ostrzyżeni has the longest side names (OCALENI / OSTRZYŻENI) and never a bomb, so its clock track
+   is only as wide as its m:ss digits: the 104 px floor exists to keep the sides still when a bomb
+   icon joins the digits. That gives each side the room to print OSTRZYŻENI whole on its chip beside
+   five pips at 553 px (1024 wide), with the gap to spare. */
+.top-bar[data-mode="ostrzyzeni"] { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
 .top-bar .t0 { --ts-team: var(--hud-team0); }
 .top-bar .t1 { --ts-team: var(--hud-team1); }
 
 /* One side: pips at the outer edge, then the role icon, the name and the score beside the clock.
    The right side is the same row mirrored; which side is left is the CSS `order` (stripSides). */
-.top-bar .ts-side { grid-row: 1; display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.top-bar .ts-side { grid-row: 1; display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
 .top-bar .ts-side.r { flex-direction: row-reverse; }
+/* A team name is printed whole, always (Principle 9): it never shrinks, so OSTRZYŻENI beside five
+   pips is never „OSTRZYŻ…”. Only a player's nick (a tournament pair, the FFA leader), already cut at
+   12 characters in JS, may still end in „…” when its letters are wide. */
 .top-bar .ts-name {
-  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  flex: none;
   font: 600 var(--hud-t1)/1.15 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--ts-team, var(--hud-tx2));
 }
-.top-bar .ts-name.nick { letter-spacing: var(--hud-track-num); }
+.top-bar .ts-name.nick { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; letter-spacing: var(--hud-track-num); }
 /* My side's name sits on a filled chip (Principle 9). */
 .top-bar .ts-side.mine .ts-name { padding: 2px 6px 1px; border-radius: var(--hud-radius); background: var(--ts-team); color: var(--hud-plate); }
 .top-bar .ts-side.me .ts-name { color: var(--hud-tx); }
 .top-bar .ts-score {
   font: 400 var(--hud-t3)/1 var(--font-display); letter-spacing: var(--hud-track-num); font-variant-numeric: tabular-nums;
-  min-width: 1.1em; text-align: center; color: var(--hud-tx);
+  min-width: .8em; text-align: center; color: var(--hud-tx);
 }
 .top-bar .ts-side.mine .ts-score { box-shadow: inset 0 -2px 0 var(--ts-team); }
 .top-bar .ts-side.best.lead .ts-score { color: var(--hud-danger); }
@@ -44,10 +52,14 @@
 
 /* Pips: 8 × 14, 3 px apart — filled alive, a 30 % outline dead, none for a player who left. The
    living sit nearest the clock. Above five a side collapses into one pip and its count, which is
-   `data-count` drawn by CSS: the count is never a text node (§5.1). */
-.top-bar .ts-pips { display: flex; flex-direction: row-reverse; align-items: center; gap: 3px; flex: none; }
+   `data-count` drawn by CSS: the count is never a text node (§5.1).
+   If a side ever holds more than its cell (not in a round at the gate sizes, where the widest side
+   fits with room to spare), the pips give way before the name: they narrow (never below 3 px), and
+   past that the row is cut from the outer edge in, the dead first and the living nearest the clock
+   last. Their count stays in `aria-label` / `data-count`. */
+.top-bar .ts-pips { display: flex; flex-direction: row-reverse; align-items: center; gap: 3px; flex: 0 1 auto; min-width: 0; overflow: hidden; }
 .top-bar .ts-side.r .ts-pips { flex-direction: row; }
-.top-bar .ts-pip { box-sizing: border-box; width: 8px; height: 14px; border-radius: 1px; background: var(--ts-team); }
+.top-bar .ts-pip { box-sizing: border-box; flex: 0 1 auto; width: 8px; min-width: 3px; height: 14px; border-radius: 1px; background: var(--ts-team); }
 .top-bar .ts-pip.dead { background: none; border: 1px solid var(--ts-team); opacity: .3; }
 .top-bar .ts-pips.many::after {
   content: attr(data-count); padding: 0 2px;
@@ -83,16 +95,18 @@
 @keyframes ts-flash { from { filter: brightness(1.4); } }
 
 /* Row 2: the round, the goal, the ladder or the bracket stage under the clock, and my role badge
-   under my side. Ostrzyżeni's line spans the strip (the round and the heads left). */
+   under my side. It is its own grid of three tracks across the strip: the badge in the first, the
+   line in the middle. A `1fr` track is never narrower than what it holds, so the line is centred
+   while the badge leaves it room and is pushed right when not (ostrzyżeni's long line beside
+   „OSTRZYŻONY”) — always 12 px apart, never „OSTRZYŻONYRUNDA 2 / 5”. */
 .top-bar .ts-row2 {
-  grid-row: 2; grid-column: 1 / -1; justify-self: center;
+  grid-row: 2; grid-column: 1 / -1; min-width: 0;
+  display: grid; grid-template-columns: 1fr auto 1fr; column-gap: 12px; align-items: baseline;
   font: 600 var(--hud-t1)/1.15 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx2);
 }
+.top-bar .ts-row2 > .ts-line { grid-column: 2; }
 .top-bar .ts-row2 [data-testid="ladder-gun"] { letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
-.top-bar .ts-badge {
-  grid-row: 2; grid-column: 1; justify-self: start; position: relative; z-index: 1;
-  font: 600 var(--hud-t1)/1.15 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--ts-team);
-}
+.top-bar .ts-row2 > .ts-badge { grid-column: 1; justify-self: start; color: var(--ts-team); }
 /* Between pairs the strip is the break clock and „DRABINKA” alone, on a plate its own size. */
 .top-bar.between { width: auto; min-width: 200px; grid-template-columns: auto; justify-items: center; padding: 3px 32px 4px; }
 .top-bar.between .ts-clock, .top-bar.between .ts-row2 { grid-column: 1; }
