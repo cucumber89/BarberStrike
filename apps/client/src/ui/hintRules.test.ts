@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { HINTS, nextHint, type HintContext } from "./hintRules";
+import { cutBeforeRead, HINT_READ_MS, HINTS, nextHint, type HintContext } from "./hintRules";
 
 const base: HintContext = {
-  alive: true, connected: true, shopOpen: false, buyWindowLeft: 0,
+  alive: true, connected: true, shopOpen: false, covered: false, buyWindowLeft: 0,
   planVoteMine: false, teamTotals: [3, 3], myTeam: 0, elapsedMs: 60_000,
 };
 const ctx = (o: Partial<HintContext> = {}): HintContext => ({ ...base, ...o });
@@ -37,6 +37,25 @@ describe("first-run hints", () => {
 
   it("does not talk over a menu that already explains itself", () => {
     expect(nextHint(ctx({ shopOpen: true, buyWindowLeft: 5000 }), none)).toBeNull();
+  });
+
+  it("never spends the one-time plan hint under the shop, Tab or the pause card", () => {
+    // ULTRON P3 defect (hint burn): the plan hint was picked BEFORE the shop check, and the zone is
+    // hidden under every overlay (§4.5), so pressing B as the vote opened used it up unseen.
+    expect(nextHint(ctx({ planVoteMine: true, shopOpen: true }), none)).toBeNull();
+    expect(nextHint(ctx({ planVoteMine: true, covered: true }), none)).toBeNull();
+    for (const o of [{ buyWindowLeft: 5000 }, { teamTotals: [5, 2] as [number, number] }, {}])
+      expect(nextHint(ctx({ ...o, covered: true }), none)).toBeNull();
+    // …and it is still there, unspent, once the overlay closes and the vote is still open.
+    expect(nextHint(ctx({ planVoteMine: true }), none)?.id).toBe("plan");
+  });
+
+  it("gives back a hint that a cover cut before it could be read", () => {
+    expect(cutBeforeRead(0, 8000)).toBe(true);
+    expect(cutBeforeRead(HINT_READ_MS - 1, 8000)).toBe(true);
+    expect(cutBeforeRead(HINT_READ_MS, 8000)).toBe(false);
+    expect(cutBeforeRead(7000, 8000)).toBe(false);
+    for (const h of HINTS) expect(cutBeforeRead(h.ms, h.ms), h.id).toBe(false); // ran its course
   });
 
   it("mentions switching sides only when a side is actually short", () => {

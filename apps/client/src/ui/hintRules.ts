@@ -43,6 +43,11 @@ export interface HintContext {
   alive: boolean;
   connected: boolean;
   shopOpen: boolean;
+  /**
+   * Something hides the hint zone right now — the shop, Tab or the pause card (§4.5's hide row in
+   * `left.css`). A hint is shown once EVER, so picking one under a cover would spend it unseen.
+   */
+  covered: boolean;
   /** Ms of buy window left; > 0 means buying is possible right now. */
   buyWindowLeft: number;
   /** A plan vote is open and this player's team is the one voting. */
@@ -60,11 +65,14 @@ export interface HintContext {
  */
 export function nextHint(ctx: HintContext, seen: ReadonlySet<string>): HintDef | null {
   if (!ctx.connected) return null;
+  // Nothing is picked while the zone is hidden — not even the plan hint: the vote runs on under
+  // the shop or Tab, and a hint picked there is remembered as seen but never read. It waits for
+  // the overlay to close (the vote usually outlasts a quick buy).
+  if (ctx.covered || ctx.shopOpen) return null;
   const pick = (id: string) => (seen.has(id) ? null : byId.get(id) ?? null);
 
   // Something is on screen asking for a decision: that hint first.
   if (ctx.planVoteMine) { const h = pick("plan"); if (h) return h; }
-  if (ctx.shopOpen) return null;                       // the menu explains itself; do not talk over it
   if (ctx.buyWindowLeft > 0 && ctx.alive) { const h = pick("buy"); if (h) return h; }
   // A side two or more bodies short is worth mentioning once.
   const other = ctx.myTeam === 0 ? 1 : 0;
@@ -73,6 +81,17 @@ export function nextHint(ctx: HintContext, seen: ReadonlySet<string>): HintDef |
   if (ctx.alive && ctx.elapsedMs > 1500) { const h = pick("move"); if (h) return h; }
   if (ctx.elapsedMs > 25_000) { const h = pick("pause"); if (h) return h; }
   return null;
+}
+
+/**
+ * A hint that was on screen for less than this before something covered it (the shop, Tab, the
+ * pause card, the match's end) was not read: it goes back to unseen and may come again.
+ */
+export const HINT_READ_MS = 2000;
+
+/** Was a hint cut off before it could be read? Then it must not stay remembered as seen. */
+export function cutBeforeRead(shownMs: number, ms: number): boolean {
+  return shownMs < Math.min(HINT_READ_MS, ms);
 }
 
 const KEY = "fb_hints_seen_v1";

@@ -88,7 +88,8 @@ function planShowing(s: HudState): boolean {
 /**
  * First-run hints: one short line, once each, never blocking (2.4). NOT while dormant: a hint is
  * shown once ever and then remembered, so letting the timer run behind an invisible HUD would burn
- * them all before the player saw one. Not under the pause card either (its `uiFlags` flag).
+ * them all before the player saw one. Not under the pause card either (its `uiFlags` flag), and
+ * under the shop or Tab it stays mounted but picks nothing (`covered`, HintsMount).
  */
 export const HintLine = memo(function HintLine({ dormant }: ZoneProps & { dormant: boolean }) {
   const paused = useUiFlags((f) => f.overlay.pause);
@@ -96,9 +97,14 @@ export const HintLine = memo(function HintLine({ dormant }: ZoneProps & { dorman
   return !paused && !dormant && !ended ? <HintsMount /> : null;
 });
 
+/**
+ * The hint zone is hidden under the shop and Tab (§4.5, `left.css`); `covered` tells Hints so it
+ * picks nothing there — a hint shown once ever must not be spent behind an overlay.
+ */
 function HintsMount() {
   const h = useHud();
-  return <Hints h={h} />;
+  const covered = useUiFlags((f) => f.overlay.tab || f.overlay.shop || f.overlay.pause);
+  return <Hints h={h} covered={covered || h.shopOpen} />;
 }
 
 /**
