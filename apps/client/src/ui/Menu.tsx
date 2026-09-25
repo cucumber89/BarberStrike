@@ -11,6 +11,9 @@ import { MODE_ART, NAV_ART, mapArt } from "./menuArt";
 import { Armoury } from "./Armoury";
 import { Crates } from "./Crates";
 import { Account } from "./Account";
+import { Welcome } from "./onboarding/Welcome";
+import { loadOnboard } from "./onboarding/tutorialRules";
+import { tutorial } from "./onboarding/tutorialStore";
 import "./menu.css";
 
 interface Props {
@@ -76,6 +79,10 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   const [copied, setCopied] = useState(false);
   const [mobile] = useState(() => touchOnly());
   const [name, setName] = useState(settings.nickname || "");
+  // P8b onboarding: the welcome shows once (localStorage `bs_onboard_v1`), over the menu, and only
+  // when a match was not opened by a link (a friend's invite is not a first-run moment). It never
+  // appears on a touch device, where the game cannot be played at all.
+  const [welcome, setWelcome] = useState(() => !mobile && !invite.room && !loadOnboard().welcomed);
   const [roomName, setRoomName] = useState(invite.room);
   const [gameMode, setGameMode] = useState<GameMode>(() => {
     if (invite.mode) return invite.mode;
@@ -165,6 +172,19 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
    */
   const startWarmup = () => onPlay(commitName(), "", "create", undefined, "duel", { count: 1, level: botLevel }, DUEL_MAP_ID);
   /**
+   * P8b onboarding: SAMOUCZEK and TRENING both open a duel against one bot through the existing
+   * `play("create")` path (D9 — reuse `onPlay` with `bots>0`, no new room, no new schema). The
+   * tutorial additionally arms the overlay store, which the app-root `TutorialMount` renders over
+   * the match once it is live. A nickname is not required to train — a fresh player has not typed
+   * one — so we fall back to a friendly default.
+   */
+  const startOnboarding = (kind: "tutorial" | "training") => {
+    if (kind === "tutorial") tutorial.start();
+    const n = (name.trim() || settings.nickname || "NOWY").slice(0, MAX_NAME_LENGTH);
+    if (n !== settings.nickname) onSettings({ ...settings, nickname: n });
+    onPlay(n, "", "create", undefined, "duel", { count: 1, level: "easy" }, DUEL_MAP_ID);
+  };
+  /**
    * A greyed-out match list is the wrong answer to "you have not typed a nickname yet": it makes
    * the half of the lobby a player came for look broken. The rows stay live and send the click to
    * the field that is actually missing.
@@ -236,6 +256,15 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   return (
     <div className="menu" data-testid="menu">
       <div className="mm-bg" aria-hidden="true" />
+
+      {/* P8b onboarding (disjoint block, §7.0): the one-time welcome over the menu. Picking any of
+          the three options marks the player welcomed; SAMOUCZEK / TRENING launch a duel with a bot. */}
+      {welcome && (
+        <Welcome
+          onStart={(kind) => { setWelcome(false); startOnboarding(kind); }}
+          onSkip={() => setWelcome(false)}
+        />
+      )}
 
       {panel === "main" && (
         <div className="mm-title">
