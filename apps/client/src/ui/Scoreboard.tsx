@@ -4,7 +4,7 @@ import type { ScoreRow } from "../game/store";
 import { IconSkull } from "./hud/icons";
 import { money } from "./hud/format";
 import { pairNames } from "./Bracket";
-import { ranking, shavesOf, sideNames, type HistoryKind, type HistorySlot } from "./resultText";
+import { ranking, shavesOf, sideNames, splitColumns, type HistoryKind, type HistorySlot } from "./resultText";
 
 /**
  * A straight razor, drawn rather than spelled.
@@ -65,7 +65,7 @@ interface Table { key: string; cls: string; head: string; rows: ScoreRow[]; mine
 const byScore = (a: ScoreRow, b: ScoreRow): number => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths;
 const byKills = (a: ScoreRow, b: ScoreRow): number => b.kills - a.kills || a.deaths - b.deaths;
 
-function tablesOf(rows: readonly ScoreRow[], myId: string, myTeam: Team, mode: GameMode, bracket: string): Table[] {
+function tablesOf(rows: readonly ScoreRow[], myId: string, myTeam: Team, mode: GameMode, bracket: string, split: boolean): Table[] {
   if (mode === "turniej") {
     // A tournament's sides are two PEOPLE: the pair on the board, and nobody else (the bystanders are
     // in the bracket below it). Once the draw is over there is no pair: everyone, by how far they got.
@@ -75,7 +75,10 @@ function tablesOf(rows: readonly ScoreRow[], myId: string, myTeam: Team, mode: G
     return [{ key: "pair", cls: "pair", head: "", rows: list, mine: false }];
   }
   if (!MODES[mode].teams) {
-    return [{ key: "all", cls: "ffa", head: "", rows: [...rows].sort(mode === "gungame" ? byScore : byKills), mine: false }];
+    const ranked = [...rows].sort(mode === "gungame" ? byScore : byKills);
+    // A crowd side by side: the ranking reads down the left column, then down the right one.
+    if (split && ranked.length > 1) return splitColumns(ranked).map((part, i) => ({ key: `all${i}`, cls: "ffa", head: "", rows: part, mine: false }));
+    return [{ key: "all", cls: "ffa", head: "", rows: ranked, mine: false }];
   }
   const names = sideNames(mode);
   const side = (t: Team): Table => ({ key: `t${t}`, cls: `t${t} ${t === myTeam ? "mine" : "theirs"}`, head: names[t], rows: rows.filter((r) => r.team === t).sort(byScore), mine: t === myTeam });
@@ -115,15 +118,21 @@ export interface ScoreboardProps {
   bracket?: string;
   /** Mid-match: the dead are dimmed with a skull. The result card's table is not (the match is over). */
   live?: boolean;
+  /**
+   * The Tab board's densest layouts (`boardSplit`): the tables side by side, my side on the left —
+   * a solo ranking in two columns — so a crowd fits the board without scrolling.
+   */
+  split?: boolean;
 }
 
 /** The tables: my side first, then theirs (`.sb-team` each, the class `multiplayer.spec.ts` counts). */
-export function Scoreboard({ rows, myId, myTeam = rows.find((r) => r.id === myId)?.team ?? 0, mode, bracket = "", live = false }: ScoreboardProps) {
+export function Scoreboard({ rows, myId, myTeam = rows.find((r) => r.id === myId)?.team ?? 0, mode, bracket = "", live = false, split = false }: ScoreboardProps) {
   const moneyCol = MODES[mode].shop !== "none";
   const gun = mode === "gungame";
+  const tables = tablesOf(rows, myId, myTeam, mode, bracket, split);
   return (
-    <div className="sb-tables">
-      {tablesOf(rows, myId, myTeam, mode, bracket).map((t) => (
+    <div className={`sb-tables${split && tables.length > 1 ? " split" : ""}`}>
+      {tables.map((t) => (
         <table key={t.key} className={`sb-team ${t.cls}`}>
           <thead>
             <tr>

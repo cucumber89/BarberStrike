@@ -395,3 +395,39 @@ export function historySlots(mode: GameMode, history: readonly { round: number; 
     return { n, winner: r ? r.winner : null, kind: r ? HISTORY_KIND[r.reason] ?? "elimination" : null, reason: r?.reason ?? "", now: !r && n === current, gapAfter };
   });
 }
+
+// ---------------------------------------------------------------- the Tab board's density
+
+/**
+ * How tightly the Tab board is drawn. It is held open by a key while the pointer is locked and the
+ * wheel changes weapons, so a board that scrolls hides its bottom rows from the player for good:
+ * every row must be on screen, whatever the roster (a fixed 6 v 6, an open lobby's 32 people and 8
+ * bots) and whatever the screen (§4.4: ≤ 80vh from max(10vh, 88px)). So the board is drawn at the
+ * first density at which it fits, measured, never guessed from a head count:
+ *   0  the spec's board: my side above theirs, roomy rows;
+ *   1  the same, rows at the t1 line with no air, a tighter header;
+ *   2  the two sides SIDE BY SIDE (mine on the left), rows as in 1 — the one layout in which a
+ *      crowd fits under 80vh at the 14 px floor (a solo ranking splits into two columns);
+ *   3  as 2, and the header, the gaps and the table heads at their floor.
+ * Nothing ever goes under the type floor (§3.1): the board changes its layout, not its size.
+ */
+export type BoardDensity = 0 | 1 | 2 | 3;
+export const BOARD_DENSITY_MAX: BoardDensity = 3;
+/** From density 2 the tables stand side by side. */
+export const boardSplit = (d: BoardDensity): boolean => d >= 2;
+/**
+ * The density to draw next, given the one just drawn and whether it overflowed: one step denser
+ * while it does not fit, and null (keep it) once it fits or there is nothing denser to try.
+ */
+export function nextDensity(drawn: BoardDensity, overflows: boolean): BoardDensity | null {
+  return overflows && drawn < BOARD_DENSITY_MAX ? ((drawn + 1) as BoardDensity) : null;
+}
+/**
+ * A ranking split into two columns that read down the left one and then down the right one, as
+ * a printed table does: the first ⌈n/2⌉ places on the left, so #1 heads the left column and the
+ * place after the left column's last heads the right one.
+ */
+export function splitColumns<T>(rows: readonly T[]): [T[], T[]] {
+  const half = Math.ceil(rows.length / 2);
+  return [rows.slice(0, half), rows.slice(half)];
+}

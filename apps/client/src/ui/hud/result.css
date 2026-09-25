@@ -287,6 +287,43 @@
 .sb-team td.sb-shaved.none { color: rgba(229, 174, 82, .4); }
 .sb-team .sb-shaved svg { display: block; margin: 0 auto; }
 
+/* ---------------------------------------------------------------- density: the board never scrolls
+   Tab is held with the pointer locked and the wheel on the weapons, so a row under the fold is a row
+   nobody can reach. ScoreboardOverlay measures the board and draws it at the first density that fits
+   (`BoardDensity`, resultText.ts): 0 the roomy board above; 1 rows at the t1 line with no air and a
+   tighter frame; 2 the two sides side by side, mine on the left (a solo ranking in two columns);
+   3 the frame at its floor. The type never shrinks (§3.1): only the air and the layout do. */
+.sb:not([data-density="0"]) { gap: 6px; padding: 10px 16px 10px; }
+.sb:not([data-density="0"]) .sb-header { padding-bottom: 6px; }
+.sb:not([data-density="0"]) .sb-tables { gap: 6px; }
+.sb:not([data-density="0"]) .sb-team th { padding-block: 2px; }
+.sb:not([data-density="0"]) .sb-team td { padding-block: 1px; }
+/* One line height for every cell: the mono money cell would otherwise make my side's rows taller. */
+.sb:not([data-density="0"]) .sb-team :is(th, td) { line-height: 1.2; }
+/* The BOT / class tag sits inside the text line, so it never makes its row taller than the others. */
+.sb:not([data-density="0"]) .sb-tag { line-height: 1; padding-block: 0; vertical-align: top; }
+.sb[data-density="3"] { gap: 4px; padding: 8px 14px 8px; }
+.sb[data-density="3"] .sb-header { padding-bottom: 4px; }
+.sb[data-density="3"] .sb-mid { gap: 0; }
+.sb[data-density="3"] .sb-team :is(th, td) { padding-block: 0; }
+/* At the floor the rows lose their hairlines (a pixel a row) and alternate a faint band instead. */
+.sb[data-density="3"] .sb-team td { border-bottom: 0; }
+.sb[data-density="3"] .sb-team tbody tr:nth-child(even):not(.me) > td { background: rgba(175, 192, 202, .05); }
+/* Side by side: two equal columns, each table with narrower number columns and less air (a fixed
+   table's column width here is the whole cell's), so a 16-character nick keeps ~135 px at 1024
+   wide (it ellipsizes past that, as everywhere). */
+.sb-tables.split { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; align-items: start; }
+.sb-tables.split .sb-team :is(th, td) { padding-inline: 6px; }
+.sb-tables.split .sb-team th.sb-n { width: 32px; }
+.sb-tables.split .sb-team th.sb-shaved { width: 30px; }
+.sb-tables.split .sb-team th.sb-money { width: 72px; }
+.sb-tables.split .sb-team th.sb-pts { width: 56px; }
+/* Gun game has no wallet, and its points column is headed SZCZEBEL. */
+.sb-tables.split .sb-team:not(:has(th.sb-money)) th.sb-pts { width: 100px; }
+.sb-tables.split .sb-team th.sb-ping { width: 56px; }
+.sb-tables.split .sb-skull { margin-right: 4px; }
+.sb-tables.split .sb-tag { margin-left: 4px; padding-inline: 4px; }
+
 /* The draw under the pair (turniej), and the result's DRABINKA tab: P2's BracketPanel, set in this
    zone's type (t1, no text under 14 px) — its own sheet sizes it for the pair card. */
 .sb-bracket { display: grid; justify-items: center; padding-top: 4px; border-top: var(--hud-plate-line); }

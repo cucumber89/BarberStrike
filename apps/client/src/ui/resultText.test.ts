@@ -4,8 +4,9 @@ import type { ScoreRow } from "../game/store";
 import type { MatchReward } from "../game/progression/profile";
 import { keepMountedState } from "./hud/useKeepMounted";
 import {
-  RESULT_EXIT_MS, RESULT_VIEW0, STAGE_SECONDS, keyStats, matchOutcome, matchWhy, placement, podium, resultInput, resultStage, resultWhy,
-  scoreLine, stageC, stageCWords, topReward, verdict, verdictWhy, verdictWords, type Outcome, type ResultCtx,
+  BOARD_DENSITY_MAX, RESULT_EXIT_MS, RESULT_VIEW0, STAGE_SECONDS, boardSplit, keyStats, matchOutcome, matchWhy, nextDensity, placement, podium,
+  resultInput, resultStage, resultWhy, scoreLine, splitColumns, stageC, stageCWords, topReward, verdict, verdictWhy, verdictWords,
+  type BoardDensity, type Outcome, type ResultCtx,
 } from "./resultText";
 
 const row = (id: string, team: 0 | 1, over: Partial<ScoreRow> = {}): ScoreRow => ({
@@ -248,4 +249,43 @@ it("a tournament is decided by its final, not by a points limit", () => {
   expect(matchWhy(ctx as never)).toBe("ZDZICHU wygrał finał drabinki");
   expect(matchWhy(ctx as never)).not.toContain("drużyna");
   expect(scoreLine(ctx as never)).toContain("ZDZICHU");
+});
+
+describe("the Tab board never scrolls (held with the pointer locked: a hidden row is unreachable)", () => {
+  /** The board's fit loop (ScoreboardOverlay `useBoardFit`) against a board whose height per density is known. */
+  const fit = (heights: readonly number[], room: number): BoardDensity => {
+    let d: BoardDensity = 0;
+    for (let step = 0; step < 10; step++) {
+      const next = nextDensity(d, heights[d] > room + 1);
+      if (next === null) return d;
+      d = next;
+    }
+    throw new Error("the fit loop did not settle");
+  };
+
+  it("climbs one density at a time while the board overflows, and keeps the first that fits", () => {
+    // Measured (board-probe, 1024x576, room 459 px): a full 6 v 6 bomb board is 526 px roomy, 385 px tight.
+    expect(fit([526, 385, 300, 280], 459)).toBe(1);
+    // A 5 v 5 TDM board at 1600x900 fits as the spec draws it: nothing changes.
+    expect(fit([441, 330, 260, 240], 718)).toBe(0);
+    // An open lobby of 20 v 20 at 1024x576 (measured: 1302 px roomy, 492 side by side, 418 at the floor).
+    expect(fit([1302, 900, 492, 418], 459)).toBe(3);
+    // Past the densest layout there is nothing to try: it stays at the floor (and keeps my row in view).
+    expect(fit([2000, 1500, 900, 800], 459)).toBe(BOARD_DENSITY_MAX);
+    expect(nextDensity(BOARD_DENSITY_MAX, true)).toBeNull();
+    expect(nextDensity(0, false)).toBeNull();
+  });
+
+  it("the sides stand side by side only from density 2 (0 and 1 keep my side above theirs)", () => {
+    expect([0, 1, 2, 3].map((d) => boardSplit(d as BoardDensity))).toEqual([false, false, true, true]);
+  });
+
+  it("a split ranking reads down the left column, then the right: #1 heads the left, ⌈n/2⌉ on the left", () => {
+    const ranked = Array.from({ length: 7 }, (_, i) => i + 1);
+    expect(splitColumns(ranked)).toEqual([[1, 2, 3, 4], [5, 6, 7]]);
+    expect(splitColumns(Array.from({ length: 40 }, (_, i) => i)).map((c) => c.length)).toEqual([20, 20]);
+    expect(splitColumns([1])).toEqual([[1], []]);
+    // Nobody is dropped or repeated.
+    expect(splitColumns(ranked).flat()).toEqual(ranked);
+  });
 });

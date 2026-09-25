@@ -5,11 +5,33 @@
  * board over the shop — and what it must no longer show (the English, the [TAB] keycap, the false
  * "the next match starts by itself").
  */
-import { BOMB, MATCH, MatchPhase, NIGHT_DISTRICT, encodeHaircut } from "@frankibarber/shared";
+import { BOMB, BOT_NAMES, MATCH, MAX_PLAYERS, MatchPhase, NIGHT_DISTRICT, encodeHaircut, type Team } from "@frankibarber/shared";
+import type { ScoreRow } from "../game/store";
 import {
   DUEL_MAP, MATES, REWARD_LOSS, REWARD_WIN, S, TDM_LIMIT, TOUR, base, bombData, bombFreeze, bombState, kit, pairMatchEnds, radarFor, roster, seat,
   tdmLive, tdmRadar, turniej, type PinSet, type Scenario,
 } from "./fixtures";
+
+/**
+ * A fixed-roster room at its fullest: `MAX_PLAYERS` seats, six a side, the server's bots in the
+ * seats nobody took (named from `BOT_NAMES`, as the room names them). The Tab board is photographed
+ * at its tallest, so the gallery's `noScroll` pin holds for the biggest board a round mode draws.
+ */
+function fullHouse(rows: ScoreRow[], f: number): ScoreRow[] {
+  const spare = BOT_NAMES.filter((n) => !rows.some((r) => r.name === n));
+  const out = [...rows];
+  for (const t of [0, 1] as Team[]) {
+    while (out.filter((r) => r.team === t).length < MAX_PLAYERS / 2) {
+      const name = spare.shift()!;
+      const [k, d, a] = [3, 6, 2].map((v) => Math.round(v * f));
+      out.push({
+        id: `bot-${name.toLowerCase()}`, name, team: t, kills: k, deaths: d, assists: a, score: k * 100 + a * 50, ping: 0, alive: true, connected: true,
+        money: 1_050, bot: true, shaved: false, haircut: encodeHaircut("buzz", 0),
+      });
+    }
+  }
+  return out;
+}
 
 export const scenarios: Scenario[] = [
   // ---- pre-drop scenarios (their states kept; the map named, and the loss made coherent)
@@ -47,9 +69,9 @@ export const scenarios: Scenario[] = [
   // ---- drop U scenarios (§5.2)
   {
     id: "scoreboard-bomb-history", n: 52, maxWords: 130, isNew: true,
-    moment: "Bomb, runda 7, zamrożenie: sklep otwarty i trzymasz Tab — tabela z historią rund (od rundy 2)",
+    moment: "Bomb, runda 7, zamrożenie: pełny serwer 6 na 6, sklep otwarty i trzymasz Tab — tabela z historią rund (od rundy 2)",
     state: bombFreeze(7, 11_600, {
-      mapId: NIGHT_DISTRICT.id, scoreA: 4, scoreB: 2, money: BOMB.startMoney, ...kit("pistol"), owned: ["pistol"], armor: 0, players: roster({ f: 0.5 }),
+      mapId: NIGHT_DISTRICT.id, scoreA: 4, scoreB: 2, money: BOMB.startMoney, ...kit("pistol"), owned: ["pistol"], armor: 0, players: fullHouse(roster({ f: 0.5 }), 0.5),
       shopOpen: true, pointerLocked: false,
       roundHistory: [
         { round: 2, winner: 0, reason: "BOMB DETONATED" }, { round: 3, winner: 1, reason: "ATTACKERS ELIMINATED" },
@@ -121,6 +143,8 @@ export const pins: PinSet = {
     caseText: ["DRUŻYNOWY DEATHMATCH", "NIGHT DISTRICT", "PKT", "PING", "xXPiotrekXx"],
     textAbsent: [{ text: "TEAM DEATHMATCH" }],
     zoneWords: { scoreboard: 110 },
+    // Tab is held with the pointer locked: a board that scrolls hides rows nobody can reach (every size).
+    noScroll: ["[data-testid=scoreboard]"],
   },
   "scoreboard-bomb-history": {
     expect: [
@@ -130,9 +154,11 @@ export const pins: PinSet = {
       "[data-testid=sb-history] [data-slot='2'].w0[data-reason=detonation]", "[data-testid=sb-history] [data-slot='3'].w1[data-reason=elimination]",
       "[data-testid=sb-history] [data-slot='6'].w1.gap[data-reason=defuse]", "[data-testid=sb-history] [data-slot='7'].now.empty",
     ],
-    absent: ["[data-testid=sb-history] [data-slot='13']"],
-    caseText: ["RUNDA 7 / 12", "0:12", "ŁADUNEK", "NIGHT DISTRICT"],
+    // A full house, six a side: the sixth row of each side is on the board, and the board does not scroll.
+    absent: ["[data-testid=sb-history] [data-slot='13']", "[data-testid=scoreboard] .sb-team tbody tr:nth-child(7)"],
+    caseText: ["RUNDA 7 / 12", "0:12", "ŁADUNEK", "NIGHT DISTRICT", "MIREK", "HENIEK"],
     zoneWords: { scoreboard: 110 },
+    noScroll: ["[data-testid=scoreboard]"],
   },
   "scoreboard-turniej": {
     expect: [
@@ -143,6 +169,7 @@ export const pins: PinSet = {
     caseText: ["Kowal", "xXPiotrekXx", "TURNIEJ"],
     textAbsent: [{ text: "FADE", zone: "scoreboard" }, { text: "TAPER", zone: "scoreboard" }],
     zoneWords: { scoreboard: 90 },
+    noScroll: ["[data-testid=scoreboard]"],
   },
   "match-end-final-round": {
     // Stage A: the card is already mounted (e2e reads `summary` from t = 0), and invisible.

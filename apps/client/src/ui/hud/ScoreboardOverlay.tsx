@@ -1,9 +1,9 @@
-import { memo, useEffect, useLayoutEffect, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { BOMB, MODES, MatchPhase, OSTRZYZENI, type GameMode, type Team } from "@frankibarber/shared";
 import { useHudSlice } from "../../game/store";
 import { BracketPanel } from "../Bracket";
 import { HistoryStrip, Scoreboard, pairOrFinal } from "../Scoreboard";
-import { historySlots, sideNames } from "../resultText";
+import { boardSplit, historySlots, nextDensity, sideNames, type BoardDensity } from "../resultText";
 import { MODE_TITLE, mapTitle } from "./copy";
 import { fmtClock } from "./format";
 import { clockMs, type PhaseModel } from "./phase";
@@ -20,7 +20,9 @@ import type { ZoneProps } from "./types";
  *
  * From top to bottom (§4.4): the header (`sb-header`: my side and score, the round and the clock,
  * the mode and the map, theirs), the round history (`sb-history`, round modes), my side, theirs;
- * in a tournament the pair on the board and then the whole draw (`BracketPanel`, read-only).
+ * in a tournament the pair on the board and then the whole draw (`BracketPanel`, read-only). It
+ * never scrolls: a roster too big for that stack at this screen's height is drawn tighter, and then
+ * with the sides side by side (`useBoardFit`), never in type under the floor.
  */
 
 /** Leaving takes 100 ms (§6.1): the board stays mounted that long, its keys already released. */
@@ -65,14 +67,65 @@ function Board({ model, closing }: { model: PhaseModel; closing: boolean }) {
   const bracket = useHudSlice((s) => s.bracket);
   const history = useHudSlice((s) => s.roundHistory);
   const slots = historySlots(mode, history, model.round);
+  const ref = useRef<HTMLDivElement>(null);
+  // What decides the board's height: how many rows and tables, the strip, the draw, the screen.
+  const density = useBoardFit(ref, `${players.length}|${mode}|${slots?.length ?? 0}|${bracket}`);
   return (
-    <div className={`sb${closing ? " closing" : ""}`} data-zone="scoreboard" data-testid="scoreboard" role="dialog" aria-label="Tabela wyników">
+    <div ref={ref} className={`sb${closing ? " closing" : ""}`} data-zone="scoreboard" data-testid="scoreboard" data-density={density} role="dialog" aria-label="Tabela wyników">
       <Header model={model} mode={mode} myTeam={myTeam} bracket={bracket} />
       {slots && <HistoryStrip slots={slots} mode={mode} />}
-      <Scoreboard rows={players} myId={myId} myTeam={myTeam} mode={mode} bracket={bracket} live />
+      <Scoreboard rows={players} myId={myId} myTeam={myTeam} mode={mode} bracket={bracket} live split={boardSplit(density)} />
       {mode === "turniej" && bracket !== "" && <div className="sb-bracket"><BracketPanel bracket={bracket} compact /></div>}
     </div>
   );
+}
+
+/** The screen's size, and whether the web fonts have landed: either one moves the rows' height. */
+function useScreenKey(): string {
+  const read = () => `${window.innerWidth}x${window.innerHeight}|${document.fonts?.status ?? "loaded"}`;
+  const [key, setKey] = useState(read);
+  useEffect(() => {
+    const on = () => setKey(read());
+    window.addEventListener("resize", on);
+    if (document.fonts && document.fonts.status !== "loaded") void document.fonts.ready.then(on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  return key;
+}
+
+/**
+ * The Tab board never scrolls (the pointer is locked and the wheel changes weapons, so a row under
+ * the fold is a row the player never sees): it is drawn at the first density (`BoardDensity`) at
+ * which everything fits, measured before paint. A new roster, strip, draw or screen starts again
+ * from the spec's roomy board, and each overflow steps one density on — a few synchronous layouts
+ * when the board opens or the roster changes, none while only the numbers tick.
+ *
+ * Past the densest layout (a host who raised the open lobby's cap far past the default 32 + 8) the
+ * board scrolls after all, and keeps my own row in view.
+ */
+function useBoardFit(ref: RefObject<HTMLDivElement | null>, content: string): BoardDensity {
+  const key = `${content}|${useScreenKey()}`;
+  const [fit, setFit] = useState<{ key: string; density: BoardDensity }>({ key, density: 0 });
+  const density: BoardDensity = fit.key === key ? fit.density : 0;
+  const measured = useRef("");
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const at = `${key}#${density}`;
+    if (!el || measured.current === at) return;
+    measured.current = at;
+    const over = el.scrollHeight > el.clientHeight + 1;
+    const next = nextDensity(density, over);
+    if (next !== null) { setFit({ key, density: next }); return; }
+    if (fit.key !== key) setFit({ key, density });
+    if (over) {
+      const me = el.querySelector<HTMLElement>("tr.me");
+      if (me) {
+        const r = me.getBoundingClientRect(), b = el.getBoundingClientRect();
+        if (r.bottom > b.bottom) el.scrollTop += r.bottom - b.bottom + 8;
+      }
+    }
+  });
+  return density;
 }
 
 /**
