@@ -47,10 +47,10 @@ export const pins: PinSet = {
     textAbsent: [{ text: "AR-31", zone: "feed" }, { text: "FRAG", zone: "gear" }, { text: "BOJOWY", zone: "gear" }, { text: "AR-31", zone: "inv" }],
     zoneWords: { vitals: 2, inv: 2, gear: 2 },
   },
-  // Row 11: the C4 with its [T] keycap in the gear row, beside the frag and the smoke.
+  // Row 11: the C4 with its [T] keycap in the gear row, beside the frag and the smoke. Whether it
+  // blinks follows `siteHere` in P2's fixture, so it is not pinned here.
   "bomb-live-carrier": {
     expect: ["[data-testid=crosshair]", "[data-testid=c4] .gear-c4", "[data-testid=slot-lethal] .gear-art svg", "[data-testid=slot-tactical] .gear-art svg"],
-    absent: ["[data-testid=c4][data-site]"],
     zoneWords: { gear: 3, inv: 2 },
   },
   // Row 43: the digits stay through the reload („0” and „/ 120”), dimmed, with the 3 px bar; the
