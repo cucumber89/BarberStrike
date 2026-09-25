@@ -9,6 +9,9 @@ import {
   MATES, S, T, bombData, bombFreeze, bombMatchEnds, bombState, chatLines, kit, radarFor, roster, type PinSet, type Scenario,
 } from "./fixtures";
 
+/** `radar-rim-pins`: the attack near its spawn, the sites out of range; mates[0] is p1, the carrier. */
+const RIM_RADAR = radarFor(NIGHT_DISTRICT, 0, 0.05, { mates: MATES });
+
 export const scenarios: Scenario[] = [
   // ---- moved verbatim from the pre-drop gallery
   {
@@ -16,6 +19,8 @@ export const scenarios: Scenario[] = [
     n: 10, maxWords: 48,
     // §5.2 #10 photographs the vote as „[F1] OTWÓRZ ROLETĘ · 2”, „[F2] ZBURZ MUR W ZAUŁKU · 1” — plans
     // 1 and 2, the offer of `planOffer(2)` — 3 s into the freeze (12 s left), nobody's vote mine yet.
+    // Round 5 itself offers plans 2 and 3, the longest card: `chat-busy` photographs that one, and
+    // `walletToasts.test.ts` ("the plan card") walks every offer for the 24 words.
     state: bombFreeze(5, 11_400, {
       scoreA: 3, scoreB: 1,
       plan: { options: planOffer(2), tally: [2, 1], chosen: 0, appliesAt: S + 11_400, votingTeam: 0, round: 5, at: T - 3_600 },
@@ -39,13 +44,15 @@ export const scenarios: Scenario[] = [
     moment: "Bomb, runda 5, zamrożenie: 6 linii czatu, +$300 za sprzedaż, 3 perki, portfel i plan rundy",
     state: bombFreeze(5, 9_400, {
       scoreA: 3, scoreB: 1, money: 3_450,
-      // The same vote as `bomb-freeze` (§5.2 #47: "bomb freeze … the plan card").
-      plan: { options: planOffer(2), tally: [2, 1], chosen: 0, appliesAt: S + 9_400, votingTeam: 0, round: 5, at: T - 5_600 },
+      // The vote round 5 really offers — plans 2 and 3, `planOffer(5)`: the two four-word names,
+      // the tallest card there is — so the plan × chat gap is measured on the worst case.
+      plan: { options: planOffer(5), tally: [2, 1], chosen: 0, appliesAt: S + 9_400, votingTeam: 0, round: 5, at: T - 5_600 },
       perks: { flask: S + 45_000, roids: S + 45_000, energy: S + 45_000, fade: 0 },
       moneyToasts: [{ key: 9, delta: 300, reason: "sell", total: 3_450, at: T - 900 }],
+      // The newest message is long enough to wrap at every size: it is shown whole, never cut.
       chat: chatLines(0, [
-        [8_300, "p1", "biorę A, kto ze mną?"], [7_100, "p2", "ja środkiem"], [5_800, "p5", "powodzenia", true],
-        [4_600, "me", "głosujcie F1, roleta"], [3_200, "p6", "gl hf", true], [1_500, "p1", "ok, F1"],
+        [8_300, "p1", "biorę A"], [7_100, "p2", "ja środkiem"], [5_800, "p5", "powodzenia", true],
+        [4_600, "me", "głosujcie F1, mur"], [3_200, "p6", "gl hf", true], [1_500, "p1", "ok, F1 — idę zaułkiem, flash nad murem"],
       ]),
     }),
     radar: radarFor(NIGHT_DISTRICT, 0, 0, { mates: MATES }),
@@ -53,11 +60,13 @@ export const scenarios: Scenario[] = [
   {
     id: "radar-rim-pins", n: 48, maxWords: 24, isNew: true,
     moment: "Bomb, runda 5 trwa: 14 s po starcie, jeszcze przy spawnie ataku — A i B poza zasięgiem radaru",
-    state: bombState(bombData({ stage: "carried", carrier: "p1", roundEndsAt: S + 101_000 }), {
+    // The bomb is where its carrier is (`stepBomb` writes the carrier's x and z into it every
+    // step): the attack's radar shows the C4 under Kasia's dot.
+    state: bombState(bombData({ stage: "carried", carrier: "p1", roundEndsAt: S + 101_000, x: RIM_RADAR.mates[0].x, z: RIM_RADAR.mates[0].z }), {
       phase: MatchPhase.Playing, phaseEndsAt: S + 101_000, matchEndsAt: bombMatchEnds(4, BOMB.buyMs + 14_000), scoreA: 3, scoreB: 1, buyWindowLeft: 0,
       players: roster({ f: 0.34 }), health: 100, armor: 100, ...kit("rifle"), owned: ["pistol", "rifle"], money: 650,
     }),
-    radar: radarFor(NIGHT_DISTRICT, 0, 0.05, { mates: MATES }),
+    radar: RIM_RADAR,
   },
 ];
 
@@ -93,9 +102,13 @@ export const pins: PinSet = {
     zoneWords: { wallet: 5 },
   },
   // §5.2 #47: six lines with Polish tags, one merged toast with no reason word, the plan card.
+  // The newest message wraps and is shown whole at every size (`text` reads what is rendered;
+  // `noScroll` fails when the list is cut), and the vote is round 5's real one, plans 2 and 3.
   "chat-busy": {
-    expect: ["[data-testid=chat] [data-testid=chat-line]", "[data-testid=plan-vote]", "[data-testid=wallet] .wallet-toast"],
+    expect: ["[data-testid=chat] [data-testid=chat-line]", "[data-testid=plan-vote]", "[data-testid=wallet] .wallet-toast", "[data-testid=plan-option-2]", "[data-testid=plan-option-3]"],
     caseText: ["[DRUŻYNA]", "[WSZYSCY]", "+$300"],
+    text: ["ok, F1 — idę zaułkiem, flash nad murem"],
+    noScroll: ["[data-testid=chat] .chat-lines"],
     textAbsent: [...noEnglish("plan", "chat"), { text: "SPRZEDAŻ", zone: "wallet" }],
     zoneWords: { wallet: 4, plan: 24 },
   },
