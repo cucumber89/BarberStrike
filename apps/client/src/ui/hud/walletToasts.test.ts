@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { PLANS, planOffer } from "@frankibarber/shared";
 import { countWords } from "./format";
 import {
-  AUTO_CLOSE_MS, CLOSED_FLASH_MS, NO_SHOP, SHOP_CLOSED, TOAST_MS,
-  buyRow, closedItself, mergeToasts, toastLeaving, toastText, type BuyRowInput, type ToastIn,
+  AUTO_CLOSE_MS, CLOSED_FLASH_MS, NO_SHOP, PLAN_CARD_WORDS, SHOP_CLOSED, TOAST_MS,
+  buyRow, chipName, closedItself, mergeToasts, planCard, planCardText, toastLeaving, toastText,
+  type BuyRowInput, type PlanCardInput, type ToastIn,
 } from "./walletToasts";
 
 /** Drop U, P3 (docs/UI_U_SPEC.md §7 P3 ACCEPTANCE): the wallet's toast and its buy row. */
@@ -87,5 +89,78 @@ describe("the buy row", () => {
     expect(closedItself(false, false, 0)).toBe(false);
     expect(row({ buyWindowLeft: 0, autoClosedAt: T - 100 })).toEqual({ kind: "autoClosed" });
     expect(row({ buyWindowLeft: 0, autoClosedAt: T - AUTO_CLOSE_MS })).toBeNull();
+  });
+});
+
+/**
+ * The plan card's words (§5.1: ≤ 24 as the freeze card; §7 P3 ACCEPTANCE: in `bomb-freeze` the
+ * wallet and the plan together ≤ 28). Walked over EVERY offer the rounds make — not only the one
+ * the gallery photographs — for both sides, before and after votes, with and without my own.
+ */
+describe("the plan card", () => {
+  /** Every distinct offer a match can make (`planOffer` is a function of the round alone). */
+  const offers = [...new Map(Array.from({ length: 60 }, (_, r) => planOffer(r + 1)).filter((o) => o.length).map((o) => [o.join(), o])).values()];
+  const tallies = [[0, 0], [2, 1], [1, 2], [1, 1], [0, 3]];
+  const every = (): PlanCardInput[] => offers.flatMap((options) => [true, false].flatMap((mine) =>
+    tallies.flatMap((tally) => [null, ...options].map((voted) => ({ options, tally, mine, voted: mine ? voted : null, secs: 12, compact: false })))));
+  /** „$4,100 [B] 12s”: the bomb freeze's wallet (money, key, seconds — no toast). */
+  const WALLET_FREEZE = countWords("$4,100 B 12s");
+
+  it("walks the three offers a match makes", () => {
+    expect(offers.map((o) => o.join())).toEqual(["1,2", "2,3", "3,1"]);
+  });
+
+  it("holds its 24 words for every offer, and the bomb freeze its 28 with the wallet", () => {
+    for (const input of every()) {
+      const card = planCard(input);
+      const words = countWords(planCardText(card));
+      const at = `${input.options} ${input.mine ? "attack" : "defence"} tally ${input.tally} voted ${input.voted}`;
+      expect(words, at).toBeLessThanOrEqual(PLAN_CARD_WORDS);
+      expect(words + WALLET_FREEZE, at).toBeLessThanOrEqual(28);
+      // …and it never pays for that with the gain and the cost: the focused option keeps both.
+      const focus = input.voted ?? card.rows.find((r) => r.leading)?.id ?? null;
+      expect(card.rows.filter((r) => r.detail).map((r) => r.id), at).toEqual(focus === null ? [] : [focus]);
+      // The focused option, the one being explained, keeps its full name.
+      for (const r of card.rows) if (r.detail) expect(r.name, at).toBe(r.full);
+    }
+  });
+
+  it("prints §5.2 #10 word for word when it fits (the offer of round 2)", () => {
+    const card = planCard({ options: [1, 2], tally: [2, 1], mine: true, voted: null, secs: 12, compact: false });
+    expect(planCardText(card)).toBe(
+      "PLAN RUNDY · 12s F1 OTWÓRZ ROLETĘ · 2 + Drugie wejście od Głównej ulicy. − Obrona też może nim wyjść. F2 ZBURZ MUR W ZAUŁKU · 1 ");
+    expect(countWords(planCardText(card))).toBe(23);
+    const def = planCard({ options: [1, 2], tally: [2, 1], mine: false, voted: null, secs: 12, compact: false });
+    expect(def.title).toBe("ATAK WYBIERA PLAN");
+    expect(def.rows.map((r) => r.key)).toEqual([null, null]);
+  });
+
+  it("shortens the OTHER option's name first when two long names would not fit (the offer of round 5)", () => {
+    // Round 5 offers plans 2 and 3, both four-word names. In full, with F1 leading, the card was
+    // 26 words (3 + 6 + 5 + 6 + 6): over the 24.
+    const card = planCard({ options: [2, 3], tally: [2, 1], mine: true, voted: null, secs: 12, compact: false });
+    expect(card.rows.map((r) => `${r.key} ${r.name} · ${r.votes}`)).toEqual(["F1 ZBURZ MUR W ZAUŁKU · 2", "F2 ZDEJMIJ SCHODY · 1"]);
+    expect(card.rows[0].detail).toEqual({ gain: PLANS[1].gain, cost: PLANS[1].cost });
+    expect(countWords(planCardText(card))).toBe(24);
+    // My own vote moves the focus, and the full name with it.
+    const mine = planCard({ options: [2, 3], tally: [2, 1], mine: true, voted: 3, secs: 12, compact: false });
+    expect(mine.rows.map((r) => r.name)).toEqual(["ZBURZ MUR", "ZDEJMIJ SCHODY NA CZATOWNIĘ"]);
+    expect(mine.rows[1].chosen).toBe(true);
+    // Before any vote there is nothing to explain, and every name is printed in full.
+    const none = planCard({ options: [2, 3], tally: [0, 0], mine: true, voted: null, secs: 12, compact: false });
+    expect(none.rows.map((r) => [r.name, r.detail])).toEqual([["ZBURZ MUR W ZAUŁKU", null], ["ZDEJMIJ SCHODY NA CZATOWNIĘ", null]]);
+  });
+
+  it("tells the three plans apart by their short names", () => {
+    expect(new Set(PLANS.map((p) => chipName(p.name))).size).toBe(PLANS.length);
+    for (const p of PLANS) expect(countWords(chipName(p.name))).toBeLessThanOrEqual(2);
+  });
+
+  it("is its header and two rows on a short screen (§4.2)", () => {
+    for (const input of every()) {
+      const card = planCard({ ...input, compact: true });
+      expect(card.rows.every((r) => !r.detail && countWords(r.name) <= 2)).toBe(true);
+      expect(countWords(planCardText(card))).toBeLessThanOrEqual(12);
+    }
   });
 });

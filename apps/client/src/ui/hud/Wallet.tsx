@@ -5,8 +5,7 @@ import { useHudSlice } from "../../game/store";
 import { money } from "./format";
 import { IconCart } from "./icons";
 import { useLeftSlot } from "./LeftColumn";
-import { polishWrap } from "../PlanPanel";
-import { buyRow, closedItself, mergeToasts, toastLeaving, toastText, type BuyRow, type MergedToast } from "./walletToasts";
+import { buyRow, closedItself, mergeToasts, polishWrap, toastLeaving, toastText, type BuyRow, type MergedToast } from "./walletToasts";
 import type { ZoneProps } from "./types";
 
 /**

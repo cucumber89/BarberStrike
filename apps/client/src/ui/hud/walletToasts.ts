@@ -1,5 +1,5 @@
-import type { MoneyEvent } from "@frankibarber/shared";
-import { money } from "./format";
+import { planById, type MoneyEvent, type PlanEvent } from "@frankibarber/shared";
+import { countWords, money } from "./format";
 
 /**
  * Drop U, P3: what the wallet says besides the money itself, decided here and drawn by
@@ -11,6 +11,9 @@ import { money } from "./format";
  *  - resets and purchases never toast: you pressed the button, you know;
  *  - the buy row is a cart, a key and a number of seconds, or — after B outside the window — a
  *    crossed cart and two words for 1800 ms (five in a mode with no shop at all).
+ *
+ * The plan card under the wallet (`PlanPanel.tsx`) keeps its words here too, at the end: it is
+ * the left column's other counted text, and this is the column's one pure, tested module.
  */
 
 /** A merged toast lives this long after the LAST change in it; changes inside it merge. */
@@ -119,3 +122,118 @@ export function buyRow(i: BuyRowInput): BuyRow | null {
  */
 export const closedItself = (wasOpen: boolean, open: boolean, buyWindowLeft: number): boolean =>
   wasOpen && !open && !(buyWindowLeft > 0);
+
+// ------------------------------------------------------------------------------------ the plan card
+
+/** §5.1: the freeze card's word budget („PLAN RUNDY · 12s”, the rows, the gain and the cost). */
+export const PLAN_CARD_WORDS = 24;
+
+/** One option row of the freeze card: „[F1] OTWÓRZ ROLETĘ · 2”, and under the focused one its gain and cost. */
+export interface PlanCardRow {
+  id: number;
+  /** „F1” / „F2” for the side that votes; null for the side that watches (no keys). */
+  key: string | null;
+  /** The name as printed: the full one, or its two-word short form (`chipName`). */
+  name: string;
+  /** The plan's full name (the row's accessible name when `name` is the short form). */
+  full: string;
+  votes: number;
+  /** I voted for it. */
+  chosen: boolean;
+  /** It leads the tally right now (a tie to the lower id, as `tallyVotes` settles it). */
+  leading: boolean;
+  /** The gain and the cost, on the ONE focused row only; null elsewhere. */
+  detail: { gain: string; cost: string } | null;
+}
+
+export interface PlanCard {
+  /** „PLAN RUNDY” for the side that votes, „ATAK WYBIERA PLAN” for the side that watches. */
+  title: string;
+  /** „12s”: the seconds left in the vote. */
+  secs: string;
+  rows: PlanCardRow[];
+}
+
+export interface PlanCardInput extends Pick<PlanEvent, "options" | "tally"> {
+  /** My side votes this round. */
+  mine: boolean;
+  /** The option I voted for this round, if any. */
+  voted: number | null;
+  /** Seconds left in the vote. */
+  secs: number;
+  /** A screen 600 px high or less: the header and the option rows only, short names (§4.2). */
+  compact: boolean;
+}
+
+/** The option ahead right now, as `tallyVotes` would settle it (a tie to the lower id); null with no votes. */
+export function leading(p: Pick<PlanEvent, "options" | "tally">): number | null {
+  let best: number | null = null, bestN = 0;
+  p.options.forEach((id, i) => {
+    const n = p.tally[i] ?? 0;
+    if (n > bestN || (n === bestN && n > 0 && best !== null && id < best)) { best = id; bestN = n; }
+  });
+  return best;
+}
+
+/**
+ * The short name: its first two words („ZBURZ MUR W ZAUŁKU” → „ZBURZ MUR”). Each of the three plans
+ * is told apart by its first two words alone (OTWÓRZ ROLETĘ, ZBURZ MUR, ZDEJMIJ SCHODY), so the
+ * live chip „PLAN: …” stays within its 3 words (§5.1), and so does a row of the card that must
+ * give way. The full name is always the element's accessible name.
+ */
+export const chipName = (name: string): string => name.split(/\s+/).slice(0, 2).join(" ");
+
+/**
+ * Polish typesetting: a one-letter word („W”, „a”, „i”, „z”) never ends a line — it is tied to the
+ * next word with a no-break space, so „ZBURZ MUR W ZAUŁKU” wraps as „ZBURZ MUR / W ZAUŁKU”.
+ */
+export const polishWrap = (s: string): string => s.replace(/(^|\s)(\p{L})\s+/gu, "$1$2\u00a0");
+
+/** The card as the tool reads it: every printed text, in order (for `countWords`). */
+export const planCardText = (c: PlanCard): string => [
+  `${c.title} · ${c.secs}`,
+  ...c.rows.flatMap((r) => [`${r.key ?? ""} ${r.name} · ${r.votes}`, r.detail ? `+ ${r.detail.gain} − ${r.detail.cost}` : ""]),
+].join(" ");
+
+/**
+ * The freeze card's words (§7 P3 WORK 3, §5.2 #10), within its 24 (§5.1) for EVERY offer.
+ *
+ * The gain and the cost go under ONE option: the one I voted for, else the one leading; before any
+ * vote, under none. The names are printed in full while the card fits its words — the offer of
+ * round 2, „[F1] OTWÓRZ ROLETĘ · 2”, „[F2] ZBURZ MUR W ZAUŁKU · 1” with F1's gain and cost, is 23 —
+ * but two four-word names and a long gain and cost do not: round 5 offers plans 2 and 3, and that
+ * card would be 26 words for the attack and 25 for the defence. So the card gives way in steps,
+ * each only as far as it must, and the step it stops at is the first that fits:
+ *  1. every name in full;
+ *  2. the OTHER option's name short („F2 ZDEJMIJ SCHODY · 1”) — the focused one, the one being
+ *     explained, keeps its full name beside its gain and cost;
+ *  3. every name short;
+ *  4. no gain and cost (never reached with today's three plans; the test walks every offer).
+ * On a short screen (`compact`) the card is its header and rows with short names (§4.2).
+ */
+export function planCard(i: PlanCardInput): PlanCard {
+  const title = i.mine ? "PLAN RUNDY" : "ATAK WYBIERA PLAN";
+  const secs = `${Math.max(0, i.secs)}s`;
+  const lead = leading(i);
+  const focus = i.compact ? null : i.voted ?? lead;
+  const build = (shortOther: boolean, shortFocus: boolean, detail: boolean): PlanCard => ({
+    title, secs,
+    rows: i.options.flatMap((id, k) => {
+      const plan = planById(id);
+      if (!plan) return [];
+      const focused = id === focus;
+      const short = i.compact || (focused ? shortFocus : shortOther);
+      return [{
+        id, key: i.mine ? `F${k + 1}` : null, name: short ? chipName(plan.name) : plan.name, full: plan.name,
+        votes: i.tally[k] ?? 0, chosen: i.voted === id, leading: lead === id,
+        detail: focused && detail ? { gain: plan.gain, cost: plan.cost } : null,
+      }];
+    }),
+  });
+  const steps: [boolean, boolean, boolean][] = [[false, false, true], [true, false, true], [true, true, true], [true, true, false]];
+  for (const [other, own, detail] of steps) {
+    const card = build(other, own, detail);
+    if (countWords(planCardText(card)) <= PLAN_CARD_WORDS) return card;
+  }
+  return build(true, true, false);
+}

@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useState } from "react";
-import { MatchPhase, planById, type PlanEvent } from "@frankibarber/shared";
+import { MatchPhase, planById } from "@frankibarber/shared";
 import type { HudState } from "../game/store";
 import { uiSound } from "../game/audio";
+import { chipName, planCard, polishWrap } from "./hud/walletToasts";
 
 /**
  * THE LIVING ARENA, on screen — the round's plan card, zone `plan` (drop U P3, docs/UI_U_SPEC.md
@@ -18,6 +19,11 @@ import { uiSound } from "../game/audio";
  * without a cost is not a choice — under ONE option: the one I voted for, else the one leading
  * (a tie goes to the lower id, as `tallyVotes` settles it); before any vote, under none. Once the
  * round runs, a chip says what is in force: „PLAN: OTWÓRZ ROLETĘ” (≤ 3 words, §5.1).
+ *
+ * What the card says is decided by `planCard` (`hud/walletToasts.ts`, pure, tested over every
+ * offer the rounds make): it holds the freeze card's 24 words (§5.1) for every pair of plans, and
+ * when two long names and a long gain and cost would not fit, the OTHER option's name gives way to
+ * its two-word short form first. This only draws it; every row's full name is its accessible name.
  */
 export function PlanPanel({ h, onVote }: { h: HudState; onVote: (id: number) => void }) {
   const p = h.plan;
@@ -56,60 +62,40 @@ export function PlanPanel({ h, onVote }: { h: HudState; onVote: (id: number) => 
     );
   }
 
-  const left = Math.max(0, Math.ceil((p.appliesAt - h.serverNow) / 1000));
-  const lead = leading(p);
-  // Gain and cost under ONE option: mine, else the leader. Before anyone votes, none — the names
-  // alone, until a key or a teammate picks one (the words stay within the freeze card's 24).
-  const focus = voted ?? lead;
+  const card = planCard({
+    options: p.options, tally: p.tally, mine, voted, compact,
+    secs: Math.ceil((p.appliesAt - h.serverNow) / 1000),
+  });
   return (
     <div className={`plan${mine ? " mine" : ""}${compact ? " compact" : ""}`} data-zone="plan" data-testid="plan-vote">
       <div className="plan-head">
-        <span className="plan-title">{mine ? "PLAN RUNDY" : "ATAK WYBIERA PLAN"}</span> · <span className="plan-secs">{`${left}s`}</span>
+        <span className="plan-title">{card.title}</span> · <span className="plan-secs">{card.secs}</span>
       </div>
-      {p.options.map((id, i) => {
-        const plan = planById(id);
-        if (!plan) return null;
-        const n = p.tally[i] ?? 0;
-        return (
-          <Fragment key={id}>
-            <button
-              className={`plan-option${voted === id ? " chosen" : ""}${lead === id ? " leading" : ""}`}
-              disabled={!mine}
-              data-testid={`plan-option-${id}`}
-              onClick={() => { uiSound("click"); setVoted(id); onVote(id); }}
-            >
-              {mine && <><kbd className="plan-key">{`F${i + 1}`}</kbd> </>}
-              <span className="plan-name">{compact ? chipName(plan.name) : polishWrap(plan.name)}</span>
-              <span className="plan-votes">{` · ${n}`}</span>
-            </button>
-            {focus === id && !compact && (
-              <div className="plan-detail">
-                <p className="plan-gain">{`+ ${polishWrap(plan.gain)}`}</p>
-                <p className="plan-cost">{`− ${polishWrap(plan.cost)}`}</p>
-              </div>
-            )}
-          </Fragment>
-        );
-      })}
+      {card.rows.map((row) => (
+        <Fragment key={row.id}>
+          <button
+            className={`plan-option${row.chosen ? " chosen" : ""}${row.leading ? " leading" : ""}`}
+            disabled={!mine}
+            data-testid={`plan-option-${row.id}`}
+            aria-label={`${row.key ? `${row.key} ` : ""}${row.full} · ${row.votes}`}
+            title={row.full}
+            onClick={() => { uiSound("click"); setVoted(row.id); onVote(row.id); }}
+          >
+            {row.key && <><kbd className="plan-key">{row.key}</kbd> </>}
+            {/* The count rides on the name's last word (no-break spaces), as „OTWÓRZ ROLETĘ · 2”. */}
+            <span className="plan-name">{polishWrap(row.name)}<span className="plan-votes">{`\u00a0·\u00a0${row.votes}`}</span></span>
+          </button>
+          {row.detail && (
+            <div className="plan-detail">
+              <p className="plan-gain">{`+ ${polishWrap(row.detail.gain)}`}</p>
+              <p className="plan-cost">{`− ${polishWrap(row.detail.cost)}`}</p>
+            </div>
+          )}
+        </Fragment>
+      ))}
     </div>
   );
 }
-
-/** The option ahead right now, as `tallyVotes` would settle it (a tie to the lower id); null with no votes. */
-export function leading(p: Pick<PlanEvent, "options" | "tally">): number | null {
-  let best: number | null = null, bestN = 0;
-  p.options.forEach((id, i) => {
-    const n = p.tally[i] ?? 0;
-    if (n > bestN || (n === bestN && n > 0 && best !== null && id < best)) { best = id; bestN = n; }
-  });
-  return best;
-}
-
-/**
- * Polish typesetting: a one-letter word („W”, „a”, „i”, „z”) never ends a line — it is tied to the
- * next word with a no-break space, so „ZBURZ MUR W ZAUŁKU” wraps as „ZBURZ MUR / W ZAUŁKU”.
- */
-export const polishWrap = (s: string): string => s.replace(/(^|\s)(\p{L})\s+/gu, "$1$2\u00a0");
 
 /** §4.2: at 600 px high and less the card is its header and its option rows, ≤ 100 px. */
 const COMPACT = "(max-height: 600px)";
@@ -125,10 +111,3 @@ function useCompact(): boolean {
   }, []);
   return on;
 }
-
-/**
- * The short name: its first two words („ZBURZ MUR W ZAUŁKU” → „ZBURZ MUR”), so the live chip
- * „PLAN: …” stays within its 3 words (§5.1) for every plan, and a row of the card on a short screen
- * stays one line (§4.2: ≤ 100 px). The full name is the chip's `title`.
- */
-export const chipName = (name: string): string => name.split(/\s+/).slice(0, 2).join(" ");

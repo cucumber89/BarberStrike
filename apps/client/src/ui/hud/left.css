@@ -63,17 +63,20 @@
 /* Within the wallet's width it wraps rather than run into the banner's column (1024 px wide). */
 .wallet-shut { font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); line-height: 1.2; letter-spacing: var(--hud-track-label); color: var(--hud-tx); }
 
-/* ---------------------------------------------------------------- plan (zone `plan`) */
+/* ---------------------------------------------------------------- plan (zone `plan`)
+   300 wide and at most 200 high (§4.2) for every offer the rounds make: the tallest real card —
+   a two-line name, its gain and cost on two lines each, the other option on one — is measured
+   at 1600, 1280 and 1024 (P3 report). The words are `planCard`'s (walletToasts.ts). */
 .plan {
-  margin-top: 10px; width: 300px; box-sizing: border-box; padding: 8px 10px 8px;
+  margin-top: 10px; width: 300px; box-sizing: border-box; padding: 6px 8px;
   background: var(--hud-plate); border: var(--hud-plate-line); border-top: 2px solid var(--hud-accent); border-radius: var(--hud-radius);
   backdrop-filter: blur(var(--hud-blur)); pointer-events: auto;
   animation: left-in var(--hud-base) var(--hud-ease) both;
 }
-.plan-head { margin: 0 2px 6px; font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); line-height: 1.2; letter-spacing: var(--hud-track-label); color: var(--hud-accent); }
+.plan-head { margin: 0 2px 4px; font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); line-height: 1.2; letter-spacing: var(--hud-track-label); color: var(--hud-accent); }
 .plan-secs { font-family: var(--font-mono); font-weight: 500; letter-spacing: var(--hud-track-num); color: var(--hud-tx); }
 .plan-option {
-  display: flex; align-items: center; gap: 8px; width: 100%; margin: 0; padding: 5px 6px; box-sizing: border-box;
+  display: flex; align-items: center; gap: 6px; width: 100%; margin: 0; padding: 3px 4px; box-sizing: border-box;
   background: transparent; border: 0; border-left: 2px solid transparent; border-radius: var(--hud-radius);
   font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t2); line-height: 1.15; letter-spacing: var(--hud-track-label);
   color: var(--hud-tx); text-align: left; cursor: pointer;
@@ -82,16 +85,16 @@
 .plan-option:hover:not(:disabled) { background: color-mix(in srgb, var(--hud-accent) 8%, transparent); }
 .plan-option.chosen { border-left-color: var(--hud-accent); background: color-mix(in srgb, var(--hud-accent) 14%, transparent); }
 /* Both keycaps one width, so the two names start on one line and the detail under them. */
-.plan-key { width: 26px; }
+.plan-key { width: 24px; }
 .plan-option.chosen .plan-key { background: var(--hud-accent); border-color: var(--hud-accent); color: #141008; }
+/* The name and its count are one run of text: the count sits after the last word and wraps with it. */
 .plan-name { flex: 1; min-width: 0; }
-.plan-votes { flex: none; font-family: var(--font-mono); font-weight: 500; letter-spacing: var(--hud-track-num); color: var(--hud-tx2); white-space: pre; }
+.plan-votes { font-family: var(--font-mono); font-weight: 500; letter-spacing: var(--hud-track-num); color: var(--hud-tx2); }
 .plan-option.leading .plan-votes { color: var(--hud-accent); }
-/* The gain and the cost of ONE option, under it. The cost is not small print. */
-/* Flush with the keycap (the row's 2 px rule + 6 px), so a line of the gain or the cost keeps the
-   card's whole width and does not break off its last word. */
-.plan-detail { margin: 0 0 4px; padding: 2px 6px 2px 8px; }
-.plan-gain, .plan-cost { margin: 0; font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); line-height: 1.3; letter-spacing: 0; }
+/* The gain and the cost of ONE option, under it. The cost is not small print. Flush with the
+   keycap (the row's 2 px rule + 4 px), so a line keeps the card's whole width. */
+.plan-detail { margin: 0 0 2px; padding: 1px 4px 2px 6px; }
+.plan-gain, .plan-cost { margin: 0; font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); line-height: 1.25; letter-spacing: 0; }
 .plan-gain { color: var(--hud-tx); }
 .plan-cost { color: var(--hud-warn); }
 /* The live chip: „PLAN: OTWÓRZ ROLETĘ”. */
@@ -104,10 +107,9 @@
 .plan-tag { color: var(--hud-tx2); }
 .plan-active-name { color: var(--hud-accent); }
 /* §4.2: at 600 px high and less the card is its header and its option rows, ≤ 100 px, and the
-   rows carry the two-word names (PlanPanel `compact`). */
-.plan.compact { padding: 6px 10px; }
-.plan.compact .plan-head { margin-bottom: 4px; }
-.plan.compact .plan-option { padding: 3px 6px; }
+   rows carry the two-word names (PlanPanel `compact`), one line each. */
+.plan.compact { padding: 5px 8px; }
+.plan.compact .plan-option { padding: 2px 4px; }
 
 /* ---------------------------------------------------------------- chat (zone `chat`)
    Bottom left, 12 px over the perks: ≤ 6 lines × 22 px, 4 at ≤ 760 px high, 3 at ≤ 600 and 2 there
