@@ -21,8 +21,30 @@ const ROUND_REASON: Record<string, string> = {
   "ELIMINATED": "Przeciwnik wyeliminowany",
   "TIME · EVEN": "Czas minął przy równym zdrowiu",
   "TIME · MORE HEALTH": "Czas minął — więcej zdrowia wygrywa",
+  "SURVIVORS HELD": "Ktoś dotrwał nieostrzyżony do końca czasu",
+  "ALL SHAVED": "Wszyscy ostrzyżeni",
 };
 export const roundReasonText = (result: string): string => ROUND_REASON[result] ?? result;
+
+/**
+ * The SHORT reason (≤ 3 words) that banners and the result's first two stages print (spec §5.4).
+ * Seeded by Ultron ahead of wave 2 because P2's pair card and P6's result read it (a frozen export)
+ * and would not compile against P5's branch alone; P5 owns it from here.
+ */
+const ROUND_REASON_SHORT: Record<string, string> = {
+  "BOMB DETONATED": "Ładunek wybuchł",
+  "BOMB DEFUSED": "Ładunek rozbrojony",
+  "DEFENDERS ELIMINATED": "Obrona wybita",
+  "ATTACKERS ELIMINATED": "Atak wybity",
+  "SITE SECURED": "Czas minął",
+  "TRADE": "Obaj padli",
+  "ELIMINATED": "Przeciwnik wyeliminowany",
+  "TIME · EVEN": "Czas — remis",
+  "TIME · MORE HEALTH": "Czas — więcej zdrowia",
+  "SURVIVORS HELD": "Ocaleni dotrwali",
+  "ALL SHAVED": "Wszyscy ostrzyżeni",
+};
+export const roundReasonShort = (result: string): string => ROUND_REASON_SHORT[result] ?? roundReasonText(result);
 
 export interface RoundEnd { title: string; why: string; mine: boolean | null }
 

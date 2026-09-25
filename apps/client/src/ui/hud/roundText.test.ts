@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OSTRZYZENI } from "@frankibarber/shared";
-import { roundEnd } from "./roundText";
+import { roundEnd, roundReasonShort } from "./roundText";
 
 // Moved verbatim from `ui/resultText.test.ts` (its 'round end' suite) with the functions it pins.
 describe("round end", () => {
@@ -21,5 +21,20 @@ describe("round end", () => {
     expect(roundEnd("ostrzyzeni", "", OSTRZYZENI.shavedTeam, -1, 0)?.why).toBe("Wszyscy ostrzyżeni");
     expect(roundEnd("ostrzyzeni", "", -1, -1, 0)).toBeNull();
     expect(roundEnd("tdm", "", 0, -1, 0)).toBeNull();
+  });
+});
+
+describe("roundReasonShort (spec §5.4)", () => {
+  const reasons = ["BOMB DETONATED", "BOMB DEFUSED", "DEFENDERS ELIMINATED", "ATTACKERS ELIMINATED", "SITE SECURED", "TRADE", "ELIMINATED", "TIME · EVEN", "TIME · MORE HEALTH", "SURVIVORS HELD", "ALL SHAVED"];
+  it("every server reason has a Polish short form of at most three words", () => {
+    for (const r of reasons) {
+      const short = roundReasonShort(r);
+      expect(short, r).not.toBe(r);
+      expect(short.split(/\s+/).filter((w) => /[\p{L}\d]/u.test(w)).length, short).toBeLessThanOrEqual(3);
+    }
+  });
+  it("the defuse keeps the words multiplayer.spec pins, and an unknown reason passes through", () => {
+    expect(roundReasonShort("BOMB DEFUSED")).toBe("Ładunek rozbrojony");
+    expect(roundReasonShort("SOMETHING NEW")).toBe("SOMETHING NEW");
   });
 });
