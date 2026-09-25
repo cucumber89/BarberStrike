@@ -10,7 +10,7 @@ import type { ShopApi } from "./ui/Shop";
 import type { ChatApi } from "./ui/Chat";
 import { Loading, pickedMap } from "./ui/Loading";
 import { Fade, useFade } from "./ui/Fade";
-import { humanError } from "./ui/errors";
+import { errorCode, humanError } from "./ui/errors";
 import { ERR } from "./ui/hud/copy";
 import { uiFlags } from "./ui/hud/uiFlags";
 import { useHudSlice } from "./game/store";
@@ -32,8 +32,14 @@ interface Picked { gameMode?: GameMode; mapId?: string }
 const FADE = {
   /** Menu → loading: black in, the loading card mounts under it, black out. */
   toLoading: { in: 240, out: 200 },
-  /** Loading → match: black in, held ≥ `hold` until deployed, then out (the zones stagger in). */
-  toMatch: { in: 200, hold: 100, out: 400 },
+  /**
+   * Loading → match: black in, held ≥ `hold` until deployed, then out (the zones stagger in). The
+   * black is held at most `cap`: a server that stops answering between READY and the spawn would
+   * otherwise leave the player on pure black for the whole deploy timeout (10 s, `Game.ts:842`) with
+   * no word and no way out. After `cap` the black clears back to the loading card („WCHODZISZ”,
+   * its WRÓĆ DO MENU live), and the match comes in through a second black once the spawn arrives.
+   */
+  toMatch: { in: 200, hold: 100, cap: 1200, out: 400 },
   /** Match / loading / error → menu: black in, then the menu keyart's own `mm-keyart-in` (1100). */
   toMenu: { in: 240, out: 240 },
   /** The zone stagger (`hud.css` `.hud.entering`): the last zone starts at 180 and runs 240. */
@@ -201,30 +207,50 @@ export function App() {
     // queued (the swap under it awaits it) and starts waiting once Ready is sent.
     let waitFor!: (p: Promise<void>) => void;
     const deployed = new Promise<void>((resolve, reject) => { waitFor = (p) => { p.then(resolve, reject); }; });
-    deployed.catch(() => undefined); // observed through `black` below
+    deployed.catch(() => undefined); // observed through `black` / the second pass below
+    /** The zones' stagger, as the black leaves over the live match (§6.1). */
+    const stagger = () => {
+      setEntering(true);
+      uiFlags.set({ entering: true });
+      window.clearTimeout(enteringTimer.current);
+      enteringTimer.current = window.setTimeout(() => { setEntering(false); uiFlags.set({ entering: false }); }, FADE.stagger);
+    };
+    /** Whether the first black ended on the match (true) or went back to the card (the cap ran out). */
+    let live = false;
     const black = through({
       inMs: FADE.toMatch.in, outMs: FADE.toMatch.out,
       swap: async () => {
         if (attempt.current !== token) return;
         setScreen({ kind: "deploying" });
-        await Promise.all([deployed, new Promise((r) => window.setTimeout(r, FADE.toMatch.hold))]);
-        if (attempt.current === token) setScreen({ kind: "game" });
-      },
-      onClear: () => {
+        const held = Promise.all([deployed, new Promise((r) => window.setTimeout(r, FADE.toMatch.hold))]).then(() => true);
+        const capped = new Promise<false>((r) => window.setTimeout(() => r(false), FADE.toMatch.cap));
+        live = await Promise.race([held, capped]);
         if (attempt.current !== token) return;
-        setEntering(true);
-        uiFlags.set({ entering: true });
-        window.clearTimeout(enteringTimer.current);
-        enteringTimer.current = window.setTimeout(() => { setEntering(false); uiFlags.set({ entering: false }); }, FADE.stagger);
+        // No spawn within the cap: back to the loading card (canvas hidden, HUD dormant — no shared
+        // frame), which says WCHODZISZ and keeps WRÓĆ DO MENU clickable while we keep waiting.
+        setScreen({ kind: live ? "game" : "entering" });
       },
+      onClear: () => { if (attempt.current === token && live) stagger(); },
     });
     const host = appRoot.current;
     if (host && await enterFullscreen(host)) void lockKeyboard();
     void game.requestPointerLockAsync();
     connection.send(C2S.Ready);
-    waitFor(game.waitForDeployment());
-    try { await black; }
-    catch (error) { if (attempt.current === token) await leave(error); }
+    // A deploy that fails says so in Polish (§5.5 `deploy-timeout`) even while `Game.ts:842` still
+    // rejects with English: an error that is not already a code is the deploy failing.
+    waitFor(game.waitForDeployment().catch((e: unknown) => Promise.reject(errorCode(e) === ERR.unknown ? new Error(ERR.deployTimeout) : e)));
+    try {
+      await black;
+      if (live || attempt.current !== token) return;
+      // The slow path: the card is up again; the spawn (or the deploy timeout, `Game.ts:842`) decides.
+      await deployed;
+      if (attempt.current !== token) return;
+      await through({
+        inMs: FADE.toMatch.in, outMs: FADE.toMatch.out,
+        swap: () => { if (attempt.current === token) setScreen({ kind: "game" }); },
+        onClear: () => { if (attempt.current === token) stagger(); },
+      });
+    } catch (error) { if (attempt.current === token) await leave(error); }
   };
   useEffect(() => () => {
     attempt.current++;
