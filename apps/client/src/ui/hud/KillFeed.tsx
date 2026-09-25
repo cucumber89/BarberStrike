@@ -11,9 +11,9 @@ import type { ZoneProps } from "./types";
  * - at most 5 rows, in a column exactly `--hud-feed-w` wide (460 / 320 / 195.5 px at 1600 / 1280 /
  *   1024), so it keeps 16 px from the strip and 12 px from the banner by construction (§3.6);
  * - the weapon is its silhouette (`SHOP_ART`), the headshot and the shave are icons, so a row is at
- *   most three words: two nicks and one assist (§5.1). Nicks keep their own case. When the column
- *   is too narrow for a row, the assist gives way first, then the killer down to its first letters,
- *   and the victim last (`Row`, corners.css);
+ *   most three words: two nicks and one assist (§5.1). Nicks keep their own case, and every nick
+ *   stays readable: a row too wide for the column breaks into two lines — who killed (and who
+ *   helped) over what and whom — instead of cutting a name (`Row`, corners.css);
  * - a 1 px brass rule when I am the killer, 1 px red when I am the victim;
  * - a row slides in over 160 ms and fades over its last 400 ms (§6.1 "Kill feed row"). The store
  *   drops a row at 6000 ms (`Game.syncHud`); the fade is started by a timer, not by a 6-second CSS
@@ -32,15 +32,13 @@ function Gun({ weapon }: { weapon: string }) {
 }
 
 /**
- * A killer's nick this long may be cut down to its first letters (corners.css `.kf-long`, a 3.2em
- * floor); a shorter one is always whole — five letters are about the floor's width anyway.
- */
-const CUTTABLE_NICK = 6;
-
-/**
- * One row. When it is wider than the column (1024 px: 195.5 px for two nicks, the silhouette and
- * the headshot) the width is given up in a fixed order (corners.css): the assist first, then the
- * killer down to its first letters, and the victim last — the victim is who the row is about.
+ * One row, as two halves: „killer + assist” (`kf-who`) and „weapon victim” (`kf-what`). On one line
+ * when it fits — always at 1600, the gallery's rows at 1280. When it does not (the 195.5 px column at
+ * 1024 holds about 180 px of row: two long nicks and a silhouette are 250+), the row wraps between
+ * the halves instead of cutting names: each half has the whole line, so a 16-letter victim
+ * (`MAX_NAME_LENGTH`) with the rifle is whole, and a 16-letter killer is whole. Only a half that is
+ * wider than a line on its own is cut, and then fairly (corners.css): the killer and the assist
+ * share the line, the shorter one whole, never one of them down to „+ …”.
  */
 function Row({ k, myId, teams, out }: { k: KillFeedEntry; myId: string; teams: boolean; out: boolean }) {
   const self = k.killer === k.victim;
@@ -48,13 +46,19 @@ function Row({ k, myId, teams, out }: { k: KillFeedEntry; myId: string; teams: b
   const assist = k.assists?.[0];
   return (
     <li className="kf-row" data-me={k.killer === myId && !self ? "killer" : k.victim === myId ? "victim" : undefined} data-out={out || undefined}>
-      {!self && <span className={`kf-nick kf-killer ${side(k.killerTeam)}${[...k.killerName].length >= CUTTABLE_NICK ? " kf-long" : ""}`}>{k.killerName}</span>}
-      {!self && assist && <span className={`kf-assist ${side(k.killerTeam)}`}><span className="kf-plus">+</span> {assist}</span>}
-      <span className="kf-weapon" role="img" aria-label={k.shave ? "OGOLENIE" : `${killerName(k.weapon)}${k.headshot ? " · W GŁOWĘ" : ""}`}>
-        {k.shave ? <Razor className="kf-razor" /> : <Gun weapon={k.weapon} />}
-        {k.headshot && !k.shave ? <HeadShot className="kf-head" /> : null}
+      {!self && (
+        <span className="kf-who">
+          <span className={`kf-nick kf-killer ${side(k.killerTeam)}`}>{k.killerName}</span>
+          {assist && <span className={`kf-assist ${side(k.killerTeam)}`}><span className="kf-plus">+</span> {assist}</span>}
+        </span>
+      )}
+      <span className="kf-what">
+        <span className="kf-weapon" role="img" aria-label={k.shave ? "OGOLENIE" : `${killerName(k.weapon)}${k.headshot ? " · W GŁOWĘ" : ""}`}>
+          {k.shave ? <Razor className="kf-razor" /> : <Gun weapon={k.weapon} />}
+          {k.headshot && !k.shave ? <HeadShot className="kf-head" /> : null}
+        </span>
+        <span className={`kf-nick kf-victim ${side(k.victimTeam)}`}>{k.victimName}</span>
       </span>
-      <span className={`kf-nick kf-victim ${side(k.victimTeam)}`}>{k.victimName}</span>
     </li>
   );
 }

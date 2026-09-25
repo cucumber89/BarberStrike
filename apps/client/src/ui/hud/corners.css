@@ -145,29 +145,30 @@
 .feed { position: absolute; top: var(--hud-edge); right: var(--hud-edge); width: var(--hud-feed-w); margin: 0; padding: 0; list-style: none;
   display: flex; flex-direction: column; align-items: flex-end; gap: 4px; container: p4-feed / inline-size; }
 @supports (width: round(down, 1px, 1px)) { .feed { width: round(down, var(--hud-feed-w), .5px); } }
-.kf-row { box-sizing: border-box; max-width: 100%; height: 30px; display: flex; align-items: center; gap: 7px; padding: 0 10px;
+/* A row is 30 px on one line; a row that wraps (below) is two lines of t1 in about 44 px. */
+.kf-row { box-sizing: border-box; max-width: 100%; min-height: 30px; display: flex; flex-wrap: wrap; align-items: center; align-content: center;
+  column-gap: 7px; row-gap: 2px; padding: 4px 10px;
   background: var(--hud-plate); border: 1px solid transparent; border-radius: var(--hud-radius);
   font: 600 var(--hud-t1)/1.2 var(--font-ui); color: var(--hud-tx); white-space: nowrap;
   animation: slide-in 160ms var(--hud-ease); transition: opacity 400ms linear; }
 .kf-row[data-me="killer"] { border-color: var(--hud-accent); }
 .kf-row[data-me="victim"] { border-color: var(--hud-danger); }
 .kf-row[data-out] { opacity: 0; }
-/* A row wider than the column gives up width in a fixed order, and only what it must: the assist
-   first, then the killer down to its first letters, the victim last — the row is about who died.
-   Proportional shrinking cut both nicks at once (1024: „xXPiotrek… Ko…” for one pixel too many).
-   - The victim is an ordinary item (0 1 auto): it shrinks only when nothing else can.
-   - The killer and the assist start at zero (basis 0) and GROW into what the victim and the weapon
-     leave, each up to its own width (max-width: max-content). The killer's grow factor dwarfs the
-     assist's, so the assist gets width only once the killer is whole. Their floors are their
-     min-widths: none for the assist, 3.2em (three letters and „…”) for a long killer, its whole
-     nick for a short one (KillFeed.tsx CUTTABLE_NICK).
-   While the floors fit, the row is in the grow case and the victim is never touched; past them, the
-   frozen floors leave the whole overflow to the victim. */
+/* A row wider than the column never cuts a name to make room: it wraps between its two halves,
+   „killer + assist” on the first line and „weapon victim” on the second, flush right like every
+   other row's victim (KillFeed.tsx `Row`). Each half then has a whole line (≈ 180 px at 1024), which
+   holds a 16-letter nick (MAX_NAME_LENGTH, ≈ 125 px) and, on the second line, the rifle beside it.
+   The old order (assist first, then the killer, the victim last) cut the killer to three letters
+   and the assist to a bare „+ …” at 1024 for the gallery's own nicks.
+   Only a half wider than a line on its own is cut, and fairly: the killer and the assist both start
+   at zero (basis 0) and grow alike, each frozen at its own width (max-width: max-content), so the
+   shorter one is whole and the longer one takes the rest — never less than half the line. */
+.kf-who, .kf-what { display: flex; align-items: center; column-gap: inherit; min-width: 0; max-width: 100%; }
+.kf-who { flex: 0 1 auto; }
+.kf-what { flex: 0 1 auto; margin-left: auto; }
 .kf-nick, .kf-assist { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.kf-killer, .kf-assist { flex: 1 1 0; max-width: max-content; }
 .kf-victim { flex: 0 1 auto; }
-.kf-killer { flex: 1000000 1 0; max-width: max-content; min-width: max-content; }
-.kf-killer.kf-long { min-width: 3.2em; }
-.kf-assist { flex: 1 1 0; max-width: max-content; }
 .kf-nick.t0, .kf-assist.t0 { color: var(--hud-team0); }
 .kf-nick.t1, .kf-assist.t1 { color: var(--hud-team1); }
 .kf-nick.ffa, .kf-assist.ffa { color: var(--hud-tx); }
@@ -180,7 +181,7 @@
 .kf-razor { flex: none; }
 /* The 1024-wide column (195.5 px): tighter row, smaller silhouette, so the nicks keep their letters. */
 @container p4-feed (max-width: 260px) {
-  .kf-row { gap: 5px; padding: 0 7px; }
+  .kf-row { column-gap: 5px; padding: 4px 7px; }
   .kf-art svg { height: 12px; }
 }
 

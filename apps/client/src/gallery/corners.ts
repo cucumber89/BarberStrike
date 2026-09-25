@@ -54,8 +54,11 @@ export const scenarios: Scenario[] = [
 export const pins: PinSet = {
   // Row 5: health, armour „50”, ammo „19 / 120” with the rifle's silhouette, the frag and the flash
   // as icons with their keys, the feed's rows at ≤ 3 words with the assist and the headshot icon.
+  // A row is two halves, „killer + assist” and „weapon victim”, so a row too wide for the 195.5 px
+  // column wraps between them instead of cutting a nick (KillFeed.tsx `Row`).
   "tdm-live": {
     expect: ["[data-testid=crosshair]", "[data-testid=killfeed] li", "[data-testid=killfeed] li[data-me=killer]", "[data-testid=killfeed] .kf-head",
+      "[data-testid=killfeed] li .kf-who .kf-killer + .kf-assist .kf-plus", "[data-testid=killfeed] li .kf-what .kf-weapon + .kf-victim",
       "[data-testid=killfeed] .kf-art svg", "[data-testid=ammo] .ammo-gun svg", "[data-testid=slot-lethal] .gear-art svg", "[data-testid=slot-tactical] .gear-art svg"],
     absent: ["[data-testid=c4]", "[data-testid=perks]", "[data-testid=weapon-name]"],
     caseText: ["Kowal", "+ Młody_Tomek", "JANUSZ"],
