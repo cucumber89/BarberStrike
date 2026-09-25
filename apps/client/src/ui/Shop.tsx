@@ -197,8 +197,10 @@ export function Shop({ h, api, now, live = true }: Props) {
     const priceText = busy ? "…"
       : s.carried && s.have && !s.v.ok ? s.have
       : refusal ? refusal
-      : s.price === 0 ? "ZA DARMO"
+      // A swap first: the free P9 taken back for a carried revolver pays the revolver's refund,
+      // and „ZA DARMO” there hid the $420 you get.
       : s.swapNet !== undefined ? (s.swapNet >= 0 ? money(s.swapNet) : `+${money(-s.swapNet)}`)
+      : s.price === 0 ? "ZA DARMO"
       : money(s.price);
     const tone = busy ? "" : s.carried && s.have && !s.v.ok ? "have" : refusal ? "no" : s.swapNet !== undefined ? "swap" : "";
     const label = `${itemName(id)}, ${s.price === 0 ? "za darmo" : money(s.price)}${s.swapNet !== undefined ? `, z wymianą ${money(s.swapNet)}` : ""}${refusal ? ` — ${refusal}` : s.carried && s.have ? ` — ${s.have}` : ""}`;
