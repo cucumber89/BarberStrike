@@ -134,7 +134,9 @@
   font: 600 var(--hud-t1)/1.2 var(--font-ui); letter-spacing: var(--hud-track-label); color: var(--hud-tx);
   text-shadow: 0 1px 3px rgba(0, 0, 0, .85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   opacity: 0; visibility: hidden; transition: opacity 300ms var(--hud-ease-in), visibility 0s linear 300ms; }
-.weapon-name[data-on] { opacity: 1; visibility: visible; transition: none; animation: p4-rise var(--hud-fast) var(--hud-ease); }
+/* `inherit`, not `visible`: a visible child shows through a hidden parent, so the name stayed on
+   screen over a dormant HUD (`.hud.dormant`, the loading screen's READY step). */
+.weapon-name[data-on] { opacity: 1; visibility: inherit; transition: none; animation: p4-rise var(--hud-fast) var(--hud-ease); }
 
 /* ---------------------------------------------------------------- top right: the kill feed */
 /* The column is the --hud-feed-w token, snapped down to the half pixel: at 1024 the token is
