@@ -284,7 +284,7 @@
 .sb-team td.sb-money { font-family: var(--font-mono); font-weight: 500; color: var(--hud-money); }
 .sb-team :is(th, td).sb-ping { color: var(--hud-tx2); }
 .sb-team .sb-shaved { text-align: center; color: var(--hud-warn); }
-.sb-team td.sb-shaved.none { opacity: .4; }
+.sb-team td.sb-shaved.none { color: rgba(229, 174, 82, .4); }
 .sb-team .sb-shaved svg { display: block; margin: 0 auto; }
 
 /* The draw under the pair (turniej), and the result's DRABINKA tab: P2's BracketPanel, set in this
