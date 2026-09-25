@@ -19,3 +19,9 @@ apps/client/e2e/tools/__*.mjs
 
 # Konfiguracja wdrożenia (domena, mail) — lokalna dla serwera.
 deploy/.env
+
+# Baza kont SQLite (drop V / H, P4) — dane runtime serwera, nie commitujemy.
+apps/server/data/
+*.db
+*.db-shm
+*.db-wal
