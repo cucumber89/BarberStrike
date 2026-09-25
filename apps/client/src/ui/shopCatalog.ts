@@ -3,6 +3,7 @@ import {
   boysAllows, isArmorId, isGrenadeId, isPerkId, isWeaponId, modeAllowsItem,
   type ArmorId, type GameMode, type GrenadeId, type PerkId, type ShopItemId, type WeaponId,
 } from "@frankibarber/shared";
+import { money } from "./hud/format";
 
 /**
  * The buy menu's catalogue: which aisle holds what, in which order, under which key — ONE source
@@ -195,4 +196,36 @@ export function itemName(id: string): string {
   if (isPerkId(id)) return PERKS[id as PerkId].name;
   if (isArmorId(id)) return ARMOR[id as ArmorId].name;
   return id;
+}
+
+/** A refusal on the tile, as its one tag: one or two words (a tile is ≤ 6 words, §5.2 #49). */
+export const BLOCKED_LABEL: Record<string, string> = {
+  owned: "MASZ", full: "PEŁNO", slot: "SLOT ZAJĘTY", class: "NIE TA ROLA", mode: "NIE TU", "no-shop": "BRAK SKLEPU", shaved: "NIE TERAZ",
+};
+
+export interface TileTagIn {
+  /** Why the shop refuses the item (`canBuy`'s reason, or the shelf's own "closed" / "class"), "" when it sells. */
+  reason: string;
+  /** On you now: the gun in its slot, the plate you wear, a running perk, at least one of this grenade. */
+  carried: boolean;
+  /** What a carried item says when HAVING it is the refusal: „MASZ”, „nosisz”, „działa jeszcze 12s”, „PEŁNO”. */
+  have: string;
+  /** The money missing on a "money" refusal (`buyShortfall`), 0 otherwise. */
+  short: number;
+}
+/** The tile's one tag: its text, its tone (`no` = a refusal, `why-{id}`; `have` = yours), and whether the tile greys. */
+export interface TileTag { text: string; tone: "no" | "have" | ""; locked: boolean }
+
+/**
+ * The tile's one tag (§5.2 #49), from the REASON the shop refuses the item — never from "carried"
+ * alone. Carrying one Frag of two does not make the slot full: the second one is refused for money
+ * or a shut window, and that is what the tile must say (the refusal, with its `why-{id}`). Only
+ * "owned" / "full" — having it IS the reason — print what you have. A shut shop says so once, in
+ * the header, so its tiles keep only what you carry.
+ */
+export function tileTag({ reason, carried, have, short }: TileTagIn): TileTag {
+  if (!reason) return { text: "", tone: "", locked: false };
+  if (reason === "owned" || reason === "full") return { text: have || BLOCKED_LABEL[reason], tone: "have", locked: false };
+  if (reason === "closed") return carried ? { text: have, tone: have ? "have" : "", locked: false } : { text: "", tone: "", locked: true };
+  return { text: short > 0 ? `Brakuje ${money(short)}` : BLOCKED_LABEL[reason] ?? "", tone: "no", locked: true };
 }

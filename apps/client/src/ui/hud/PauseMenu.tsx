@@ -1,19 +1,29 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useState } from "react";
-import { GAME_VERSION, MODES, MatchPhase, type Team } from "@frankibarber/shared";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { GAME_VERSION, MODES, MatchPhase, type GameMode, type Team } from "@frankibarber/shared";
 import { useHud, useHudSlice } from "../../game/store";
 import type { Settings } from "../../settings";
 import { SettingsPanel } from "../SettingsPanel";
-import { TeamPicker } from "../TeamPicker";
+import { TeamPicker, teamPickerShown } from "../TeamPicker";
+import { MODE_TITLE, mapTitle } from "./copy";
 import { uiFlags } from "./uiFlags";
+import { useKeepMounted } from "./useKeepMounted";
 import type { ZoneProps } from "./types";
 
 /**
- * Drop U, P0 (seed for P7): the pause card (zone `pause`) with what opens it — Escape, and the
- * pointer lost outside the shop and the chat box for 300 ms — moved out of `Hud.tsx` verbatim
- * (docs/UI_U_SPEC.md §7 P0 0d).
+ * The ESC menu (zone `pause`), CS2's shape: a column on the left, the match still running and
+ * visible beside it under a light dim, settings opening beside the column rather than inside it
+ * (zone `settings`), the team picker opening inline under its button, and leaving behind an
+ * explicit „NA PEWNO WYJŚĆ?” (docs/UI_U_SPEC.md §4.4, §5.2 #54–57, §6.1).
  *
- * It publishes `uiFlags.overlay.pause` while the card shows, so the scoreboard's Tab and the
- * first-run hints, which used to read the HUD's own `paused`, read it from there.
+ * What opens it is unchanged from the pre-drop HUD: Escape, and the pointer lost outside the shop
+ * and the chat box for 300 ms. Two exceptions, both from §6.1:
+ * - a dormant HUD (the one mounted behind the loading card) never arms it (`startup.spec.ts:16`);
+ * - after a match ends and the next one starts (Ended → Waiting) the pointer is free because the
+ *   player was reading the result, not because they asked for a menu. So for 2500 ms nothing arms
+ *   it, and the resume prompt „KLIKNIJ, ŻEBY GRAĆ” (zone `prompt`) stands in its place until a
+ *   click takes the pointer or Escape opens the menu.
+ *
+ * It publishes `uiFlags.overlay.pause` while the column shows, which hides the other zones (§4.5).
  */
 export interface PauseMenuProps extends ZoneProps {
   settings: Settings;
@@ -29,6 +39,12 @@ export interface PauseMenuProps extends ZoneProps {
   dormant: boolean;
 }
 
+/** §6.1 New match: how long after Ended → Waiting the pointer being free does not open the menu. */
+export const NEW_MATCH_QUIET_MS = 2500;
+/** §6.1: the column's exit, and the settings panel's. */
+const CLOSE_MS = 160;
+const SETTINGS_CLOSE_MS = 120;
+
 export const PauseMenu = memo(function PauseMenu({ settings, onSettings, onLeave, onResume, onPause, onFullscreen, onChooseTeam, dormant }: PauseMenuProps) {
   const pointerLocked = useHudSlice((s) => s.pointerLocked);
   const connected = useHudSlice((s) => s.connected);
@@ -36,6 +52,11 @@ export const PauseMenu = memo(function PauseMenu({ settings, onSettings, onLeave
   const shopOpen = useHudSlice((s) => s.shopOpen);
   const chatOpen = useHudSlice((s) => s.chatOpen);
   const [paused, setPaused] = useState(false);
+  /** The resume prompt after a new match (see the header). */
+  const [prompt, setPrompt] = useState(false);
+  /** `performance.now()` until which a free pointer does not arm the menu (see the header). */
+  const quietUntil = useRef(0);
+  const lastPhase = useRef(phase);
   const [pauseSettings, setPauseSettings] = useState(false);
   /** Set when a resume attempt came back without the pointer, so the card can say so and retry. */
   const [lockRefused, setLockRefused] = useState(false);
@@ -53,6 +74,16 @@ export const PauseMenu = memo(function PauseMenu({ settings, onSettings, onLeave
     if (ok) setPaused(false);
   }, [onResume]);
 
+  // A new match (Ended → Waiting): whatever was open at the end is closed, and the quiet window
+  // starts. Declared before the arming effect below, which reads the window in the same commit.
+  useEffect(() => {
+    const was = lastPhase.current;
+    lastPhase.current = phase;
+    if (was !== MatchPhase.Ended || phase === MatchPhase.Ended) return;
+    quietUntil.current = performance.now() + NEW_MATCH_QUIET_MS;
+    setPaused(false);
+  }, [phase]);
+
   useEffect(() => {
     if (dormant) return;
     const down = (e: KeyboardEvent) => {
@@ -62,6 +93,7 @@ export const PauseMenu = memo(function PauseMenu({ settings, onSettings, onLeave
         // runs. Under Keyboard Lock (fullscreen, Chromium) Escape reaches the page WITHOUT
         // releasing it, so the lock has to be dropped here or the pause card would be unclickable.
         e.preventDefault();
+        setPrompt(false);
         if (paused) void resume();
         else { onPause(); setPaused(true); }
       }
@@ -81,27 +113,41 @@ export const PauseMenu = memo(function PauseMenu({ settings, onSettings, onLeave
     // keyboard effect above already has — a hud that is not on screen decides nothing.
     if (dormant) return;
     if (!pointerLocked && connected && phase !== MatchPhase.Ended && !shopOpen && !chatOpen) {
+      // A new match's quiet window: the prompt, not the menu. The prompt then stays until a click
+      // or Escape; after the window only a LATER loss of the pointer arms the menu.
+      if (performance.now() < quietUntil.current) { setPrompt(true); return; }
+      if (prompt) return;
       const timer = window.setTimeout(() => setPaused(true), 300);
       return () => window.clearTimeout(timer);
     }
+    if (pointerLocked) setPrompt(false);
     if (pointerLocked || shopOpen || chatOpen) setPaused(false);
-  }, [dormant, pointerLocked, connected, phase, shopOpen, chatOpen]);
+  }, [dormant, pointerLocked, connected, phase, shopOpen, chatOpen, prompt]);
 
   const open = paused && phase !== MatchPhase.Ended;
+  const mount = useKeepMounted(open, CLOSE_MS);
   // Published before paint, so nothing that waits on the pause is a frame late.
   useLayoutEffect(() => { uiFlags.set({ overlay: { pause: open } }); }, [open]);
   useLayoutEffect(() => () => uiFlags.set({ overlay: { pause: false } }), []);
-  if (!open) return null;
+  const showPrompt = prompt && !open && phase !== MatchPhase.Ended && !dormant;
   return (
-    <PauseCard
-      settings={settings} onSettings={onSettings} onLeave={onLeave} onChooseTeam={onChooseTeam}
-      resume={resume} onFullscreen={onFullscreen} fullscreen={fullscreen} setFullscreen={setFullscreen}
-      pauseSettings={pauseSettings} setPauseSettings={setPauseSettings} lockRefused={lockRefused}
-    />
+    <>
+      {showPrompt && <p className="resume-prompt" data-zone="prompt" data-testid="resume-prompt">KLIKNIJ, ŻEBY GRAĆ</p>}
+      {mount !== "closed" && (
+        <PauseCard
+          closing={mount === "closing"}
+          settings={settings} onSettings={onSettings} onLeave={onLeave} onChooseTeam={onChooseTeam}
+          resume={resume} onFullscreen={onFullscreen} fullscreen={fullscreen} setFullscreen={setFullscreen}
+          pauseSettings={pauseSettings} setPauseSettings={setPauseSettings} lockRefused={lockRefused}
+        />
+      )}
+    </>
   );
 });
 
 interface PauseCardProps {
+  /** On its way out (§6.1, 160 ms): drawn, but it answers nothing. */
+  closing: boolean;
   settings: Settings;
   onSettings: (s: Settings) => void;
   onLeave: () => void;
@@ -115,31 +161,73 @@ interface PauseCardProps {
   lockRefused: boolean;
 }
 
-/** The card itself; the team picker reads the whole state, so it is read only while the card shows. */
-function PauseCard({ settings, onSettings, onLeave, onChooseTeam, resume, onFullscreen, fullscreen, setFullscreen, pauseSettings, setPauseSettings, lockRefused }: PauseCardProps) {
-  const h = useHud();
+/**
+ * „DRUŻYNOWY DEATHMATCH · NIGHT DISTRICT”: the mode's HUD title and the map, when it is known. Each
+ * part is kept whole (`white-space: nowrap`), so a line too long for the column breaks at the dot
+ * and never inside the map's name.
+ */
+function PauseObjective({ mode, mapId }: { mode: GameMode; mapId: string }) {
+  const map = mapTitle(mapId);
   return (
-    <div className="pause" data-zone="pause" data-testid="pause">
-      <div className="pause-card">
-        <div className="wordmark small">BARBERSTRIKE</div>
-        <p className="pause-hint">Pauza · <kbd>ESC</kbd> albo WRÓĆ DO GRY, żeby grać dalej</p>
-        <p className="pause-objective" data-testid="pause-objective"><b>{MODES[h.mode].name}</b> · {MODES[h.mode].objective}</p>
+    <p className="pause-objective" data-testid="pause-objective">
+      <span>{MODE_TITLE[mode]}</span>{map && <>{" · "}<span>{map}</span></>}
+    </p>
+  );
+}
+
+/** The column itself; the team picker reads the whole state, so it is read only while the card shows. */
+function PauseCard({ closing, settings, onSettings, onLeave, onChooseTeam, resume, onFullscreen, fullscreen, setFullscreen, pauseSettings, setPauseSettings, lockRefused }: PauseCardProps) {
+  const h = useHud();
+  const teams = teamPickerShown(h.mode) && MODES[h.mode].teams;
+  // Open when a side was just asked for: the answer (6 s) belongs under the cards it answers.
+  const [teamsOpen, setTeamsOpen] = useState(() => !!h.teamResult && performance.now() - h.teamResult.at < 6000);
+  const [confirm, setConfirm] = useState(false);
+  const settingsMount = useKeepMounted(pauseSettings, SETTINGS_CLOSE_MS);
+  return (
+    // Closing: `.closing` takes the pointer away from it (screens.css), so it answers nothing.
+    <div className={`pause-layer${closing ? " closing" : ""}`}>
+      <div className="pause-dim" aria-hidden="true" />
+      <div className="pause" data-zone="pause" data-testid="pause" role="dialog" aria-label="Menu">
+        <div className="pause-head">
+          <h2 className="pause-title">MENU</h2>
+          {/* One text node: „v2.1” is one word (§3.10), not „v” and „2.1”. */}
+          <span className="pause-version">{`v${GAME_VERSION}`}</span>
+        </div>
+        <p className="pause-live">MECZ TRWA DALEJ</p>
+        <PauseObjective mode={h.mode} mapId={h.mapId} />
         {lockRefused && (
-          <p className="pause-warn" data-testid="pause-lock-refused">
-            Przeglądarka nie oddała myszy. Kliknij <strong>WRÓĆ DO GRY</strong> jeszcze raz —
-            odmowa tuż po wciśnięciu Escape jest normalna i mija po sekundzie.
-          </p>
+          // A refused pointer lock has to be SAID: Chrome refuses it for about a second after
+          // Escape left the previous lock, and a silent refusal reads as a frozen game.
+          <p className="pause-warn" data-testid="pause-lock-refused">MYSZ NIE WRÓCIŁA — KLIKNIJ JESZCZE RAZ</p>
         )}
-        <button className="menu-btn primary" onClick={() => void resume()} data-testid="btn-resume">WRÓĆ DO GRY</button>
-        <button className="menu-btn" onClick={() => void onFullscreen().then(setFullscreen)} data-testid="btn-fullscreen">
-          {fullscreen ? "WYJDŹ Z PEŁNEGO EKRANU" : "PEŁNY EKRAN"}
-        </button>
-        <button className="menu-btn" onClick={() => setPauseSettings((v) => !v)} data-testid="btn-pause-settings">{pauseSettings ? "UKRYJ USTAWIENIA" : "USTAWIENIA"}</button>
-        {!pauseSettings && <TeamPicker h={h} onChoose={onChooseTeam} />}
-        {pauseSettings && <SettingsPanel settings={settings} onChange={onSettings} />}
-        <button className="menu-btn" onClick={onLeave} data-testid="btn-leave">OPUŚĆ MECZ</button>
-        <div className="version">v{GAME_VERSION}</div>
+        <div className="pause-nav">
+          <button className="pause-btn primary" onClick={() => void resume()} data-testid="btn-resume">WRÓĆ DO GRY</button>
+          <button className="pause-btn" aria-pressed={pauseSettings} onClick={() => setPauseSettings((v) => !v)} data-testid="btn-pause-settings">USTAWIENIA</button>
+          {teams && (
+            <button className="pause-btn" aria-pressed={teamsOpen} aria-controls="team-picker" onClick={() => setTeamsOpen((v) => !v)} data-testid="btn-teams">ZMIEŃ DRUŻYNĘ</button>
+          )}
+          {teams && teamsOpen && <TeamPicker h={h} onChoose={onChooseTeam} />}
+          <button className="pause-btn switch" aria-pressed={fullscreen} onClick={() => void onFullscreen().then(setFullscreen)} data-testid="btn-fullscreen">
+            PEŁNY EKRAN<span className="pause-switch" aria-hidden="true" />
+          </button>
+          <button className="pause-btn leave" aria-expanded={confirm} onClick={() => setConfirm((v) => !v)} data-testid="btn-leave">OPUŚĆ MECZ</button>
+          {confirm && (
+            <div className="pause-confirm" role="group" aria-label="Potwierdź wyjście">
+              <p>NA PEWNO WYJŚĆ?</p>
+              <div className="pause-confirm-row">
+                <button className="pause-btn leave primary" onClick={onLeave} data-testid="btn-leave-confirm" autoFocus>TAK, WYJDŹ</button>
+                <button className="pause-btn" onClick={() => setConfirm(false)} data-testid="btn-leave-cancel">ANULUJ</button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+      {settingsMount !== "closed" && (
+        // The panel is SettingsPanel, untouched; it carries `data-testid="settings"` itself.
+        <div className={`pause-settings${settingsMount === "closing" ? " closing" : ""}`} data-zone="settings">
+          <SettingsPanel settings={settings} onChange={onSettings} />
+        </div>
+      )}
     </div>
   );
 }

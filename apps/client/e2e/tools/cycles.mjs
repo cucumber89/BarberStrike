@@ -3,7 +3,7 @@
  * Menu → match → leave, N times, measured: does anything grow?
  *
  * Each cycle joins a fresh room, waits for READY, enters, plays a few frames, leaves through the
- * pause card, and records: time to READY (cycle 1 is the cold load, the rest are warm), the scene's
+ * ESC column (OPUŚĆ MECZ, then TAK, WYJDŹ), and records: time to READY (cycle 1 is the cold load, the rest are warm), the scene's
  * resource counts at READY (meshes, materials, textures, particle systems, compiled effects), and the
  * JS heap after leaving and a forced GC. After the caches warm (cycle 2) the counts must be flat and
  * the heap must stop climbing; a monotonic heap or a growing texture count is a leak.
@@ -73,6 +73,8 @@ for (let i = 1; i <= N; i++) {
     await page.keyboard.press("Escape");
   }
   await leaveBtn.click({ timeout: 10_000 });
+  // Drop U (P7): OPUŚĆ MECZ asks first — „NA PEWNO WYJŚĆ?” — and TAK, WYJDŹ leaves.
+  await page.getByTestId("btn-leave-confirm").click({ timeout: 10_000 });
   await page.getByTestId("btn-play").waitFor({ timeout: 30_000 });
   const heapMb = await heap();
   const canvases = await page.evaluate(() => document.querySelectorAll("canvas").length);
