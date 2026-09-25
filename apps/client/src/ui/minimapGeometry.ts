@@ -26,6 +26,35 @@ export const MINIMAP = {
   rimInset: 11,
 } as const;
 
+/**
+ * The radar's paint order, bottom to top. `Minimap.tsx` paints its layers by walking this list, so
+ * the order is data and is tested. What a player stands ON — a site, a flag, the bomb — goes UNDER
+ * the player: an enemy defusing the planted bomb, a teammate on the carried bomb or anyone
+ * capturing a flag stays visible exactly when it matters. That is the pre-drop order
+ * (objectives, then marks, then enemies and teammates, then me); drop U only adds north last.
+ */
+export const RADAR_LAYERS = ["stations", "objectives", "marks", "enemies", "mates", "me", "north"] as const;
+export type RadarLayer = (typeof RADAR_LAYERS)[number];
+
+/** How the radar shows the bomb to me: where it lies and who sees it (§5.3, Principle 14). */
+export type RadarBomb = "planted" | "dropped" | "carried" | null;
+
+/**
+ * Which bomb, if any, my radar draws.
+ *  - Planted: everyone, at its site.
+ *  - Dropped: the attack only, where it lies — the defence never learns it from the HUD.
+ *  - Carried: the attack only, at the carrier. The server writes the carrier's x and z into the
+ *    bomb every step (`bomb.ts` `stepBomb`, stage "carried"), and `Game.syncHud` copies them into
+ *    the HUD store, so this is WHO carries it. The pre-drop radar showed it; drop U keeps it.
+ *  - Idle (no round yet) and resolved: nothing — its x and z mean nothing then.
+ */
+export function radarBomb(b: { stage: string; attackTeam: number } | null | undefined, myTeam: number): RadarBomb {
+  if (!b) return null;
+  if (b.stage === "planted") return "planted";
+  if (b.attackTeam !== myTeam) return null;
+  return b.stage === "dropped" ? "dropped" : b.stage === "carried" ? "carried" : null;
+}
+
 /** World → map-image pixel. */
 export function toMap(x: number, z: number, bounds: Box, scale: number = MINIMAP.scale): [number, number] {
   return [(x - bounds.minX) * scale, (bounds.maxZ - z) * scale];

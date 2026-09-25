@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NIGHT_DISTRICT, boxFrom, sitesOf } from "@frankibarber/shared";
-import { MINIMAP, radarOffset, rimPin, toMap } from "./minimapGeometry";
+import { MINIMAP, RADAR_LAYERS, radarBomb, radarOffset, rimPin, toMap, type RadarLayer } from "./minimapGeometry";
 
 /** Drop 5: minimap maths. Drop U (P3): the compass strip is gone; the rim carries its marks. */
 
@@ -22,6 +22,36 @@ describe("minimap maths", () => {
   it("has no compass strip any more", () => {
     expect("compassWidth" in MINIMAP).toBe(false);
     expect("compassHalf" in MINIMAP).toBe(false);
+  });
+
+  it("paints what a player stands on under the player", () => {
+    // Principle 14: an enemy defusing the planted bomb, or anyone on a flag, is never hidden by
+    // the objective's icon. Every objective layer is below every player layer.
+    const at = (l: RadarLayer) => RADAR_LAYERS.indexOf(l);
+    for (const player of ["enemies", "mates", "me"] as const) {
+      expect(at("objectives"), `objectives under ${player}`).toBeLessThan(at(player));
+      expect(at("marks"), `marks under ${player}`).toBeLessThan(at(player));
+    }
+    expect(at("stations")).toBeLessThan(at("objectives"));
+    expect(new Set(RADAR_LAYERS).size).toBe(RADAR_LAYERS.length);
+  });
+
+  it("shows the attack the carried and the dropped bomb, and everyone the planted one", () => {
+    const b = (stage: string) => ({ stage, attackTeam: 0 });
+    // The attack (team 0): who carries it, where it lies, where it is planted.
+    expect(radarBomb(b("carried"), 0)).toBe("carried");
+    expect(radarBomb(b("dropped"), 0)).toBe("dropped");
+    expect(radarBomb(b("planted"), 0)).toBe("planted");
+    // The defence (team 1): only the planted bomb.
+    expect(radarBomb(b("carried"), 1)).toBeNull();
+    expect(radarBomb(b("dropped"), 1)).toBeNull();
+    expect(radarBomb(b("planted"), 1)).toBe("planted");
+    // No round yet, or the round is over: its position means nothing.
+    for (const team of [0, 1]) {
+      expect(radarBomb(b("idle"), team)).toBeNull();
+      expect(radarBomb(b("resolved"), team)).toBeNull();
+      expect(radarBomb(null, team)).toBeNull();
+    }
   });
 
   it("rimPin puts an off-range site on the rim", () => {

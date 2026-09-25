@@ -1,23 +1,25 @@
 import { useEffect, useRef } from "react";
 import { sitesOf, TEAM_COLORS, type MapDef } from "@frankibarber/shared";
 import type { RadarSnapshot } from "../game/Game";
-import { hud } from "../game/store";
-import { MINIMAP, radarOffsetTo, rimPin, toMap } from "./minimapGeometry";
+import { hud, type HudState } from "../game/store";
+import { MINIMAP, RADAR_LAYERS, radarBomb, radarOffsetTo, rimPin, toMap, type RadarLayer } from "./minimapGeometry";
 
 /**
  * The radar (drop 5; drop U P3, docs/UI_U_SPEC.md §7 P3 WORK 1). The map is a pre-rendered
  * top-down image of the collision boxes (walls light, low cover dimmer, floors dark); every frame
- * it is drawn rotated so the facing is up, then teammates, spotted enemies, flags, sites, the bomb,
- * marks and buy stations go on top. Runs on its own rAF from the radar getter — React never
- * re-renders per frame.
+ * it is drawn rotated so the facing is up, then the layers go on top in `RADAR_LAYERS` order: buy
+ * stations, objectives (sites, flags, the bomb), marks, spotted enemies, teammates, me, north — a
+ * player is never hidden under the thing they stand on. Runs on its own rAF from the radar getter
+ * — React never re-renders per frame.
  *
  * Drop U, as CS2 draws it: ONE instrument. The 240×20 compass strip is gone; „N” and every
  * objective beyond the radar's range (a site, a flag, the bomb) sit on the rim in their own
  * direction (`rimPin`). Every letter is 14 px — it was 10–13 — and is drawn in CSS pixels on a
  * backing store sized to the box (`--hud-radar`, 144–176 px) times the device pixel ratio, so
  * 14 px on the canvas is 14 px on the screen. The area off the map is the HUD's plate at 60 %,
- * not a black hole. A planted bomb is an icon at its site; a dropped one, for the attack only,
- * an icon where it lies (§5.3).
+ * not a black hole. The bomb is the C4 icon (`radarBomb`, §5.3): planted, for everyone, at its
+ * site; dropped, for the attack only, where it lies; carried, for the attack only, at the carrier —
+ * so the attack still sees who has it, as before the drop.
  *
  * `window.__canvasText`, when it is an array (the gallery sets one), receives `{text, px}` for
  * every letter drawn, so the 14 px floor is measured (`hud-states.mjs` `canvasMin`).
@@ -44,7 +46,7 @@ const C = {
   tx: "#f4f0e7",                    // --hud-tx
   tx2: "#afc0ca",                   // --hud-tx2
   warn: "#e5ae52",                  // --hud-warn: the sites
-  danger: "#df4938",                // --hud-danger: a planted bomb, spotted enemies
+  danger: "#df4938",                // --hud-danger: spotted enemies, the planted bomb's display
   money: "#9fe0a8",                 // --hud-money: buy stations
   neutral: "#9a9a9a",
   contested: "#ff7a3d",
@@ -153,17 +155,21 @@ export function Minimap({ radar }: Props) {
       letter(id, px, py + 0.5, color);
     };
     /**
-     * The C4, as the HUD's bomb icon draws it: a block with its dark display and a lead off the
-     * corner. Out of range it sits one pin inside the rim, so a bomb lying on the way to a site
-     * never covers that site's letter.
+     * The C4, as the HUD's bomb icon draws it: a block with its display and a lead off the corner.
+     *  - Planted: a light block with a red display, pinned one pin inside the rim when out of
+     *    range. It is not the spotted enemy's red: a red dot on it is an enemy defusing it.
+     *  - Dropped: amber, pinned the same way — where the attack has to go and pick it up.
+     *  - Carried: amber, at the carrier, in range only (a teammate's own dot goes on top of it).
+     * Out of range a pin sits one pin inside the rim, so it never covers a site's letter.
      */
-    const bomb = (x: number, z: number, color: string) => {
-      pinned(x, z, 20);
+    const bomb = (x: number, z: number, kind: "planted" | "dropped" | "carried") => {
+      if (kind === "carried") { if (!inside(x, z, half - 10)) return; } else pinned(x, z, 20);
       const px = half + off[0], py = half + off[1];
+      const body = kind === "planted" ? C.tx : C.warn;
       ctx.beginPath(); ctx.arc(px, py, 10, 0, Math.PI * 2); ctx.fillStyle = C.shadow; ctx.fill();
-      ctx.fillStyle = color; ctx.fillRect(px - 7, py - 4, 14, 9);
-      ctx.fillStyle = C.shadow; ctx.fillRect(px - 4, py - 1.5, 6, 3.5);
-      ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+      ctx.fillStyle = body; ctx.fillRect(px - 7, py - 4, 14, 9);
+      ctx.fillStyle = kind === "planted" ? C.danger : C.shadow; ctx.fillRect(px - 4, py - 1.5, 6, 3.5);
+      ctx.strokeStyle = body; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(px + 5, py - 4); ctx.lineTo(px + 7, py - 8); ctx.stroke();
     };
     /** A mark or a station: a letter where it is, only within range. */
@@ -172,17 +178,61 @@ export function Minimap({ radar }: Props) {
       letter(text, half + off[0], half + off[1], color);
     };
 
+    // The frame being drawn, for the layers below (set at the top of `draw`).
+    let r!: RadarSnapshot, st!: HudState, map!: MapDef;
+    /**
+     * The layers, painted in `RADAR_LAYERS` order (bottom to top, tested): what a player stands
+     * on — a site, a flag, the bomb — goes under the player, so an enemy on the planted bomb or a
+     * teammate on a flag is never hidden by the objective's icon.
+     */
+    const layers: Record<RadarLayer, () => void> = {
+      stations: () => { for (const s of map.stations) glyph(s.x, s.z, "$", C.money); },
+      objectives: () => {
+        if (st.mode === "bomb") {
+          for (const s of sitesOf(map)) objective(s.x, s.z, s.id, C.warn, C.warn);
+          // §5.3: planted, everyone sees it; dropped or carried, the attack sees where it is.
+          const b = st.bomb, kind = radarBomb(b, st.myTeam);
+          if (b && kind) bomb(b.x, b.z, kind);
+        }
+        if (st.mode === "dom" || st.mode === "boys") st.flags.forEach((f, i) => {
+          const def = map.flags[i];
+          if (!def) return;
+          const color = f.owner === -1 ? C.neutral : TEAM_COLORS[f.owner as 0 | 1];
+          objective(def.x, def.z, f.id, f.contested ? C.contested : color, color);
+        });
+      },
+      marks: () => { for (const m of st.marks) glyph(m.x, m.z, m.kind === "spot" ? "!" : "▼", m.kind === "spot" ? C.danger : TEAM_COLORS[m.team]); },
+      enemies: () => { for (const e of r.spotted) dot(e.x, e.z, C.danger, 4.5); },
+      mates: () => {
+        const mine = TEAM_COLORS[st.myTeam];
+        for (const m of r.mates) { if (!m.alive) continue; dot(m.x, m.z, mine, 4); }
+      },
+      me: () => {
+        // An arrow pointing up.
+        ctx.save(); ctx.translate(half, half);
+        ctx.fillStyle = r.alive ? "#ffffff" : "#777";
+        ctx.strokeStyle = C.shadow; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(6, 6); ctx.lineTo(0, 2.5); ctx.lineTo(-6, 6); ctx.closePath(); ctx.stroke(); ctx.fill();
+        ctx.restore();
+      },
+      north: () => {
+        // On the rim: the direction of +Z in the facing-up frame, on a disc like every pin.
+        const nx = half - view.sin * rim, ny = half - view.cos * rim;
+        ctx.beginPath(); ctx.arc(nx, ny, 9, 0, Math.PI * 2); ctx.fillStyle = C.shadow; ctx.fill();
+        letter("N", nx, ny + 0.5, C.tx);
+      },
+    };
+
     const draw = () => {
       raf = requestAnimationFrame(draw);
-      const r = radar();
-      if (!r || !r.map) return;
+      const snap = radar();
+      if (!snap || !snap.map) return;
       // A radar does not need to be redrawn faster than the eye can use it. At 60 Hz this changes
       // nothing; on a 144 or 240 Hz display it drops two frames of canvas work in three.
       const now = performance.now();
       if (now - lastDraw < MIN_REDRAW_MS) return;
       lastDraw = now;
-      const st = hud.get();
-      const map = r.map;
+      r = snap; st = hud.get(); map = snap.map;
       const img = baseImage(map);
       const [px, py] = toMap(r.x, r.z, map.bounds);
       view.x = r.x; view.z = r.z; view.cos = Math.cos(r.yaw); view.sin = Math.sin(r.yaw);
@@ -200,35 +250,7 @@ export function Minimap({ radar }: Props) {
       ctx.restore();
       ctx.beginPath(); ctx.arc(half, half, half - 1, 0, Math.PI * 2);
       ctx.strokeStyle = C.rim; ctx.lineWidth = 2; ctx.stroke();
-
-      for (const s of map.stations) glyph(s.x, s.z, "$", C.money);
-      for (const m of st.marks) glyph(m.x, m.z, m.kind === "spot" ? "!" : "▼", m.kind === "spot" ? C.danger : TEAM_COLORS[m.team]);
-      for (const e of r.spotted) dot(e.x, e.z, C.danger, 4.5);
-      const mine = TEAM_COLORS[st.myTeam];
-      for (const m of r.mates) { if (!m.alive) continue; dot(m.x, m.z, mine, 4); }
-      if (st.mode === "bomb") {
-        for (const s of sitesOf(map)) objective(s.x, s.z, s.id, C.warn, C.warn);
-        const b = st.bomb;
-        // §5.3: planted, everyone sees it at its site; dropped, the attack sees where it lies.
-        if (b && b.stage === "planted") bomb(b.x, b.z, C.danger);
-        else if (b && b.stage === "dropped" && b.attackTeam === st.myTeam) bomb(b.x, b.z, C.warn);
-      }
-      if (st.mode === "dom" || st.mode === "boys") st.flags.forEach((f, i) => {
-        const def = map.flags[i];
-        if (!def) return;
-        const color = f.owner === -1 ? C.neutral : TEAM_COLORS[f.owner as 0 | 1];
-        objective(def.x, def.z, f.id, f.contested ? C.contested : color, color);
-      });
-      // Me: an arrow pointing up.
-      ctx.save(); ctx.translate(half, half);
-      ctx.fillStyle = r.alive ? "#ffffff" : "#777";
-      ctx.strokeStyle = C.shadow; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(6, 6); ctx.lineTo(0, 2.5); ctx.lineTo(-6, 6); ctx.closePath(); ctx.stroke(); ctx.fill();
-      ctx.restore();
-      // North, on the rim: the direction of +Z in the facing-up frame, on a disc like every pin.
-      const nx = half - view.sin * rim, ny = half - view.cos * rim;
-      ctx.beginPath(); ctx.arc(nx, ny, 9, 0, Math.PI * 2); ctx.fillStyle = C.shadow; ctx.fill();
-      letter("N", nx, ny + 0.5, C.tx);
+      for (const layer of RADAR_LAYERS) layers[layer]();
     };
     raf = requestAnimationFrame(draw);
     return () => { cancelAnimationFrame(raf); resize?.disconnect(); };
