@@ -1,9 +1,9 @@
 /**
  * Gallery file of P2-top (docs/UI_U_SPEC.md §7, seeded by P0 step 0b): the live match in every mode
- * — the strip, the mode line, flags, the action slot, the bracket card — and P2's pins on its zones
+ * — the strip, the mode line, flags, the action slot, the pair card — and P2's pins on its zones
  * (`top`, `top-line`, `action`, `bracket`; §8.7). The eleven pre-drop scenarios below moved here
- * verbatim from `hudStates.tsx`; the seeded ones follow §5.2 and carry no pins yet (P2 writes them
- * in wave 2, re-pinning the clocks to m:ss per §8.4).
+ * from `hudStates.tsx`; the seeded ones follow §5.2. The pins are §5.2's copy, the clocks re-pinned
+ * to m:ss (§8.4), and wave 2 moved four photographed instants onto the spec's row (see the notes).
  */
 import {
   BOMB, BOYS, CS_ECONOMY, ECONOMY, MatchPhase, NIGHT_DISTRICT, OSTRZYZENI, TEAM_NAMES, TOURNAMENT, WEAPONS,
@@ -32,7 +32,8 @@ export const scenarios: Scenario[] = [
     n: 6, maxWords: 24,
     before: { ...tdmLive(), serverNow: S - 1_800, phaseEndsAt: S - 1_700 },
     state: {
-      ...tdmLive(), phase: MatchPhase.Prep, phaseEndsAt: S + 3_200, matchEndsAt: S + 235_000, scoreA: 24, scoreB: 19,
+      // 2.6 s left (§5.2 row 6: „0:03”, inside the last 3 s, so the clock is pulsing).
+      ...tdmLive(), phase: MatchPhase.Prep, phaseEndsAt: S + 2_600, matchEndsAt: S + 235_000, scoreA: 24, scoreB: 19,
       players: roster({ f: 0.6 }), health: 100, ammo: WEAPONS.rifle.magazine, buyWindowLeft: Infinity, moneyToasts: [],
       killFeed: feed(0, [[4_300, "p5", "bot-2", "dmr", { headshot: true }], [2_700, "me", "bot-4", "rifle", { assists: ["p2"] }], [2_000, "p1", "p6", "smg"]]),
     },
@@ -61,6 +62,8 @@ export const scenarios: Scenario[] = [
       lethal: "frag", lethalCount: 1, tactical: "smoke", tacticalCount: 1,
       plan: { options: planOffer(5), tally: [1, 2], chosen: planOffer(5)[1] ?? 0, appliesAt: S - 44_000, votingTeam: 0, round: 5, at: T - 44_000 },
       planId: planOffer(5)[1] ?? 0,
+      // On site A (§5.2 row 11: the C4 blinks and the action slot says how to plant).
+      siteHere: "A",
       killFeed: feed(0, [[4_100, "p1", "p7", "rifle"], [1_900, "bot-3", "bot-2", "smg"]]),
     }),
     radar: radarFor(NIGHT_DISTRICT, 0, 0.5, { mates: MATES, dead: ["bot-2"], spotted: true }),
@@ -72,6 +75,8 @@ export const scenarios: Scenario[] = [
       myTeam: 1, phase: MatchPhase.Playing, phaseEndsAt: S + 40_000, matchEndsAt: bombMatchEnds(4, BOMB.buyMs + 75_000), scoreA: 3, scoreB: 1, buyWindowLeft: 0,
       players: roster({ f: 0.34, myTeam: 1, dead: ["p2", "bot-1", "p6"] }), health: 54, armor: 30, ...kit("rifle", 12), owned: ["pistol", "rifle"], money: 1_150,
       tactical: "flash", tacticalCount: 1,
+      // Standing at the bomb (§5.2 row 15: „PRZYTRZYMAJ [T] · ROZBRÓJ”).
+      nearBomb: true,
       killFeed: feed(1, [[5_200, "p6", "p2", "rifle"], [3_300, "bot-3", "bot-1", "shotgun"], [900, "me", "p6", "rifle", { headshot: true }]]),
     }),
     radar: radarFor(NIGHT_DISTRICT, 1, 0.5, { mates: MATES, dead: ["p2", "bot-1"], spotted: true }),
@@ -124,7 +129,8 @@ export const scenarios: Scenario[] = [
     id: "gungame-live", moment: "Gun Game: szczebel 7/14, prowadzi xXPiotrekXx (9/14)",
     n: 41, maxWords: 22,
     state: {
-      ...base("gungame"), phase: MatchPhase.Playing, phaseEndsAt: S + 190_000, matchEndsAt: S + 190_000,
+      // 5:03 on the match clock (§5.2 row 41).
+      ...base("gungame"), phase: MatchPhase.Playing, phaseEndsAt: S + 303_000, matchEndsAt: S + 303_000,
       players: roster({
         f: 0.5, ffa: true,
         set: { me: { score: 6, kills: 7 }, p5: { score: 8, kills: 10 }, p1: { score: 5, kills: 6 }, p6: { score: 5, kills: 5 }, p2: { score: 4, kills: 5 },
@@ -249,35 +255,94 @@ export const scenarios: Scenario[] = [
   },
 ];
 
-/** P2's pins (§8.7): the strip's clock and scores, the mode lines and the action slot. */
+/**
+ * P2's pins (§8.7, §8.8): the strip's clock and scores, the mode lines, the action slot and the pair
+ * card, in §5.2's exact copy. Clocks are m:ss now (§8.4): „04:12” → „4:12”, and a round mode's
+ * freeze, round and break show their own clock, never the match backstop („23:17”, „21:44”, „19:58”,
+ * „07:50” were the backstop). `bomb-hud` is not rendered in a break any more (§8.4).
+ */
+const TIMER = "[data-testid=timer]";
 export const pins: PinSet = {
-  "warmup": { expect: ["[data-testid=objective]", "[data-testid=timer]"], text: ["ROZGRZEWKA"] },
-  "countdown": { expect: ["[data-testid=objective]"], text: ["START 3"] },
-  "tdm-live": { expect: ["[data-testid=score-goal]"], text: ["04:12"] },
-  "tdm-wave-prep": { expect: ["[data-testid=timer]"], text: ["03:55"] },
-  "dom-live-capturing": { expect: ["[data-testid=capture]", "[data-testid=flags]"], text: ["62%"] },
-  "bomb-freeze": { expect: ["[data-testid=bomb-hud]"], text: ["START ZA 12s", "23:17"] },
-  "bomb-live-carrier": { expect: ["[data-testid=bomb-hud]"], text: ["MASZ ŁADUNEK", "01:11"] },
-  "bomb-planted-defender": { expect: [".bomb-hud.armed", "[data-testid=timer].urgent"], text: ["ROZBROIĆ", "00:28"] },
-  "bomb-round-won": { expect: ["[data-testid=bomb-hud]"] },
-  "bomb-round-lost": { text: ["21:44"] },
-  "bomb-halftime": { expect: ["[data-testid=bomb-hud]"], text: ["ZMIANA STRON", "OBRONA", "19:58"] },
-  "duel-freeze": { expect: ["[data-testid=duel-line]"], text: ["ZAMROŻENIE", "START ZA 12s"] },
-  "duel-live-buytail": { expect: ["[data-testid=duel-line]"], text: ["SKLEP OTWARTY JESZCZE 3s"] },
-  "duel-round-break": { expect: ["[data-testid=duel-line]"], text: ["NASTĘPNA RUNDA ZA 3s"] },
-  "duel-match-point": { expect: ["[data-testid=duel-line]"], text: ["MECZBOL", "00:42"] },
-  "infection-prep": { expect: ["[data-testid=infection-line]"], text: ["RUNDA 2 / 5", "RUNDA ZA 6s", "07:50"] },
-  "gungame-live": { expect: ["[data-testid=ladder]", "[data-testid=ladder-gun]"], text: ["7/14"] },
-  // Seeded scenarios: P2 writes these pins in wave 2.
-  "ffa-live": {},
-  "boys-live": {},
-  "bomb-live-defender": {},
-  "bomb-live-escort": {},
-  "bomb-dropped": {},
-  "bomb-defusing": {},
-  "bomb-teammate-defusing": {},
-  "turniej-freeze": {},
-  "turniej-between-pairs": {},
-  "turniej-walkover": {},
+  "warmup": {
+    expect: ["[data-testid=objective]", `${TIMER}[data-kind=warmup]`, "[data-testid=warmup-players]"],
+    caseText: ["ROZGRZEWKA", "GRACZE 1/2", "PIERWSI DO 40 ZABÓJSTW"], absent: ["[data-testid=role-badge]", "[data-testid=alive-a]"],
+  },
+  "countdown": { expect: ["[data-testid=objective]", `${TIMER}[data-kind=countdown]`, "[data-testid=score-goal]"], caseText: ["0:03", "DO 40"], textAbsent: [{ text: "START 3" }] },
+  "tdm-live": {
+    expect: ["[data-testid=score-goal]", `${TIMER}[data-kind=match]`, ".ts-side.mine [data-testid=score-a]"],
+    caseText: ["4:12", "DO 40", "FADE", "TAPER"], absent: ["[data-testid=alive-a]", "[data-zone=top-line]"],
+  },
+  "tdm-wave-prep": {
+    expect: ["[data-testid=mode-line]", `${TIMER}[data-kind=freeze]`, `${TIMER} .ts-digits.tick`],
+    caseText: ["0:03", "ZAMROŻENIE"], textAbsent: [{ text: "03:55" }],
+  },
+  "ffa-live": {
+    expect: ["[data-testid=score-a]", "[data-testid=score-b]", ".ts-side.best.lead"],
+    caseText: ["TY", "xXPiotrekXx", "3:40", "DO 30"], leftOf: ["[data-testid=score-a]", "[data-testid=score-b]"], absent: [".ts-side.mine"],
+  },
+  "dom-live-capturing": {
+    expect: ["[data-testid=capture][data-progress]", "[data-testid=flags]", "[data-testid=flag-B].here", "[data-testid=capture] .act-bar"],
+    caseText: ["PRZEJMUJESZ B · 62%", "5:03", "DO 100"],
+  },
+  "boys-live": {
+    expect: [".top-bar[data-mode=boys]", "[data-testid=flags]", "[data-testid=flag-B].contested"],
+    caseText: ["4:48", "DO 100"],
+  },
+  "bomb-freeze": {
+    expect: [`${TIMER}[data-kind=freeze]`, "[data-testid=round-label]", "[data-testid=role-badge]", "[data-testid=alive-a]", "[data-testid=alive-b]"],
+    caseText: ["0:12", "RUNDA 5 / 12", "ATAK"], absent: ["[data-testid=bomb-hud]", "[data-zone=top-line]"],
+  },
+  "bomb-live-carrier": {
+    expect: ["[data-testid=bomb-hud]", `${TIMER}[data-kind=round]`, "[data-zone=action][data-kind=prompt-plant]"],
+    caseText: ["MASZ ŁADUNEK", "1:11", "PRZYTRZYMAJ [T] · PODŁÓŻ"], absent: ["[data-testid=role-badge]"],
+  },
+  "bomb-live-defender": { expect: ["[data-testid=bomb-hud]", ".ts-side.l.t1.mine"], caseText: ["BROŃ PUNKTÓW A / B", "1:23"], absent: ["[data-zone=action]"] },
+  "bomb-live-escort": { expect: ["[data-testid=bomb-hud]"], caseText: ["OSŁANIAJ NIOSĄCEGO ŁADUNEK", "1:19"] },
+  "bomb-dropped": { expect: ["[data-testid=bomb-hud]"], caseText: ["ŁADUNEK UPUSZCZONY — PODNIEŚ GO", "1:01"] },
+  "bomb-planted-defender": {
+    expect: [".bomb-hud.armed", `${TIMER}[data-kind=bomb][aria-label="ŁADUNEK A"] .ts-bomb`, "[data-zone=action][data-kind=prompt-defuse]"],
+    caseText: ["ŁADUNEK NA A — ROZBRÓJ [T]", "0:28", "PRZYTRZYMAJ [T] · ROZBRÓJ"],
+    leftOf: ["[data-testid=score-b]", "[data-testid=score-a]"], textAbsent: [{ text: "00:28" }],
+  },
+  "bomb-defusing": {
+    expect: ["[data-zone=action][data-kind=defuse][data-progress] .act-bar", `${TIMER}[data-kind=bomb]`],
+    caseText: ["ROZBRAJANIE", "0:21", "ŁADUNEK NA A — ROZBRÓJ [T]"],
+  },
+  "bomb-teammate-defusing": {
+    expect: ["[data-testid=bomb-hud].armed .ml-bar.t1", `${TIMER}[data-kind=bomb]`],
+    caseText: ["Kasia_Brzytwa ROZBRAJA", "0:26"], absent: ["[data-zone=action]"],
+  },
+  "bomb-round-won": { expect: [`${TIMER}[data-kind=break]`], absent: ["[data-testid=bomb-hud]"], caseText: ["0:04"] },
+  "bomb-round-lost": { expect: [`${TIMER}[data-kind=break]`], absent: ["[data-testid=bomb-hud]"], caseText: ["0:04"], textAbsent: [{ text: "21:44" }] },
+  "bomb-halftime": { expect: ["[data-testid=role-badge]", `${TIMER}[data-kind=freeze]`], caseText: ["OBRONA", "0:13", "RUNDA 7 / 12"], textAbsent: [{ text: "19:58" }] },
+  "duel-freeze": {
+    expect: [`${TIMER}[data-kind=freeze]`, "[data-testid=round-label]", "[data-testid=score-goal]", "[data-testid=alive-a][data-count=\"1\"]"],
+    caseText: ["0:12", "RUNDA 2", "DO 6"], absent: ["[data-testid=duel-line]", "[data-zone=top-line]"],
+  },
+  "duel-live-buytail": { expect: [`${TIMER}[data-kind=round]`], caseText: ["0:58"], absent: ["[data-testid=duel-line]", "[data-zone=top-line]"] },
+  "duel-round-break": { expect: [`${TIMER}[data-kind=break]`], caseText: ["0:03"], absent: ["[data-testid=duel-line]"] },
+  "duel-match-point": { expect: ["[data-testid=duel-line].warn"], caseText: ["MECZBOL · FADE", "0:42"], textAbsent: [{ text: "BRONISZ MECZBOLU" }] },
+  "infection-prep": {
+    expect: ["[data-testid=infection-line]", "[data-testid=mode-line]", `${TIMER}[data-kind=freeze]`, "[data-testid=role-badge]"],
+    caseText: ["RUNDA 2 / 5 · 9 NIEOSTRZYŻONYCH", "0:06", "UCIEKAJ PRZED MASZYNKĄ", "OCALONY", "OCALENI", "OSTRZYŻENI"],
+    textAbsent: [{ text: "07:50" }, { text: "RUNDA ZA" }],
+  },
+  "gungame-live": {
+    expect: ["[data-testid=ladder]", "[data-testid=ladder-gun]", "[data-testid=score-b]"],
+    // §5.2's „C-20 Side Part → M-1” is an example; the ladder's rung 7 is whatever GUN_GAME says.
+    caseText: ["7/14", `${WEAPONS[ladderWeapon(6)].name} → ${WEAPONS[ladderWeapon(7)].name.split(" ")[0]}`, "9/14", "xXPiotrekXx", "5:03"],
+  },
+  "turniej-freeze": {
+    expect: ["[data-testid=bracket-strip]", `${TIMER}[data-kind=freeze]`, "[data-testid=alive-a][data-count=\"1\"]", "[data-testid=alive-b][data-count=\"1\"]"],
+    caseText: ["PÓŁFINAŁ · RUNDA 2", "Kowal", "xXPiotrekXx", "0:12"], absent: ["[data-testid=bracket-card]", ".ts-pip.dead"],
+  },
+  "turniej-between-pairs": {
+    expect: ["[data-testid=bracket-card]", `${TIMER}[data-kind=break]`, "[data-testid=bracket-strip]"],
+    caseText: ["ZDZICHU PRZECHODZI DALEJ", "6 : 4 · Przeciwnik wyeliminowany", "NASTĘPNA PARA · FINAŁ", "Kowal vs ZDZICHU", "GRASZ TERAZ", "DRABINKA", "0:07"],
+    absent: ["[data-testid=score-a]", "[data-testid=score-b]", "[data-zone=top-line]"],
+  },
+  "turniej-walkover": {
+    expect: ["[data-testid=bracket-card].walkover"],
+    caseText: ["WALKOWER · ZDZICHU DALEJ", "NASTĘPNA PARA · FINAŁ", "Kowal vs ZDZICHU"], absent: [".bc-verdict"],
+  },
 };
-
