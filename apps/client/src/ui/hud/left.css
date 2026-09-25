@@ -88,8 +88,9 @@
 .plan-votes { flex: none; font-family: var(--font-mono); font-weight: 500; letter-spacing: var(--hud-track-num); color: var(--hud-tx2); white-space: pre; }
 .plan-option.leading .plan-votes { color: var(--hud-accent); }
 /* The gain and the cost of ONE option, under it. The cost is not small print. */
-.plan-detail { margin: 0 0 4px; padding: 2px 6px 2px 42px; }
-.plan:not(.mine) .plan-detail { padding-left: 8px; }
+/* Flush with the keycap (the row's 2 px rule + 6 px), so a line of the gain or the cost keeps the
+   card's whole width and does not break off its last word. */
+.plan-detail { margin: 0 0 4px; padding: 2px 6px 2px 8px; }
 .plan-gain, .plan-cost { margin: 0; font-family: var(--font-ui); font-weight: 600; font-size: var(--hud-t1); line-height: 1.3; letter-spacing: 0; }
 .plan-gain { color: var(--hud-tx); }
 .plan-cost { color: var(--hud-warn); }
