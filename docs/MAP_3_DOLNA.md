@@ -216,29 +216,33 @@ mapa obejmuje działkę i ulicę przed”.* Przetłumaczone na wymagania, które
   łańcucha (§4.6). Osłona wizualna bez bryły kolizyjnej jest błędem (§4.7).
 - **R4. Starty ukryte i równe.** Oba starty niewidoczne z siebie nawzajem (stojąc i kucając, w obie
   strony); z każdego startu **≥ 3 wyjścia w 15 m ścieżki**; czasy sprintu (prawdziwy `simulateBody`)
-  do **ośmiu miejsc**: BRAMA, FURTKA, GARAŻ (domu), BARAK (drzwi), HALA (brama), ULICA (środek
-  odcinka), TOJ (pobocze przy budowie), drugi start — **różnią się ≤ 250 ms** dla miejsc spornych
-  (BRAMA, FURTKA, GARAŻ, BARAK, HALA, ULICA); miara GÓRY to 0 ms dzięki symetrii 180°; tu, na
-  prawdziwym miejscu, dopuszczamy 250. Asymetrię stron wyrównuje zmiana stron co 3 rundy — ale runda
-  decydująca (11.) jest grana na tej stronie, którą da zmiana, więc ≤ 250 ms to warunek, nie
-  życzenie.
+  mierzone do **ośmiu miejsc**: BRAMA, FURTKA, GARAŻ (domu), BARAK (drzwi), HALA (brama), ULICA
+  (środek odcinka), TOJ (pobocze przy budowie), drugi start — i do **miejsc spornych**, czyli tych, o
+  które obie strony walczą naprawdę: na prawdziwym, niesymetrycznym miejscu są to punkty **na ulicy**
+  (zachód przy słupie, środek przy vanie, wschód przy aucie; §5, D-W2), a nie brama, garaż czy hala,
+  które należą do jednego „domu”. Dla miejsc spornych czasy **różnią się ≤ 250 ms** (zmierzone w §5:
+  ≤ 150 ms); miara GÓRY to 0 ms dzięki symetrii 180°. To, co każdy „dom” ma u siebie za darmo,
+  wyrównuje zmiana stron co 3 rundy — ale runda decydująca (11.) jest grana na tej stronie, którą da
+  zmiana, więc ≤ 250 ms na miejscach spornych to warunek, nie życzenie.
 - **R5. Linie wzroku z liczbami.** Twarde: jedna linia **≥ 50 m** (ulica); żadna linia dłuższa niż
   ulica w granicach mapy; **żadne miejsce nie widzi obu startów**; żadna wyżej położona pozycja nie
-  jest osiągalna z jednej strony szybciej niż z drugiej o więcej niż 250 ms. Progi rozkładu (mediana
-  czystej linii między dwoma osiągalnymi punktami, p90) są **celami zmierzonymi na propozycji z §5**
-  (liczby w §5 „Pomiary”), nie regułą GÓRY (7.6 / 15.0 m na 34 × 22 m): sesja mierzy je po pierwszym
-  pełnym układzie i, jeśli p90 rośnie wyłącznie przez pary na ulicy, proponuje nowy próg z liczbą w
-  Decisions (jak D-G3 dla `huntSpawnMinM`) — **nie zabudowuje ulicy, żeby trafić w liczbę.**
+  jest osiągalna z jednej strony szybciej niż z drugiej o więcej niż 250 ms. Progi rozkładu są
+  **celami zmierzonymi na propozycji z §5**, nie regułą GÓRY (7.6 / 15.0 m na 34 × 22 m): mediana
+  czystej linii między dwoma osiągalnymi punktami **8–12 m** (zmierzone 11.2), **p90 ≤ 30 m ogółem i
+  ≤ 25 m poza parami ulica↔ulica** (zmierzone 28.3 / 21.9; D-W7 — na ulicy tylko van i toi-toi
+  przewyższają oko stojącego, bo tak mówi język osłon z R3). Sesja mierzy je po pierwszym pełnym
+  układzie i, jeśli odbiegają, proponuje nowy próg z liczbą w Decisions (jak D-G3 dla
+  `huntSpawnMinM`) — **nie zabudowuje ulicy, żeby trafić w liczbę.**
 - **R6. Nic nie wychodzi z mapy, nic nie lata.** Tuje, płoty, siatki i niewidzialne ściany zamykają
   arenę; test łańcucha wspinaczek (§4.6, wzór `gora.test.ts`) dowodzi, że **nikt nie wejdzie na dach
   domu, hali ani baraka** ani na balkon, chyba że projekt świadomie robi z któregoś perch (P6 —
   wtedy jest osiągalny schodami/drabiną z obu stron w równym czasie i ma lip 1.35 m jak GÓRA). Każda
   bryła stoi na ziemi albo na innej bryle.
-- **R7. Rozmiar i orientacja:** ulica **60–70 m** długości w granicach mapy, wzdłuż osi X; działka
-  **~24 × 45 m** w +Z; pobocze z sosnami i parter budowy w −Z; całość rzędu **70 × 55–62 m** (szac.;
-  działka 45 + ulica 6 + pobocza i parter budowy 8–12). To cztery–pięć razy więcej niż GÓRA (34 × 22
-  m, 748 m²) — cena za długą linię. Runda ma 60 s: mapa musi być tak czytelna, żeby dwie osoby
-  znalazły się w 10–15 s (starty **35–45 m ścieżki** od siebie, nie więcej).
+- **R7. Rozmiar i orientacja:** ulica **~60 m** długości w granicach mapy, wzdłuż osi X; działka
+  **~24 × 42 m** w +Z; pobocze z sosnami, plac i parter budowy w −Z; całość **64 × 70 m** (`bounds`
+  z §5; szac. ±20 %). To sześć razy więcej niż GÓRA (34 × 22 m, 748 m²) — cena za długą linię. Runda
+  ma 60 s: mapa musi być tak czytelna, żeby dwie osoby znalazły się w 10–15 s (starty **35–45 m
+  ścieżki** od siebie; zmierzone 44.3 m).
 - **R8. Odwzorowanie:** każdy obiekt ze zdjęć jest na mapie w swojej pozycji względem domu i ulicy
   (lista w §2); proporcje domu, płotu, bramy i szerokości ulicy trzymają się szacunków ±20 %.
   Stylistyka gry to **noc + low-poly na serio** (§4.8): dom, tuje, sosny, blacha i sztachety mają być
@@ -492,7 +496,268 @@ albo playtestu”**. Wszystko, co zauważysz poza dropem → jedna linia w Defer
 
 ## 5. Propozycja układu (zmierzona; do sprawdzenia ze zdjęciami i do ponownego zmierzenia w repo)
 
-<!-- §5: wypełniane po naradzie projektantów (Załącznik B) -->
+Prototyp: `apps/client/e2e/tools/dolna/proto-final.ts`, pomiar: `apps/client/e2e/tools/dolna/measure-final.md`, plan: `apps/client/e2e/tools/dolna/plan-final.txt` — liczby poniżej pochodzą z tego pomiaru: harness tej sesji (`apps/client/e2e/tools/dolna/measure.mts`, `plan.mts`) na prawdziwym `simulateBody` i siatce chodu repo, odtwarzający liczby `map-duel.ts` dla GÓRY; sesja wykonawcza mierzy ponownie narzędziami repo. Powtórka: `./apps/server/node_modules/.bin/tsx apps/client/e2e/tools/dolna/measure.mts apps/client/e2e/tools/dolna/proto-final.ts`.
+
+### 5.1 Idea
+
+DOLNA to dwa „domy" i środek między nimi, jak na mapie z CS. Dom pierwszy to **działka barbera**: czarny barak pod balkonem jest kieszenią startową drużyny 0, garaż w bryle domu i trzy otwory w linii frontu (dziura w tujach, furtka, brama) są jej linią przednią, blaszana hala detailingu w tylnym rogu ogrodu jest jej tyłem. Dom drugi to **budowa po drugiej stronie ulicy**: parter-szkielet jest kieszenią startową drużyny 1, trzy otwory w siatce budowlanej (luka zachodnia, brama budowy, luka wschodnia) są jej linią przednią. **Środek to ULICA**: jedna prosta linia 60 m i 5.2 m szerokości, przerywana z boku (nie w poprzek) dwoma autami, vanem, toi-toiem, dwoma kontenerami, słupami i pniami sosen — pas korony drogi (z −5.5…−3.5) widzi całe 60 m, resztę ulicy widać na 10–20 m. Trzy walki: ULICA (daleko, 40–60 m, DMR/snajperka), PODJAZD/FRONT (średnio, 12–25 m: brama, furtka, płot 1.5 m, podjazd, front garażu, dziura w tujach) i WNĘTRZA (blisko, < 10 m: garaż z autem, barak z fotelami, hala z autem na podnośniku, szkielet budowy z przepierzeniem). Jest to uczciwe, bo miejsca, o które się walczy, leżą na ulicy, i z obu startów dobiega się do nich w tym samym czasie (cztery punkty sporne: zachód ulicy przy słupie, środek przy vanie, wschód przy aucie — najgorsza różnica **150 ms**, próg 250), a starty są od siebie 44.3 m ścieżki, ukryte stojąc i kucając, i żadne miejsce na mapie nie widzi obu naraz; to, co każdy „dom" ma u siebie za darmo (garaż, barak, hala po jednej stronie; szkielet i plac po drugiej), wyrównuje zmiana stron co 3 rundy. Zdjęcia są uszanowane w położeniu każdej rzeczy względem domu i ulicy: dom 10 × 10 z dwiema bramami garażowymi od ulicy, płot sztachetowy 1.5 m z furtką na lewo od środka i bramą 3.2 m po prawej, tuje na granicach i rząd wysokich tui na lewo od domu, żywopłoty sąsiadów wzdłuż ulicy, po drugiej stronie szpaler sosen na piaszczystym poboczu, siatka budowlana, toi-toi, kontenery, van i ciemne auto, dwa słupy energetyczne, w ogrodzie drzewa, zjeżdżalnia i to coś pod plandeką; dwie zmiany właściciela — czarny barak 8 × 4 pod balkonem (elewacja ogrodowa, +Z) i blaszana hala 12 × 7 × 4 w miejscu altany — są bryłami gry, każda z dwoma wyjściami.
+
+### 5.2 Plan
+
+```
+dolna — 64 × 70 m, north up, 2 chars/m in X. # ≥2.8  = 2.0–2.8  + 1.2–1.6  . 0.5–1.0  / stairs  ~ boundary  : invisible  o/O duel starts  x spawns  $ station  F flag  A/B sites
+          -30       -25       -20       -15       -10       -5        0         5         10        15        20        25        30  
+   44                                                                                                                                 
+   43                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                                       
+   42                                        ~····########################····················~                                       
+   41                                        ~····=··············x···....#····················~                                       
+   40                                        ~····=······················#····················~                                       
+   39                                        ~·········=·····=··$······..#····················~                                       
+   38                                        ~····=······················#····················~                                       
+   37                                        ~····=·······A········..····#·······.....++······~                                       
+   36                                        ~····####········############····················~                                       
+   35                                        ~················································~                                       
+   34                                        ~································####············~                                       
+   33                                        ~································####············~                                       
+   32                                        ~···········································x····~                                       
+   31                                        ~················································~                                       
+   30                                        ~··································====··········~                                       
+   29                                        ~··········x·······················====··········~                                       
+   28                                        ~······················####········====··········~                                       
+   27                                        ~······················####········====··········~                                       
+   26                                        ~·······#######··································~                                       
+   25                                        ~·······#######··································~                                       
+   24                                        ~·······#######······x···························~                                       
+   23                                        ~·······························x················~                                       
+   22                                        ~················································~                                       
+   21                                        ~················································~                                       
+   20                                        ~················=##############=················~                                       
+   19                                        ~················=··············=················~                                       
+   18                                        ~#######··········o·····················#######··~                                       
+   17                                        ~#######································#######··~                                       
+   16                                        ~#######·········=··+···+···....=·······#######··~                                       
+   15                                        ~#######·······####################·····#######··~                                       
+   14                                        ~··············####################··············~                                       
+   13                                        ~··············####################··············~                                       
+   12                                        ~···························#######··············~                                       
+   11                                        ~·······················+++·#######··············~                                       
+   10                                        ~··············=········+++·#######··············~                                       
+    9                                        ~··············=········+++·##############·······~                                       
+    8                                        ~··············=········+++·##############·······~                                       
+    7                                        ~··············=········+++·##############·······~                                       
+    6                                        ~··············==·····======##############·······~                                       
+    5                                        ~·······####·····································~                                       
+    4                                        ~·······####······························F······~                                       
+    3                                        ~·······####·····································~                                       
+    2                                        ~·······####·····································~                                       
+    1                                        ~·······####·····································~                                       
+    0    :~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~···~~~~~~~~~~~~~~···~~~~~~~~~~~~~~~~······~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~:   
+   -1    :························································································································:   
+   -2    :······························································································+++++++++·················:   
+   -3    :······························································································+++++++++·················:   
+   -4    :··················································································································$·····:   
+   -5    :··································++++··················································································:   
+   -6    :··········$··············+++++++++++++·················==========·············++++++····································:   
+   -7    :·························+++++++++·····················==========·==··········++++++····································:   
+   -8    ::::::::::::::::::::::::::::::::::::::···::::::::::·······::::::::::::···:::::::::::::::::::::::::::::::::::::::::::::::::   
+   -9                                    :············································:                                               
+  -10                                    :············································:                                               
+  -11                                    :·········································x··:                                               
+  -12                                    :··....····B····························++···:                                               
+  -13                                    :··....·································++···:                                               
+  -14                                    :············································:                                               
+  -15                                    :············································:                                               
+  -16                                    :············································:                                               
+  -17                                    :············=···====================········:                                               
+  -18                                    :······x·························+++=········:                                               
+  -19                                    :····················x··············=········:                                               
+  -20                                    :············=··········#·····x·····=········:                                               
+  -21                                    :············=··········#··········x·········:                                               
+  -22                                    :············=··········#······..···=········:                                               
+  -23                                    :············=·O········#······..···=········:                                               
+  -24                                    :·············######################·········:                                               
+  -25                                                                                                                                 
+```
+
+Co widać: **dolna część planu to ulica** — rząd `:` na z −8 to niewidzialna ściana za sosnami (pnie `##` na z −7…−8), między z −7 a −1 biegnie droga (`+++` to kontenery i auta 1.3/1.45 m, `====` to van 2.2 m z toi-toiem `==` obok, na x 3), na z 0 linia frontu (`~` żywopłoty sąsiadów i tuje, przerwy `···` to od lewej: DZIURA w tujach x −11.5…−10, FURTKA x −3…−1.5, BRAMA x 6.5…9.7). **Nad ulicą działka** (+Z): rząd `####` na x −8.6…−6.4 z 0…5 to szpaler tui na lewo od domu, blok `####` x −5…5, z 5…15 to dom (lewa dolna część z `+++` to garaż z autem, otwarta lewa brama na x −4…−1.5), nad nim `=…=` x −4…4, z 15…20 to BARAK ze startem `o` przy zachodnich drzwiach, po bokach domu `#######` to korony drzew (z 14…18), w ogrodzie krzak `#######` (x −8.5…−5, z 23…26), drzewa, przyczepa pod plandeką `====` (x 5…7, z 26…30), zjeżdżalnia `..++` (x 5…9, z 36…37), a w lewym górnym rogu HALA `#` x −10…2, z 35…42 (brama rolowana to przerwa w dolnej ścianie x −8…−4, `=` w lewej ścianie to drzwi boczne na szczelinę wzdłuż tui). **Pod ulicą budowa** (−Z): `:` to siatka budowlana x −14…8 z trzema przerwami (luka zachodnia x −11.5…−10 w linii DZIURY, brama x −4.85…−1.65, luka wschodnia x 4.25…5.75), pryzma piasku `....` i cegły `++` na placu, na dole SZKIELET x −8…4, z −24.6…−17.3 z przepierzeniem `#` i startem `O` w zachodnim pokoju. Orientacja: +X w prawo wzdłuż ulicy, +Z w górę w głąb działki; 2 znaki na metr w X, 1 wiersz na metr w Z.
+
+### 5.3 Ekstenty
+
+| obszar (callout) | box minX..maxX × minZ..maxZ | co to jest |
+|---|---|---|
+| ULICA | −30..30 × −6.7..−1.5 (droga) + −1.5..−0.5 (pobocze od działki) | droga gruntowa 5.2 m `soil`, 60 m; korona z −5.5..−3.5 widzi całość |
+| SOSNY | −30..30 × −8.3..−6.7 | dalsze pobocze z 15 pniami sosen; przed budową (x −14..8) pas przy siatce |
+| BUDOWA (plac) | −14..8 × −17.3..−8.3 | plac budowy za siatką: piasek, cegły, wejście do szkieletu |
+| BUDOWA (szkielet) | −8..4 × −24.6..−17.3 | parter domu w budowie, ściany 2.8, przepierzenie x −2.3, start T1; tylna ściana = krawędź mapy |
+| PODJAZD (front) | −11.8..11.8 × −0.5..5.3 | betonowy przedogródek za płotem: furtka, brama, front garażu; szpaler tui x −8.6..−6.4 dzieli go |
+| PODJAZD (przejazd wschodni) | 5..11.8 × 5.3..15.3 | betonowy pas między domem a wschodnim żywopłotem, tuje x 5..8.6 z 5.3..9.3 zostawiają 3.2 m |
+| TUJE (kieszeń + przejście zachodnie) | −11.8..−5 × 0.1..15.3 | kieszeń za dziurą (x −11.8..−8.6, z 0.1..5.3) i trawnik między domem a zachodnim żywopłotem |
+| GARAŻ | −4.7..1.3 × 5.6..12.1 | wnęka garażowa w domu: lewa brama otwarta (x −3.95..−1.55), tylne drzwi 1.5 m w ścianie zachodniej (z 10.25..11.75), auto |
+| DOM (zamknięty) | −5..5 × 5.3..15.3 | bryła domu 6.5 m + dach dwustopniowy; tylko garaż jest w grze |
+| BARAK | −4..4 × 15.3..19.6 | czarny barak barbera, 2.8 m, drzwi W (z 16.25..17.75) i E (to samo), start T0 |
+| OGRÓD | −11.8..11.8 × 19.6..42 (bez hali) | trawnik z drzewami, krzakiem, przyczepą pod plandeką, zjeżdżalnią |
+| HALA | −10..2 × 35..42 | blaszana hala 12 × 7 × 4: brama rolowana 4 m w ścianie S (x −8..−4), drzwi boczne 1.5 m w ścianie W (z 37.75..39.25) na szczelinę x −11.8..−10 wzdłuż tui |
+| granica | −32..32 × −26..44 (`bounds`) | żywopłoty 3 m (działka i sąsiedzi), niewidzialne ściany 5 m na końcach ulicy, za sosnami i wokół budowy, siatka 2 m z niewidzialnym pasem do 5 m |
+
+### 5.4 Bryły
+
+| nazwa (prefix) | co to jest w rzeczywistości | rozmiar (m) | pozycja | klasa wysokości | mat / look |
+|---|---|---|---|---|---|
+| ground_road, ground_verge_n, ground_verge_s | droga gruntowa i dwa pobocza | 60 × 1 × 5.2 / 1.0 / 1.6 | z −6.7..−1.5 / −1.5..−0.5 / −8.3..−6.7, y −1..0 | grunt | soil |
+| ground_site | plac budowy | 23 × 1 × 16.8 | x −14.5..8.5, z −25.1..−8.3 | grunt | soil |
+| ground_front, ground_drive, ground_garage | beton: przedogródek, przejazd wschodni, pod domem | 24.8 × 5.8 / 7.4 × 10 / 10 × 10 | z −0.5..5.3 / x 5..12.4 z 5.3..15.3 / x −5..5 | grunt | floor_concrete |
+| ground_lawn_w, ground_lawn_n | trawnik zachodni i ogród | 7.4 × 10 / 24.8 × 27.3 | x −12.4..−5 z 5.3..15.3 / z 15.3..42.6 | grunt | soil |
+| ground_nb_w, ground_nb_e | stopy żywopłotów sąsiadów | 17.6 × 0.6 | z −0.5..0.1, x ±12.4..±30 | grunt | soil |
+| hedge_w, hedge_e, hedge_n | żywopłot z tui na granicach działki | 0.6 × 3 × 43.1 / 23.6 × 3 × 0.6 | x −12.4..−11.8 i 11.8..12.4, z −0.5..42.6; z 42..42.6 | granica (≥ 2.8) | foliage |
+| hedge_front_w_j0/j1 | tuje w linii frontu na lewo od płotu, z DZIURĄ 1.5 m | 0.3 / 4.0 × 3 × 0.6 | x −11.8..−11.5 i −10..−6, z −0.5..0.1 | granica | foliage |
+| fence_front_j0/j1/j2 | płot sztachetowy z FURTKĄ 1.5 m (x −3..−1.5) i BRAMĄ 3.2 m (x 6.5..9.7) | 3 / 8 / 2.1 × 1.5 × 0.3 | x −6..−3, −1.5..6.5, 9.7..11.8; z −0.5..−0.2 | 1.45–1.5 (kucnięcie chowa, stojąc widać głowę; z ziemi nie wejdziesz) | wood |
+| hedge_nb_w, hedge_nb_e | żywopłoty sąsiadów wzdłuż ulicy | 17.6 × 3 × 0.6 | x −30..−12.4 i 12.4..30, z −0.5..0.1 | granica | foliage |
+| wall_edge_w/e, wall_edge_s_w/s_e, wall_edge_site_w/e/s, wall_edge_site_top_0–3 | niewidzialne ściany: końce ulicy, za sosnami, wokół budowy, pas nad siatką | 0.5 × 5 × 8.9 / 16–22 × 5 × 0.5 / 0.5 × 5 × 15.8 / 23 × 5 × 0.5 / 2.25–5.9 × 3 × 0.3 | x ±30..±30.5; z −8.8..−8.3; x −14.5..−14 i 8..8.5; z −25.1..−24.6; y 2..5 nad panelami siatki | granica (invisible) | none |
+| fence_site_j0–j3 | siatka budowlana z luką W 1.5 m (x −11.5..−10), bramą 3.2 m (x −4.85..−1.65) i luką E 1.5 m (x 4.25..5.75) | 2.5 / 5.15 / 5.9 / 2.25 × 2 × 0.3 | z −8.6..−8.3 | granica (2.0 + pas niewidzialny do 5; kule zatrzymuje, widać przez nią) | fence |
+| house_main_e, house_main_n | dom nr 17 (zamknięta bryła, piętro) | 3.7 × 6.5 × 10 / 6.3 × 6.5 × 3.2 | x 1.3..5 z 5.3..15.3 / x −5..1.3 z 12.1..15.3 | ≥ 2.8 | paint_white |
+| garage_wall_w_j0/j1/_band | zachodnia ściana garażu z tylnymi drzwiami 1.5 m (z 10.25..11.75), nadproże 2.2 | 0.3 × 2.2 × 4.95 / 0.35; pas 0.3 × 4.3 × 6.8 | x −5..−4.7 | ≥ 2.8 (ściana), otwór | paint_white |
+| garage_wall_s_j0/j1/_band | front garażu: lewa brama (w niszy) OTWARTA x −3.95..−1.55, prawa (w licu) zamknięta = ściana | 0.75 / 2.85 × 2.2 × 0.3; pas 6 × 4.3 × 0.3 | z 5.3..5.6 | ≥ 2.8, otwór 2.4 m | paint_white |
+| roof_house_1, roof_house_2 | dach kopertowy jako dwie schodkowe płyty (sylwetka piramidy) | 9.2 × 1 × 9.2 / 6 × 1 × 6 | y 6.5..7.5 / 7.5..8.5, na domu | ≥ 2.8 (nieosiągalny) | paint_red |
+| garage_car | auto w garażu | 1.8 × 1.45 × 4.4 | x −0.7..1.1, z 6.3..10.7 | 1.45 | glass_car / car |
+| shed_wall_w_j0/j1/_band, shed_wall_e_*, shed_wall_n | czarny BARAK 8 × 4.3 × 2.8 dostawiony do domu pod balkonem; drzwi W i E 1.5 m (z 16.25..17.75), nadproża 2.2 | ściany 0.3 grube; N 7.4 × 2.8 × 0.3 | x −4..4, z 15.3..19.6 | ≥ 2.8 (2.8 = konstrukcja), otwory | wall_panel (albedo #403630) |
+| roof_shed | dach baraku | 7.8 × 0.25 × 4.1 | y 2.5..2.75 | ≥ 2.8 klasa (top 2.75 poza zasięgiem 2.7; udowodnione łańcuchem) | wall_panel |
+| shed_chair_1, shed_chair_2 | fotele fryzjerskie (proxy kolizyjne jak w GÓRZE; rekwizyt `barber_chair` na nich) | 0.8 × 1.45 × 0.9 | x −2.6..−1.8 i −0.6..0.2, z 15.5..16.4 | 1.45 (celowo „częściowa": 0.8 szer.) | leather |
+| shed_counter | lada barbera | 1.9 × 0.8 × 0.9 | x 1.5..3.4, z 15.5..16.4 | 0.8 | counter |
+| hall_wall_s_j0/j1/_band | ściana S hali z BRAMĄ ROLOWANĄ 4 m (x −8..−4), nadproże 3.0 | 2 / 6 × 3 × 0.6; pas 12 × 1 × 0.6 | z 35..35.6 | ≥ 2.8, otwór 4 m | corrugated_blue |
+| hall_wall_w_j0/j1/_band | ściana W hali z drzwiami bocznymi 1.5 m (z 37.75..39.25) od strony tui | 0.3 × 2.2 × 2.15 ×2; pas 0.3 × 1.8 × 5.8 | x −10..−9.7 | ≥ 2.8, otwór | corrugated_blue |
+| hall_wall_e, hall_wall_n | ściany E i N hali | 0.3 × 4 × 5.8 / 12 × 4 × 0.6 | x 1.7..2; z 41.4..42 | ≥ 2.8 | corrugated_blue |
+| roof_hall | dach hali | 11.8 × 0.25 × 6.8 | y 3.7..3.95 | ≥ 2.8 (nieosiągalny) | corrugated_blue |
+| hall_lift_post_w/e | słupy podnośnika dwukolumnowego | 0.4 × 2 × 0.4 | x −7.6 i −4.3, z 38.2..38.6 | ≥ 2.0 (celowo częściowa) | metal |
+| hall_car_raised | auto na podnośniku (przechodzi się pod nim, 2.0 m) | 4.4 × 1.45 × 1.8 | x −8..−3.6, y 2..3.45, z 37.5..39.3 | zawieszone na słupach, 0.25 m do dachu — nie do wejścia | glass_car / car |
+| hall_cabinets | szafki narzędziowe | 3.4 × 2 × 0.6 | x −9.5..−6.1, z 40.8..41.4 | ≥ 2.0 | metal / lockers |
+| hall_drums_1/2, hall_tyres_1/2 | beczki i opony | 1 × 0.8 × 1 | x −0.4..1.7 z 40.2..41.2; (−1.4, 36.2), (0.3, 38) | 0.8 | metal / drums; rubber |
+| thuja_front_w | 3–4 wysokie tuje na lewo od domu (Z2), jako rząd N–S od żywopłotu do narożnika domu | 2.2 × 6 × 5.2 | x −8.6..−6.4, z 0.1..5.3 | ≥ 2.8 | foliage |
+| thuja_se | tuje i krzewy po prawej domu | 3.6 × 6 × 4 | x 5..8.6, z 5.3..9.3 | ≥ 2.8 | foliage |
+| tree_w/e/mid/n (_trunk + _crown) | drzewa w ogrodzie: pień 1.4 m + korona od 1.4 m (blokuje oko stojące) | pień 0.6 × 1.4 × 0.6; korona 3.4 / 3.4 / 2.4 / 2.4 × 3.1, y 1.4..4.5 | (−10.1, 16), (9.4, 16), (0, 27), (5, 33) | pień 1.4 (klasa 1.45 ±0.06), korona nad głową | wood; foliage |
+| shrub_w | krzak (bez / lilak) w ogrodzie po zachodniej stronie | 3.5 × 3 × 3 | x −8.5..−5, z 23..26 | ≥ 2.8 | foliage |
+| trailer_tarp | „coś pod ciemną plandeką" za domem po prawej (Z2) | 2 × 2 × 4 | x 5.2..7.2, z 26..30 | ≥ 2.0 | glass_dark / container |
+| slide_tower, slide_ramp | zielona zjeżdżalnia: podest + zjazd | 1.2 × 1.3 × 1.2 / 2.4 × 0.8 × 0.8 | x 7.8..9 z 36..37.2 / x 5.4..7.8 z 36.2..37 | 1.3 / 0.8 (z rampy na podest) | paint_green |
+| pole_w, pole_e | betonowe słupy energetyczne (przewody = rekwizyt `cable`) | 0.35 × 8 × 0.35 | (−16.2, −1.65), (13.85, −1.65) | ≥ 2.8, celowo częściowa | concrete_block |
+| pine_w28…pine_e28_5 (15) | pnie sosen na poboczu (korony wysoko = rekwizyt/tło) | 0.6 × 6 × 0.6 | x −28, −25, −22, −19, −16, −8, −6, 2, 13.5, 16, 18.5, 21, 23.5, 26, 28.5; z −8.3..−7.7 | ≥ 2.8, celowo częściowa | wood |
+| car_dark_2 | ciemne auto na poboczu przy budowie, na zachód od luki W siatki | 4.4 × 1.45 × 1.8 | x −17.6..−13.2, z −7.5..−5.7 | 1.45 | glass_car / car |
+| skip_1 | kontener budowlany przed luką W siatki (szczelina 1.5 m za nim) | 2 × 1.3 × 2 | x −13.2..−11.2, z −6.8..−4.8 | 1.3 | metal / skip |
+| van_white | biały van na pasie południowym, środek odcinka | 5 × 2.2 × 2 | x −2.5..2.5, z −7.5..−5.5 | ≥ 2.0 | paint_white / van |
+| toitoi | niebieska toaleta przenośna obok vana | 1.1 × 2.3 × 1.1 | x 3..4.1, z −8.3..−7.2 | ≥ 2.0 (nieosiągalna: nic ≤ 1.3 w 4.42 m) | paint_blue |
+| skip_2 | drugi kontener, pas południowy | 3 × 1.3 × 2 | x 9..12, z −7.5..−5.5 | 1.3 | metal / skip |
+| car_dark | ciemne auto na pasie północnym, wschód (Z3: auto przy działce) | 4.4 × 1.45 × 1.8 | x 17..21.4, z −3.5..−1.7 | 1.45 | glass_car / car |
+| shell_wall_n_j0/j1/_band | ściana N szkieletu z drzwiami 1.5 m na zachodnim końcu (x −7.7..−6.2) | 0.3 / 10.2 × 2.2 × 0.3; pas 12 × 0.6 × 0.3 | z −17.6..−17.3 | 2.8, otwór | paint_white |
+| shell_wall_e_*, shell_wall_w_* | ściany E i W szkieletu z drzwiami 1.5 m (E: z −22.25..−20.75; W: z −19.75..−18.25) | 0.3 × 2.2 × 2.05–4.55; pasy 0.3 × 0.6 × 6.7 | x 3.7..4 / −8..−7.7 | 2.8, otwory | paint_white |
+| shell_wall_s, shell_partition | tylna ściana szkieletu (krawędź mapy) i przepierzenie dzielące dwa pokoje | 11.4 × 2.8 × 0.3 / 0.3 × 2.8 × 4.7 | z −24.6..−24.3 / x −2.3..−2, z −24.3..−19.6 | 2.8 | paint_white |
+| shell_pallets, shell_mixer | palety i betoniarka w pokoju wschodnim | 1.2 × 0.8 × 1.2 / 1.2 × 1.3 × 1.2 | (1..2.2, −23.5..−22.3) / (2.2..3.4, −19..−17.8) | 0.8 / 1.3 | wood / pallets; metal / machine |
+| site_sand, site_bricks | pryzma piasku i paleta cegieł na placu | 2 × 0.8 × 2 / 1.2 × 1.3 × 1.2 | (−13..−11, −14..−12) / (5.5..6.7, −13.5..−12.3) | 0.8 / 1.3 | soil; wood / pallets |
+
+Razem **127 brył** (w tym 11 płyt gruntu i 14 niewidzialnych). Rekwizyty (bez kolizji, do dopisania w Sesji 2): `barber_chair` ×2 na proxy, `mirror`, `neon` „BARBER", `sign` „17" na 2.5 m przy prawym narożniku, `sign` skrzynka na słupku bramy, `lamp wall` między oknami piętra, panele `glass_dark` okien i rolet, kominy ×2 (`vent`/bryła dekoracyjna na dachu), balkon (`board`/`shelf` na elewacji +Z nad barakiem — tylko wizualnie, P6a), `pole` + `cable` na słupach, korony sosen wysoko, `wheel` ×n, `tube_light` w hali, `pipe` (wąż), `lamp post` = latarnia poza granicą (tło).
+
+### 5.5 Starty, spawny, stacje, flagi, miejsca bomby
+
+- **Start T0 (działka)**: `(−3.4, 0, 17.0)`, yaw −π/2 (patrzy na zachód, w zachodnie drzwi baraku 1.1 m dalej). Chowa go barak (ściany 2.8, drzwi W i E przesunięte względem osi przejść) i dom; widzą go 338 z 5279 powierzchni (6.4 %), najdalsza 14.7 m (z zachodniego trawnika przez drzwi W). Wyjścia w 15 m ścieżki: drzwi W baraku 1.0 m → trawnik zachodni; tylne drzwi garażu 7.9 m; drzwi E baraku 8.0 m → przejazd wschodni; ogród (0, 22) 9.9 m; przejazd wschodni (9.5, 12) 14.8 m — **5 wyjść**.
+- **Start T1 (budowa)**: `(−7.0, 0, −23.6)`, yaw 0 (patrzy na północ, w drzwi N szkieletu). Chowa go szkielet: drzwi N na zachodnim końcu ściany (x −7.7..−6.2) leżą poza osią bramy budowy, drzwi W (z −19.75..−18.25) rzutują ze startu na panel siatki, nie na lukę; widzi go 216 powierzchni (4.1 %), najdalsza 14.5 m. Wyjścia w 15 m: drzwi W 5.1 m; drzwi N 7.0 m; drzwi E 13.2 m — **3 wyjścia** (brama budowy 15.7 m tuż za progiem).
+- Oba starty niewidoczne wzajemnie stojąc/kucając (wszystkie pary spawnów T0×T1); **0 komórek widzi oba starty** (sprawdzenie własne `both.mts`, R5). Linia prosta start–start 40.8 m, ścieżka **44.3 m, 5.85 s** sprintu.
+- **Spawny T0** (`team: 0`, pierwszy = start): (−3.4, 0, 17.0, −π/2); (−7, 0, 28.5, π); (−2, 0, 23, π); (3.5, 0, 22, π); (9.5, 0, 31, π); (−2.5, 0, 40, π) [w hali].
+- **Spawny T1** (`team: 1`): (−7, 0, −23.6, 0); (−4, 0, −20, 0); (0.5, 0, −21, 0); (3, 0, −21.5, 0); (−11, 0, −19, 0) [pas zachodni placu]; (6.5, 0, −11.5, 0) [plac przy luce E].
+- **arenaSpawns** (8, po trzech strefach): (−27, 0, −4, π/2) ULICA-W; (27, 0, −6, −π/2) ULICA-E; (10.5, 0, 12, π) PODJAZD; (−10.5, 0, 3.5, π) TUJE-kieszeń; (−6, 0, 39.5, 0) HALA; (3, 0, −12.5, 0) BUDOWA; (3, 0, 30, π) OGRÓD; (−11, 0, −22, 0) BUDOWA-W.
+- **Stacje** (rozrzut 52 m w x): HALA (−3, 0, 38); SOSNY (−25, 0, −6.5); ULICA (27, 0, −5).
+- **Flagi** (min. odległość 23.4 m): A HALA (−6, 0, 36.5); B PODJAZD (8.5, 0, 3); C BUDOWA (−9, 0, −12.5).
+- **Miejsca bomby**: A HALA (−6, 0, 36.5) — obciążenie 15 brył w 7.5 m; B BUDOWA (−9, 0, −12.5) — 12 brył; równe dojście: A jest tyłem T0, B tyłem T1 (w DOM/BOMB obie drużyny startują z 6 spawnów po swojej stronie; P1 domyślnie: tylko duel/turniej w pierwszym cięciu).
+- `huntSpawnMinM: 10` (przekątna `bounds` 94.8 m; GÓRA 6 na 39, dzielnica 14 na 121), `killY: −8`, `bounds: boxFrom(−32, −2, −26, 64, 20, 70)` → x −32..32, y −2..18, z −26..44.
+
+### 5.6 Trzy walki
+
+**ULICA** (callouty ULICA, SOSNY, VAN, BRAMA/FURTKA/TUJE jako wejścia, BUDOWA jako wyjścia): jedna prosta linia 58.6 m po koronie drogi (z −5.5..−3.5) od końca do końca; kto ją trzyma z DMR M-1 (60 m pełnych obrażeń) albo SR-50, widzi każdego, kto przekracza ulicę — ale sam stoi na 1.7 m pasie bez osłony, bo osłony stoją z boku: na pasie południowym przy budowie auto (1.45), kontener (1.3), van (2.2) z toi-toiem (2.3), drugi kontener (1.3), na północnym auto (1.45) przy wschodnim słupie, do tego dwa słupy 0.35 i pnie sosen 0.6. Kucając za autem albo kontenerem jesteś schowany przed całą ulicą (osłona klasy 1.3–1.45 chowa kucającego), stojąc pokazujesz głowę; van i toi-toi chowają całego. Cztery miejsca sporne (zachód przy słupie, środek przy vanie, wschód przy aucie) są równo daleko z obu startów (Δ ≤ 150 ms). Dystans 30–60 m: DMR, snajperka, karabinek C-20 (38 m) i AR-31 (32 m) już w falloffie.
+
+**PODJAZD / FRONT** (BRAMA, FURTKA, TUJE, PODJAZD, GARAŻ jako próg): pas 12–25 m między linią frontu a domem i wzdłuż przejazdu wschodniego. Płot sztachetowy 1.5 m to osłona „kucnij i zniknij" po obu stronach; brama 3.2 m otwiera dłuższą diagonalę na front garażu i przejazd (do 20 m), furtka 1.5 m to wąskie gardło naprzeciw otwartej lewej bramy garażu (7 m), dziura w tujach prowadzi tylko do kieszeni za szpalerem tui i dalej na zachodni trawnik (rząd tui 6 m odcina kieszeń od reszty frontu). Kto wchodzi z ulicy, wybiera jedno z trzech wejść; kto broni, stoi za płotem, w niszy garażu albo za tujami. Dystans 12–25 m: karabin, C-20, rewolwer R-44 (28 m), P9 (22 m).
+
+**WNĘTRZA** (GARAŻ, BARAK, HALA, BUDOWA-szkielet, OGRÓD jako łącznik): garaż 6 × 6.5 z autem i 4 m nawą od bramy do tylnych drzwi; barak 8 × 4.3 przelotowy W–E z dwoma fotelami (1.45) i ladą (0.8) — wchodzi się z trawnika, wychodzi na przejazd, nigdy do ślepego pokoju; hala 12 × 7 z autem nad głową na dwóch słupach, szafkami 2.0 i beczkami, brama rolowana od ogrodu i drzwi boczne na 1.8 m szczelinę wzdłuż tui (pętla wokół hali); szkielet budowy 12 × 7.3 z przepierzeniem i trzema drzwiami. Wszystko < 10 m, narożniki i drzwi 1.5 m: strzelby S12 (9 m) i SG-6 (7 m), SMG K-7/VZ-9, MP-11, clippers. Łączniki: przejście zachodnie (TUJE) i przejazd wschodni (PODJAZD) — po jednym z każdej strony domu, obydwa cięte koronami drzew na wysokości oczu.
+
+### 5.7 Callouty
+
+1. **ULICA** — droga, cały odcinek 60 m (z „zachód/środek/wschód" jako dopowiedzenie).
+2. **SOSNY** — dalsze pobocze ze szpalerem pni, między ulicą a siatką budowy.
+3. **BUDOWA** — plac za siatką i szkielet parteru (start T1).
+4. **VAN** — biały van z toi-toiem na środku odcinka, pas południowy.
+5. **BRAMA** — brama wjazdowa 3.2 m i podjazd tuż za nią.
+6. **FURTKA** — furtka 1.5 m naprzeciw garażu.
+7. **TUJE** — dziura w tujach, kieszeń za szpalerem i zachodnie przejście wzdłuż żywopłotu.
+8. **PODJAZD** — betonowy przedogródek i przejazd wschodni do ogrodu.
+9. **GARAŻ** — wnęka garażowa domu z autem, przelotowa do zachodniego trawnika.
+10. **BARAK** — czarny barber shop pod balkonem (start T0).
+11. **OGRÓD** — trawnik za domem: drzewa, krzak, przyczepa pod plandeką, zjeżdżalnia.
+12. **HALA** — blaszana hala detailingu w tylnym lewym rogu.
+
+(Słup, kontenery, auto i toi-toi są punktami orientacyjnymi wewnątrz ULICY/VANU, nie osobnymi calloutami — limit R11 to 12.)
+
+### 5.8 Pomiary
+
+Z `measure-final.md` (harness tej sesji, `simulateBody` + siatka chodu repo, sprint trzymany, prawdziwy mover):
+
+- `127 solids · 0 props · 0 lights · 12 team spawns (+8 arena) · 3 stations · 3 flags · 2 sites · bounds 64.0 × 70.0 m · 7504 walk cells, 5279 reachable from spawn 0 (1320 m²).`
+- Suita wspólna (emulowana): spawny 6 + 6 ok, wszystkie wolne/na podłodze/w granicach/osiągalne, zbiór osiągalny 5279 > 400, żaden spawn T0 nie widzi spawnu T1, stacje 3 z rozrzutem 52.0 m, flagi ABC min 23.4 m, 0 spawnów w strefie flagi, miejsca bomby własne i w granicach (obciążenie A 15+0, B 12+0), 0 głębokich nakładań tego samego materiału, audyt podłóg 0/0, `huntSpawnMinM 10` na przekątnej 94.8 m.
+- **Starty ukryte**: `all pairs, standing/crouching both ends: none visible — ok`. Powierzchnie widzące start T0: **338 z 5279 (6.4 %), najdalsza 14.7 m**; start T1: **216 z 5279 (4.1 %), najdalsza 14.5 m** (GÓRA: 7.9 %, 9 m). **Start do startu pieszo: 44.3 m, 5.85 s** (R7: 35–45 m).
+- **Trasy z obu startów** (to samo miejsce z każdej strony):
+
+| Place | T0 path (m) | T0 (s) | T1 path (m) | T1 (s) | Δ (ms) |
+|---|---|---|---|---|---|
+| *street_w | 30.1 | 3.92 | 29.2 | 3.88 | 33 |
+| *street_mid | 24.4 | 3.17 | 23.1 | 3.02 | 150 |
+| *street_e | 34.9 | 4.53 | 34.2 | 4.55 | 17 |
+| *pole_w | 25.6 | 3.33 | 25.7 | 3.38 | 50 |
+| gate | 26.5 | 3.43 | 30.2 | 4.00 | 567 |
+| wicket | 20.0 | 2.60 | 24.1 | 3.15 | 550 |
+| hedge_gap | 19.7 | 2.57 | 24.3 | 3.18 | 617 |
+| garage_door | 14.4 | 1.88 | 30.3 | 3.97 | 2083 |
+| shed_w_door | 1.0 | 0.10 | 43.2 | 5.65 | 5550 |
+| hall_mouth | 18.7 | 2.43 | 60.6 | 7.90 | 5467 |
+| site_gate | 28.6 | 3.72 | 15.7 | 2.05 | 1667 |
+| site_gap_w | 28.2 | 3.68 | 15.8 | 2.07 | 1617 |
+| site_gap_e | 31.9 | 4.13 | 21.4 | 2.78 | 1350 |
+| toj | 30.5 | 3.93 | 23.7 | 3.13 | 800 |
+| skips | 30.9 | 4.02 | 28.7 | 3.83 | 183 |
+| car | 37.8 | 4.92 | 37.2 | 4.95 | 33 |
+| street_w_end | 36.6 | 4.78 | 36.3 | 4.80 | 17 |
+| street_e_end | 45.9 | 5.98 | 45.2 | 6.00 | 17 |
+| other_start_T1 | 44.3 | 5.85 | 0.0 | 0.00 | 5850 |
+| other_start_T0 | 0.0 | 0.00 | 44.1 | 5.75 | 5750 |
+
+  Najgorsza różnica ogółem 5850 ms (miejsca jednej strony — oczekiwane); **najgorsza różnica na 4 miejscach spornych: 150 ms — ok** (R4 ≤ 250). Żadna trasa nie utknęła (0 × STUCK), 0 par bez ścieżki. Osiem miejsc R4: BRAMA 3.43/4.00 s, FURTKA 2.60/3.15, GARAŻ 1.88/3.97, BARAK 0.10/5.65, HALA 2.43/7.90, ULICA (środek) 3.17/3.02, TOJ 3.93/3.13, drugi start 5.85/5.75.
+- **Wyjścia**: T0 w 15 m — **5** (shed_w_door, shed_e_door, garage_back_door, east_lane, garden_n), w 30 m 6 z 10 — ok; T1 w 15 m — **3** (shell_door_n, shell_door_e, shell_door_w), w 30 m 5 z 10 — ok.
+- **Linie wzroku** (oko stojące → oko stojące, tylko powierzchnie osiągalne): `5279 surfaces (1320 m²), 200000 pairs, 39496 clear (19.7 %): median 11.2 m, p90 28.3 m, p99 49.6 m, longest 58.6 m (−29.25, 0, −4.75) → (29.25, 0, −1.75)`. Linie czyste ponad 10 m: **56.1 %**; 15 m: **35.3 %**; 20 m: **21.7 %**; 30 m: **8.6 %**; 40 m: **3.3 %**; 50 m: **0.9 %**. R5: mediana 8–12 → ok; **p90 ≤ 25 → FAIL (28.3)**; najdłuższa ≥ 50 → ok (58.6 m, na ulicy; żadna linia nie jest dłuższa niż ulica). (GÓRA: mediana 7.6, p90 15.0, najdłuższa 34.) Rozbicie własne (`sight2.mts`, ta sama próba 200 000 par): bez par ulica↔ulica **mediana 10.1, p90 21.9, p99 35.1, > 25 m 6.6 %**; tylko ulica↔ulica: mediana 16.1, p90 40.5, > 25 m 30.5 %.
+- **Łańcuch wspinaczek**: `mantle 1.25 m beside a top; sprint jump 4.42 m across; 21 standable tops of 127.` **Blaty osiągalne ≥ 1.9 m: none.** **Granica/dach osiągalne: none — ok** (dach domu, baraku, hali, żywopłoty, siatka, balkon: nieosiągalne).
+- **Osłony (R3)**: `low (0.5–1.0) 8 · crouch (1.2–1.6) 17 · full (2.0–2.8) 26 · structure (≥ 2.8) 36 · off the language: none — ok`. **Nic nie lata**: `solids not standing on the ground or on another solid: none — ok`. Osłony węższe niż ciało w obu osiach (celowo częściowe): jamby drzwi garażu i szkieletu (0.3–0.75 m), fotele 0.8 m, słupy podnośnika 0.4, pnie drzew 0.6.
+- **Werdykt harnessu**: `1 failing checks: p90 sight line over 25 m` — wszystko inne przechodzi.
+
+### 5.9 Decyzje do podpisu
+
+- **D-W1 — kieszenie startowe: T0 w baraku, T1 w szkielecie budowy.** Start T0 stoi przy zachodnich drzwiach baraku (5 wyjść w 15 m), T1 w tylnym rogu zachodniego pokoju szkieletu (3 wyjścia). *Alternatywa:* T0 w hali (tył działki: 60 m do budowy, runda 60 s za krótka) albo T1 na poboczu przy sosnach (bez kieszeni — widoczny z ulicy).
+- **D-W2 — ulica jako środek; miejsca sporne = cztery punkty na ulicy** (zachód przy słupie, środek przy vanie, wschód przy aucie, słup zachodni), nie BRAMA/FURTKA/GARAŻ/BARAK/HALA, jak literalnie mówi R4 — na prawdziwym, niesymetrycznym miejscu te pięć należy do jednego „domu" (Δ 550–5467 ms) i nie da się ich wyrównać bez obrotu mapy o 180°, co łamie R8. Zmiana stron co 3 rundy wyrównuje to, co każdy ma u siebie. *Alternatywa:* literalne R4 → mapa symetryczna, czyli nie ta działka.
+- **D-W3 — dziura w tujach jako trzecie wejście** (1.5 m, x −11.5..−10) w jednej linii z zachodnią luką siatki: „zachodnia aleja" przez ulicę; dziura prowadzi do kieszeni za szpalerem tui, nie na front. *Alternatywa:* zamknięta → dwa wejścia (brama, furtka), T0 na zachód ulicy +4 m, Δ street_w ~500 ms bez dalszych zmian.
+- **D-W4 — furtka otwarta i poszerzona do 1.5 m** (ze zdjęcia ~1 m; P9 domyślnie), brama otwarta 3.2 m. *Alternatywa:* furtka zamknięta (osłona 1.5 m) → T0 do środka ulicy przez bramę +8 m, balans ulicy do przebudowy.
+- **D-W5 — w garażu OTWARTA jest LEWA brama (ta w niszy), prawa zamknięta** — odwrotnie niż domyślna odpowiedź P5. Powód zmierzony: lewa brama leży w osi furtki i tylnych drzwi garażu; prawa otwarta wydłuża trasę T0 do ulicy o ~2.5 m (330 ms), co wymusza cofnięcie szkieletu T1 o 2.5 m i start–start 47 m > 45 (R7). Nisza (~1 m) jest tu tylko wizualna (otwór w licu). *Alternatywa:* jak P5 → R7 albo R4 do ponownego wyważenia.
+- **D-W6 — drzewa w ogrodzie jako przerywacze linii**: pień 1.4 m + korona od 1.4 do 4.5 m (blokuje oko stojące 1.62; kucając 1.25 da się pod nią przejść — celowa „niska" droga), korona tree_w dotyka zachodniego żywopłotu (inaczej przejście zachodnie było jedną linią 61 m od hali do budowy); do tego krzak 3 m w ogrodzie (graft z prototypu „Wierny miejscu"). *Alternatywa:* same pnie 0.5 × 5 m (fidelity) → ogród i przejścia jako linie 25–36 m.
+- **D-W7 — próg p90 (R5)**: zmierzone **p90 28.3 m** przy medianie 11.2; bez par ulica↔ulica p90 21.9. Jedyne uczciwe osłony na ulicy wyższe od oka (1.62) to van i toi-toi; auta 1.45 i kontenery 1.3 przerywają linie kucającego, nie stojącego — taki jest język osłon z R3. Proponowany próg: **p90 ≤ 30 m ogółem i p90 ≤ 25 m poza parami ulica↔ulica** (obie liczby spełnione). *Alternatywa:* van w poprzek korony drogi (wtedy p90 ~26, ale to zabudowanie ulicy, którego R5 zakazuje) albo próg 25 utrzymany = mapa nie przechodzi.
+- **D-W8 — barak z DWOMA drzwiami**: zachodnie (od trawnika/ogrodu) i wschodnie (od podjazdu), oba 1.5 m, na tej samej wysokości z 16.25..17.75; bez trzecich drzwi północnych z prototypu CS2. *Alternatywa:* trzecie drzwi N → 6 wyjść T0, ale kieszeń startowa widoczna z ogrodu.
+- **D-W9 — hala dokładnie 12 × 7 × 4, odsunięta 1.8 m od zachodniego żywopłotu; drzwi boczne w ścianie zachodniej „od strony tui", brama rolowana 4 m w ścianie południowej „od domu/ogrodu"** (oba prototypy miały drzwi w ścianie wschodniej). Auto na podnośniku = bryła zawieszona 2.0 m nad podłogą (przechodzi się pod nią), nie osłona 1.45. *Alternatywa:* drzwi we wschodniej ścianie → bez pętli wzdłuż tui; auto na ziemi jako osłona 1.45 (P11 domyślnie) → hala traci nawę.
+- **D-W10 — szpaler 3–4 wysokich tui na lewo od domu jako rząd N–S w przedogródku** (x −8.6..−6.4, od żywopłotu do narożnika domu; odczyt Z2 z prototypu „Wierny miejscu"), dzielący front na kieszeń zachodnią i podjazd. *Alternatywa:* tuje obok domu (CS2) → front jest jedną otwartą płytą 24 × 6 m.
+- **D-W11 — obiekty na ulicy przestawione (P12 domyślnie)**: ciemne auto nr 2 i kontener 1 na pasie południowym przed zachodnią luką siatki (kontener wprost przed luką, auto zamyka szczelinę za nim — to gałka wyrównująca czas T1 na zachód ulicy), van + toi-toi na środku odcinka przy budowie, kontener 2 na x 9..12, ciemne auto nr 1 na pasie północnym na x 17..21 (auto z Z3 przy działce). *Alternatywa:* jak na Z1 (wszystko po prawej, dalej na wschód) → Δ street_w 450–630 ms.
+- **D-W12 — proporcje zmienione względem zdjęć dla R7**: przedogródek 5.5 m od płotu do domu, dom 10 × 10 (Z2: 10 × 10–11), barak 8 × 4.3 (ściany 0.3; 4.0 proponowane), szkielet budowy przysunięty do ulicy (plac 8.7 m głęboki, tylna ściana szkieletu = krawędź mapy), droga 5.2 m, pobocze z sosnami 1.6 m — wszystko w ±20 % R8. *Alternatywa:* wymiary jak w §2 → start–start 49 m (R7 35–45 niespełnione).
+- **D-W13 — dach kopertowy jako dwie schodkowe płyty `paint_red`; balkon, kominy, tabliczka „17", lampa, skrzynka i przewody jako rekwizyty bez kolizji; balkon nie jest perch (P6a)** — dowód: dach baraku 2.75 m poza zasięgiem 2.7, żaden osiągalny blat ≥ 1.9 m na mapie. *Alternatywa:* P6c (BALKON jako perch ze schodami z obu stron) → +2 biegi schodów, nowy pomiar.
+- **D-W14 — front budowy jako `fence` (siatka: widać, kule stają) z pasem niewidzialnym nad panelami; trzy przerwy 1.5 / 3.2 / 1.5 m; spawny drużynowe T1 na placu i w szkielecie.** *Alternatywa:* drewniany parkan `wood` (nieprzezroczysty) → ulica nie widzi placu, T1 wychodzi „na ślepo".
+
+### 5.10 Ryzyka i co nie jest zmierzone
+
+- **Brak renderu.** Wszystko powyżej to dane i symulacja; sylwetki (dom z dachem-piramidą, czarny barak, blacha hali, szpaler tui, pnie sosen) i to, czy osłona wygląda jak osłona, sprawdzi dopiero `map-review.html?map=dolna` przez SwiftShader — a czytelność w nocy na prawdziwym GPU tylko playtest.
+- **60 s rundy vs 44.3 m ścieżki start–start**: spotkanie w środku ulicy po ~3.1 s sprintu z obu stron, ale gracz, który idzie tyłem (hala ↔ szkielet) potrzebuje 60.6 m = 7.9 s; rundy „na zegar" (kto ma więcej HP) będą częstsze niż na GÓRZE. Nie zmierzone: realny czas spotkania z botem (P7).
+- **Balkon**: przyjęty na elewacji ogrodowej (+Z) nad barakiem (P2 domyślnie), tylko wizualnie; jeśli właściciel wskaże inną elewację, barak i start T0 przesuwają się z nim i cały pomiar jest do powtórzenia.
+- **Wnęka lewej bramy garażu** jest tylko otworem w licu (bez cofnięcia o 1 m) — kosmetyka do Sesji 2, bez wpływu na trasy.
+- **Korony drzew od 1.4 m**: pod koroną można przejść kucając (1.25 m) — mover harnessu tego nie robi (siatka chodu liczy ciało stojące), więc realny gracz ma tam dodatkową, wolną (2.7 m/s) drogę; do sprawdzenia, czy to nie otwiera linii, których pomiar nie widzi.
+- **Mover harnessu** obcina zakręty o 0.6 m przy wąskich (1.5 m) przejściach podchodzonych na ukos; w tej wersji 0 × STUCK, ale każda zmiana pozycji drzwi/luk musi być mierzona ponownie (`map-duel` w repo ma ten sam model).
+- **Nie zmierzone przez harness**: R11 „≤ 3 zakręty na trasę bota" (trasy ULICA–HALA i ULICA–szkielet mają 3–4 załamania — do sprawdzenia narzędziem `findPath` w repo), draw-calle (`metrics.json`), obciążenie świateł (0 świateł w prototypie), rekwizyty (0 w prototypie — proxy foteli już są bryłami).
+- **SwiftShader** renderuje bez GPU: mgła, emisja neonu i jarzeniówek oraz kontrast czarnego baraku w nocy wymagają prawdziwego GPU.
+- **Do sprawdzenia ze zdjęciami przez czat odbierający**: pozycje vana (tu x −2.5..2.5 po stronie budowy, środek odcinka), obu aut (tu jedno na pasie południowym x −17.6..−13.2, drugie na północnym x 17..21.4), kontenerów (x −13.2..−11.2 i 9..12), toi-toia (x 3..4.1 obok vana), czy dziura w tujach istnieje naprawdę czy jest dodana (D-W3), która brama garażowa jest w niszy i czy to ona ma być otwarta (D-W5), strona balkonu (P2), miejsce altany → hali (tu tylny LEWY róg, x −10..2), szerokość drogi 5.2 m i głębokość przedogródka 5.5 m.
 
 ## 6. Porządek pracy (dwie sesje; ma być w prompcie wykonawczym w tej kolejności)
 
@@ -514,9 +779,11 @@ Decisions).
 3. **Projekt na papierze** — sekcja `## Projekt` dopisana na końcu tego pliku (po Załączniku B; §2 i §5
    zostają nietknięte): tabela ekstentów (obszar → box), plan ASCII z tej tabeli, lista wszystkich brył
    z wysokością wg języka osłon, starty i pozostałe spawny, stacje, flagi, miejsca bomby, trzy walki,
-   linie wzroku, callouty, **lista decyzji do podpisu D-W1…** (jak D-G1…D-G6 w `MAP_2.md`). Liczby z
-   §5 zmierzone ponownie narzędziami repo na prototypie w `packages/shared/src/dolna.ts` **bez wpisu
-   do `MAPS`** (narzędzia importują plik wprost). Wiersz ledgera ze statusem `blocked: waiting for the
+   linie wzroku, callouty, **lista decyzji do podpisu D-W1…** (jak D-G1…D-G6 w `MAP_2.md`). Punkt wyjścia: prototyp
+   `apps/client/e2e/tools/dolna/proto-final.ts` (127 brył, zmierzony harnessem z tego katalogu —
+   `measure.mts`, `plan.mts`); liczby z §5 zmierzone ponownie narzędziami repo na prototypie
+   przeniesionym do `packages/shared/src/dolna.ts` **bez wpisu do `MAPS`** (narzędzia importują plik
+   wprost). Wiersz ledgera ze statusem `blocked: waiting for the
    owner's sign-off of the paper design`, commit `plan: ledger <data> drop W`, raport ≤ 20 linii z
    listą decyzji. **Stop.**
 
@@ -555,7 +822,8 @@ Sesja 2 jest skończona, gdy:
   wymienionymi po nazwie w `## Projekt`, 0 rekwizytów zatopionych lub latających, 0 osłon bez bryły;
 - `map-duel` (uogólniony): starty niewidoczne 0 par na wszystkie (stojąc i kucając); Δ czasów sprintu
   do ośmiu miejsc z R4 ≤ 250 ms dla miejsc spornych; ≥ 3 wyjścia na start w 15 m; jedna linia ≥ 50
-  m; mediana i p90 w celach z §5 „Pomiary” albo nowy próg z liczbą w Decisions (R5); łańcuch
+  m; mediana 8–12 m, p90 ≤ 30 m ogółem i ≤ 25 m poza parami ulica↔ulica (R5, D-W7) albo nowy próg z
+  liczbą w Decisions; łańcuch
   wspinaczek: dach domu, baraku i hali, balkon i ogrodzenie nieosiągalne (chyba że perch z P6 — wtedy
   równy czas z obu stron); R11: ≤ 12 calloutów, ≤ 140 brył, ≤ 3 zakręty na trasę;
 - render: 10 zrzutów, tabela recenzenta-oka z 0 werdyktów „lata” / „przenika” / „nieczytelna
@@ -599,9 +867,9 @@ wklejeniem.
   granica), płot sztachetowy = bryła 1.5 m (kucnięcie chowa, stojąc widać głowę; ~1.6 m na zdjęciu
   mieści się w ±20 % R8).*
 - **P5** Które wnętrza są otwarte: garaż w domu (przelotowy do ogrodu?), parter domu, szkielet
-  budowy? *Domyślnie: otwarta jest prawa brama garażu (w licu ściany), lewa (w niszy) zamknięta —
-  nisza działa jak wnęka-osłona; z garażu drzwi do ogrodu (garaż przelotowy); dom zamknięty; budowa:
-  tylko parter bez stropu jako drugi kraniec.*
+  budowy? *Domyślnie: otwarta jest LEWA brama garażu (ta w niszy — leży w osi furtki i tylnych drzwi;
+  pomiar D-W5 w §5), prawa zamknięta; z garażu drzwi do ogrodu (garaż przelotowy); dom zamknięty;
+  budowa: parter bez stropu jako drugi kraniec.*
 - **P6** Perch: (a) brak, (b) dach hali (drabina/schody z obu stron, równy czas), (c) **BALKON** nad
   barakiem (schody z ogrodu i z baraku, lip = balustrada 1.35 m jak GÓRA; widzi ulicę i ogród, nie
   widzi żadnego startu — gotowy „Balcony” z Inferno)? *Domyślnie: (a) w pierwszym cięciu; wtedy dach
@@ -617,8 +885,9 @@ wklejeniem.
   balkonem)? Ile drzwi i gdzie? *Domyślnie: przylega, drzwi od podjazdu i od ogrodu.*
 - **P11** Hala detailingu: wymiary (domyślnie 12 × 7 m, 4 m), brama rolowana otwarta od strony
   domu/ogrodu czy podjazdu, małe drzwi z której ściany? Czy auto na podnośniku w środku ma być osłoną
-  (bryła `car` 1.45 m) czy tylko tłem? *Domyślnie: brama od domu/ogrodu, drzwi od tui, auto = osłona
-  1.45 m.*
+  (bryła `car` 1.45 m) czy tylko tłem? *Domyślnie: brama od domu/ogrodu, drzwi od tui; auto na
+  podnośniku zawieszone 2.0 m nad podłogą (przechodzi się pod nim; D-W9), szafki 2.0 i beczki 0.8 jako
+  osłony.*
 - **P12** Granice ulicy: (a) niewidzialna ściana + tuje sąsiadów po obu stronach działki (60–70 m),
   czy (b) do skrzyżowania z asfaltem i latarnią? Druga strona: tylko pobocze z sosnami i toi-toiem
   (płot budowy = granica) czy też parter domu w budowie jako strefa? Van i auto tam, gdzie na Z1
@@ -706,4 +975,26 @@ Sesja wykonawcza ma je zmierzyć ponownie, nie wierzyć tej tabeli.
 
 ## Załącznik B — jak powstał §5 (przebieg tej sesji)
 
-<!-- wypełniane po naradzie -->
+1. **Narzędzie przed projektem.** `apps/client/e2e/tools/dolna/measure.mts` — harness, który dowolny
+   prototyp `MapDef` przepuszcza przez to, co robią `map.test.ts`, `mapFlags.test.ts`,
+   `floorAudit.ts` i `map-duel.ts` (siatka chodu, `findPath`, prawdziwy `simulateBody` ze sprintem,
+   raycasty oko–oko, łańcuch wspinaczek), z jedną zmianą: trasy z obu startów idą do **tego samego**
+   punktu zamiast do bliźniaka 180°. Sprawdzony na GÓRZE: 7.8 % powierzchni widzi start, najdalsza
+   8.2 m, start–start 39.1 m — te same liczby, które podaje `map-duel.ts`. `plan.mts` rysuje plan
+   ASCII z brył, jak `map-plan.ts`, ale dla dowolnych `bounds`.
+2. **Narada.** Trzech projektantów o różnych szkołach (wierny CS2 / wierny miejscu / minimalista
+   czytelności) dostało §1–§4 i §9 z domyślnymi odpowiedziami oraz harness; każdy miał oddać
+   zmierzony prototyp. Dwa dojechały do pomiaru: „wierny CS2” (127 brył, wszystkie kontrole poza
+   p90 25.0 m, sporne Δ 167 ms, start–start 49 m) i „wierny miejscu” (112 brył, trzy trasy
+   zablokowane przy furtce i drzwiach 1.0–1.2 m — ta sama lekcja, którą GÓRA zapłaciła w
+   `MAP_2.md` „As built”). Trzeci i trzech sędziów nie zdążyło — limit sesji; sądem była tabela
+   pomiarów.
+3. **Synteza.** Jeden agent wziął zwycięzcę, przeszczepił z drugiego odczyt zdjęć (rząd tui w
+   przedogródku, krzak w ogrodzie) i naprawił to, czego brief wymaga: przejścia ≥ 1.5 m, start–start
+   44.3 m (szkielet budowy przysunięty 4 m), starty ukryte na 14.5 m, sporne Δ 150 ms, żadna trasa
+   zablokowana, nic osiągalnego ≥ 1.9 m, 0 brył latających — dwanaście pomiarów. Jedyna czerwona
+   kontrola, p90 28.3 m, została **zostawiona i nazwana** (D-W7): na ulicy tylko van i toi-toi są
+   wyższe od oka, bo tak mówi język osłon, a zabudowanie ulicy jest zakazane w R5.
+4. **Co nie jest w tym pomiarze:** render (0 świateł, 0 rekwizytów w prototypie), kucnięcie pod
+   koronami drzew (mover liczy ciało stojące), zakręty tras z R11, draw-calle — lista w §5.10; sesja
+   wykonawcza mierzy wszystko ponownie narzędziami repo (§6, Sesja 1, krok 3).
