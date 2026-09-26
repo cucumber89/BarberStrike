@@ -210,6 +210,24 @@ watch). A pair IS a duel — the freeze, the buy window, the CS economy, the hal
 bracket is the only thing the mode adds, and it lives in `packages/shared/src/tournament.ts` as
 pure data plus one replicated string.
 
+### Drop W — DOLNA, the third map: a real plot and its street, built for the 1 v 1 tournament (owner's brief, 2026-09-26)
+
+The owner's brief, verbatim: *"nowa mapa pod turniej taka jak z csgo — klarowna, prosta, ale daje
+dużo możliwości osłony odpowiednie do wielkości gracza, możliwość walki na bardzo daleko ale jak i
+blisko; na podstawie zdjęć, dobrze odwzorowana; pod balkonem czarny duży barak — barber shop; tam
+gdzie altana przy płocie — ogromny blaszany garaż z detailingiem; mapa obejmuje działkę i ulicę
+przed."* Three photos (Street View along the street, the house front, a satellite view). The owner
+asked first for a **prompt**, not geometry: a document to paste into a vision chat, which writes
+the executive brief for the session that builds the map. That document is `docs/MAP_3_DOLNA.md`
+(the block between its markers), with the engine facts transcribed from the code and checked, and a
+layout proposal measured with the shared simulation. The map itself follows Drop G's rule — the
+layout on paper in `docs/MAP_3_DOLNA.md` (a `## Projekt` section), signed off, before a solid is
+written into `packages/shared/src/dolna.ts` — and is judged by the generic map suite, a
+`dolna.test.ts` twin of `gora.test.ts` (Δ ≤ 250 ms to eight named places instead of a 180° twin),
+the map tools generalised to a map id, and renders through `map-review.html?map=dolna`. Whether
+DOLNA replaces GÓRA as the duel map or joins it (`DUEL_MAP_IDS`) is the owner's call (P1 in the
+document).
+
 ### Drop H — Accounts and leaderboard (after A–E have been played)
 
 Nick + password or Discord OAuth, server-side profile (skins, haircuts, XP), weekly leaderboard
@@ -285,6 +303,22 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
 | 2026-09-26 | V (turniej na 20 osób + konta + polish, owner's brief) | claude/practical-bardeen-07gu1m | **"Turniej 1v1 na ~20 osób z równoległymi arenami, konta bez e-maila, tablica sławy, ładne menu i ikony, samouczek, wydajność", built by the ULTRON fleet.** Wave 1: 8 recon scouts (incl. a live capacity probe) + rival designers for the tournament and the accounts (a judge each) + single designers for menu/onboarding/perf → `docs/V_SPEC.md`, attacked by a completeness critic. Owner interview settled three calls: **new lobby room + schema approved (D1/D2/D3)**; VPS is **2 vCPU / 4 GB** (so 32 entrants / 96 spectators fit at ≈1.9 Mbit/s, tick has huge headroom); **SQLite** for accounts. Skeleton P0 (medal): the bracket widened to 32 (`tournament.ts` roundName 1/8, 1/16), `lobbyProtocol.ts` (message types, 32/96 caps, chat limits + `sanitizeChat`), `account.ts`, the Colyseus `LobbyState` in its own file so the game tick is untouched (L6). **Ten packages in parallel worktrees, each inspected (+ one auto-fix)**: P1 the Tab bracket (a missing `display:flex` glued the nicks — `result.css`), P2 `TournamentLobbyRoom` (roster, ready, host START, chat, N parallel `tdm mode=duel` arenas via matchMaker, result over `presence`), P3 the arena's 60 s tournament grace vs 15 s TDM + `verifySession` + result publish, P4 accounts backend (SQLite, scrypt, sessions, rate-limit, REST `/api`), P5 lobby UI + invite link + spectate-any-match + warmup, P6 account UI + profile migration + `/stats` hall of fame, P7 tournament records + trophies, P8a real weapon shop icons + Polish menu hero, P8b onboarding welcome + bot tutorial, P8c a `minimal` perf tier + FPS badge. Ultron merged all ten (Menu.tsx/main.tsx conflicts resolved by hand). **Two real bugs the isolated tests missed, found live and fixed**: `/stats` crashed on the server's `{tournaments:[…]}` shape; the shop icons rendered tiny (square PNG = mostly margin) with the gear as white blobs — the guns are now cropped to their own aspect and enlarged, the twelve gear/grenade/perk items redrawn as coloured icons. Live over real sockets: lobby hosts 8 → START raises 4 arenas, chat truncates/rate-limits/escapes; arena holds a dropped seat at 18 s (60 s) while a plain duel released it (15 s); server tick **0.99 ms max / 0.011 ms mean** at 2 bodies. | `docs/V_SPEC.md`; `apps/client/e2e/out/v/capacity.md`; `apps/client/e2e/out/v/shots/*.png` (13 showcase + shop before/after, gitignored); regenerate with `LOBBY=1`/`GRACE=1 node apps/client/e2e/tools/tournament.mjs`, `node apps/client/e2e/tools/account.mjs`, `hud-states.mjs`, `weapon-icons.mjs`, `v-app-shots.mjs` | typecheck ✓ test ✓ (1329: shared 373, skins 11, server 256, client 689) build ✓ live: lobby+arenas+chat ✓, grace 60/15 ✓, tick 0.99 ms ✓; full e2e + 3-size gallery + 16-arena load test — not run (Deferred, commands above) | review |
 
 ## Decisions log (append-only)
+- 2026-09-26 — Drop W: **the owner's brief opens a third map before the A–D playtest.**
+  `MASTER_PROMPT.md` gates E/F/G/H on a filled `PLAYTEST_TEMPLATE.md`; there is none. The brief of
+  2026-09-26 ("nowa mapa pod turniej … na podstawie zdjęć") is the owner's explicit word, which is
+  the reopening the preamble of this plan allows, so DOLNA proceeds as its own drop. Letter **W**,
+  because G is GÓRA (five ledger rows, `out/g/`, D-G decisions). (owner's brief; recorded by the
+  session)
+- 2026-09-26 — Drop W: **the deliverable of this session is a prompt, not geometry** — the owner
+  asked for "prompt … wkleję do innego czata, żeby wygenerował mi już właściwy prompt". The layout
+  in `docs/MAP_3_DOLNA.md` §5 was measured with a scratch harness on the real `simulateBody` and
+  walk grid (`measure.mts`, this session's scratchpad, reproduces `map-duel.ts`'s GÓRA numbers:
+  7.8 % of surfaces see a start, 39.1 m start to start), NOT with the repo tools, which are
+  hard-wired to GÓRA. The executive session re-measures with the repo tools before anything is
+  signed. (session)
+- 2026-09-26 — Drop W: **DOLNA joins GÓRA rather than replacing it, duel-only, by default** —
+  proposed as P1 in the document with the file and test list of the change; the owner decides.
+  (proposal)
 - 2026-09-23 — Drop T: **the profile is now written the first time the MENU is drawn, not the
   first time a wardrobe or a match is.** Putting the crate on the front page means
   `refreshDailyCrates` runs on the main screen, and it saves. Two consequences, both accepted: a
@@ -835,6 +869,20 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
 - 2026-09-26 — Drop V (owner, Ultron): **a new Colyseus room `tournament-lobby` and a new replicated schema `TournamentLobbyState` (`hostId`, `phase`, `entrants`, `bracket`, `arenas`) are approved (D1/D2/D3).** L6 keeps the game's tick/snapshot and `MatchState`/`PlayerState` untouched, so the tournament coordinator is a separate, physics-free room; each pair plays as an ordinary `tdm mode=duel` arena, and results flow back to the lobby over Colyseus `presence` (not a new game field). Also decided: **the VPS is 2 vCPU / 4 GB**, which sizes the caps at `TOURNAMENT_MAX_ENTRANTS = 32` / `TOURNAMENT_MAX_SPECTATORS_TOTAL = 96` (≈1.9 Mbit/s at full load; a final-gate load test must confirm `tick.maxMs < 8 ms` at 16 arenas, else drop to 16/48); and **accounts persist in SQLite** (`better-sqlite3`, `data/accounts.db`), passwords scrypt-hashed, sessions stored as SHA-256 hashes. The full rationale is `docs/V_SPEC.md` §2, §6.
 
 ## Deferred (things noticed, deliberately not done)
+- Drop W 2026-09-26: **`apps/client/e2e/tools/duel-check.mjs` does not exist** — `docs/MAP_2.md:693`
+  and the Drop T ledger rows cite it as evidence; the only tools that play a duel with a bot are
+  `gora-shots.mjs` (section 2, 60 s of HUD samples) and `tournament.mjs`. Either the file was never
+  committed or it was lost; the DOLNA brief tells the next session not to call it.
+- Drop W 2026-09-26: **the map tools are hard-wired to one map.** `map-duel.ts` and `map-plan.ts`
+  import `GORA` (plan extents −18…18 × −12…12 on top), `map-rotation.ts` carries NIGHT_DISTRICT and
+  GÓRA by name; `map-audit.ts` and `map-review.html` do `MAPS[id] ?? NIGHT_DISTRICT`, so an unknown
+  id **silently** audits or renders the district. Generalising them to `argv[2]` / `?map=` (and
+  failing loudly on an unknown id) is the first commit of the DOLNA drop.
+- Drop W 2026-09-26: **`LightHint.shadows` is declared (`map.ts:74`) and never read** — `buildMap`
+  creates exactly one shadow generator, the moon (`MapBuilder.ts:220`); `ARCHITECTURE.md:52`'s
+  "≤ 2 generators, only lights flagged `shadows`" describes a rule the code does not implement.
+- Drop W 2026-09-26: the tournament panel's map picker (`Menu.tsx:638–653`) offers every map while
+  pairs always run on `DUEL_MAP_ID`; the caption says it is for the warm-up, but it reads as a choice.
 - Drop V 2026-09-26: **the live gate was not fully run** — the full Playwright e2e suite, the HUD gallery at all three sizes across every scene, and a 16-parallel-arena load test *with players in the arenas* (to confirm `tick.maxMs < 8 ms` on the 2 vCPU VPS) are outstanding. What WAS proven live: the lobby hosts and raises parallel arenas, chat is truncated/rate-limited/escaped, the 60 s vs 15 s grace, and a 0.99 ms max tick at 2 bodies. Run alone on the machine with the commands in the ledger row before the owner deploys.
 - Drop V 2026-09-26: **the weapon shop icons are a shader-free 2D projection of the real geometry**, now cropped and enlarged so they read; they are not photoreal. If the owner wants true rendered portraits, a Babylon render pipeline (the path `weapon-icons.mjs` abandoned under headless SwiftShader) is the next step. The twelve gear/grenade/perk icons are hand-drawn coloured SVGs in the house palette.
 - Drop V 2026-09-26: **minor findings accepted from the package inspections**, none blocking: P4's body-parser logs a `PayloadTooLargeError` to stderr on 64–128 kB bodies (the 413 is still correct); a bare `?mode=lobby` link with no room makes the opener an accidental host (a correct invite link always carries the room); P6 fires two `/api/me` on login and shows the 409 "migration skipped" as a red error; `tournSize` defaults to 8 rather than null. Cheap to tidy in a polish pass.
