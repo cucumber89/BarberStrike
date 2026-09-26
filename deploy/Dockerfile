@@ -22,6 +22,11 @@
 FROM node:22-alpine AS deps
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
+# better-sqlite3 (accounts store, drop V) is a native module and Alpine is musl, so there is no
+# prebuilt binary to download: pnpm compiles it from source with node-gyp, which needs python3 and a
+# C/C++ toolchain. This lives in the deps/build stages only; the runtime image copies the compiled
+# node_modules and carries none of it.
+RUN apk add --no-cache python3 make g++
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/server/package.json apps/server/
@@ -58,12 +63,18 @@ ENV PORT=2567
 # Serwer sam szuka klienta obok siebie, ale w obrazie układ katalogów jest inny niż w repo,
 # więc wskazujemy go wprost — inaczej wystartuje bez strony i "/" zwróci 404.
 ENV BS_CLIENT_DIR=/app/client
+# Accounts SQLite (drop V) lives on the mounted volume `accounts_data:/data` so it survives a
+# redeploy; without the override it would land in /app and be lost every `up --build`.
+ENV ACCOUNTS_DB=/data/accounts.db
 WORKDIR /app
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=prod-deps /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=prod-deps /app/apps/server/package.json ./apps/server/package.json
 COPY --from=build /app/apps/server/dist ./apps/server/dist
 COPY --from=build /app/apps/client/dist ./client
+# The accounts DB dir must be writable by the unprivileged runtime user. Creating it here (owned by
+# `node`) means a fresh named volume inherits that ownership on first mount.
+RUN mkdir -p /data && chown node:node /data
 USER node
 EXPOSE 2567
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \

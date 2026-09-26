@@ -23,5 +23,8 @@
     "check:weapons": "node apps/client/e2e/tools/weapon-parts.mjs",
     "host": "pnpm --filter @frankibarber/client build && pnpm --filter @frankibarber/server dev",
     "shots:builds": "cd apps/client && node e2e/tools/body-shots.mjs"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3"]
   }
 }
