@@ -1,6 +1,6 @@
 import { DEFAULT_BINDINGS, type KeyBindings } from "./game/input/InputState";
 
-export type QualityPreset = "low" | "medium" | "high" | "ultra";
+export type QualityPreset = "minimal" | "low" | "medium" | "high" | "ultra";
 
 /**
  * The choice a player is actually offered (the brief's four): Automatic, Performance, Balanced,
@@ -138,6 +138,12 @@ export interface Settings {
 const KEY = "fb_settings_v1";
 
 export const PRESETS: Record<QualityPreset, Settings["graphics"]> = {
+  // MINIMAL (drop V, P8c): the floor for a machine `DeviceProbe` calls WEAK. Everything the "low"
+  // preset already turns off stays off, and the two remaining levers are pushed past it — the render
+  // buffer is halved (0.5, quarter the pixels of full) and effect density drops to 0.2 — so a weak
+  // GPU draws far fewer triangles and issues fewer draw calls than it would at "low". Not offered as
+  // a manual button (QUALITY_MODES lists four): it is reached automatically via WEAK→minimal.
+  minimal: { preset: "minimal", auto: false, renderer: "webgl2", brightness: 1, targetFps: 60, renderScale: 0.5, shadows: "off", postProcessing: false, effects: 0.2, antialiasing: false, dynamicResolution: true, importedModels: false },
   low: { preset: "low", auto: false, renderer: "webgl2", brightness: 1, targetFps: 60, renderScale: 0.75, shadows: "off", postProcessing: false, effects: 0.4, antialiasing: false, dynamicResolution: true, importedModels: false },
   medium: { preset: "medium", auto: false, renderer: "webgl2", brightness: 1, targetFps: 60, renderScale: 1.0, shadows: "medium", postProcessing: true, effects: 0.7, antialiasing: true, dynamicResolution: true, importedModels: true },
   high: { preset: "high", auto: false, renderer: "webgl2", brightness: 1, targetFps: 60, renderScale: 1.0, shadows: "high", postProcessing: true, effects: 1.0, antialiasing: true, dynamicResolution: true, importedModels: true },
@@ -165,7 +171,7 @@ const bool = (v: unknown, fallback: boolean): boolean => (typeof v === "boolean"
 
 export function repairGraphics(input: unknown, fallback = PRESETS.medium): Settings["graphics"] {
   const g = (input && typeof input === "object" ? input : {}) as Partial<Settings["graphics"]>;
-  const preset = g.preset === "low" || g.preset === "medium" || g.preset === "high" || g.preset === "ultra" ? g.preset : fallback.preset;
+  const preset = g.preset === "minimal" || g.preset === "low" || g.preset === "medium" || g.preset === "high" || g.preset === "ultra" ? g.preset : fallback.preset;
   const base = g.preset === preset ? PRESETS[preset] : fallback;
   return {
     preset,
@@ -193,9 +199,10 @@ export function applyQualityMode(g: Settings["graphics"], mode: QualityMode): Se
   return { ...applyQualityPreset(g, mode), auto: false };
 }
 
-/** Which of the four buttons is lit. */
+/** Which of the four buttons is lit. `minimal` has no button of its own, so it lights PŁYNNOŚĆ (low). */
 export function qualityMode(g: Settings["graphics"]): QualityMode {
-  return g.auto ? "auto" : g.preset;
+  if (g.auto) return "auto";
+  return g.preset === "minimal" ? "low" : g.preset;
 }
 
 /** Personal display preferences do not make a quality preset custom. */

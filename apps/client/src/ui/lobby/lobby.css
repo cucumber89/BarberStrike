@@ -1,0 +1,44 @@
+/* Tournament waiting-room (drop V, P5). Leans on the menu's own tokens (menu.css) so it reads as
+   one screen: the same block cards, the same buttons, the same rules. */
+
+.lobby { display: flex; flex-direction: column; gap: 16px; padding: 20px 24px; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+.lobby-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.lobby-sub { display: block; font-size: 12px; letter-spacing: 0.06em; opacity: 0.7; margin-top: 4px; }
+
+.lobby-grid2 { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(340px, 1.3fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { .lobby-grid2 { grid-template-columns: 1fr; } }
+
+.lobby-col { display: flex; flex-direction: column; gap: 16px; }
+
+.lobby-roster { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+.lobby-entrant { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; background: rgba(255,255,255,0.02); }
+.lobby-entrant.ready { border-color: rgba(120, 220, 140, 0.5); background: rgba(120, 220, 140, 0.06); }
+.lobby-entrant.gone { opacity: 0.5; }
+.lobby-entrant.me b { color: var(--mm-accent, #e8c17a); }
+.lobby-entrant b { font-weight: 600; }
+.lobby-tag { font-size: 10px; letter-spacing: 0.08em; opacity: 0.65; }
+.lobby-entrant.ready .lobby-tag { color: #8fe0a2; opacity: 1; }
+
+.lobby-controls { display: flex; flex-direction: column; gap: 8px; }
+.lobby-controls .mm-btn.on { border-color: rgba(120, 220, 140, 0.6); }
+
+.lobby-invite input { width: 100%; font-family: var(--mono, monospace); font-size: 12px; }
+
+.lobby-matches { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.lobby-match { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; }
+.lobby-match.live { border-color: rgba(230, 120, 120, 0.5); }
+.lobby-match b { font-weight: 600; }
+
+.lobby-chat-block { display: flex; flex-direction: column; }
+.lobby-chat { min-height: 120px; max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding: 8px; border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; background: rgba(0,0,0,0.2); margin-bottom: 8px; }
+.lobby-chat-line { font-size: 13px; line-height: 1.4; word-break: break-word; }
+.lobby-chat-name { font-weight: 600; opacity: 0.85; }
+.lobby-chat-text { opacity: 0.95; }
+
+.lobby-empty { opacity: 0.5; font-size: 13px; padding: 8px 0; }
+
+.row.tight { display: flex; gap: 8px; align-items: center; }
+.row.tight input { flex: 1 1 auto; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }

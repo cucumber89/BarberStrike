@@ -5,8 +5,11 @@ import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { GAME_VERSION, MAX_PLAYERS, modeCapacity, openPlayerCap } from "@frankibarber/shared";
 import { TdmRoom } from "./rooms/TdmRoom";
+import { TournamentLobbyRoom } from "./rooms/TournamentLobbyRoom";
 import { clientDir, hostBanner, serveClient, spaFallback } from "./hosting";
 import { tickStats } from "./stats";
+import { accountRoutes } from "./accounts/routes";
+import { openDb } from "./accounts/db";
 
 const PORT = Number(process.env.PORT ?? 2567);
 const origins = (process.env.CORS_ORIGIN ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -50,6 +53,12 @@ app.get("/rooms", async (_req, res) => {
   }
 });
 
+// Accounts REST (drop V / H, P4): auth + persistence on the existing Express server, off the game
+// loop (L6). Mounted under `/api` BEFORE the SPA fallback so its routes answer with JSON instead of
+// the client's index.html. `openDb` migrates the six-table SQLite file on first use.
+openDb();
+app.use("/api", accountRoutes());
+
 /**
  * Player-hosted games (2.0): serve the built client from this very process when it is there.
  *
@@ -73,6 +82,10 @@ const gameServer = new Server({
 // Rooms match on name AND mode (drop 4) AND map (drop G): a quick-play into "ffa" never lands in
 // someone's TDM, and a quick-play onto GÓRA never lands in a Night District room.
 gameServer.define("tdm", TdmRoom).filterBy(["room", "mode", "map"]);
+
+// The tournament waiting-room (drop V, D1): a light coordinator with no game tick. It raises `tdm`
+// duels as arenas server-side and dirigates the bracket; the arenas above are what actually play.
+gameServer.define("tournament-lobby", TournamentLobbyRoom);
 
 gameServer.listen(PORT).then(() => {
   console.log(`[BARBERSTRIKE ${GAME_VERSION}] listening on :${PORT}`);

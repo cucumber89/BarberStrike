@@ -4,13 +4,30 @@
  * `wallet`, `plan`, `chat`, `hint`; §8.7). The pre-drop scenario below moved here from
  * `hudStates.tsx`; the seeded ones follow §5.2. P3 (wave 2) wrote the pins at the end.
  */
-import { BOMB, MatchPhase, NIGHT_DISTRICT, planOffer } from "@frankibarber/shared";
+import { BOMB, MARK, MatchPhase, NIGHT_DISTRICT, planOffer, sitesOf } from "@frankibarber/shared";
+import type { HudMark } from "../game/store";
 import {
   MATES, S, T, bombData, bombFreeze, bombMatchEnds, bombState, chatLines, kit, radarFor, roster, type PinSet, type Scenario,
 } from "./fixtures";
 
 /** `radar-rim-pins`: the attack near its spawn, the sites out of range; mates[0] is p1, the carrier. */
 const RIM_RADAR = radarFor(NIGHT_DISTRICT, 0, 0.05, { mates: MATES });
+/**
+ * Three team marks on it: Kasia's „go” ▼ on site A and Tomek's „spot” ! behind me — both far
+ * beyond the radar's 24 m, so both pinned one pin inside the rim (`markPin`), under A's rim
+ * letter, not on it — and my own ▼ 10 m ahead, in range, drawn in place.
+ */
+const RIM_MARKS: HudMark[] = (() => {
+  const { x, z, yaw } = RIM_RADAR, siteA = sitesOf(NIGHT_DISTRICT)[0];
+  const fx = Math.sin(yaw), fz = Math.cos(yaw);
+  const mk = (key: number, id: string, name: string, kind: HudMark["kind"], mx: number, mz: number): HudMark =>
+    ({ key, id, name, team: 0, x: mx, y: 0, z: mz, kind, at: T - 1_500, until: T - 1_500 + (kind === "spot" ? MARK.spotTtlMs : MARK.ttlMs) });
+  return [
+    mk(1, "p1", "Kasia_Brzytwa", "go", siteA.x, siteA.z),
+    mk(2, "p2", "Młody_Tomek", "spot", x - fx * 40 + fz * 12, z - fz * 40 - fx * 12),
+    mk(3, "me", "Kowal", "go", x + fx * 10, z + fz * 10),
+  ];
+})();
 
 export const scenarios: Scenario[] = [
   // ---- moved verbatim from the pre-drop gallery
@@ -61,12 +78,13 @@ export const scenarios: Scenario[] = [
   },
   {
     id: "radar-rim-pins", n: 48, maxWords: 24, isNew: true,
-    moment: "Bomb, runda 5 trwa: 14 s po starcie, jeszcze przy spawnie ataku — A i B poza zasięgiem radaru",
+    moment: "Bomb, runda 5 trwa: 14 s po starcie, jeszcze przy spawnie ataku — A i B poza zasięgiem radaru, znaczniki drużyny na A i za plecami na krawędzi",
     // The bomb is where its carrier is (`stepBomb` writes the carrier's x and z into it every
     // step): the attack's radar shows the C4 under Kasia's dot.
     state: bombState(bombData({ stage: "carried", carrier: "p1", roundEndsAt: S + 101_000, x: RIM_RADAR.mates[0].x, z: RIM_RADAR.mates[0].z }), {
       phase: MatchPhase.Playing, phaseEndsAt: S + 101_000, matchEndsAt: bombMatchEnds(4, BOMB.buyMs + 14_000), scoreA: 3, scoreB: 1, buyWindowLeft: 0,
       players: roster({ f: 0.34 }), health: 100, armor: 100, ...kit("rifle"), owned: ["pistol", "rifle"], money: 650,
+      marks: RIM_MARKS,
     }),
     radar: RIM_RADAR,
   },
@@ -114,7 +132,8 @@ export const pins: PinSet = {
     textAbsent: [...noEnglish("plan", "chat"), { text: "SPRZEDAŻ", zone: "wallet" }],
     zoneWords: { wallet: 4, plan: 24 },
   },
-  // §5.2 #48: one instrument — the compass strip is gone; the letters are on the canvas (canvasMin).
+  // §5.2 #48: one instrument — the compass strip is gone; the letters are on the canvas (canvasMin),
+  // the far team marks among them (▼ on A, ! behind: pinned inside the rim — see the PNG).
   "radar-rim-pins": { expect: ["[data-testid=minimap] canvas.radar"], absent: [".compass", "[data-testid=minimap] canvas + canvas"] },
   // §5.3: the attack sees the dropped bomb on the radar (a canvas icon; see the PNG).
   "bomb-dropped": { expect: ["[data-testid=minimap] canvas.radar", "[data-testid=money]"] },

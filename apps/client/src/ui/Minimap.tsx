@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { sitesOf, TEAM_COLORS, type MapDef } from "@frankibarber/shared";
 import type { RadarSnapshot } from "../game/Game";
 import { hud, type HudState } from "../game/store";
-import { MINIMAP, RADAR_LAYERS, radarBomb, radarOffsetTo, rimPin, toMap, type RadarLayer } from "./minimapGeometry";
+import { MINIMAP, RADAR_LAYERS, radarBomb, markPin, radarOffsetTo, rimPin, toMap, type RadarLayer } from "./minimapGeometry";
 
 /**
  * The radar (drop 5; drop U P3, docs/UI_U_SPEC.md §7 P3 WORK 1). The map is a pre-rendered
@@ -14,7 +14,7 @@ import { MINIMAP, RADAR_LAYERS, radarBomb, radarOffsetTo, rimPin, toMap, type Ra
  *
  * Drop U, as CS2 draws it: ONE instrument. The 240×20 compass strip is gone; „N” and every
  * objective beyond the radar's range (a site, a flag, the bomb) sit on the rim in their own
- * direction (`rimPin`). Every letter is 14 px — it was 10–13 — and is drawn in CSS pixels on a
+ * direction (`rimPin`); so does every team mark beyond it (`markPin`), one pin inside the rim. Every letter is 14 px — it was 10–13 — and is drawn in CSS pixels on a
  * backing store sized to the box (`--hud-radar`, 144–176 px) times the device pixel ratio, so
  * 14 px on the canvas is 14 px on the screen. The area off the map is the HUD's plate at 60 %,
  * not a black hole. The bomb is the C4 icon (`radarBomb`, §5.3): planted, for everyone, at its
@@ -163,7 +163,7 @@ export function Minimap({ radar }: Props) {
      * Out of range a pin sits one pin inside the rim, so it never covers a site's letter.
      */
     const bomb = (x: number, z: number, kind: "planted" | "dropped" | "carried") => {
-      if (kind === "carried") { if (!inside(x, z, half - 10)) return; } else pinned(x, z, 20);
+      if (kind === "carried") { if (!inside(x, z, half - 10)) return; } else pinned(x, z, MINIMAP.pinStep);
       const px = half + off[0], py = half + off[1];
       const body = kind === "planted" ? C.tx : C.warn;
       ctx.beginPath(); ctx.arc(px, py, 10, 0, Math.PI * 2); ctx.fillStyle = C.shadow; ctx.fill();
@@ -172,7 +172,19 @@ export function Minimap({ radar }: Props) {
       ctx.strokeStyle = body; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(px + 5, py - 4); ctx.lineTo(px + 7, py - 8); ctx.stroke();
     };
-    /** A mark or a station: a letter where it is, only within range. */
+    /**
+     * A team mark (▼ go, ! spot): in range, the bare letter where it is, as before; beyond, the
+     * letter on a dark disc pinned one pin inside the rim in its own direction (`markPin`) — a
+     * mark reaches 60 m, and without the compass strip a far one was otherwise drawn nowhere.
+     */
+    const mark = (x: number, z: number, text: string, color: string) => {
+      radarOffsetTo(off, view.x, view.z, view.cos, view.sin, x, z, pxPerM);
+      const onRim = markPin(off, off[0], off[1], half);
+      const px = half + off[0], py = half + off[1];
+      if (onRim) { ctx.beginPath(); ctx.arc(px, py, 9, 0, Math.PI * 2); ctx.fillStyle = C.shadow; ctx.fill(); }
+      letter(text, px, py + (onRim ? 0.5 : 0), color);
+    };
+    /** A station: a letter where it is, only within range. */
     const glyph = (x: number, z: number, text: string, color: string) => {
       if (!inside(x, z, half - 10)) return;
       letter(text, half + off[0], half + off[1], color);
@@ -201,7 +213,7 @@ export function Minimap({ radar }: Props) {
           objective(def.x, def.z, f.id, f.contested ? C.contested : color, color);
         });
       },
-      marks: () => { for (const m of st.marks) glyph(m.x, m.z, m.kind === "spot" ? "!" : "▼", m.kind === "spot" ? C.danger : TEAM_COLORS[m.team]); },
+      marks: () => { for (const m of st.marks) mark(m.x, m.z, m.kind === "spot" ? "!" : "▼", m.kind === "spot" ? C.danger : TEAM_COLORS[m.team]); },
       enemies: () => { for (const e of r.spotted) dot(e.x, e.z, C.danger, 4.5); },
       mates: () => {
         const mine = TEAM_COLORS[st.myTeam];

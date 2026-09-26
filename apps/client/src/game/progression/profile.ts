@@ -6,6 +6,7 @@ import {
 import { DEFAULT_BUILD, isBuildId } from "@frankibarber/shared";
 import { DEFAULT_OUTFIT, DROPPABLE_OUTFITS, isOutfitId, outfitDef, type OutfitDef, type OutfitRarity } from "@frankibarber/shared";
 import { WEAPON_ORDER, encodeCosmetics, type WeaponId } from "@frankibarber/shared";
+import type { TournamentRecord } from "@frankibarber/shared";
 import { catalog, fitsWeapon, skinById, type SkinInstance } from "@frankibarber/skins";
 
 /**
@@ -53,9 +54,14 @@ export interface Profile {
   crateCuts: string[];
   challengeClaims: string[];
   challengeBase: { matches: number; kills: number; headshots: number };
+  /**
+   * Drop V (D7): the tournaments this profile has finished — history for the trophy shelf. Cosmetic
+   * (L1). Written by P7; older profiles migrate to an empty list. Not a Colyseus schema field.
+   */
+  tournaments: TournamentRecord[];
 }
 
-export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT, build: DEFAULT_BUILD, outfit: DEFAULT_OUTFIT, fits: [], skins: [], equip: {}, crates: 0, crateDay: "", crateCuts: [], challengeClaims: [], challengeBase: { matches: 0, kills: 0, headshots: 0 } });
+export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT, build: DEFAULT_BUILD, outfit: DEFAULT_OUTFIT, fits: [], skins: [], equip: {}, crates: 0, crateDay: "", crateCuts: [], challengeClaims: [], challengeBase: { matches: 0, kills: 0, headshots: 0 }, tournaments: [] });
 
 /**
  * Reads the profile, repairing anything the shape has outgrown.
@@ -94,6 +100,13 @@ export function loadProfile(): Profile {
       crateCuts: Array.isArray(p.crateCuts) ? p.crateCuts.filter(id => typeof id === "string" && isHaircutId(id)) : [],
       challengeClaims: Array.isArray(p.challengeClaims) ? p.challengeClaims.filter(id => typeof id === "string") : [],
       challengeBase: { matches: Number(p.challengeBase?.matches) || 0, kills: Number(p.challengeBase?.kills) || 0, headshots: Number(p.challengeBase?.headshots) || 0 },
+      // Drop V (D7): a profile written before tournaments existed gets an empty shelf; each record is
+      // validated so an edited blob cannot poison the trophy list.
+      tournaments: Array.isArray(p.tournaments)
+        ? p.tournaments.filter((t): t is TournamentRecord =>
+            !!t && typeof t === "object" && typeof t.id === "string" && typeof t.winner === "string"
+            && Number.isFinite(t.endedAt) && Number.isFinite(t.size))
+        : [],
       xp: Number.isFinite(p.xp) ? Math.max(0, Math.floor(p.xp as number)) : 0,
       life,
       badges: Array.isArray(p.badges) ? p.badges.filter((b) => known.has(b)) : [],
@@ -113,8 +126,42 @@ export function loadProfile(): Profile {
   }
 }
 
+/**
+ * Drop V (P6): the one save chokepoint branches on who is signed in.
+ *
+ * localStorage is written EVERY time, signed in or not — it stays the fast local source of truth and
+ * the offline fallback. When an account is signed in, the same blob is ALSO pushed to the server, but
+ * debounced: a match end can call `saveProfile` several times in a tick, and the cloud does not need
+ * every intermediate — only the last state, a beat later. A guest never touches the network.
+ *
+ * The branch is injected rather than imported so this module keeps no dependency on the net layer (it
+ * runs in the match hot path and in node tests). `App`/`Account` call `setProfileSync` on boot to
+ * wire the real "am I signed in?" check and the real `PUT /api/profile`.
+ */
+type ProfileSync = { isLoggedIn: () => boolean; push: (p: Profile) => void };
+let profileSync: ProfileSync | null = null;
+
+/** Wires the server-sync branch of `saveProfile`. Called once on client boot; no-op in tests. */
+export function setProfileSync(sync: ProfileSync | null): void {
+  profileSync = sync;
+}
+
 export function saveProfile(p: Profile): void {
   try { localStorage.setItem(KEY, JSON.stringify(p)); } catch { /* private mode, quota: play anyway */ }
+  // Signed in → also debounce the same blob up to the cloud. Guest → localStorage only (above).
+  try { if (profileSync?.isLoggedIn()) profileSync.push(p); } catch { /* a failed cloud save must never cost the local one */ }
+}
+
+/**
+ * Adopts a profile the server handed back (on sign-in) as the local source of truth.
+ *
+ * Runs it through `loadProfile`'s repair path first — the same defaulting every read gets — so a blob
+ * from an older or newer build cannot poison the wardrobe, then writes it locally. Does NOT push back
+ * up (it just came from there); it writes localStorage directly to avoid a needless echo PUT.
+ */
+export function mergeServerProfile(server: Profile): Profile {
+  try { localStorage.setItem(KEY, JSON.stringify(server)); } catch { /* private mode: adopt in memory only */ }
+  return loadProfile();
 }
 
 /** What the summary screen shows after a match. */

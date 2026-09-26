@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import type { ShopItemId } from "@frankibarber/shared";
+import { isWeaponId, type ShopItemId, type WeaponId } from "@frankibarber/shared";
 
 /**
  * Flat silhouettes. Each one is drawn on a 64 × 28 sheet, but its `viewBox` is the drawing's own
@@ -7,38 +7,169 @@ import type { ShopItemId } from "@frankibarber/shared";
  * covers 26 × 21 units of a 64 × 28 sheet showed as a thumbnail in a slot that was three times its
  * width, so the "large silhouette" the row promises was mostly margin. Same aspect handling as
  * before (`xMidYMid meet`), so nothing is stretched.
+ *
+ * The FOURTEEN weapons are the exception: their tiles carry a rendered three-quarter PNG
+ * (`assets/weapons/<id>.png`, built by `e2e/tools/weapon-icons.mjs` from the real procedural
+ * geometry) instead of an inline `<path>`, so the shop shows the actual gun. Grenades, gear and
+ * perks keep the flat SVG silhouettes below — they were never the placeholders P8a set out to fix.
  */
-const box = (x: number, y: number, w: number, h: number) =>
-  ({ viewBox: `${x - 1} ${y - 1} ${w + 2} ${h + 2}`, fill: "currentColor", "aria-hidden": true }) as const;
+// Every weapon portrait, resolved to its bundled URL at build time (Vite `import.meta.glob`).
+// Keyed by weapon id so a tile picks its own PNG without fourteen literal imports.
+const WEAPON_PNG = import.meta.glob<string>("../assets/weapons/*.png", { eager: true, query: "?url", import: "default" });
+const weaponPngUrl = (id: WeaponId): string | undefined => WEAPON_PNG[`../assets/weapons/${id}.png`];
 
-const Pistol = (): ReactElement => <svg {...box(6, 7, 50, 20)}><path d="M8 7h35v5H30v4H19l-2 11H9l3-12H6V9h2zm35 2h13v3H43zM20 16h8l-3 4h-6z" /></svg>;
-const Revolver = (): ReactElement => <svg {...box(6, 6, 51, 21)}><path d="M6 9h13V7h12l5 3h21v4H36l-5 3h-7l-4 10h-8l5-12H6z" /><circle cx="27" cy="12" r="6" /></svg>;
-const MachinePistol = (): ReactElement => <svg {...box(7, 6, 50, 21)}><path d="M7 6h36v9H29l-2 12h-8l2-12H11v4H7zm36 3h14v4H43zM33 15h7l4 12h-8z" /><path d="M48 6h3v3h-3zm5 0h3v3h-3z" /></svg>;
-const Smg = (): ReactElement => <svg {...box(3, 3, 58, 24)}><path d="M3 9h9l8-6h5v5h27v8H31l-3 11h-8l2-11H13L3 21zm49 2h9v3h-9zM35 16h7v7h-7z" /></svg>;
-const Smg2 = (): ReactElement => <svg {...box(4, 3, 57, 24)}><path d="M4 10h9l9-7h4v6h27v7H34l4 11h-8l-6-11H13L4 21zm49-2h8v9h-8zM8 12h12v2H8z" /></svg>;
-const Carbine = (): ReactElement => <svg {...box(2, 7, 60, 20)}><path d="M4 7h20l7 3h22v7H30l-7-3H10l-5 7H2V9zM53 11h9v3h-9zM14 14h7l3 13h-8zM31 17h7l-2 8h-7z" /></svg>;
-const Rifle = (): ReactElement => <svg {...box(2, 3, 61, 24)}><path d="M2 9h10l9-6h6v5h27v8H32l-4 11h-8l3-11H13L2 21zm52 2h9v3h-9zM36 16h8l4 11h-9zM29 5h18v2H29z" /></svg>;
-const Lmg = (): ReactElement => <svg {...box(2, 3, 61, 24)}><path d="M2 8h12l8-5h7v4h27v9H32l-4 11h-8l3-11H13L2 20zm54 3h7v4h-7zM34 15h15v12H34zM28 3h21v3H28z" /></svg>;
-const Shotgun = (): ReactElement => <svg {...box(2, 4, 60, 23)}><path d="M2 10h15l8-6h7v5h30v4H34v6h-9l-5 8h-9l7-11H2zM31 15h31v3H31zM37 13h12v7H37z" /></svg>;
-const AutoShotgun = (): ReactElement => <svg {...box(2, 3, 60, 24)}><path d="M2 8h17l8-5h8v4h27v5H36v7H26l-5 8h-9l7-11H2zm34 6h26v3H36zM38 4h17v3H38zM30 18h7l3 9h-8z" /></svg>;
-const Dmr = (): ReactElement => <svg {...box(2, 2, 60, 25)}><path d="M2 10h14l9-6h7v5h30v4H37l-6 6h-9l-7 8H5l10-12H2zm25-8h22v4H27zm15 13h8l3 12h-9z" /></svg>;
-const Sniper = (): ReactElement => <svg {...box(1, 2, 61, 25)}><path d="M1 11h16l9-5h36v4H35v6H24l-8 11H5l10-13H1zm24-9h25v4H25zm22 1h7v2h-7zM39 16h7l3 11h-8zM52 14h2l4 9h-3z" /></svg>;
-const Launcher = (): ReactElement => <svg {...box(4, 3, 58, 24)}><path d="M4 6h47l8 4v9l-8 3H4zM51 8h11v12H51zM16 21h9l-4 6H12zm18 0h7v6h-7zM8 3h21v3H8z" /></svg>;
-const Clippers = (): ReactElement => <svg {...box(12, 1, 40, 26)}><path d="M19 8h27v19H19zM15 3h35v7H15zM16 1h4v5h4V1h4v5h4V1h4v5h4V1h4v5h4V1h4v8H12V6h4zM25 13h15v3H25z" /></svg>;
+/**
+ * The shop/HUD icon for any item, tagged `shop-icon-<id>` (the e2e contract, §8). A weapon renders
+ * its rendered PNG portrait; everything else renders its flat SVG silhouette. One component so the
+ * shop, the kill feed, the inventory strip and the death card all draw an item the same way.
+ */
+export function ShopIcon({ id, className }: { id: ShopItemId; className?: string }): ReactElement {
+  const url = isWeaponId(id) ? weaponPngUrl(id) : undefined;
+  if (url) return <img className={className} src={url} alt="" aria-hidden="true" draggable={false} data-testid={`shop-icon-${id}`} />;
+  const Draw = SHOP_ART[id];
+  return <span className={className} data-testid={`shop-icon-${id}`}>{Draw ? <Draw /> : null}</span>;
+}
 
-const Frag = (): ReactElement => <svg {...box(13, 1, 26, 21)}><path d="M18 6h13l4 5-3 11H17l-4-11zm4-5h8v5h-8zm8 1h9v3h-9z" /></svg>;
-const Molotov = (): ReactElement => <svg {...box(14, 2, 25, 20)}><path d="M20 2h9v6l5 6v8H14v-8l6-6zm11 0 8 3-5 5z" /></svg>;
-const Knife = (): ReactElement => <svg {...box(3, 3, 41, 20)}><path d="M3 17h13l21-14 7 2-22 14v4H10v-3H3z" /></svg>;
-const Flash = (): ReactElement => <svg {...box(16, 1, 24, 22)}><path d="M16 6h17v17H16zM20 1h9v5h-9zm11 1h9v3h-9zM19 9h11v2H19zm0 5h11v2H19z" /></svg>;
-const Smoke = (): ReactElement => <svg {...box(15, 1, 26, 22)}><path d="M15 5h18v18H15zM18 1h12v4H18zm15 2h8v3h-8zM18 9h12v3H18zm0 5h12v3H18z" /></svg>;
-const Shell = (): ReactElement => <svg {...box(3, 8, 42, 8)}><path d="M7 9h30l8 3-8 3H7zM3 8h7v8H3z" /></svg>;
+// The weapons: a rendered PNG portrait, NOT an inline `<path>` (P8a criterion — the shop cards must
+// carry the real gun). `weaponImg` builds the same `<img>` for every weapon so a missing PNG is a
+// build error, not fourteen chances to forget one. The image is the item's silhouette wherever
+// `SHOP_ART[id]` is used (shop tile, kill feed, inventory, death card).
+const weaponImg = (id: WeaponId): (() => ReactElement) => {
+  const url = weaponPngUrl(id);
+  const Draw = (): ReactElement => <img className="art-img" src={url} alt="" aria-hidden="true" draggable={false} />;
+  return Draw;
+};
+const Pistol = weaponImg("pistol");
+const Revolver = weaponImg("revolver");
+const MachinePistol = weaponImg("machinepistol");
+const Smg = weaponImg("smg");
+const Smg2 = weaponImg("smg2");
+const Carbine = weaponImg("carbine");
+const Rifle = weaponImg("rifle");
+const Lmg = weaponImg("lmg");
+const Shotgun = weaponImg("shotgun");
+const AutoShotgun = weaponImg("autoshotgun");
+const Dmr = weaponImg("dmr");
+const Sniper = weaponImg("sniper");
+const Launcher = weaponImg("launcher");
+const Clippers = weaponImg("clippers");
 
-const LightPlate = (): ReactElement => <svg {...box(8, 2, 32, 21)}><path d="M13 2h22l5 5-3 16H11L8 7zm2 5v11h18l2-9-3-2z" /></svg>;
-const HeavyPlate = (): ReactElement => <svg {...box(5, 1, 38, 22)}><path d="M9 4h27l4 5-3 14H8L5 9zm6-3h25l3 4-2 4-5-5H14z" /></svg>;
-const Flask = (): ReactElement => <svg {...box(14, 1, 20, 22)}><path d="M19 1h10v6l5 6v10H14V13l5-6zm-1 13v6h12v-6z" /></svg>;
-const Syringe = (): ReactElement => <svg {...box(2, 0, 39, 24)}><path d="M8 16 31 3l5 8-23 13zM31 1l2-1 8 13-3 2zM5 15l5 9H6l-4-7z" /></svg>;
-const EnergyCan = (): ReactElement => <svg {...box(15, 2, 19, 21)}><path d="M15 2h19l-2 21H17zm4 6h10l-5 5h5l-9 7 3-6h-5z" /></svg>;
-const Fade = (): ReactElement => <svg {...box(5, 3, 39, 18)}><path d="M5 5h28v5H5zm4 5h3v5H9zm5 0h3v7h-3zm5 0h3v9h-3zm5 0h3v11h-3zm9-7h11v3H33z" /></svg>;
+/**
+ * Grenades, gear and perks as small COLOURED illustrations on one 48×48 grid, one house palette
+ * (steel + brass + each item's own colour). They replace the flat ivory silhouettes P8a left in
+ * place: a white blob read as nothing at a shop-tile's size, and next to the rendered weapon
+ * portraits it looked unfinished. Two or three tones each is enough to say "bottle", "vest",
+ * "syringe" at a glance; the drop shadow (in `screens.css`) sits them on the tile like the guns.
+ */
+const VB = { viewBox: "0 0 48 48", "aria-hidden": true } as const;
+// House palette, shared with the weapon renderer's material colours where it helps them sit together.
+const C = {
+  steelL: "#cdd4dc", steel: "#9aa3ad", steelD: "#5f666f", dark: "#2b2f36",
+  brass: "#e7b62e", brassD: "#b98a1f", olive: "#77883f", oliveD: "#56602f",
+  glass: "#a7c4d2", amber: "#d68a2c", flame: "#f4a72a", flame2: "#e85f2b",
+  kev: "#3d444e", kevL: "#525b66", red: "#d0555f", green: "#57bd67",
+  white: "#eef2f6", tan: "#c39a63", tanD: "#8f6f45", lens: "#5fa7c8",
+};
+
+const Frag = (): ReactElement => (
+  <svg {...VB}>
+    <ellipse cx="24" cy="31" rx="11" ry="13" fill={C.olive} />
+    <path d="M13 27h22M13 34h22M24 18v26M18 19v24M30 19v24" stroke={C.oliveD} strokeWidth="1.6" />
+    <rect x="19" y="12" width="10" height="8" rx="1.5" fill={C.steel} />
+    <rect x="19" y="12" width="10" height="3" fill={C.steelL} />
+    <path d="M29 14q10 1 7 13" fill="none" stroke={C.steelD} strokeWidth="3" strokeLinecap="round" />
+    <circle cx="15" cy="14" r="4" fill="none" stroke={C.brass} strokeWidth="2.4" />
+  </svg>
+);
+const Molotov = (): ReactElement => (
+  <svg {...VB}>
+    <path d="M18 20h12v4l3 5v13a3 3 0 0 1-3 3H18a3 3 0 0 1-3-3V29l3-5z" fill={C.glass} />
+    <path d="M15 33h18v11a3 3 0 0 1-3 3H18a3 3 0 0 1-3-3z" fill={C.amber} />
+    <rect x="19" y="15" width="10" height="6" rx="1" fill={C.steelL} />
+    <path d="M22 15c-1-5 3-6 2-11 4 3 5 7 2 11z" fill={C.flame} />
+    <path d="M23 11c0-3 1-4 1-6 2 2 2 4 1 6z" fill={C.flame2} />
+  </svg>
+);
+const Knife = (): ReactElement => (
+  <svg {...VB}>
+    <path d="M8 34 34 8l5 2-24 26z" fill={C.steelL} />
+    <path d="M8 34 34 8l2 1-25 26z" fill={C.white} />
+    <rect x="6" y="31" width="12" height="7" rx="2" transform="rotate(-3 12 34)" fill={C.dark} />
+    <rect x="16" y="30" width="4" height="8" rx="1.5" transform="rotate(-45 18 34)" fill={C.brass} />
+  </svg>
+);
+const Flash = (): ReactElement => (
+  <svg {...VB}>
+    <rect x="17" y="18" width="14" height="26" rx="3" fill={C.steel} />
+    <rect x="17" y="18" width="5" height="26" rx="3" fill={C.steelL} />
+    <rect x="19" y="13" width="10" height="6" rx="1.5" fill={C.steelD} />
+    <path d="M24 2 27 12h-6zM8 16l9 3-8 4zM40 16l-9 3 8 4z" fill={C.brass} />
+    <circle cx="24" cy="30" r="4" fill={C.white} />
+  </svg>
+);
+const Smoke = (): ReactElement => (
+  <svg {...VB}>
+    <rect x="17" y="20" width="14" height="24" rx="3" fill={C.oliveD} />
+    <rect x="17" y="20" width="5" height="24" rx="3" fill={C.olive} />
+    <rect x="19" y="15" width="10" height="6" rx="1.5" fill={C.steel} />
+    <circle cx="16" cy="12" r="5" fill={C.steelL} opacity=".85" />
+    <circle cx="26" cy="9" r="6" fill={C.steel} opacity=".8" />
+    <circle cx="34" cy="13" r="4.5" fill={C.steelL} opacity=".85" />
+  </svg>
+);
+const Shell = (): ReactElement => (
+  <svg {...VB}>
+    <path d="M22 14c7 0 12 4 12 10s-5 10-12 10z" fill={C.steelL} />
+    <rect x="12" y="17" width="12" height="14" rx="2" fill={C.brass} />
+    <rect x="10" y="16" width="4" height="16" rx="1.5" fill={C.brassD} />
+    <path d="M24 19h9M24 24h11M24 29h9" stroke={C.steel} strokeWidth="1.4" />
+  </svg>
+);
+const plate = (heavy: boolean): (() => ReactElement) => () => (
+  <svg {...VB}>
+    <path d="M24 10 38 14v11c0 8-6 12-14 15-8-3-14-7-14-15V14z" fill={C.kev} />
+    <path d="M24 10 38 14v3l-14-4-14 4v-3z" fill={C.kevL} />
+    <path d="M24 15v25" stroke={C.kevL} strokeWidth="1.4" />
+    {heavy && <path d="M15 20h18M15 27h18" stroke={C.kevL} strokeWidth="1.6" />}
+    <rect x="21" y="20" width="6" height="8" rx="1" fill={C.brass} />
+  </svg>
+);
+const LightPlate = plate(false);
+const HeavyPlate = plate(true);
+const Flask = (): ReactElement => (
+  <svg {...VB}>
+    <path d="M20 10h8v9l7 13a5 5 0 0 1-4.5 8H17.5a5 5 0 0 1-4.5-8l7-13z" fill={C.glass} />
+    <path d="M14 30h20l1.5 3a5 5 0 0 1-4.5 7H17a5 5 0 0 1-4.5-7z" fill={C.green} />
+    <rect x="19" y="7" width="10" height="5" rx="1.5" fill={C.brass} />
+    <circle cx="21" cy="35" r="1.8" fill={C.white} opacity=".8" />
+    <circle cx="27" cy="38" r="1.3" fill={C.white} opacity=".8" />
+  </svg>
+);
+const Syringe = (): ReactElement => (
+  <svg {...VB}>
+    <rect x="10" y="18" width="24" height="10" rx="2" transform="rotate(-30 22 23)" fill={C.steelL} />
+    <rect x="10" y="18" width="12" height="10" rx="2" transform="rotate(-30 22 23)" fill={C.amber} />
+    <path d="M33 9 42 15" stroke={C.steel} strokeWidth="3" strokeLinecap="round" />
+    <path d="M6 27 12 31" stroke={C.steelD} strokeWidth="3" strokeLinecap="round" />
+    <path d="M39 6l4 3" stroke={C.steelD} strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+const EnergyCan = (): ReactElement => (
+  <svg {...VB}>
+    <rect x="16" y="10" width="16" height="30" rx="3" fill={C.steelL} />
+    <rect x="16" y="10" width="5" height="30" rx="3" fill={C.white} />
+    <rect x="16" y="20" width="16" height="10" fill={C.red} />
+    <path d="M25 21l-5 6h4l-2 5 6-7h-4z" fill={C.brass} />
+    <rect x="18" y="8" width="12" height="3" rx="1" fill={C.steelD} />
+  </svg>
+);
+const Fade = (): ReactElement => (
+  <svg {...VB}>
+    <path d="M24 8 39 13v10c0 9-6 14-15 18-9-4-15-9-15-18V13z" fill={C.lens} />
+    <path d="M24 8 39 13v10c0 9-6 14-15 18z" fill={C.steel} opacity=".55" />
+    <path d="M24 15l7 8-7 8-7-8z" fill={C.white} opacity=".85" />
+  </svg>
+);
 
 export const SHOP_ART: Record<ShopItemId, () => ReactElement> = {
   pistol: Pistol, revolver: Revolver, machinepistol: MachinePistol,

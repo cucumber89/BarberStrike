@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bracketString, champion, currentMatch, isDone, isTournament, parseBracket, reportWinner,
-  roundName, roundsLeft, roundsOf, seedBracket, setScore, withdraw, type Bracket, type TournamentSize,
+  roundName, roundsLeft, roundsOf, seedBracket, setScore, withdraw, TOURNAMENT_SIZES, type Bracket, type TournamentSize,
 } from "./tournament";
 import { mulberry32 } from "./rng";
 
@@ -191,6 +191,67 @@ describe("the string the clients are sent", () => {
     expect(parseBracket("nonsense")).toBeNull();
     expect(parseBracket("5|0;a|b|0|0|-"), "five is not a bracket size").toBeNull();
     expect(parseBracket("4|0;short")).toBeNull();
+  });
+});
+
+describe("drop V: sixteen and thirty-two on parallel arenas", () => {
+  it("offers all four draw sizes", () => {
+    expect(TOURNAMENT_SIZES).toEqual([4, 8, 16, 32]);
+  });
+
+  it("draws the right number of rounds and matches for 16 and 32", () => {
+    expect(roundsOf(16)).toBe(4);
+    expect(roundsOf(32)).toBe(5);
+    expect(draw(16).matches).toHaveLength(15);
+    expect(draw(32).matches).toHaveLength(31);
+    expect(draw(32).matches.filter((m) => m.round === 0)).toHaveLength(16);
+  });
+
+  it("names the early rounds of a big draw as the fractions they are read with", () => {
+    expect(roundName(4)).toBe("1/8");   // round of sixteen
+    expect(roundName(5)).toBe("1/16");  // round of thirty-two
+    // The three near the end keep their words.
+    expect(roundName(3)).toBe("ĆWIERĆFINAŁ");
+    expect(roundName(2)).toBe("PÓŁFINAŁ");
+    expect(roundName(1)).toBe("FINAŁ");
+    expect(roundsLeft(draw(16)), "sixteen entrants open on the 1/8").toBe(4);
+    expect(roundsLeft(draw(32)), "thirty-two entrants open on the 1/16").toBe(5);
+  });
+
+  it("seeds 20 entrants into a bracket of 32: 32 slots, 12 byes", () => {
+    const b = seedBracket(people(20), 32, mulberry32(7));
+    const firstRound = b.matches.filter((m) => m.round === 0);
+    const slots = firstRound.flatMap((m) => [m.a, m.b]);
+    expect(slots).toHaveLength(32);
+    expect(slots.filter(Boolean)).toHaveLength(20);
+    expect(slots.filter((s) => s === "")).toHaveLength(12); // the byes
+    // Everybody is placed exactly once.
+    expect(slots.filter(Boolean).sort()).toEqual(people(20).map((p) => p.id).sort());
+  });
+
+  it("plays a 32-draw out to a single champion", () => {
+    // The higher entrant NUMBER always wins (a numeric pick, since "p9" > "p31" lexically).
+    const num = (id: string) => Number(id.slice(1));
+    const b = playOut(draw(32), (a, bb) => (num(a) > num(bb) ? a : bb));
+    expect(isDone(b)).toBe(true);
+    expect(champion(b)).toBe("p31");
+  });
+
+  it("round-trips bracketString → parseBracket for 16 and 32", () => {
+    for (const size of [16, 32] as const) {
+      let b = draw(size);
+      b = reportWinner(b, currentMatch(b)!.a, 6, 2);
+      const s = bracketString(b);
+      const view = parseBracket(s)!;
+      expect(view, `size ${size}`).not.toBeNull();
+      expect(view.size).toBe(size);
+      expect(view.at).toBe(b.at);
+      expect(view.matches).toHaveLength(size - 1);
+      expect(view.matches[0].winner).toBe("a");
+      expect(view.matches[0].scoreA).toBe(6);
+      expect(view.matches[0].scoreB).toBe(2);
+      expect(view.matches.filter((m) => m.round === 0)).toHaveLength(size / 2);
+    }
   });
 });
 

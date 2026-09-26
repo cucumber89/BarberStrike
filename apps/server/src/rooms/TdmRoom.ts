@@ -32,6 +32,7 @@ import {
 } from "@frankibarber/shared";
 import { boysClass, isBoysClass, boysHealRate, boysMedicGoal, BOYS_SUPPORT } from "@frankibarber/shared";
 import { FlagState, MatchState, PlayerState } from "../schema";
+import { verifySession } from "../accounts/session";
 import { nextPhase } from "../match";
 import { roomCollisionWorld, sharedWalk } from "./sharedWorld";
 import { recordTick } from "../stats";
@@ -43,6 +44,12 @@ interface HistoryEntry { t: number; x: number; y: number; z: number; crouching: 
 const HISTORY_LEN = 30;
 /** Seconds a dropped (non-consented) client may reconnect before its player is removed. */
 const RECONNECT_GRACE_S = 15;
+/**
+ * Drop V: the longer grace for a tournament arena. A player mid-tournament gets a full minute to come
+ * back before the walkover is final (the lobby, not the arena's `onLeave`, times this out — see
+ * V_SPEC §5). P3 wires `onLeave` to choose between this and `RECONNECT_GRACE_S`; P0 only declares it.
+ */
+const TOURNAMENT_RECONNECT_GRACE_S = 60;
 /** Input `seq` travels back as a uint32 ack (S2C.Ack); anything beyond cannot be acknowledged. */
 const MAX_SEQ = 0xffffffff;
 
@@ -166,6 +173,24 @@ export interface TdmJoinOptions {
   haircut?: string;
   skins?: string;
   /**
+   * Drop V (P3, D4): the tournament context an ARENA carries. When the waiting room raises a
+   * `tdm mode="duel"` arena for a bracket pair it passes the lobby's own room id as `tournamentId`
+   * and the pair's `matchIndex`, plus `pair` — the two ENTRANT ids (the lobby's session ids) the
+   * arena publishes its winner as. These are JOIN OPTIONS, never replicated schema fields: the arena
+   * uses them to choose the 60 s grace and to publish its result on `tourn:<tournamentId>:<matchIndex>`
+   * where the lobby is listening (`TournamentLobbyRoom`), and they never touch `TdmState`.
+   */
+  tournamentId?: string;
+  matchIndex?: number;
+  /** The two entrant ids of this arena's pair, in bracket order (a → team 0, b → team 1). */
+  pair?: [string, string];
+  /**
+   * Drop V (P4/D6): a session token, the account's identity. `verifySession` resolves it locally to
+   * an account id (a valid session sets the identity; a missing or invalid one is a GUEST, no error —
+   * L1). It is a join option, not a replicated field: nothing about the account reaches `TdmState`.
+   */
+  session?: string;
+  /**
    * Join to WATCH: no body, no slot, no scoreboard row. A spectator is a Colyseus client with no
    * `PlayerState`, which is all it takes — the room already replicates the whole match state to
    * every client, so a viewer sees the game without the room knowing anything new about it. No
@@ -270,6 +295,22 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private pair: [string, string] | null = null;
   /** Set when a pair has been decided and the next one has to be put on the map. */
   private needPair = false;
+  /**
+   * Drop V (P3): this arena's tournament context, from the join options the lobby raised it with
+   * (D4). `tournamentId` is the lobby's room id and the presence topic prefix; `matchIndex` is the
+   * pair; `lobbyPair` are the two ENTRANT ids the winner is published as (a → team 0, b → team 1).
+   * All empty in a plain duel or deathmatch, which is how `arenaOfTournament` tells them apart. This
+   * is NOT the in-room `turniej` bracket (`this.tournament`); a drop-V arena is an ordinary `duel`.
+   */
+  private tournamentId = "";
+  private tournamentMatchIndex = -1;
+  private lobbyPair: [string, string] | null = null;
+  /** True once the arena has published its result to the lobby, so it publishes exactly once. */
+  private resultPublished = false;
+  /** True when this duel is a tournament ARENA (drop V), as opposed to a plain duel or a `turniej`. */
+  private get arenaOfTournament(): boolean { return this.tournamentId !== ""; }
+  /** Account id per session for a signed-in player (drop V, P4). Guests are simply absent. */
+  private accountIds = new Map<string, number>();
   /** Is this player one of the two playing right now? A plain duel has two players, so always. */
   private playingNow(id: string): boolean { return !this.pair || this.pair[0] === id || this.pair[1] === id; }
   /**
@@ -319,6 +360,19 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.world = roomCollisionWorld(this.map);
     this.state.mapId = this.map.id;
     this.state.roomName = typeof options?.room === "string" ? options.room.slice(0, 24) : "";
+    // Drop V (P3, D4): the tournament context the lobby raised this arena with. Present only for an
+    // arena of the parallel-arena tournament — a plain duel or deathmatch leaves all of it empty and
+    // `arenaOfTournament` false, so the 60 s grace and the result publish below stay off for them.
+    if (typeof options?.tournamentId === "string" && options.tournamentId && isFiniteNumber(options?.matchIndex)) {
+      this.tournamentId = options.tournamentId.slice(0, 64);
+      this.tournamentMatchIndex = options.matchIndex >>> 0;
+      const pr = options?.pair;
+      if (Array.isArray(pr) && typeof pr[0] === "string" && typeof pr[1] === "string") this.lobbyPair = [pr[0], pr[1]];
+    }
+    // Drop V (P4/D6): resolve the creator's session to an account, no-throw. There is no player to
+    // attach it to at onCreate (the host joins after), so this only proves a bad token cannot crash a
+    // room; onJoin attaches the identity per player.
+    this.verifyIdentity(options);
     if ((this.mode === "dom" || this.mode === "boys")) {
       for (const f of this.map.flags) { const fs = new FlagState(); fs.id = f.id; this.state.flags.push(fs); this.flagSims.push(neutralFlag()); }
     }
@@ -633,6 +687,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     const s = new Session();
     s.ready = options?.deferSpawn !== true;
     this.sessions.set(client.sessionId, s);
+    // Drop V (P4/D6): a valid session token sets this player's account identity; none/invalid = guest.
+    const accountId = this.verifyIdentity(options);
+    if (accountId != null) this.accountIds.set(client.sessionId, accountId);
     if (NET_STATS) this.instrumentClient(client);
     client.send(S2C.Welcome, { id: client.sessionId, serverTime: this.now(), tickRate: 1000 / TICK_MS } satisfies WelcomeMessage);
     this.spawn(client.sessionId);
@@ -683,9 +740,16 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   }
 
   /**
-   * A dropped connection keeps the player (flagged `connected=false`) for RECONNECT_GRACE_S so a page
-   * hiccup does not cost the slot. The ghost stays a valid, hittable body but never respawns
+   * A dropped connection keeps the player (flagged `connected=false`) for the reconnection grace so a
+   * page hiccup does not cost the slot. The ghost stays a valid, hittable body but never respawns
    * (see `step`) and does not count towards the match's connected players.
+   *
+   * Drop V (P3): the grace is context-dependent. A tournament ARENA gives a full minute
+   * (`TOURNAMENT_RECONNECT_GRACE_S`) — a player mid-bracket should not lose the match to a dropped
+   * Wi-Fi; a plain TDM keeps the 15 s it always had (`RECONNECT_GRACE_S`). And CRITICALLY, the arena
+   * does not decide the eventual walkover: after the minute the WAITING ROOM strikes the entrant out
+   * of the bracket (V_SPEC §5), because the bracket seat outlives this arena. So `removePlayer` for a
+   * tournament arena must NOT report a result on a leave — it lets the ghost sit and does nothing.
    */
   override async onLeave(client: Client, code?: number): Promise<void> {
     const p = this.state.players.get(client.sessionId);
@@ -695,7 +759,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     const consented = code === 1000 || code === 4000;
     if (!consented) {
       try {
-        await this.allowReconnection(client, RECONNECT_GRACE_S);
+        const grace = this.arenaOfTournament ? TOURNAMENT_RECONNECT_GRACE_S : RECONNECT_GRACE_S;
+        await this.allowReconnection(client, grace);
         const back = this.state.players.get(client.sessionId);
         if (back) { back.connected = true; this.connectedCount++; }
         return;
@@ -714,13 +779,54 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.state.players.delete(id);
     this.publishCount();
     this.sessions.delete(id);
+    this.accountIds.delete(id);
     // A duel with one side gone for good is over — a walkover on the score as it stands, so the
     // result screen and the rematch loop run instead of a lone player winning empty rounds.
     if (this.tournament) { this.withdrawFromBracket(id); return; }
+    // Drop V (P3): a tournament ARENA must NOT decide anything when a player leaves for good after the
+    // 60 s grace. The bracket seat lives in the waiting room, which times the walkover out itself
+    // (V_SPEC §5); the arena ending here would publish a premature result and race the lobby. So it
+    // simply lets the ghost go and waits — either a genuine finish publishes, or the lobby withdraws.
+    if (this.arenaOfTournament) return;
     if (this.duel && (this.state.phase === MatchPhase.Playing || this.state.phase === MatchPhase.Prep)) {
       const sides = new Set([...this.state.players.values()].filter((p) => p.connected).map((p) => p.team));
       if (sides.size < 2) this.endMatch();
     }
+  }
+
+  /**
+   * Drop V (P4/D6): resolve a session token to an account id, never throwing. A valid session names
+   * the account (identity); a missing, malformed or expired token — or a store that is not open in a
+   * headless test — is a GUEST, which is not an error (L1: a guest plays with no restriction). The
+   * account id is the room's own business; nothing about it reaches the replicated `TdmState`.
+   */
+  private verifyIdentity(options: TdmJoinOptions | undefined): number | null {
+    const token = options?.session;
+    if (typeof token !== "string" || !token) return null;
+    try {
+      return verifySession(token);
+    } catch {
+      return null; // no database open (a test/tool), or a store error — treat as a guest.
+    }
+  }
+
+  /**
+   * Drop V (P3): publish this arena's result to the waiting room, exactly once, on the presence topic
+   * the lobby subscribes to (`TournamentLobbyRoom`): `tourn:<tournamentId>:<matchIndex>` carrying
+   * `{winner, scoreA, scoreB}`. The `winner` is an ENTRANT id — `lobbyPair[0]` for a team-0 win,
+   * `lobbyPair[1]` for team 1 — because the lobby's bracket keys on entrant ids, not on this arena's
+   * own session ids. A draw or a match with no lobby pair publishes an empty winner, which the lobby
+   * reads as a walkover. `scoreA`/`scoreB` carry the duel's round score with the SAME sign the lobby
+   * uses (A = team 0 = `lobbyPair[0]`).
+   */
+  private publishTournamentResult(): void {
+    if (!this.arenaOfTournament || this.resultPublished) return;
+    this.resultPublished = true;
+    const side = this.state.winner; // 0, 1 or -1, as endMatch settled the team score
+    const winner = this.lobbyPair && side === 0 ? this.lobbyPair[0] : this.lobbyPair && side === 1 ? this.lobbyPair[1] : "";
+    void this.presence.publish(`tourn:${this.tournamentId}:${this.tournamentMatchIndex}`, {
+      winner, scoreA: this.state.scoreA, scoreB: this.state.scoreB,
+    });
   }
 
   // ---------------------------------------------------------------- inputs
@@ -1942,6 +2048,9 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       this.state.winnerId = top && !tied ? top.id : "";
       this.state.winnerName = top && !tied ? top.name : "";
     }
+    // Drop V (P3): a tournament arena reports its winner to the waiting room the moment the match is
+    // settled — after `state.winner` is decided, so the entrant id and the sign are right.
+    this.publishTournamentResult();
     this.broadcast(S2C.MatchEvent, { phase: MatchPhase.Ended, winner: this.state.winner as Team | -1, winnerId: this.state.winnerId, winnerName: this.state.winnerName, endsAt: this.state.phaseEndsAt } satisfies MatchEventMessage);
   }
 

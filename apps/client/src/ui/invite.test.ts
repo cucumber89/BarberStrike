@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_MAP_ID, MAPS, MAP_ORDER } from "@frankibarber/shared";
-import { inviteLink, isSharedOrigin, mapChoices, parseInvite, roomFromPath, suggestRoomName } from "./invite";
+import { inviteLink, isLobbyInvite, isSharedOrigin, lobbyLink, mapChoices, parseInvite, roomFromPath, suggestRoomName } from "./invite";
 
 describe("invite links", () => {
   it("round-trips a room, a mode and a map through the page address as /r/<room>?mode=&map= (Drop D/G)", () => {
@@ -64,6 +64,22 @@ describe("invite links", () => {
     expect(inviteLink("http://192.168.1.4:2567/", "  ", "tdm")).toBe("http://192.168.1.4:2567/?mode=tdm&map=night_district");
     // A link made from a link does not nest paths.
     expect(inviteLink("https://barberstrike.click/r/old?mode=ffa", "new", "ffa", "gora")).toBe("https://barberstrike.click/r/new?mode=ffa&map=gora");
+  });
+
+  it("makes a tournament waiting-room link with mode=lobby (drop V, P5)", () => {
+    const link = lobbyLink("https://barberstrike.click/index.html?old=1#x", "friday-cup", "gora");
+    expect(link).toBe("https://barberstrike.click/r/friday-cup?mode=lobby&map=gora");
+    expect(isLobbyInvite(new URL(link).search)).toBe(true);
+    // The room is on the path, the way a match link carries it, so the menu reads it the same way.
+    expect(roomFromPath(new URL(link).pathname)).toBe("friday-cup");
+    // No room: still a lobby link, just without a path.
+    expect(lobbyLink("https://barberstrike.click/", "")).toBe(`https://barberstrike.click/?mode=lobby&map=${DEFAULT_MAP_ID}`);
+    // A map the build lacks falls back to the default, like every other link.
+    expect(lobbyLink("https://barberstrike.click/", "x", "banana")).toBe(`https://barberstrike.click/r/x?mode=lobby&map=${DEFAULT_MAP_ID}`);
+    // A match link is not a lobby link.
+    expect(isLobbyInvite(new URL(inviteLink("https://barberstrike.click/", "x", "tdm")).search)).toBe(false);
+    // `mode=lobby` is not a game mode, so parseInvite does not mistake it for one.
+    expect(parseInvite(new URL(link).search, new URL(link).pathname).mode).toBeNull();
   });
 
   it("suggests a readable, deterministic name for a fixed generator", () => {

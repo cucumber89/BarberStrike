@@ -24,6 +24,13 @@ export const MINIMAP = {
   letterPx: 14,
   /** How far inside the edge a rim pin's centre sits (px): a 14 px letter clears the 2 px ring. */
   rimInset: 11,
+  /**
+   * How far inside the rim a second-rank pin sits (px): the bomb and team marks. One pin — a
+   * 10 px disc — inward, so a mark pinged on site A never covers the „A” pinned on the rim.
+   */
+  pinStep: 20,
+  /** A mark is drawn in place while its centre is at least this far inside the disc's edge (px). */
+  markEdge: 10,
 } as const;
 
 /**
@@ -94,4 +101,20 @@ export function rimPin(out: [number, number], ox: number, oy: number, rim: numbe
   const k = rim / d;
   out[0] = ox * k; out[1] = oy * k;
   return true;
+}
+
+/**
+ * Where a team mark goes (drop U residual, P3). A mark reaches `MARK.maxRange` (60 m), well past
+ * the radar's 24 m; the compass strip used to carry the far ones by bearing, and when it went they
+ * were drawn nowhere. Now, as CS2 does it and as the objectives already do (`rimPin`):
+ *  - within `half − markEdge` px of the centre — in place, exactly as before;
+ *  - further — pinned in its own direction one pin (`pinStep`) inside the rim, so it sits under
+ *    a site's or a flag's rim letter instead of on top of it.
+ * `half` is the radar's half-size in CSS px. Writes the canvas offset into `out` and returns
+ * whether the mark was pinned.
+ */
+export function markPin(out: [number, number], ox: number, oy: number, half: number): boolean {
+  const lim = half - MINIMAP.markEdge;
+  if (ox * ox + oy * oy <= lim * lim) { out[0] = ox; out[1] = oy; return false; }
+  return rimPin(out, ox, oy, half - MINIMAP.rimInset - MINIMAP.pinStep);
 }

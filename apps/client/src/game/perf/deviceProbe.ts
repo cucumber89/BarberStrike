@@ -1,4 +1,5 @@
 import type { AutoTier } from "./autoQuality";
+import type { QualityPreset } from "../../settings";
 
 /**
  * What can this machine probably do, before it has rendered anything?
@@ -12,6 +13,13 @@ import type { AutoTier } from "./autoQuality";
 
 export interface DeviceReport {
   tier: AutoTier;
+  /**
+   * WEAK (drop V, P8c): a machine the probe judges too slow for even the "low" preset — a software
+   * or integrated renderer, a mobile GPU, or two cores / 2 GB. `tier` still reads "low" (the auto
+   * director only ever moves between low/medium/high), but `weak` routes the STARTING preset to
+   * `minimal` through `presetFromDevice` — halved render scale and effect density on top of low.
+   */
+  weak: boolean;
   /** Why, in a sentence, for the settings panel and the report. */
   why: string;
   cores: number;
@@ -55,15 +63,15 @@ export function probeDevice(): DeviceReport {
   } catch { /* blocked or unavailable; handled below */ }
 
   if (!webgl2) {
-    return { tier: "low", why: "This browser does not offer WebGL2.", cores, memoryGb, gpu, mobile,
+    return { tier: "low", weak: true, why: "This browser does not offer WebGL2.", cores, memoryGb, gpu, mobile,
       fatal: "This game needs WebGL2, which this browser did not provide. Try a recent Chrome, Edge or Firefox, and check that hardware acceleration is switched on." };
   }
 
-  if (mobile) return { tier: "low", why: "Mobile GPU — starting at Performance.", cores, memoryGb, gpu, mobile };
-  if (gpu && WEAK.test(gpu)) return { tier: "low", why: `${gpu} is a software or integrated renderer — starting at Performance.`, cores, memoryGb, gpu, mobile };
-  if (cores <= 2 || (memoryGb !== null && memoryGb <= 2)) return { tier: "low", why: `${cores} cores${memoryGb ? `, ${memoryGb} GB` : ""} — starting at Performance.`, cores, memoryGb, gpu, mobile };
-  if (gpu && STRONG.test(gpu) && cores >= 8) return { tier: "high", why: `${gpu} — starting at Quality.`, cores, memoryGb, gpu, mobile };
-  return { tier: "medium", why: gpu ? `${gpu} — starting at Balanced.` : `${cores} cores — starting at Balanced.`, cores, memoryGb, gpu, mobile };
+  if (mobile) return { tier: "low", weak: true, why: "Mobile GPU — starting at Minimal.", cores, memoryGb, gpu, mobile };
+  if (gpu && WEAK.test(gpu)) return { tier: "low", weak: true, why: `${gpu} is a software or integrated renderer — starting at Minimal.`, cores, memoryGb, gpu, mobile };
+  if (cores <= 2 || (memoryGb !== null && memoryGb <= 2)) return { tier: "low", weak: true, why: `${cores} cores${memoryGb ? `, ${memoryGb} GB` : ""} — starting at Minimal.`, cores, memoryGb, gpu, mobile };
+  if (gpu && STRONG.test(gpu) && cores >= 8) return { tier: "high", weak: false, why: `${gpu} — starting at Quality.`, cores, memoryGb, gpu, mobile };
+  return { tier: "medium", weak: false, why: gpu ? `${gpu} — starting at Balanced.` : `${cores} cores — starting at Balanced.`, cores, memoryGb, gpu, mobile };
 }
 
 /**
@@ -73,6 +81,16 @@ export function probeDevice(): DeviceReport {
  * Never raises by more than one level: the opening seconds of a match are not its heaviest, so a
  * quiet spawn room must not talk the game into a level it cannot hold once the shooting starts.
  */
+/**
+ * The STARTING quality preset a probe justifies (drop V, P8c). A WEAK machine opens at `minimal` —
+ * below anything the auto director will pick — so the first frames a slow GPU renders are already
+ * the cheapest the game can draw; everything else opens at its measured `tier`. The auto director
+ * (low/medium/high) still refines from real frames a few seconds later.
+ */
+export function presetFromDevice(report: Pick<DeviceReport, "tier" | "weak">): QualityPreset {
+  return report.weak ? "minimal" : report.tier;
+}
+
 export function tierFromMeasurement(start: AutoTier, medianFrameMs: number, targetFps = 60): AutoTier {
   const order: AutoTier[] = ["low", "medium", "high"];
   const budget = 1000 / targetFps;

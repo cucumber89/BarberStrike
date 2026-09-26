@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BOYS_CLASSES, BOYS, BUILDS, OUTFITS, buildDef, outfitDef, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, DUEL_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MAX_PLAYERS, MODES, MODE_ORDER, TOURNAMENT, isGameMode, isOpenMode, type BotLevel, type GameMode } from "@frankibarber/shared";
 import { equippedBuild, equippedHaircut, equippedOutfit, ownedCuts } from "../game/progression/profile";
-import { copyText, inviteLink, isMapId, mapChoices, parseInvite } from "./invite";
+import { copyText, inviteLink, isLobbyInvite, isMapId, mapChoices, parseInvite } from "./invite";
+import { Lobby, LOBBY_SIZES, isLobbySize } from "./lobby";
+import type { TournamentSize } from "@frankibarber/shared";
 import { Connection, defaultServerUrl, type RoomListing } from "../game/net/Connection";
 import type { Settings } from "../settings";
 import { SettingsPanel } from "./SettingsPanel";
 import { MODE_ART, NAV_ART, mapArt } from "./menuArt";
 import { Armoury } from "./Armoury";
 import { Crates } from "./Crates";
+import { Account } from "./Account";
+import { Welcome } from "./onboarding/Welcome";
+import { loadOnboard } from "./onboarding/tutorialRules";
+import { tutorial } from "./onboarding/tutorialStore";
 import "./menu.css";
 
 interface Props {
@@ -31,7 +37,7 @@ const CONTROLS: [string, string, string][] = [
 ];
 const CONTROL_GROUPS: [string, string][] = [["move", "MOVEMENT"], ["fight", "COMBAT"], ["team", "TEAM & MATCH"]];
 
-type Panel = "main" | "lobby" | "settings" | "controls" | "armoury";
+type Panel = "main" | "lobby" | "settings" | "controls" | "armoury" | "tournament" | "account";
 
 /** Touch-only devices (phones/tablets) cannot play: no pointer lock, no keyboard. */
 const touchOnly = (): boolean =>
@@ -53,7 +59,19 @@ const mapSize = (id: string): string => {
 export function Menu({ settings, onSettings, connecting, error, onPlay }: Props) {
   // Drop D, join by link: what `/r/<room>?mode=…` asks for, read once at load.
   const invite = useMemo(() => parseInvite(typeof location !== "undefined" ? location.search : "", typeof location !== "undefined" ? location.pathname : ""), []);
-  const [panel, setPanel] = useState<Panel>(() => (invite.room ? "lobby" : "main"));
+  // Drop V (P5): a `mode=lobby` link opens straight into the tournament waiting-room join flow. It is
+  // read from the raw query (parseInvite drops `lobby`, which is not a game mode), and the room it
+  // names is the lobby to join. A guest joins by room name; the host reaches this panel via the
+  // ZAŁÓŻ TURNIEJ button, which sets a size.
+  const lobbyInvite = useMemo(() => typeof location !== "undefined" && isLobbyInvite(location.search), []);
+  const [panel, setPanel] = useState<Panel>(() => (lobbyInvite ? "tournament" : invite.room ? "lobby" : "main"));
+  // The tournament the host is setting up (or "" for the join flow from a link). `null` until the
+  // host presses ZAŁÓŻ TURNIEJ and picks a size — a guest arriving by link has no size.
+  const [tournSize, setTournSize] = useState<TournamentSize | null>(() => {
+    try { const s = Number(localStorage.getItem("fb_tourn_size")); return isLobbySize(s) ? s : 8; } catch { return 8; }
+  });
+  const [inLobby, setInLobby] = useState(false);
+  const pickTournSize = (n: TournamentSize) => { setTournSize(n); try { localStorage.setItem("fb_tourn_size", String(n)); } catch { /* private mode */ } };
   // A link was sent by a friend, so the lobby asks for a nickname and nothing else — the room and
   // the mode are the link's. CHANGE opens the full lobby.
   const [linkJoin, setLinkJoin] = useState(invite.viaLink && invite.room.length > 0);
@@ -61,6 +79,10 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   const [copied, setCopied] = useState(false);
   const [mobile] = useState(() => touchOnly());
   const [name, setName] = useState(settings.nickname || "");
+  // P8b onboarding: the welcome shows once (localStorage `bs_onboard_v1`), over the menu, and only
+  // when a match was not opened by a link (a friend's invite is not a first-run moment). It never
+  // appears on a touch device, where the game cannot be played at all.
+  const [welcome, setWelcome] = useState(() => !mobile && !invite.room && !loadOnboard().welcomed);
   const [roomName, setRoomName] = useState(invite.room);
   const [gameMode, setGameMode] = useState<GameMode>(() => {
     if (invite.mode) return invite.mode;
@@ -143,6 +165,26 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   };
   const play = (mode: "auto" | "create") => onPlay(commitName(), roomName.trim(), mode, undefined, gameMode, bots, mapId);
   /**
+   * Drop V (P5), D9: the warmup a player fires from the tournament waiting-room. It is an ordinary
+   * `play("create")` on the duel arena filled with one bot — NOT a tournament arena — so somebody
+   * waiting for the bracket to fill can shoot something. It goes through the same `onPlay` the menu
+   * uses everywhere, so the room is created and joined exactly as a normal duel create would be.
+   */
+  const startWarmup = () => onPlay(commitName(), "", "create", undefined, "duel", { count: 1, level: botLevel }, DUEL_MAP_ID);
+  /**
+   * P8b onboarding: SAMOUCZEK and TRENING both open a duel against one bot through the existing
+   * `play("create")` path (D9 — reuse `onPlay` with `bots>0`, no new room, no new schema). The
+   * tutorial additionally arms the overlay store, which the app-root `TutorialMount` renders over
+   * the match once it is live. A nickname is not required to train — a fresh player has not typed
+   * one — so we fall back to a friendly default.
+   */
+  const startOnboarding = (kind: "tutorial" | "training") => {
+    if (kind === "tutorial") tutorial.start();
+    const n = (name.trim() || settings.nickname || "NOWY").slice(0, MAX_NAME_LENGTH);
+    if (n !== settings.nickname) onSettings({ ...settings, nickname: n });
+    onPlay(n, "", "create", undefined, "duel", { count: 1, level: "easy" }, DUEL_MAP_ID);
+  };
+  /**
    * A greyed-out match list is the wrong answer to "you have not typed a nickname yet": it makes
    * the half of the lobby a player came for look broken. The rows stay live and send the click to
    * the field that is actually missing.
@@ -215,16 +257,26 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
     <div className="menu" data-testid="menu">
       <div className="mm-bg" aria-hidden="true" />
 
+      {/* P8b onboarding (disjoint block, §7.0): the one-time welcome over the menu. Picking any of
+          the three options marks the player welcomed; SAMOUCZEK / TRENING launch a duel with a bot. */}
+      {welcome && (
+        <Welcome
+          onStart={(kind) => { setWelcome(false); startOnboarding(kind); }}
+          onSkip={() => setWelcome(false)}
+        />
+      )}
+
       {panel === "main" && (
         <div className="mm-title">
           <div className="mm-title-grid">
             <div className="mm-title-left">
-              <header className="mm-hero">
+              <header className="mm-hero" data-testid="mm-hero">
+                <div className="mm-hero-bg" data-testid="mm-hero-bg" aria-hidden="true" />
                 <div>
-                  <div className="mm-kicker"><span /> NIGHT DISTRICT / AFTER HOURS</div>
+                  <div className="mm-kicker"><span /> NOCNA DZIELNICA / PO GODZINACH</div>
                   <h1 className="wordmark"><span>BARBER</span><strong>STRIKE</strong></h1>
                   <div className="mm-brand-rule" aria-hidden="true"><i /><b>✂</b><i /></div>
-                  <p className="mm-tagline">The district is closed. The chairs are empty.<br />Nobody is here for a haircut.</p>
+                  <p className="mm-tagline">Dzielnica zamknięta. Fotele puste.<br />Nikt tu nie przyszedł się ostrzyc.</p>
                 </div>
               </header>
 
@@ -253,7 +305,20 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                     <i className="mm-nav-no">04</i><span className="mm-nav-art"><NAV_ART.armoury /></span>
                     <b>SZAFA</b><em>Strój, sylwetka, skiny i skrzynki</em><span className="mm-nav-go">▸</span>
                   </button>
+                  {/* Drop V (P6): KONTO — own block, disjoint from the tournament entry (P5) and the
+                      title block (:219-257). Sign in to carry progress between browsers. */}
+                  <button className="mm-nav-btn" onClick={() => setPanel("account")} data-testid="btn-account">
+                    <i className="mm-nav-no">05</i><span className="mm-nav-art"><NAV_ART.armoury /></span>
+                    <b>KONTO</b><em>Zaloguj się i zabierz postępy ze sobą</em><span className="mm-nav-go">▸</span>
+                  </button>
                 </nav>
+              )}
+              {/* Drop V (P5): the way into the tournament waiting-room. A new, disjoint block below
+                  the nav (never the titlebar/NAV_ART owned by P8a) — its own entry, its own handler. */}
+              {!mobile && (
+                <button className="mm-tourn-entry" onClick={() => setPanel("tournament")} data-testid="turniej-zaloz">
+                  <b>ZAŁÓŻ TURNIEJ</b><em>Drabinka 1 v 1 · zaproś ekipę linkiem</em><span className="mm-nav-go">▸</span>
+                </button>
               )}
             </div>
 
@@ -316,7 +381,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
         <div className="mm-shell">
           <header className="mm-bar">
             <button className="mm-back" onClick={() => setPanel("main")} data-testid="btn-back">◂ WSTECZ</button>
-            <div className="mm-bar-brand"><b>BARBERSTRIKE</b><span>{panel === "lobby" ? "LOBBY" : panel === "settings" ? "USTAWIENIA" : panel === "armoury" ? "SZAFA" : "STEROWANIE"}</span></div>
+            <div className="mm-bar-brand"><b>BARBERSTRIKE</b><span>{panel === "lobby" ? "LOBBY" : panel === "tournament" ? "TURNIEJ" : panel === "settings" ? "USTAWIENIA" : panel === "armoury" ? "SZAFA" : panel === "account" ? "KONTO" : "STEROWANIE"}</span></div>
             {panel === "lobby" ? status : <span className="mm-version">v{GAME_VERSION}</span>}
           </header>
 
@@ -534,6 +599,86 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
 
           {panel === "armoury" && (
             <div className="mm-content armoury-content"><Armoury onHaircut={setHaircut} onBuild={setBuild} onOutfit={setOutfit} /></div>
+          )}
+
+          {/* Drop V (P5): the tournament waiting-room. Two states: the host sets a draw size and a
+              map and presses ZAŁÓŻ, or — arriving by a `mode=lobby` link — the join flow enters the
+              lobby straight away with the room from the address. The Lobby component owns the socket. */}
+          {panel === "tournament" && (
+            (inLobby || lobbyInvite) ? (
+              <div className="mm-content">
+                <Lobby
+                  name={name.trim().slice(0, MAX_NAME_LENGTH) || "GRACZ"}
+                  size={inLobby ? tournSize ?? undefined : undefined}
+                  map={gameMode === "duel" ? DUEL_MAP_ID : mapId}
+                  room={roomName.trim() || invite.room || undefined}
+                  onWarmup={startWarmup}
+                  onLeave={() => { setInLobby(false); setPanel("main"); }}
+                />
+              </div>
+            ) : (
+              <section className="mm-content" data-testid="tournament-setup">
+                <div className="lb-block wide">
+                  <h2 className="lb-h"><em>01</em> LICZBA MIEJSC</h2>
+                  <div className="seg" role="radiogroup" aria-label="Draw size" data-testid="tourn-size">
+                    {LOBBY_SIZES.map((n) => (
+                      <button
+                        key={n} role="radio" aria-checked={tournSize === n} className={`seg-btn ${tournSize === n ? "on" : ""}`}
+                        onClick={() => pickTournSize(n)} data-testid={`tourn-size-${n}`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                  <small className="mm-hint">Drabinka 1 v 1 na eliminacje. Puste miejsca dostają wolny los.</small>
+                </div>
+
+                <div className="lb-block">
+                  <h2 className="lb-h"><em>02</em> MAPA (ROZGRZEWKA)</h2>
+                  <div className="map-grid" role="radiogroup" aria-label="Map" data-testid="tourn-map-picker">
+                    {maps.map((m) => {
+                      const Plan = mapArt(m.id);
+                      return (
+                        <button
+                          key={m.id} role="radio" aria-checked={mapId === m.id} className={`map-card ${mapId === m.id ? "on" : ""}`}
+                          onClick={() => pickMap(m.id)} data-testid={`tourn-map-${m.id}`} title={m.name}
+                        >
+                          <span className="map-plan"><Plan /></span>
+                          <b>{m.name}</b>
+                          <span className="map-size">{mapSize(m.id)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <small className="mm-hint">Pary turnieju grają zawsze na arenie 1 v 1; ta mapa dotyczy rozgrzewki.</small>
+                </div>
+
+                <footer className="lb-launch">
+                  {nickField(true)}
+                  <div className="lb-launch-read">
+                    <span className="lb-launch-mode">TURNIEJ · {tournSize} MIEJSC</span>
+                    <span className="lb-launch-sub">Zaproś graczy linkiem po założeniu</span>
+                  </div>
+                  <div className="lb-launch-btns">
+                    <button
+                      className="mm-btn primary big" disabled={!nameOk || !tournSize} onClick={() => { commitName(); setInLobby(true); }}
+                      data-testid="tourn-create"
+                    >
+                      ZAŁÓŻ POCZEKALNIĘ ▸
+                    </button>
+                  </div>
+                  {!nameOk && <small className="mm-hint launch-hint">Wpisz ksywkę (min. 2 znaki), żeby założyć turniej.</small>}
+                </footer>
+              </section>
+            )
+          )}
+
+          {/* Drop V (P6): the account panel — sign in / up / out and the migration banner. */}
+          {panel === "account" && (
+            <div className="mm-content account-content">
+              <Account />
+              <p className="acc-hof-link">Zobacz <a href="/stats" data-testid="link-stats">tablicę sławy ▸</a></p>
+            </div>
           )}
         </div>
       )}

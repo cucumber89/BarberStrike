@@ -112,15 +112,21 @@ export const pins: PinSet = {
     caseText: ["MENU", "MECZ TRWA DALEJ", "DRUŻYNOWY DEATHMATCH · NIGHT DISTRICT", "WRÓĆ DO GRY", "USTAWIENIA", "ZMIEŃ DRUŻYNĘ", "PEŁNY EKRAN", "OPUŚĆ MECZ"],
     absent: ["[data-testid=team-picker]", "[data-testid=btn-leave-confirm]", "[data-testid=pause-lock-refused]", "[data-zone=settings]"],
     textAbsent: [{ text: "Pauza", zone: "pause" }, { text: "BARBERSTRIKE", zone: "pause" }, { text: "Eliminuj", zone: "pause" }],
+    // §4.5: the strip stays visible under pause, so the column ends left of it at every size.
+    leftOf: ["[data-testid=pause]", "[data-zone=top]"],
   },
   "pause-leave-confirm": {
     expect: ["[data-testid=btn-leave-confirm]", "[data-testid=btn-leave-cancel]"],
     caseText: ["NA PEWNO WYJŚĆ?", "TAK, WYJDŹ", "ANULUJ"],
+    // §4.5: the strip stays visible under pause, so the column ends left of it at every size.
+    leftOf: ["[data-testid=pause]", "[data-zone=top]"],
   },
   "pause-teams": {
     expect: ["[data-testid=team-picker]", "[data-testid=team-answer]", "[data-testid=team-0]:disabled", "[data-testid=team-1]:disabled"],
     caseText: ["TWOJA STRONA", "ZMIANA OD NASTĘPNEJ RUNDY", "5 GRACZY · 2 BOTY", "JESTEŚ TU", "NIE — ta strona byłaby większa", "Następną rundę zaczniesz w TAPER.", "ŁADUNEK · NIGHT DISTRICT"],
     textAbsent: ["YOUR", "players", "bots", "JOIN", "CAN'T", "You will"].map((text) => ({ text, zone: "pause" as const })),
+    // §4.5: the strip stays visible under pause, so the column ends left of it at every size.
+    leftOf: ["[data-testid=pause]", "[data-zone=top]"],
   },
   "pause-settings": {
     expect: ["[data-zone=settings] [data-testid=settings]"],
@@ -146,7 +152,8 @@ export const pins: PinSet = {
   // P5's scenario; the prompt in place of the ESC menu is P7's (§5.2 #67, §6.1 New match).
   "new-match-warmup": {
     expect: ["[data-testid=resume-prompt][data-zone=prompt]"],
-    absent: ["[data-testid=pause]"],
+    // Nothing of the menu: not the column, not its dim, not a closing layer (§6.1 New match).
+    absent: ["[data-testid=pause]", ".pause-layer", ".pause-dim"],
     caseText: ["KLIKNIJ, ŻEBY GRAĆ"],
   },
 };
