@@ -759,6 +759,14 @@ Z `measure-final.md` (harness tej sesji, `simulateBody` + siatka chodu repo, spr
 - **SwiftShader** renderuje bez GPU: mgła, emisja neonu i jarzeniówek oraz kontrast czarnego baraku w nocy wymagają prawdziwego GPU.
 - **Do sprawdzenia ze zdjęciami przez czat odbierający**: pozycje vana (tu x −2.5..2.5 po stronie budowy, środek odcinka), obu aut (tu jedno na pasie południowym x −17.6..−13.2, drugie na północnym x 17..21.4), kontenerów (x −13.2..−11.2 i 9..12), toi-toia (x 3..4.1 obok vana), czy dziura w tujach istnieje naprawdę czy jest dodana (D-W3), która brama garażowa jest w niszy i czy to ona ma być otwarta (D-W5), strona balkonu (P2), miejsce altany → hali (tu tylny LEWY róg, x −10..2), szerokość drogi 5.2 m i głębokość przedogródka 5.5 m.
 
+## Podpis
+
+Właściciel, 2026-09-26, w tej sesji: **„dalej wszystko zatwierdzam”** — układ z §5, decyzje
+D-W1…D-W14 i domyślne odpowiedzi P1–P12 (DOLNA obok GÓRY i domyślna dla turnieju, tylko duel/turniej w
+pierwszym cięciu; balkon na elewacji ogrodowej; noc; tuje i płot jako bryły; lewa brama garażu otwarta;
+bez perch; runda 60 s; furtka 1.5 m; barak i hala jak w §5; granice ulicy wariant (a)). Sesja 2
+(geometria) zaczyna się od tego podpisu, w tej samej sesji Claude Code.
+
 ## 6. Porządek pracy (dwie sesje; ma być w prompcie wykonawczym w tej kolejności)
 
 **Drop W — DOLNA** jest wpisany w `docs/PLAN_2_1.md` §Drops (ta sesja), gałąź `drop/w-dolna`,
