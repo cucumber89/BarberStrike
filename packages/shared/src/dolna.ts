@@ -204,7 +204,13 @@ add(S(5.4, 0, 36.2, 2.4, 0.8, 0.8, "paint_green", "slide_ramp"));
 // ======================= THE STREET =======================
 add(S(-16.2, 0, -1.65, 0.35, 8, 0.35, "concrete_block", "pole_w"));
 add(S(13.85, 0, -1.65, 0.35, 8, 0.35, "concrete_block", "pole_e"));
-for (const x of [-28, -25, -22, -19, -16, -8, -6, 2, 13.5, 16, 18.5, 21, 23.5, 26, 28.5]) add(S(x - 0.3, 0, VERGE_S, 0.6, 6, 0.6, "wood", `pine_${x < 0 ? "w" : "e"}${String(Math.abs(x)).replace(".", "_")}`));
+for (const x of [-28, -25, -22, -19, -16, -8, -6, 2, 13.5, 16, 18.5, 21, 23.5, 26, 28.5]) {
+  const tag = `${x < 0 ? "w" : "e"}${String(Math.abs(x)).replace(".", "_")}`;
+  add(S(x - 0.3, 0, VERGE_S, 0.6, 6, 0.6, "wood", `pine_${tag}`));
+  // The crown, high on the trunk: a pine reads as a pine from 30 m (the eye review saw a palisade
+  // of bare posts without it). Above any jump, so it shapes no route and shelters nobody.
+  add(S(x - 0.9, 4.6, VERGE_S - 0.6, 1.8, 3.0, 1.8, "foliage", `pine_crown_${tag}`));
+}
 // Off-axis street cover, every ~10 m: the skips, the van and one dark car in the SOUTH lane by the
 // site (Z1), the other dark car in the NORTH lane at the east end (Z3's car by the plot). The van,
 // the east skip and the west car sit at z ≤ -7.5, closing the sliver between them and the pine line
@@ -248,6 +254,14 @@ props.push({ kind: "clippers", x: 2.9, y: 0.98, z: HZ1 + 0.1, yaw: 0.4 });
 props.push({ kind: "towel_stack", x: 3.4, y: 0.8, z: 18.8 });
 props.push({ kind: "neon", x: SHX1 + 0.02, y: 2.3, z: 18.6, yaw: Math.PI / 2, text: "BARBER SHOP", w: 2.0, h: 0.4, color: "#fa709a" });
 props.push({ kind: "barber_pole", x: SHX1 + 0.05, y: 1.2, z: 15.8, yaw: Math.PI / 2 });
+// A lamp over each shed door (the eye review found the west lawn behind the west door black) and a
+// garden lamp post: the plot's back half was a black patch from above with eight lights on the map.
+props.push({ kind: "lamp", x: SHX0 - 0.02, y: 2.3, z: 18.4, yaw: -Math.PI / 2, variant: "wall" });
+props.push({ kind: "lamp", x: SHX1 + 0.02, y: 2.3, z: 18.4, yaw: Math.PI / 2, variant: "wall" });
+props.push({ kind: "lamp", x: 3.5, y: 0, z: 24, variant: "post", h: 3.8 });
+// Two dark panes on the van's long sides so it reads as a van, not a white block, at 28 m.
+props.push({ kind: "board", x: 0, y: 1.3, z: -7.52, yaw: Math.PI, text: "", w: 2.4, h: 0.6 });
+props.push({ kind: "board", x: 0, y: 1.3, z: -5.48, yaw: 0, text: "", w: 2.4, h: 0.6 });
 // The house: the number plate by the right corner, the wall lamp between the upstairs windows,
 // the windows and blinds as dark panes, the mailbox on the gate pillar.
 props.push({ kind: "sign", x: 4.4, y: 2.5, z: HZ0 - 0.02, yaw: Math.PI, text: "17", w: 0.4, h: 0.3 });
@@ -279,6 +293,9 @@ props.push({ kind: "trash", x: 4.6, y: 0, z: -7.4 });
 const AMBER = "#ffbf70", MERCURY = "#9adce5", ACCENT = "#fa709a";
 lights.push({ kind: "point", x: -0.2, y: 4.0, z: HZ0 - 0.6, color: AMBER, intensity: 14, range: 12, priority: 7 });   // the house front
 lights.push({ kind: "point", x: 0, y: 2.3, z: 17.5, color: AMBER, intensity: 12, range: 8, priority: 8 });             // inside the shed
+lights.push({ kind: "point", x: SHX0 - 0.6, y: 2.3, z: 18.4, color: AMBER, intensity: 6, range: 7, priority: 6 });    // the shed's west door
+lights.push({ kind: "point", x: SHX1 + 0.6, y: 2.3, z: 18.4, color: AMBER, intensity: 6, range: 7, priority: 6 });    // the shed's east door
+lights.push({ kind: "point", x: 3.5, y: 3.6, z: 24, color: MERCURY, intensity: 10, range: 12, priority: 6 });         // the garden lamp
 lights.push({ kind: "point", x: SHX1 + 0.6, y: 2.3, z: 18.6, color: ACCENT, intensity: 8, range: 6, priority: 6 });    // the neon
 lights.push({ kind: "point", x: -4, y: 3.5, z: 38.5, color: MERCURY, intensity: 16, range: 12, priority: 8 });         // the hall
 lights.push({ kind: "point", x: -6, y: 3.2, z: HALLZ0 - 0.8, color: MERCURY, intensity: 8, range: 8, priority: 5 });   // over the roller door
