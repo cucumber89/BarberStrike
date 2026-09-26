@@ -210,6 +210,7 @@ export function radarFor(map: MapDef, spawnTeam: Team, f: number, o: { alive?: b
   };
 }
 export const MATES = ["p1", "p2", "bot-1", "bot-2"];
+/** The default duel arena (DOLNA since Drop W P1), the one a duel or tournament frame is on. */
 export const DUEL_MAP = MAPS[DUEL_MAP_ID] ?? NIGHT_DISTRICT;
 
 // ------------------------------------------------------------------------------------ states

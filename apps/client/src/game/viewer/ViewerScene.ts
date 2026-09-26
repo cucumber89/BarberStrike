@@ -60,8 +60,23 @@ export const GORA_VIEWPOINTS: readonly ViewpointSpec[] = [
   { id: "overview", label: "Z GÓRY", pos: [-10, 24, -30], look: [0, 0, 0] },
 ];
 
-/** The spots for a map: the district's areas, or the roof's. */
-export const viewpointsFor = (mapId: string): readonly ViewpointSpec[] => mapId === MAPS.gora.id ? GORA_VIEWPOINTS : DISTRICT_VIEWPOINTS;
+/**
+ * DOLNA: both starts as the duellists see them, the gate from the street, the street from each end,
+ * the hall from the garden, and the plot from above (docs/MAP_3_DOLNA.md §5.3, §5.5).
+ */
+export const DOLNA_VIEWPOINTS: readonly ViewpointSpec[] = [
+  { id: "start_t0", label: "START DZIAŁKA", pos: [-3.4, 1.62, 17.0], look: [-9, 1.6, 17.0] },
+  { id: "start_t1", label: "START BUDOWA", pos: [-7.0, 1.62, -23.6], look: [-7.0, 1.6, -17] },
+  { id: "gate", label: "BRAMA", pos: [8.1, 1.62, -3.5], look: [8.1, 1.6, 6] },
+  { id: "street_w", label: "ULICA W", pos: [-27, 1.62, -4], look: [0, 1.6, -4] },
+  { id: "street_e", label: "ULICA E", pos: [27, 1.62, -6], look: [0, 1.6, -5] },
+  { id: "hall", label: "HALA", pos: [-6, 1.62, 30], look: [-6, 2, 38] },
+  { id: "overview", label: "Z GÓRY", pos: [-30, 50, -60], look: [0, 0, 9] },
+];
+
+/** The spots for a map: the district's areas, the roof's, or the plot's. */
+export const viewpointsFor = (mapId: string): readonly ViewpointSpec[] =>
+  mapId === MAPS.gora.id ? GORA_VIEWPOINTS : mapId === MAPS.dolna.id ? DOLNA_VIEWPOINTS : DISTRICT_VIEWPOINTS;
 /** Kept as the district's list for the tools that address its spots by id. */
 export const VIEWPOINTS = DISTRICT_VIEWPOINTS;
 

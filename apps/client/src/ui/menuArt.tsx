@@ -105,7 +105,8 @@ export const MODE_ART: Record<GameMode, () => ReactElement> = {
 /**
  * Map plans. Not a render of the map — an abstract of its SHAPE, which is the thing a picker has to
  * tell apart at a glance: NIGHT_DISTRICT is a long street with blocks either side, GÓRA is two rings
- * around a stair core with an open light well. Anything else falls back to a plain footprint.
+ * around a stair core with an open light well, DOLNA is a plot above a street with a building site
+ * below it. Anything else falls back to a plain footprint.
  */
 const plan = {
   viewBox: "0 0 48 24",
@@ -133,6 +134,18 @@ const GoraPlan = (): ReactElement => (
   </svg>
 );
 
+/** DOLNA, north up: the hedged plot (house, shed, hall at the back), the street, the fenced site below. */
+const DolnaPlan = (): ReactElement => (
+  <svg {...plan}>
+    <rect x="9" y="2" width="30" height="13" rx="1" opacity=".55" />
+    <rect x="20" y="10" width="8" height="5" rx=".5" />
+    <rect x="21" y="6.5" width="6" height="2.5" rx=".5" opacity=".8" />
+    <rect x="11" y="3" width="8" height="4.5" rx=".5" opacity=".8" />
+    <path d="M2 18h44" strokeDasharray="3 3" opacity=".9" />
+    <rect x="15" y="20" width="16" height="3" rx=".5" strokeDasharray="1.5 1.5" opacity=".6" />
+  </svg>
+);
+
 const GenericPlan = (): ReactElement => (
   <svg {...plan}>
     <rect x="4" y="4" width="40" height="16" rx="1" opacity=".55" />
@@ -141,7 +154,7 @@ const GenericPlan = (): ReactElement => (
 );
 
 export const mapArt = (id: string): (() => ReactElement) =>
-  id === "night_district" ? NightDistrictPlan : id === "gora" ? GoraPlan : GenericPlan;
+  id === "night_district" ? NightDistrictPlan : id === "gora" ? GoraPlan : id === "dolna" ? DolnaPlan : GenericPlan;
 
 /** Title-screen nav glyphs. */
 export const NAV_ART = {

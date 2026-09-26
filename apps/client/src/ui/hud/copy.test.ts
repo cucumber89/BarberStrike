@@ -81,7 +81,9 @@ describe("mode copy", () => {
   it("SIDE_WORD names every side in one word, and mapTitle names the maps", () => {
     expect(Object.values(SIDE_WORD)).toEqual(["ATAK", "OBRONA", "OCALONY", "OSTRZYŻONY"]);
     expect(mapTitle(DEFAULT_MAP_ID)).toBe("NIGHT DISTRICT");
-    expect(mapTitle(DUEL_MAP_ID)).toBe("GÓRA (DACH)");
+    // Drop W (P1): the default duel arena is DOLNA; GÓRA is still a map and still has its title.
+    expect(mapTitle(DUEL_MAP_ID)).toBe("DOLNA");
+    expect(mapTitle("gora")).toBe("GÓRA (DACH)");
     expect(mapTitle("")).toBe("");
     expect(mapTitle("no-such-map")).toBe("");
   });

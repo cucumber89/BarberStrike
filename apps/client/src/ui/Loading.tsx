@@ -1,5 +1,5 @@
 import type React from "react";
-import { DUEL_MAP_ID, MODES, TEAM_NAMES, scoreLimitFor, type GameMode } from "@frankibarber/shared";
+import { MODES, TEAM_NAMES, duelMapOf, scoreLimitFor, type GameMode } from "@frankibarber/shared";
 import { useHudSlice } from "../game/store";
 import { MODE_TITLE, mapTitle, modeGoal } from "./hud/copy";
 
@@ -30,13 +30,14 @@ const STAGE_LABEL: Record<(typeof STAGES)[number], string> = {
 const NAMED_SIDES = new Set<GameMode>(["tdm", "dom", "boys", "bomb"]);
 
 /**
- * The map the room will really play (§5.2 #64). The server puts a duel and a tournament on the 1 v 1
- * arena whatever the lobby asked for (`TdmRoom.ts` `get duel()` → `MAPS[DUEL_MAP_ID]`), so for them
- * the menu's map is not the truth — and `store.mapId` has no producer yet, so the card cannot wait
- * for the room to correct it. `App.play` passes this, and the card applies it to the room's mode too.
+ * The map the room will really play (§5.2 #64). The server puts a duel and a tournament on one of
+ * the 1 v 1 arenas, the default unless the lobby named the other (`TdmRoom.ts` `get duel()` →
+ * `duelMapOf`), so for them the menu's map is not always the truth — and `store.mapId` has no
+ * producer yet, so the card cannot wait for the room to correct it. `App.play` passes this, and the
+ * card applies it to the room's mode too. The same shared rule, so card and room cannot disagree.
  */
 export const pickedMap = (gameMode: GameMode | undefined, mapId: string): string =>
-  gameMode === "duel" || gameMode === "turniej" ? DUEL_MAP_ID : mapId;
+  gameMode === "duel" || gameMode === "turniej" ? duelMapOf(mapId) : mapId;
 
 export interface LoadingProps {
   ready?: boolean;

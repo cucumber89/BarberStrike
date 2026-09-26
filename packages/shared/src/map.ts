@@ -2,6 +2,7 @@ import { BOMB_SITES, type BombSite } from "./bomb";
 import { type Box, boxFrom, CollisionWorld } from "./collision";
 import { expandDistrict } from "./districtExpansion";
 import { GORA } from "./gora";
+import { DOLNA } from "./dolna";
 import type { Team } from "./types";
 
 /**
@@ -644,17 +645,35 @@ export const NIGHT_DISTRICT: MapDef = (() => {
   };
 })();
 
-export const MAPS: Record<string, MapDef> = { [NIGHT_DISTRICT.id]: NIGHT_DISTRICT, [GORA.id]: GORA };
+export const MAPS: Record<string, MapDef> = { [NIGHT_DISTRICT.id]: NIGHT_DISTRICT, [GORA.id]: GORA, [DOLNA.id]: DOLNA };
 export const DEFAULT_MAP_ID = NIGHT_DISTRICT.id;
 /**
- * The map a 1 v 1 is played on, whatever the lobby asked for.
- *
- * GÓRA was built as the duel arena — 34 × 22 m, its symmetry a construction rather than a tuning —
- * and nothing pinned the mode to it, so a duel ran on whatever map the room happened to carry;
- * by default the 100 m night district, where two people spend the round looking for each other.
+ * The arenas built for a 1 v 1, in the order a picker shows them. Nothing else may host a duel or a
+ * tournament pair: the night district is 100 m of streets where two people spend the round looking
+ * for each other (Drop G). DOLNA is deliberately NOT in `MAP_ORDER` — the owner's brief of
+ * 2026-09-26 (Drop W, P1) opens it for the duel and the tournament only, so the other modes' menus
+ * do not offer it yet.
  */
-export const DUEL_MAP_ID = GORA.id;
+export const DUEL_MAP_IDS: readonly string[] = [DOLNA.id, GORA.id];
+/**
+ * The map a 1 v 1 is played on when the lobby did not ask for one of `DUEL_MAP_IDS`.
+ *
+ * GÓRA was the only duel arena from the day it was built (34 × 22 m, its symmetry a construction
+ * rather than a tuning). DOLNA replaces it as the DEFAULT by the owner's brief of 2026-09-26: a
+ * 64 × 70 m plot-and-street with two hidden starts and three ways to fight, measured fair in
+ * docs/MAP_3_DOLNA.md §5.8. GÓRA stays selectable — it is the second entry of `DUEL_MAP_IDS`.
+ */
+export const DUEL_MAP_ID = DOLNA.id;
 export const MAP_ORDER: readonly string[] = [NIGHT_DISTRICT.id, GORA.id];
+
+/**
+ * The duel arena for what a lobby asked. Server and client both answer the question "which map
+ * will this duel REALLY play?" — the room when it builds its world, the loading card and the menu
+ * before the room exists — and they have to agree, so the rule lives once, here, and is pure: a
+ * known duel arena is honoured, anything else (the district, a stale link, nothing) is the default.
+ */
+export const duelMapOf = (asked: string | undefined): string =>
+  asked && DUEL_MAP_IDS.includes(asked) ? asked : DUEL_MAP_ID;
 
 /** The map's bomb sites, or NIGHT_DISTRICT's pair for a map that predates the field. */
 export const sitesOf = (map: MapDef): readonly BombSite[] => map.sites ?? BOMB_SITES;

@@ -149,8 +149,8 @@ export function App() {
     hud.reset();
     // Joining a room by its id: the room has its own mode and map, and the menu's pick is not them
     // (§5.2 #64) — the loading card says „DOŁĄCZANIE DO POKOJU” until the room itself tells us.
-    // A duel and a tournament are always played on the 1 v 1 arena, whatever the menu's map says:
-    // the server overrides the lobby's map for them (`TdmRoom.ts` `duel`, `MAPS[DUEL_MAP_ID]`).
+    // A duel and a tournament are always played on a 1 v 1 arena — the default unless the menu
+    // picked the other one: the server applies `duelMapOf` to the lobby's map (`TdmRoom.ts` `duel`).
     setPicked(mode === "join" ? {} : { gameMode, mapId: pickedMap(gameMode, mapId) });
     // The connection starts now; the screen changes under the black (§6.1 menu → loading). The
     // ENGINE waits for the loading card to be on screen (`shown`): building the scene holds the
