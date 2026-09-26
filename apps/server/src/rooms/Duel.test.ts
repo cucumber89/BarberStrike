@@ -29,20 +29,29 @@ function kill(killer: PlayerState, victim: PlayerState): void {
   (h.room as unknown as Damage).applyDamage(killer, victim.id, 999, false, undefined, "rifle");
 }
 
-it("is played on the arena built for it, whatever the lobby asked for", async () => {
-  // GÓRA has been the duel arena since it was built, and nothing pinned the mode to it: a room
-  // created from the lobby carried whatever map was selected there, and the default is the 100 m
-  // night district — two people, one life, sixty seconds, and a quarter of a kilometre of streets
-  // to find each other in.
+it("is played on an arena built for it: the default when the lobby asked for anything else", async () => {
+  // GÓRA was the duel arena since it was built, and nothing pinned the mode to it: a room created
+  // from the lobby carried whatever map was selected there, and the default is the 100 m night
+  // district — two people, one life, sixty seconds, and a quarter of a kilometre of streets to
+  // find each other in. Drop W (P1): the default arena is DOLNA now, and GÓRA stays on request.
+  const DEFAULT_ARENA = MAPS[DUEL_MAP_ID];
   h = await RoomHarness.create({ room: "duel-map", mode: "duel", map: "night_district", bots: 0 });
   expect(h.state.mapId).toBe(DUEL_MAP_ID);
   expect(h.room.metadata.map).toBe(DUEL_MAP_ID);
   await h.join("Alpha"); await h.join("Bravo");
   await h.until(MatchPhase.Prep);
   for (const p of h.state.players.values()) {
-    expect(GORA.spawns.some((sp) => sp.team === p.team && sp.x === p.x && sp.z === p.z),
-      `a duellist must start on one of GÓRA's own spawns, not (${p.x}, ${p.z})`).toBe(true);
+    expect(DEFAULT_ARENA.spawns.some((sp) => sp.team === p.team && sp.x === p.x && sp.z === p.z),
+      `a duellist must start on one of ${DEFAULT_ARENA.name}'s own spawns, not (${p.x}, ${p.z})`).toBe(true);
   }
+  // A duel asked for on GÓRA is played on GÓRA; one with no map at all lands on the default.
+  await h.dispose();
+  h = await RoomHarness.create({ room: "duel-gora", mode: "duel", map: "gora", bots: 0 });
+  expect(h.state.mapId).toBe(GORA.id);
+  expect(h.room.metadata.map).toBe(GORA.id);
+  await h.dispose();
+  h = await RoomHarness.create({ room: "duel-nomap", mode: "duel", bots: 0 });
+  expect(h.state.mapId).toBe(DUEL_MAP_ID);
   // And the other modes still take the lobby's word.
   await h.dispose();
   h = await RoomHarness.create({ room: "tdm-map", mode: "tdm", map: "night_district", bots: 0 });

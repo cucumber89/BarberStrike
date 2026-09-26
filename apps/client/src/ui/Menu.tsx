@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BOYS_CLASSES, BOYS, BUILDS, OUTFITS, buildDef, outfitDef, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, DUEL_MAP_ID, GAME_VERSION, MAPS, MAX_BOTS, MAX_NAME_LENGTH, MAX_PLAYERS, MODES, MODE_ORDER, TOURNAMENT, isGameMode, isOpenMode, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { BOYS_CLASSES, BOYS, BUILDS, OUTFITS, buildDef, outfitDef, HAIRCUTS, WEAPONS, BOT_LEVELS, BOT_PRESETS, DEFAULT_MAP_ID, DUEL_MAP_ID, DUEL_MAP_IDS, GAME_VERSION, MAPS, duelMapOf, MAX_BOTS, MAX_NAME_LENGTH, MAX_PLAYERS, MODES, MODE_ORDER, TOURNAMENT, isGameMode, isOpenMode, type BotLevel, type GameMode } from "@frankibarber/shared";
 import { equippedBuild, equippedHaircut, equippedOutfit, ownedCuts } from "../game/progression/profile";
 import { copyText, inviteLink, isLobbyInvite, isMapId, mapChoices, parseInvite } from "./invite";
 import { Lobby, LOBBY_SIZES, isLobbySize } from "./lobby";
@@ -107,6 +107,12 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
   });
   const pickMap = (id: string) => { setMapId(id); try { localStorage.setItem("fb_map", id); } catch { /* private mode */ } };
   const maps = useMemo(() => mapChoices(), []);
+  // Drop W (P1): the arenas a 1 v 1 may be played on — DOLNA by default, GÓRA on request. They are
+  // NOT `mapChoices()`: DOLNA is kept out of `MAP_ORDER` (duel and tournament only for now), and the
+  // district is never a duel map. The duel and tournament pickers list these instead of `maps`.
+  const duelMaps = useMemo(() => DUEL_MAP_IDS.map((id) => ({ id, name: MAPS[id].name })), []);
+  /** The two arenas in one Polish line, each with its footprint from its own bounds — nothing hard-coded. */
+  const duelArenasLine = duelMaps.map((m) => `${m.name} · ${mapSize(m.id)}`).join(" albo ");
   const [botCount, setBotCount] = useState(() => { try { return Math.max(0, Math.min(MAX_BOTS, Number(localStorage.getItem("fb_bots") ?? 0) || 0)); } catch { return 0; } });
   const [botLevel, setBotLevel] = useState<BotLevel>(() => { try { const l = localStorage.getItem("fb_botlevel"); return l === "easy" || l === "hard" ? l : "normal"; } catch { return "normal"; } });
   const pickBots = (n: number, l: BotLevel) => { setBotCount(n); setBotLevel(l); try { localStorage.setItem("fb_bots", String(n)); localStorage.setItem("fb_botlevel", l); } catch { /* private mode */ } };
@@ -451,17 +457,19 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
 
                   <div className="lb-block">
                     <h2 className="lb-h"><em>{gameMode === "boys" ? "03" : "02"}</em> MAPA</h2>
-                    {/* A 1 v 1 is played on the arena built for it, so the picker says so instead of
-                        offering a choice the server overrides. */}
+                    {/* A 1 v 1 is played on one of the arenas built for it, so the picker offers exactly
+                        those and says so — a district pick the server would override is not on offer.
+                        The card lit is the one the room will really play (`duelMapOf`). */}
                     {gameMode === "duel" && (
-                      <p className="mm-hint" data-testid="map-fixed">Pojedynek zawsze na {MAPS[DUEL_MAP_ID].name} — arenie zrobionej pod 1 v 1 ({mapSize(DUEL_MAP_ID)}).</p>
+                      <p className="mm-hint" data-testid="map-fixed">Pojedynek gra się na arenie 1 v 1: {duelArenasLine}.</p>
                     )}
                     <div className="map-grid" role="radiogroup" aria-label="Map" data-testid="map-picker">
-                      {(gameMode === "duel" ? maps.filter((m) => m.id === DUEL_MAP_ID) : maps).map((m) => {
+                      {(gameMode === "duel" ? duelMaps : maps).map((m) => {
                         const Plan = mapArt(m.id);
+                        const on = gameMode === "duel" ? duelMapOf(mapId) === m.id : mapId === m.id;
                         return (
                           <button
-                            key={m.id} role="radio" aria-checked={gameMode === "duel" || mapId === m.id} className={`map-card ${gameMode === "duel" || mapId === m.id ? "on" : ""}`}
+                            key={m.id} role="radio" aria-checked={on} className={`map-card ${on ? "on" : ""}`}
                             onClick={() => pickMap(m.id)} data-testid={`map-${m.id}`} title={m.name}
                           >
                             <span className="map-plan"><Plan /></span>
@@ -610,7 +618,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                 <Lobby
                   name={name.trim().slice(0, MAX_NAME_LENGTH) || "GRACZ"}
                   size={inLobby ? tournSize ?? undefined : undefined}
-                  map={gameMode === "duel" ? DUEL_MAP_ID : mapId}
+                  map={duelMapOf(mapId)}
                   room={roomName.trim() || invite.room || undefined}
                   onWarmup={startWarmup}
                   onLeave={() => { setInLobby(false); setPanel("main"); }}
@@ -634,13 +642,16 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                 </div>
 
                 <div className="lb-block">
-                  <h2 className="lb-h"><em>02</em> MAPA (ROZGRZEWKA)</h2>
+                  <h2 className="lb-h"><em>02</em> MAPA</h2>
+                  {/* Drop W (P1): the pairs of a tournament play on a duel arena, so only those are
+                      offered; the lobby passes the pick to every arena it raises (`TournamentLobbyRoom`). */}
                   <div className="map-grid" role="radiogroup" aria-label="Map" data-testid="tourn-map-picker">
-                    {maps.map((m) => {
+                    {duelMaps.map((m) => {
                       const Plan = mapArt(m.id);
+                      const on = duelMapOf(mapId) === m.id;
                       return (
                         <button
-                          key={m.id} role="radio" aria-checked={mapId === m.id} className={`map-card ${mapId === m.id ? "on" : ""}`}
+                          key={m.id} role="radio" aria-checked={on} className={`map-card ${on ? "on" : ""}`}
                           onClick={() => pickMap(m.id)} data-testid={`tourn-map-${m.id}`} title={m.name}
                         >
                           <span className="map-plan"><Plan /></span>
@@ -650,7 +661,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                       );
                     })}
                   </div>
-                  <small className="mm-hint">Pary turnieju grają zawsze na arenie 1 v 1; ta mapa dotyczy rozgrzewki.</small>
+                  <small className="mm-hint">Pary turnieju grają na tej arenie 1 v 1: {duelArenasLine}.</small>
                 </div>
 
                 <footer className="lb-launch">

@@ -21,9 +21,11 @@ describe("invite links", () => {
     expect(inviteLink("https://barberstrike.click/", "", "tdm", "banana")).toBe(`https://barberstrike.click/?mode=tdm&map=${DEFAULT_MAP_ID}`);
   });
 
-  it("offers every map the build has, in the shared order and under the name the map calls itself", () => {
+  it("offers the shared order's maps under the name each calls itself — DOLNA stays duel-only (Drop W P1)", () => {
     expect(mapChoices()).toEqual(MAP_ORDER.map((id) => ({ id, name: MAPS[id].name })));
     expect(mapChoices().map((m) => m.id)).toEqual(["night_district", "gora"]);
+    expect(MAPS.dolna, "the build has DOLNA").toBeDefined();
+    expect(mapChoices().map((m) => m.id), "but the other modes' menus do not offer it yet").not.toContain("dolna");
     expect(mapChoices().map((m) => m.name)).toEqual(["Night District", "GÓRA (DACH)"]);
   });
 

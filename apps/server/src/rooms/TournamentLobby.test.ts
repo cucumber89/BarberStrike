@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ClientState, LocalDriver, LocalPresence, matchMaker, type Client } from "@colyseus/core";
-import { LOBBY_CHAT_MAX_LEN, parseBracket } from "@frankibarber/shared";
+import { DUEL_MAP_ID, LOBBY_CHAT_MAX_LEN, parseBracket } from "@frankibarber/shared";
 import { TdmRoom } from "./TdmRoom";
 import { TournamentLobbyRoom } from "./TournamentLobbyRoom";
 import { fakeClient, type FakeClient } from "./testHarness";
@@ -94,6 +94,27 @@ it("host START with 8 ready raises 4 parallel arenas and enters phase 'trwa'", a
   const view = parseBracket(h.room.state.bracket)!;
   expect(view.size).toBe(8);
   for (const [, arena] of h.room.state.arenas) { expect(arena.roomId).not.toBe(""); expect(arena.live).toBe(true); }
+});
+
+/**
+ * Drop W (P1): the lobby's map reaches the arenas it raises — and only a duel arena does. The
+ * arena rooms are real local `TdmRoom`s, so their replicated `mapId` is read straight off them.
+ */
+it("raises its arenas on the duel map it was created with, or on the default duel map", async () => {
+  const arenaMaps = async (opts: Record<string, unknown>): Promise<string[]> => {
+    h = await createLobby({ size: 4, seed: 13, ...opts });
+    const cs: FakeClient[] = [];
+    for (let i = 0; i < 4; i++) { const c = await h.join(`G${i}`); h.send(c, "lobby:ready", { ready: true }); cs.push(c); }
+    h.send(cs[0], "lobby:start", {});
+    await vi.waitFor(() => expect(h.room.state.arenas.size).toBe(2));
+    const ids = [...h.room.state.arenas.values()].map((a) => (matchMaker.getLocalRoomById(a.roomId) as TdmRoom).state.mapId);
+    await h.dispose();
+    return ids;
+  };
+  expect(await arenaMaps({ map: "gora" })).toEqual(["gora", "gora"]);
+  expect(await arenaMaps({ map: "dolna" })).toEqual([DUEL_MAP_ID, DUEL_MAP_ID]);
+  expect(await arenaMaps({})).toEqual([DUEL_MAP_ID, DUEL_MAP_ID]);
+  expect(await arenaMaps({ map: "night_district" }), "a pair never plays the district").toEqual([DUEL_MAP_ID, DUEL_MAP_ID]);
 });
 
 it("a non-host START, and a START under two ready, are ignored", async () => {

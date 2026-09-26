@@ -86,15 +86,19 @@ describe("humanError (ui/errors.ts)", () => {
 
 /**
  * The loading card must not name a map the room will not play (§5.2 #64, audit P7-1): the server puts
- * a duel and a tournament on the 1 v 1 arena whatever the lobby asked (`TdmRoom.ts` `get duel()`).
- * Here because P7 owns no test file for the loading card, and a wrong card is what the menu then
- * shows as the match's first words.
+ * a duel and a tournament on a 1 v 1 arena — the default unless the lobby asked for the other one
+ * (`TdmRoom.ts` `get duel()` → `duelMapOf`, Drop W P1). Here because P7 owns no test file for the
+ * loading card, and a wrong card is what the menu then shows as the match's first words.
  */
 describe("loading card map", () => {
-  it("duel and turniej load GÓRA whatever the menu picked; other modes keep the menu's map", () => {
+  it("duel and turniej load the default arena unless GÓRA was picked; other modes keep the menu's map", () => {
     expect(pickedMap("duel", DEFAULT_MAP_ID)).toBe(DUEL_MAP_ID);
     expect(pickedMap("turniej", DEFAULT_MAP_ID)).toBe(DUEL_MAP_ID);
-    expect(mapTitle(pickedMap("duel", DEFAULT_MAP_ID))).toBe("GÓRA (DACH)");
+    expect(pickedMap("duel", "no-such-map")).toBe(DUEL_MAP_ID);
+    expect(pickedMap("duel", "gora")).toBe("gora");
+    expect(pickedMap("turniej", "gora")).toBe("gora");
+    expect(mapTitle(pickedMap("duel", DEFAULT_MAP_ID))).toBe("DOLNA");
+    expect(mapTitle(pickedMap("duel", "gora"))).toBe("GÓRA (DACH)");
     for (const m of GAME_MODES.filter((g) => g !== "duel" && g !== "turniej")) expect(pickedMap(m, DEFAULT_MAP_ID), m).toBe(DEFAULT_MAP_ID);
     expect(pickedMap(undefined, "")).toBe("");
   });

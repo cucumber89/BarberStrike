@@ -115,10 +115,11 @@ test("the lobby offers every mode it has", async ({ page }) => {
   for (const m of ["tdm", "boys", "dom", "bomb", "gungame", "ostrzyzeni", "duel", "turniej"]) {
     await expect(page.getByTestId(`mode-${m}`)).toBeVisible();
   }
-  // The 1 v 1 and the tournament are both played on the arena, and the picker says so instead of
-  // offering a map choice the server overrides.
+  // The 1 v 1 and the tournament are both played on a duel arena — DOLNA by default, GÓRA on
+  // request (Drop W P1) — and the picker offers exactly those two, never the district.
   await page.getByTestId("mode-duel").click();
   await expect(page.getByTestId("map-fixed")).toBeVisible();
+  await expect(page.getByTestId("map-dolna")).toBeVisible();
   await expect(page.getByTestId("map-gora")).toBeVisible();
   await expect(page.getByTestId("map-night_district")).toHaveCount(0);
   await page.getByTestId("mode-tdm").click();
