@@ -19,8 +19,23 @@ import type { GameMode } from "./types";
  * How many entrants a bracket is drawn for. Four is one evening; eight is the full night; sixteen
  * and thirty-two are the parallel-arena tournament of drop V, where every pair is its own room.
  */
-export type TournamentSize = 4 | 8 | 16 | 32;
+export type TournamentSize = number;
 export const TOURNAMENT_SIZES: readonly TournamentSize[] = [4, 8, 16, 32];
+
+/**
+ * The tournament seat slider (drop V follow-up, owner's brief): the host does not know if 18, 24 or
+ * 32 will turn up, so the picker is any EVEN count from two to the hard cap, and byes fill the gap.
+ */
+export const LOBBY_SEATS = { min: 2, max: 32, step: 2 } as const;
+/** A valid seat count off the slider: an even number in [2, 32]. Guards a value read from the UI. */
+export const isLobbySeats = (n: number): boolean =>
+  Number.isInteger(n) && n >= LOBBY_SEATS.min && n <= LOBBY_SEATS.max && n % 2 === 0;
+/** The bracket that holds `seats` players — the next power of two, clamped to [2, 32]. Byes fill the rest. */
+export const bracketCapacity = (seats: number): number => {
+  let c = 2;
+  while (c < seats) c *= 2;
+  return Math.min(32, Math.max(2, c));
+};
 
 /**
  * The rounds, largest first, as the screen names them. The three names near the end stay the words a
@@ -67,23 +82,26 @@ export const roundsOf = (size: TournamentSize): number => Math.log2(size);
  * and `settleByes` walks them through before anybody is asked to play.
  */
 export function seedBracket(entrants: { id: string; name: string }[], size: TournamentSize, rnd: () => number): Bracket {
+  // The picker is any even seat count now (LOBBY_SEATS); the bracket itself is always a power of two,
+  // so a draw of 18 or 24 plays in a 32-slot bracket with the empty seats as byes.
+  const cap = bracketCapacity(size);
   const ids = entrants.map((e) => e.id);
   // Fisher-Yates on a copy: the draw is the only random thing in a tournament, and it happens once.
   for (let i = ids.length - 1; i > 0; i--) {
     const j = Math.floor(rnd() * (i + 1));
     [ids[i], ids[j]] = [ids[j], ids[i]];
   }
-  while (ids.length < size) ids.push("");
+  while (ids.length < cap) ids.push("");
   const names: Record<string, string> = {};
   for (const e of entrants) names[e.id] = e.name;
 
   const matches: TourMatch[] = [];
-  for (let i = 0; i < size; i += 2) matches.push({ round: 0, a: ids[i], b: ids[i + 1], winner: "", scoreA: 0, scoreB: 0 });
-  for (let round = 1; round < roundsOf(size); round++) {
-    const count = size / 2 ** (round + 1);
+  for (let i = 0; i < cap; i += 2) matches.push({ round: 0, a: ids[i], b: ids[i + 1], winner: "", scoreA: 0, scoreB: 0 });
+  for (let round = 1; round < roundsOf(cap); round++) {
+    const count = cap / 2 ** (round + 1);
     for (let i = 0; i < count; i++) matches.push({ round, a: "", b: "", winner: "", scoreA: 0, scoreB: 0 });
   }
-  return settleByes({ size, matches, at: 0, names });
+  return settleByes({ size: cap, matches, at: 0, names });
 }
 
 /** Where the winner of match `index` goes: the match in the next round, and which side of it. */

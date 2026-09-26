@@ -31,13 +31,17 @@ export interface LobbyProps {
   map?: string;
   room?: string;
   roomId?: string;
+  /** Admin password (from /viewer), passed to create so the server lets this host raise the lobby. */
+  adminKey?: string;
+  /** Hide the bot-warmup button — the /viewer admin console has no game canvas to warm up in. */
+  hideWarmup?: boolean;
   /** Start a warmup match: the menu's `play("create")` with a bot duel (D9). */
   onWarmup: () => void;
   /** Leave the lobby back to the menu. */
   onLeave: () => void;
 }
 
-export function Lobby({ name, size, map, room, roomId, onWarmup, onLeave }: LobbyProps) {
+export function Lobby({ name, size, map, room, roomId, adminKey, hideWarmup, onWarmup, onLeave }: LobbyProps) {
   const state = useLobby();
   const [conn, setConn] = useState<LobbyConnection | null>(null);
   const [error, setError] = useState("");
@@ -52,7 +56,7 @@ export function Lobby({ name, size, map, room, roomId, onWarmup, onLeave }: Lobb
     if (started.current) return;
     started.current = true;
     let live: LobbyConnection | null = null;
-    const opts: LobbyJoinOptions = { name, map, room, roomId };
+    const opts: LobbyJoinOptions = { name, map, room, roomId, adminKey };
     const p = size ? LobbyConnection.create({ ...opts, size }) : LobbyConnection.join(opts);
     p.then((c) => { live = c; setConn(c); identifyLobby(c.room); }).catch(() => setError("Nie udało się wejść do poczekalni. Sprawdź, czy serwer działa."));
     return () => { void live?.leave(); };
@@ -145,9 +149,11 @@ export function Lobby({ name, size, map, room, roomId, onWarmup, onLeave }: Lobb
               </button>
             )}
 
-            <button type="button" className="mm-btn" onClick={onWarmup} data-testid="lobby-warmup" title="Zagraj z botem, czekając na turniej">
-              ROZGRZEWKA Z BOTEM
-            </button>
+            {!hideWarmup && (
+              <button type="button" className="mm-btn" onClick={onWarmup} data-testid="lobby-warmup" title="Zagraj z botem, czekając na turniej">
+                ROZGRZEWKA Z BOTEM
+              </button>
+            )}
           </div>
 
           {/* --------------------------------------------------------------------- invite */}

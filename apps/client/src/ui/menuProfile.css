@@ -1,0 +1,27 @@
+/* Main-menu profile card + mini hall of fame (owner's follow-up, drop V). */
+.mp { display: grid; gap: 12px; margin: 0 0 18px; }
+
+.mp-card { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; gap: 4px 14px;
+  align-items: center; padding: 14px 16px; border-radius: 12px;
+  background: linear-gradient(180deg, rgba(231,182,46,.10), rgba(20,23,28,.55)); border: 1px solid rgba(231,182,46,.30); }
+.mp-badge { grid-row: 1 / span 2; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 12px;
+  background: var(--hud-accent, #e7b62e); color: #14171c; font: 800 22px/1 var(--font-mono); box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+.mp-who { display: grid; }
+.mp-nick { font: 700 18px/1.1 var(--font-ui); color: #f2f5f8; letter-spacing: .02em; }
+.mp-title { font: 600 11px/1.2 var(--font-mono); letter-spacing: .12em; color: var(--hud-accent, #e7b62e); }
+.mp-xp { grid-column: 2; display: grid; gap: 4px; }
+.mp-xp-head { display: flex; justify-content: space-between; font: 500 10px/1 var(--font-mono); letter-spacing: .08em; color: #9aa8b4; }
+.mp-bar { height: 7px; border-radius: 4px; background: rgba(255,255,255,.10); overflow: hidden; }
+.mp-bar > i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #e7b62e, #f4d06a); transition: width .4s ease; }
+
+.mp-top { padding: 12px 14px; border-radius: 12px; background: rgba(20,23,28,.5); border: 1px solid rgba(178,201,210,.14); }
+.mp-top-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.mp-top-head b { font: 700 12px/1 var(--font-mono); letter-spacing: .14em; color: #cfd8e0; }
+.mp-top-head a { font: 600 11px/1 var(--font-mono); color: var(--hud-accent, #e7b62e); text-decoration: none; }
+.mp-top-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.mp-top-list li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,.03); }
+.mp-top-i { width: 18px; text-align: center; font: 700 12px/1 var(--font-mono); color: var(--hud-accent, #e7b62e); }
+.mp-top-name { font: 600 13px/1.1 var(--font-ui); color: #e6ebf0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mp-top-size { font: 500 11px/1 var(--font-mono); color: #8fa0ad; }
+.mp-top-empty { padding: 8px; color: #8fa0ad; font-size: 12px; text-align: center; background: none; }
