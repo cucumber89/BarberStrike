@@ -1,6 +1,6 @@
 # measure — dolna "DOLNA"
 
-129 solids · 30 props · 8 lights · 12 team spawns (+8 arena) · 3 stations · 3 flags · 2 sites · bounds 64.0 × 70.0 m · 7504 walk cells, 5279 reachable from spawn 0 (1320 m²).
+144 solids · 35 props · 11 lights · 12 team spawns (+8 arena) · 3 stations · 3 flags · 2 sites · bounds 64.0 × 70.0 m · 7509 walk cells, 5279 reachable from spawn 0 (1320 m²).
 
 ## 1. The generic map suite, emulated
 
@@ -11,10 +11,10 @@
 - stations ≥ 3, free, reachable, spread > 30 m in x: 3, spread 52.0 — ok 
 - flags A/B/C reachable, pairwise > 14 m: ABC min 23.4 — ok 
 - no spawn inside a flag zone (3.5 m): 0 — ok
-- bomb sites own (yes), in bounds: ok; load ≤ 30 within 7.5 m: A 15+5, B 12+1 — ok
+- bomb sites own (yes), in bounds: ok; load ≤ 30 within 7.5 m: A 15+5, B 14+1 — ok
 - no deep same-material overlaps: 0 — ok 
 - floor audit: coplanar TOP pairs 0, coplanar side faces on interpenetrating solids 0 — ok  
-- props in bounds: 30/30 — ok
+- props in bounds: 35/35 — ok
 - huntSpawnMinM 10 m on a 94.8 m diagonal (GÓRA: 6 on 39; district: 14 on 121).
 
 ## 2. The duel starts (first spawn of each side)
@@ -66,7 +66,7 @@ Worst difference over the 4 contested places: **150 ms** — ok
 
 ## 6. What can be climbed (chained real jumps from the ground)
 
-- mantle 1.25 m beside a top; sprint jump 4.42 m across; 21 standable tops of 129.
+- mantle 1.25 m beside a top; sprint jump 4.42 m across; 21 standable tops of 144.
 - standable tops ≥ 1.9 m: none
 - boundary/roof names standable: none — ok
 

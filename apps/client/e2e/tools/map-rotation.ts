@@ -9,18 +9,27 @@
  *   1. the movement model: steady speeds, the acceleration ramp, stop distance;
  *   2. what a corner and a flight of stairs actually cost in this model (answer: nothing);
  *   3. NIGHT_DISTRICT's real rotations, walked on its real walk grid with its real geometry, and
- *      its sight-line distribution — the reference the second map is compared against;
- *   4. GÓRA (DACH), the 1v1 roof, walked from BOTH starts on its real geometry — the rotation
- *      table `docs/MAP_2.md` quotes (the full fairness audit is `map-duel.ts`).
+ *      its sight-line distribution — the reference the duel maps are compared against;
+ *   4. the duel map named on the command line (`map-rotation.ts [map id]`, default gora), walked
+ *      from BOTH starts on its real geometry — the rotation table `docs/MAP_2.md` quotes for GÓRA
+ *      (the full fairness audit is `map-duel.ts`).
+ *
+ * WHY THE MAP ID (Drop W). Section 4 was pinned to GÓRA: it imported `GORA`, listed its places by
+ * hand and timed team 1 on the 180° twin of every route, which is only "the same route" on a map
+ * that is its own rotation. DOLNA is a real plot with no twin, so its places are a table
+ * (`DOLNA_PLACES` via `map-profiles.ts`; a leading "*" marks a contested place) and both starts
+ * are walked to the SAME point: the contested places, the eight places the brief's R4 names, and
+ * each other's start. GÓRA keeps its own rows and its twin, so the default run is bit-identical
+ * to `apps/client/e2e/out/g/rotation.md`. Sections 1–3 do not depend on the map id.
  */
 import { CollisionWorld, boxFrom, makeRayHit } from "../../../../packages/shared/src/collision";
 import { PLAYER } from "../../../../packages/shared/src/constants";
 import { createBody, simulateBody, TAC, MOVE } from "../../../../packages/shared/src/movement";
 import { Btn } from "../../../../packages/shared/src/types";
 import { NIGHT_DISTRICT, buildCollisionWorld } from "../../../../packages/shared/src/map";
-import { GORA } from "../../../../packages/shared/src/gora";
 import { walkable, reachable, cellKey, WALK_GRID } from "../../../../packages/shared/src/mapWalk";
-import { prepareNav, findPath } from "../../../../packages/shared/src/nav";
+import { prepareNav, findPath, type NavPoint } from "../../../../packages/shared/src/nav";
+import { pickProfile } from "./map-profiles";
 
 const DT = 1000 / 60;
 type P = [number, number];
@@ -199,43 +208,72 @@ for (const [name, from, to] of [
 }
 
 // ---------------------------------------------------------------------------------------------
-// 4. GÓRA (DACH) — the 1v1 roof, as built. The flat's drafted polylines that used to sit here were
-//    the drawing the flat was signed off on; the roof is measured on its real geometry and its real
-//    walk grid, from BOTH starts, so the fairness claim is a number. `map-duel.ts` is the full
-//    audit (spawn lines, symmetry, choices, climbing, floating); this is the rotation table.
+// 4. The duel map as built. The flat's drafted polylines that used to sit here were the drawing
+//    the flat was signed off on; a duel map is measured on its real geometry and its real walk
+//    grid, from BOTH starts, so the fairness claim is a number. `map-duel.ts` is the full audit
+//    (spawn lines, symmetry, choices, climbing, floating); this is the rotation table.
 // ---------------------------------------------------------------------------------------------
-console.log(`\n## 4. GÓRA (DACH) as built (real geometry, real walk grid, both starts)\n`);
-const gora = buildCollisionWorld(GORA);
-const gwalk = walkable(GORA);
+const duelProfile = pickProfile();
+const GMAP = duelProfile.map;
+console.log(`\n## 4. ${GMAP.name} as built (real geometry, real walk grid, both starts)\n`);
+const gora = buildCollisionWorld(GMAP);
+const gwalk = walkable(GMAP);
 prepareNav(gwalk);
-const g0 = GORA.spawns.find((s) => s.team === 0)!;
-const g1 = GORA.spawns.find((s) => s.team === 1)!;
-const grot = (p: { x: number; y: number; z: number }) => ({ x: -p.x, y: p.y, z: -p.z });
-const gsite = (id: string) => { const s = GORA.sites!.find((v) => v.id === id)!; return { x: s.x, y: 0, z: s.z }; };
-const gflag = (id: string) => { const f = GORA.flags.find((v) => v.id === id)!; return { x: f.x, y: f.y, z: f.z }; };
-console.log(`| Rotation (from T0; T1 walks the 180° twin) | Straight (m) | Path (m) | T0 (s) | T1 (s) |`);
-console.log(`|---|---|---|---|---|`);
-for (const [name, from, to] of [
-  ["start → own crossroads (podest W)", { x: g0.x, y: g0.y, z: g0.z }, { x: -6.2, y: 0, z: 0 }],
-  ["start → the perch", { x: g0.x, y: g0.y, z: g0.z }, gflag("C")],
-  ["start → own lane nook", { x: g0.x, y: g0.y, z: g0.z }, { x: -3.2, y: 0, z: -9.4 }],
-  ["start → bomb A (own yard)", { x: g0.x, y: g0.y, z: g0.z }, gsite("A")],
-  ["start → bomb B (far yard)", { x: g0.x, y: g0.y, z: g0.z }, gsite("B")],
-  ["start → flag A (own gate)", { x: g0.x, y: g0.y, z: g0.z }, gflag("A")],
-  ["start → flag B (far gate)", { x: g0.x, y: g0.y, z: g0.z }, gflag("B")],
-  ["start → the other start (first contact)", { x: g0.x, y: g0.y, z: g0.z }, { x: g1.x, y: g1.y, z: g1.z }],
-  ["bomb A ↔ bomb B", gsite("A"), gsite("B")],
-  ["perch → own lane nook", gflag("C"), { x: -3.2, y: 0, z: -9.4 }],
-] as [string, { x: number; y: number; z: number }, { x: number; y: number; z: number }][]) {
-  const walkFrom = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) => {
-    const path = findPath(gwalk, a, b, 60000);
-    if (!path) return null;
-    const pts: P[] = path.map((p) => [p.x, p.z]);
-    return { m: polyLen(pts), ...runRoute(gora, pts, a.y) };
+const g0 = GMAP.spawns.find((s) => s.team === 0)!;
+const g1 = GMAP.spawns.find((s) => s.team === 1)!;
+const walkFrom = (a: NavPoint, b: NavPoint) => {
+  const path = findPath(gwalk, a, b, 60000);
+  if (!path) return null;
+  const pts: P[] = path.map((p) => [p.x, p.z]);
+  return { m: polyLen(pts), ...runRoute(gora, pts, a.y) };
+};
+const est = (r: { m: number; s: number; stuck: boolean }) => r.stuck ? (r.m / 7.6).toFixed(1) + " (est)" : r.s.toFixed(2);
+if (duelProfile.twin) {
+  // A map that is its own rotation: T1 walks the 180° twin of T0's route. GÓRA's rows, as quoted
+  // in `docs/MAP_2.md`.
+  const grot = duelProfile.twin;
+  const gsite = (id: string) => { const s = GMAP.sites!.find((v) => v.id === id)!; return { x: s.x, y: 0, z: s.z }; };
+  const gflag = (id: string) => { const f = GMAP.flags.find((v) => v.id === id)!; return { x: f.x, y: f.y, z: f.z }; };
+  console.log(`| Rotation (from T0; T1 walks the 180° twin) | Straight (m) | Path (m) | T0 (s) | T1 (s) |`);
+  console.log(`|---|---|---|---|---|`);
+  for (const [name, from, to] of [
+    ["start → own crossroads (podest W)", { x: g0.x, y: g0.y, z: g0.z }, { x: -6.2, y: 0, z: 0 }],
+    ["start → the perch", { x: g0.x, y: g0.y, z: g0.z }, gflag("C")],
+    ["start → own lane nook", { x: g0.x, y: g0.y, z: g0.z }, { x: -3.2, y: 0, z: -9.4 }],
+    ["start → bomb A (own yard)", { x: g0.x, y: g0.y, z: g0.z }, gsite("A")],
+    ["start → bomb B (far yard)", { x: g0.x, y: g0.y, z: g0.z }, gsite("B")],
+    ["start → flag A (own gate)", { x: g0.x, y: g0.y, z: g0.z }, gflag("A")],
+    ["start → flag B (far gate)", { x: g0.x, y: g0.y, z: g0.z }, gflag("B")],
+    ["start → the other start (first contact)", { x: g0.x, y: g0.y, z: g0.z }, { x: g1.x, y: g1.y, z: g1.z }],
+    ["bomb A ↔ bomb B", gsite("A"), gsite("B")],
+    ["perch → own lane nook", gflag("C"), { x: -3.2, y: 0, z: -9.4 }],
+  ] as [string, NavPoint, NavPoint][]) {
+    const a = walkFrom(from, to), b = walkFrom(grot(from), grot(to));
+    if (!a || !b) { console.log(`| ${name} | — | NO PATH | — | — |`); continue; }
+    console.log(`| ${name} | ${Math.hypot(to.x - from.x, to.z - from.z).toFixed(1)} | ${a.m.toFixed(1)} | ${est(a)} | ${est(b)} |`);
+  }
+} else {
+  // No twin: both starts walk to the SAME place — every contested ("*") place, then the places the
+  // brief's R4 names, then each other's start.
+  const R4: Readonly<Record<string, readonly string[]>> = {
+    dolna: ["gate", "wicket", "garage_door", "shed_w_door", "hall_mouth", "*street_mid", "toj"],
   };
-  const a = walkFrom(from, to), b = walkFrom(grot(from), grot(to));
-  if (!a || !b) { console.log(`| ${name} | — | NO PATH | — | — |`); continue; }
-  console.log(`| ${name} | ${Math.hypot(to.x - from.x, to.z - from.z).toFixed(1)} | ${a.m.toFixed(1)} | ${a.stuck ? (a.m / 7.6).toFixed(1) + " (est)" : a.s.toFixed(2)} | ${b.stuck ? (b.m / 7.6).toFixed(1) + " (est)" : b.s.toFixed(2)} |`);
+  const names = [...Object.keys(duelProfile.places).filter((n) => n.startsWith("*")), ...(R4[GMAP.id] ?? [])].filter((n, i, all) => all.indexOf(n) === i);
+  const A: NavPoint = { x: g0.x, y: g0.y, z: g0.z }, B: NavPoint = { x: g1.x, y: g1.y, z: g1.z };
+  console.log(`Both starts walk to the SAME place (T0 from (${g0.x}, ${g0.z}), T1 from (${g1.x}, ${g1.z})); "*" marks a contested place, the ones the 250 ms brief applies to.\n`);
+  console.log(`| Place | Straight T0 / T1 (m) | Path T0 / T1 (m) | T0 (s) | T1 (s) | Δ (ms) |`);
+  console.log(`|---|---|---|---|---|---|`);
+  const row = (name: string, toA: NavPoint, toB: NavPoint) => {
+    const a = walkFrom(A, toA), b = walkFrom(B, toB);
+    if (!a || !b) { console.log(`| ${name} | — | ${a ? a.m.toFixed(1) : "NO PATH"} / ${b ? b.m.toFixed(1) : "NO PATH"} | — | — | — |`); return; }
+    console.log(`| ${name} | ${Math.hypot(toA.x - A.x, toA.z - A.z).toFixed(1)} / ${Math.hypot(toB.x - B.x, toB.z - B.z).toFixed(1)} | ${a.m.toFixed(1)} / ${b.m.toFixed(1)} | ${est(a)} | ${est(b)} | ${(Math.abs(a.s - b.s) * 1000).toFixed(0)} |`);
+  };
+  for (const n of names) {
+    const to = duelProfile.places[n];
+    if (!to) { console.log(`| ${n} | — | not in the places table | — | — | — |`); continue; }
+    row(n, to, to);
+  }
+  row("start → the other start (first contact)", B, A);
 }
 {
   const cells: { x: number; z: number; y: number }[] = [];
@@ -244,7 +282,7 @@ for (const [name, from, to] of [
     // `cellKey` is round(centre × 2) with centres at .25 offsets: key K is the centre K / 2 − 0.25.
     for (const y of ys) cells.push({ x: cx / 2 - 0.25, z: cz / 2 - 0.25, y });
   }
-  const reach = reachable(gwalk, GORA.spawns[0]);
+  const reach = reachable(gwalk, GMAP.spawns[0]);
   const live = cells.filter((c) => reach.has(`${cellKey(c.x, c.z)}@${c.y}`));
   const rnd = rnd32(12345);
   const clear: number[] = [];

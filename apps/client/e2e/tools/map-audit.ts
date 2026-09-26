@@ -31,6 +31,12 @@
  *     many distinct colours the map is spending.
  *  7. TEAM BALANCE. Walked path length from each team's spawns to every objective. For a 6v6
  *     tournament this is the number that decides whether the map is fair.
+ *
+ * WHY AN UNKNOWN ID IS AN ERROR (Drop W). The tool used to do `MAPS[argv[2]] ?? NIGHT_DISTRICT`,
+ * so a typo — or a map not yet entered in `MAPS` — silently audited the district and printed a
+ * clean report about the wrong map. With a third map being built against this audit, an unknown
+ * id now ends the run with exit code 2 and the list of known ids; no argument still means the
+ * district.
  */
 import { MAPS, NIGHT_DISTRICT, sitesOf, type MapDef, type Solid } from "../../../../packages/shared/src/map";
 import { buildCollisionWorld } from "../../../../packages/shared/src/map";
@@ -39,7 +45,13 @@ import { PLAYER } from "../../../../packages/shared/src/constants";
 import { walkable, reachable, cellKey } from "../../../../packages/shared/src/mapWalk";
 import { findPath } from "../../../../packages/shared/src/nav";
 
-const map: MapDef = MAPS[process.argv[2] ?? NIGHT_DISTRICT.id] ?? NIGHT_DISTRICT;
+const mapId = process.argv[2] ?? NIGHT_DISTRICT.id;
+const found: MapDef | undefined = MAPS[mapId];
+if (!found) {
+  console.error(`map-audit: unknown map id "${mapId}"; known: ${Object.keys(MAPS).join(", ")}`);
+  process.exit(2);
+}
+const map: MapDef = found;
 const world = buildCollisionWorld(map);
 const walk = walkable(map);
 const seen = reachable(walk, map.spawns[0]);
