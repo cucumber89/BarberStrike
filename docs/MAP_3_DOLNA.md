@@ -1246,11 +1246,11 @@ korony drzew, kubły, rabaty, buda.
 
 ### Pomiary narzędziami repo (po przebudowie)
 
-- **Front równych kosztów** (`_frontier`, siatka 2 m, tylko parter): osiem miejsc spornych —
-  podjazd (−2.25, 3.75) Δ −0.7 m, brama (−4.25, 1.75) Δ −1.2, furtka (−6.25, 1.75) Δ 1.0, wylot
-  przesmyku (1.75, 5.75) Δ 0.2, trawnik na południe od baraku (3.75, 5.75) Δ 0.0, trawnik na północ
-  od baraku (5.75, 17.75) Δ 0.0, wnętrze baraku (5.75, 11.75) Δ 1.0, droga (−10.25, −0.25) Δ −1.5 —
-  **najgorsze 1.7 m = 224 ms** (brief: 250). Start–start 57.6 / 58.1 m ścieżki (7.8 / 8.8 s).
+- **Front równych kosztów** (`_frontier`, siatka 2 m, tylko parter; po odblokowaniu północnych drzwi
+  hali, w których pierwsza wersja postawiła regał): sześć miejsc spornych — podjazd (−2.25, 3.75)
+  Δ −0.7 m, brama (−4.25, 1.75) Δ −1.2, furtka (−6.25, 1.75) Δ 1.0, kuchnia parteru (−4.25, 15.75)
+  Δ 1.2, trawnik zachodni (−14.25, 11.75) Δ −0.4, droga (−10.25, −0.25) Δ −1.5 — **najgorsze 1.5 m =
+  197 ms** (brief: 250). Barak i trawnik obok są T0 (bliżej o 8 m). Start–start 57.6 / 58.1 m ścieżki.
 - `map-duel.ts dolna` §5: 4 540 powierzchni, 22.1 % par z linią, mediana **11.5 m**, p90 25.0,
   najdłuższa 40.5 (droga wzdłuż). §6/§7: nic ponad 1.9 m poza podłogami, schodami, balkonami; 0 brył
   latających. `map-audit.ts`: 2a tylko oczekiwane (auta 1.45, krzak, czapa dachu dobudówki za
@@ -1262,7 +1262,7 @@ korony drzew, kubły, rabaty, buda.
   (z góry) wobec 392 na ulicy dzielnicy; 71 777 wierzchołków całej mapy. Kuchnia, salon, pokój
   wschodni, barak (lustra, neon, fotele, stanowiska, TV, kanapa), hala (heksy, „$ BUY”), BMW na
   drodze z ringami — wszystko czyta się z pierwszej osoby.
-- Live: pojedynek z jednym botem utworzony z menu (DUEL → DOLNA → 1 bot), karta ładowania i HUD **DOLNA**,
+- Live (przed poprawkami z zrzutów właściciela): pojedynek z jednym botem utworzony z menu (DUEL → DOLNA → 1 bot), karta ładowania i HUD **DOLNA**,
   mecz **rozegrany do końca**: 7 rund, 6:0 dla bota, 405 s do ekranu wyniku. Bot z hali w rundzie 0 obszedł
   alejkę za halą, basen i drogę, wszedł do domu i **po dwóch kondygnacjach schodów** zabił gracza w dużym
   pokoju (próbki −4.3/10.1 → −5.4/11.9 → −4.5/14.7); runda 1 skończyła się **na zegar** (bot przez 60 s
@@ -1366,3 +1366,16 @@ Sesja wykonawcza ma je zmierzyć ponownie, nie wierzyć tej tabeli.
 4. **Co nie jest w tym pomiarze:** render (0 świateł, 0 rekwizytów w prototypie), kucnięcie pod
    koronami drzew (mover liczy ciało stojące), zakręty tras z R11, draw-calle — lista w §5.10; sesja
    wykonawcza mierzy wszystko ponownie narzędziami repo (§6, Sesja 1, krok 3).
+
+### Poprawki po zrzutach właściciela (2026-09-27, wieczór)
+
+Pięć zrzutów: regał w drzwiach północnych hali, kuchnia parteru nie do przejścia, „wszystkie meble
+poobracane nie w tą stronę”, w baraku fotele tyłem do luster, toaleta o 180°. Jedna przyczyna
+czterech z nich: Babylon obraca wokół y w układzie LEWOskrętnym — `rotation.y = +π/2` niesie +z na
++x (wschód), a stałe `E`/`W` w `dolna.ts` miały to odwrotnie, więc każdy mebel ustawiony bokiem stał
+odwrócony o 180° (pełne obroty N/S były dobre). Stałe zamienione, rekwizyty starego typu (lustra,
+lampy, neon, spawny areny) zachowały liczby. Regał z drzwi hali na zachód od nich (co otworzyło T0
+północne wyjście i przesunęło front równych kosztów — patrz wyżej); w kuchni parteru stół wzdłuż ściany
+zachodniej z jednym krzesłem, przejście przy blatach 0.95 m; w baraku dwa fotele (północny usunięty
+na życzenie), TV 2.2 m (`scale` 1.6). Testy: 74/74 dla DOLNY; kadry `kitchen_0`, `shed_mirrors`,
+`garage_bench`, `house_garage`, `bath_0`, `salon_0` odświeżone.
