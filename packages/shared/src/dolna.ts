@@ -1,35 +1,51 @@
 /**
- * DOLNA — the third map: a real plot and the street in front of it, built for the 1 v 1 tournament
- * (Drop W, `docs/MAP_3_DOLNA.md`; the owner's photos and his two changes — the black barber shed
- * under the balcony, the corrugated detailing hall where the gazebo stood).
+ * DOLNA 17 — the third map, v2: the owner's plot as he drew it (plan of 2026-09-27), built for
+ * EVERY mode ("ogólnodostępna"), not only the 1 v 1.
  *
- * Grammar: two homes and a mid, like a CS map. Team 0's home is the PLOT (the black barber shed
- * under the balcony is its start pocket, the garage bay and the three gaps in the front line —
- * hedge gap, wicket, gate — are its forward line, the detailing hall is its back). Team 1's home is
- * the BUILDING SITE across the street (the ground-floor shell is its start pocket, the three gaps in
- * the construction mesh — west gap, site gate, east gap — are its forward line). The MID is the
- * STREET: the one long line of the map, 5.2 m of road and 60 m long, broken OFF-AXIS by the two
- * parked cars, the van and the two skips, the two poles and the pine trunks — a 1.7 m strip down
- * the crown of the road still sees all 60 m. Three lanes: WEST (hedge gap ↔ west mesh gap), MID
- * (wicket/garage ↔ site gate), EAST (gate/drive ↔ east mesh gap).
+ * WHAT THE DRAWING FIXES (mandatory, in his words): a hedged plot with the dirt road along its
+ * SOUTH edge; the HOUSE — three storeys, a small annex ("dobudówka") off its NE corner, a balcony
+ * on the garden face upstairs and a balcony on the east face on the top floor; the black BARBER
+ * SHED just east of the house (mirror wall with the barber table and three seats, a TV in the
+ * NW corner, a couch along the north wall, a bathroom in the SW corner, the wash basin on the
+ * south wall, two windows east, the door in the SE corner); the grey DETAILING GARAGE in the SE
+ * corner on the road, two roller gates to the road, a door to the garden and the pool, two cars
+ * inside and the spawn in its NE corner; the POOL in the NE of the garden; the dark grey-blue
+ * BMW on the road in front of the house; the second spawn in the SE room of the 2nd floor. The
+ * room plans of all three storeys (salon, kuchnia, sypialnia, łazienka, schody, kotłownia,
+ * garaż, dobudówka; upstairs salon with the balcony, kuchnia, sypialnia, łazienka; top floor
+ * rooms around the stairs, the east balcony, the spawn room) are his; the doors, which he did not
+ * draw, are ours.
  *
- * FAIRNESS IS MEASURED, NOT BUILT. A real place has no 180° twin (GÓRA's trick), so the contested
- * places are the four points ON THE STREET and both starts reach them within 250 ms (measured
- * 150; `docs/MAP_3_DOLNA.md` §5.8); what each home has for free — the garage, the shed, the hall
- * on one side, the shell and the yard on the other — is evened by the side swap every three rounds.
- * The starts are 44.3 m of path apart, hidden from each other standing and crouching, and no cell
- * of the map sees both. `dolna.test.ts` re-derives all of that from the finished solids; the
- * design-table harness that produced the numbers is `apps/client/e2e/tools/dolna/measure.mts`.
+ * WHAT WE ADDED, AND WHY. (1) A second door in the shed (north, to the pool) — one door makes a
+ * dead-end pocket, and a pocket with one mouth is a grenade trap in every mode. (2) The wooden
+ * front fence with a wicket in front of the front door and a gate in front of the house's own
+ * garage (the owner's photos have that fence; the drawing stops at the road) — three ways in from
+ * the road beside the two garage gates. (3) A garden door from the salon and from the kitchen, an
+ * outer door from the annex and from the house garage — so no room is a dead end and the house
+ * is a loop, not a tree. (4) A 2.8 m partition in the garage around the spawn pocket, so the
+ * pocket is hidden from both gates and the north door (measured in `dolna.test.ts`). (5) Trees
+ * and shrubs in the garden that break the long lines between the house and the pool.
  *
- * Cover speaks one language: 0.8 m = low, jump on it; 1.3 / 1.45–1.5 m = crouch behind it, cannot
- * be climbed from the ground (the mantle is 1.25 m); ≥ 2.0 m = full; ≥ 2.8 m = structures. The one
- * exception is deliberate: a car (1.45) beside a crate (0.8) is a staircase to 2.7 m, so nothing low
- * stands beside the cars, the van or the skips.
+ * CONSTRUCTION. Storey pitch 3.5 m: 3.25 m of wall, then a 0.25 m slab that lies ON the walls and
+ * carries the next storey's walls (a sandwich of butting faces, never an interpenetration — the
+ * floor audit wants zero coplanar faces). The slab is split into non-overlapping panels only
+ * around the stair well. Stairs are a switchback: four treads of 0.5 × 0.35 m, a landing, four
+ * more, a 0.25 m threshold wall whose top IS the upper floor — 0.35 m risers, so a bot's 0.4 m
+ * step climbs them, and 0.5 m treads so every walk-grid cell sits on its own riser (0.4 m treads
+ * put a 0.7 m step in the grid). The flight above hangs (0.35 m thick treads, each 5 cm over the
+ * previous one, so the audit sees it resting) and leaves 0.8 m of headroom over the flight
+ * below. Every door is 1.5 m wide and 2.2 m high with a band above; the walk grid is 0.5 m and
+ * the body 0.7, and a narrower door has no legal cell (how GÓRA lost a wing once). Balconies
+ * carry a 1.35 m parapet: crouching hides you, standing shows your head, and nobody mantles
+ * 1.35 (the mantle is 1.25) — the roofs beside them stay roofs, which `dolna.test.ts` proves with
+ * a wall-aware climb chain, since a naive chain "hops" through walls on a house.
  *
- * Every route passage is ≥ 1.5 m clear (the walk grid is 0.5 m and the body 0.7 — a 1.2 m door has
- * no legal cell, which is how GÓRA lost a wing once). Thin walls straddle a half-metre in z or a
- * quarter-metre in x so the plan tool draws them. +X east (along the street), +Z north (into the
- * plot). Floor top y = 0. Metres.
+ * COVER speaks one language: 0.6–0.8 low (jump on it), 1.3 / 1.45 crouch (cannot be climbed from
+ * the ground), ≥ 2.0 full, ≥ 2.8 structure. Nothing low stands beside a 2.0 m piece, or the low
+ * piece is a step onto it. Thin walls take the plan tool's rows: a wall along X occupies
+ * z ∈ [n+0.5, n+0.75], a wall along Z occupies x ∈ [n, n+0.25] or [n+0.5, n+0.75].
+ *
+ * +X east (along the road), +Z north (into the plot), floor top y = 0. Metres.
  */
 import { type Box, boxFrom } from "./collision";
 import type { LightHint, MapDef, MaterialTag, PropHint, Solid, SolidLook, SpawnPoint } from "./map";
@@ -46,350 +62,501 @@ const add = (...s: Solid[]) => solids.push(...s);
 type Gap = [number, number];
 
 /**
- * A wall along X (z0..z1 thick) from x0 to x1, height h, with door openings [a, b] cut from the
- * floor to `lintel`; the band above the lintel spans the whole wall, so it sits on the jambs and
- * nothing floats. A wall whose lintel is its full height gets no band (a fence with gaps).
+ * A wall along X (z0..z1 thick) from x0 to x1, `h` tall from `y0`, with door openings [a, b] cut
+ * from the floor to `lintel`; the band above the lintel spans the whole wall, so it sits on the
+ * jambs and nothing floats. A wall whose lintel is its full height gets no band (a fence).
  */
-function wallX(name: string, x0: number, x1: number, z0: number, z1: number, h: number, mat: MaterialTag, gaps: Gap[] = [], lintel = 2.2): void {
-  if (!gaps.length) { add(S(x0, 0, z0, x1 - x0, h, z1 - z0, mat, name)); return; }
+function wallX(name: string, x0: number, x1: number, z0: number, z1: number, h: number, mat: MaterialTag, gaps: Gap[] = [], lintel = 2.2, y0 = 0): void {
+  if (!gaps.length) { add(S(x0, y0, z0, x1 - x0, h, z1 - z0, mat, name)); return; }
   const top = Math.min(lintel, h);
   let x = x0; let i = 0;
-  for (const [a, b] of gaps) { if (a > x) add(S(x, 0, z0, a - x, top, z1 - z0, mat, `${name}_j${i++}`)); x = b; }
-  if (x < x1) add(S(x, 0, z0, x1 - x, top, z1 - z0, mat, `${name}_j${i++}`));
-  if (h > top) add(S(x0, top, z0, x1 - x0, h - top, z1 - z0, mat, `${name}_band`));
+  for (const [a, b] of gaps) { if (a > x) add(S(x, y0, z0, a - x, top, z1 - z0, mat, `${name}_j${i++}`)); x = b; }
+  if (x < x1) add(S(x, y0, z0, x1 - x, top, z1 - z0, mat, `${name}_j${i++}`));
+  if (h > top) add(S(x0, y0 + top, z0, x1 - x0, h - top, z1 - z0, mat, `${name}_band`));
 }
 /** The same wall along Z (x0..x1 thick), gaps in z. */
-function wallZ(name: string, z0: number, z1: number, x0: number, x1: number, h: number, mat: MaterialTag, gaps: Gap[] = [], lintel = 2.2): void {
-  if (!gaps.length) { add(S(x0, 0, z0, x1 - x0, h, z1 - z0, mat, name)); return; }
+function wallZ(name: string, z0: number, z1: number, x0: number, x1: number, h: number, mat: MaterialTag, gaps: Gap[] = [], lintel = 2.2, y0 = 0): void {
+  if (!gaps.length) { add(S(x0, y0, z0, x1 - x0, h, z1 - z0, mat, name)); return; }
   const top = Math.min(lintel, h);
   let z = z0; let i = 0;
-  for (const [a, b] of gaps) { if (a > z) add(S(x0, 0, z, x1 - x0, top, a - z, mat, `${name}_j${i++}`)); z = b; }
-  if (z < z1) add(S(x0, 0, z, x1 - x0, top, z1 - z, mat, `${name}_j${i++}`));
-  if (h > top) add(S(x0, top, z0, x1 - x0, h - top, z1 - z0, mat, `${name}_band`));
+  for (const [a, b] of gaps) { if (a > z) add(S(x0, y0, z, x1 - x0, top, a - z, mat, `${name}_j${i++}`)); z = b; }
+  if (z < z1) add(S(x0, y0, z, x1 - x0, top, z1 - z, mat, `${name}_j${i++}`));
+  if (h > top) add(S(x0, y0 + top, z0, x1 - x0, h - top, z1 - z0, mat, `${name}_band`));
 }
-/** A garden tree: a 1.4 m trunk with a low crown from 1.4 m — a blob that blocks the standing eye. */
-function tree(name: string, cx: number, cz: number, crown = 2.4): void {
-  add(S(cx - 0.3, 0, cz - 0.3, 0.6, 1.4, 0.6, "wood", `${name}_trunk`));
-  add(S(cx - crown / 2, 1.4, cz - crown / 2, crown, 3.1, crown, "foliage", `${name}_crown`));
+/**
+ * A garden pine: a 6 m trunk (partial cover, never a step) with its crown from 6 to 9.5 m — above
+ * the top floor's furniture plus a mantle, so no chain of hops, naive or real, ends on a crown and
+ * steps from it onto a hedge. Lines at eye level are broken by shrubs and thuja blocks instead.
+ */
+function tree(name: string, cx: number, cz: number, crown = 3.0): void {
+  add(S(cx - 0.25, 0, cz - 0.25, 0.5, 6.0, 0.5, "wood", `${name}_trunk`));
+  add(S(cx - crown / 2, 6.0, cz - crown / 2, crown, 3.5, crown, "foliage", `${name}_crown`));
+}
+/** A dark window pane, 5 cm thick, 1 cm into the wall (so the audit sees it held) and 4 cm proud of it. */
+function pane(name: string, x0: number, x1: number, z0: number, z1: number, y: number, h = 1.4): void {
+  add(S(x0, y, z0, x1 - x0, h, z1 - z0, "glass_dark", name));
 }
 
 // ======================= EXTENTS =======================
-const SX0 = -30, SX1 = 30;            // the street, 60 m
-const ROAD0 = -6.7, ROAD1 = -1.5;     // the road, 5.2 m (soil, ruts); north verge 1.0 m to the fence line
-const VERGE_S = -8.3;                 // far verge with the pines: 1.6 m; the construction mesh stands on its far edge
-const FRONT = -0.5;                   // the front line (fence / hedge feet start here)
-const PX0 = -11.8, PX1 = 11.8;        // the plot between the hedges (23.6 m)
-const PZ1 = 42;                       // the north hedge line
-const HX0 = -5, HX1 = 5, HZ0 = 5.3, HZ1 = 15.3;  // the house 10 × 10 (front yard 5.5 m from the fence)
-const HH = 6.5;                       // house walls (two storeys)
-const GX1 = 1.3, GZ1 = 12.1;          // garage bay interior: x -4.7..1.3, z 5.6..12.1 (6 × 6.5)
-const SHX0 = -4, SHX1 = 4, SHZ0 = HZ1, SHZ1 = 19.6;   // the shed 8 × 4.3 × 2.8 under the balcony, on the house's north face
-const HALLX0 = -10, HALLX1 = 2, HALLZ0 = 35, HALLZ1 = 42;   // the hall 12 × 7 × 4 (NW corner, 1.8 m slot to the west hedge)
-const SITEX0 = -14, SITEX1 = 8, SITEZ0 = -24.6, SITEZ1 = VERGE_S; // the building site yard
-const SHELLX0 = -8, SHELLX1 = 4, SHELLZ0 = SITEZ0, SHELLZ1 = -17.3; // the shell 12 × 7.3 × 2.8; its back wall is the map edge
+const WT = 0.25;                       // wall thickness
+const ST = 3.5, WH = 3.25, SLAB = 0.25; // storey pitch = wall + slab
+const Y = (s: number) => s * ST;       // floor top of storey s
+const RISE = 0.35, TREAD = 0.5;
+const PX0 = -20.5, PX1 = 20.5;         // the plot between the hedges (41 m)
+const PZ0 = 0.5, PZ1 = 26.5;           // fence line … north hedge (26 m)
+const ROAD0 = -4.5, VERGE0 = -6;       // the road 5 m, the far verge 1.5 m
+const HEDGE = 3.0, HW = 0.6;           // hedge height / thickness
+const HX0 = -15, HX1 = -2.75, HZ0 = 4.5, HZ1 = 16.75;   // the house 12.25 × 12.25
+const AX0 = -7, AZ1 = 19.75;           // the annex: x AX0..HX1, z HZ1..AZ1
+const SHX0 = 1, SHX1 = 6.25, SHZ0 = 6.5, SHZ1 = 14.75;  // the shed 5.25 × 8.25 × 2.8
+const GX0 = 11, GX1 = 20.25, GZ0 = PZ0, GZ1 = 13.75;    // the detailing garage 9.25 × 13.25 × 4
+const GH = 4.0;
+const POOL = { x0: 6.5, x1: 11.5, z0: 21, z1: 25 };      // the basin (interior)
+const DECK = { x0: 5, x1: 13, z0: 19.5, z1: PZ1 };
+const EXT: MaterialTag = "paint_white";                  // the house render: white plaster
+const INT: MaterialTag = "wall_plaster";
 
-// ======================= GROUND (non-overlapping panels) =======================
-add(S(SX0, -1, ROAD0, SX1 - SX0, 1, ROAD1 - ROAD0, "soil", "ground_road"));
-add(S(SX0, -1, ROAD1, SX1 - SX0, 1, FRONT - ROAD1, "soil", "ground_verge_n"));
-add(S(SX0, -1, VERGE_S, SX1 - SX0, 1, ROAD0 - VERGE_S, "soil", "ground_verge_s"));
-add(S(SITEX0 - 0.5, -1, SITEZ0 - 0.5, SITEX1 - SITEX0 + 1, 1, SITEZ1 - SITEZ0 + 0.5, "soil", "ground_site"));
-add(S(PX0 - 0.6, -1, FRONT, PX1 - PX0 + 1.2, 1, HZ0 - FRONT, "floor_concrete", "ground_front"));  // front yard + drive
-add(S(HX1, -1, HZ0, PX1 + 0.6 - HX1, 1, HZ1 - HZ0, "floor_concrete", "ground_drive"));           // east lane
-add(S(HX0, -1, HZ0, HX1 - HX0, 1, HZ1 - HZ0, "floor_concrete", "ground_garage"));                // under the house
-add(S(PX0 - 0.6, -1, HZ0, HX0 - PX0 + 0.6, 1, HZ1 - HZ0, "soil", "ground_lawn_w"));              // west lane
-add(S(PX0 - 0.6, -1, HZ1, PX1 - PX0 + 1.2, 1, PZ1 + 0.6 - HZ1, "soil", "ground_lawn_n"));        // the garden
-add(S(SX0, -1, FRONT, PX0 - 0.6 - SX0, 1, 0.6, "soil", "ground_nb_w"));                           // neighbours' hedge feet
-add(S(PX1 + 0.6, -1, FRONT, SX1 - PX1 - 0.6, 1, 0.6, "soil", "ground_nb_e"));
+// ======================= GROUND (non-overlapping panels; the outermost run under the hedges) =======================
+add(S(-21.7, -1, ROAD0, 43.4, 1, PZ0 - ROAD0, "soil", "ground_road"));
+add(S(-21.7, -1, VERGE0, 43.4, 1, ROAD0 - VERGE0, "soil", "ground_verge"));
+add(S(-21.1, -1, PZ0, 13.1, 1, HZ0 - PZ0, "soil", "ground_front_w"));
+add(S(-8, -1, PZ0, 4, 1, HZ0 - PZ0, "floor_concrete", "ground_drive"));
+add(S(-4, -1, PZ0, GX0 + 4, 1, HZ0 - PZ0, "soil", "ground_front_e"));
+add(S(GX0, -1, GZ0, GX1 - GX0, 1, GZ1 - GZ0, "floor_concrete", "ground_garage"));
+add(S(GX1, -1, GZ0, 21.1 - GX1, 1, GZ1 - GZ0, "soil", "ground_east_strip"));
+add(S(-21.1, -1, HZ0, HX0 + 21.1, 1, 27.1 - HZ0, "soil", "ground_lawn_w"));
+add(S(HX0, -1, HZ0, 6, 1, HZ1 - HZ0, "floor_wood", "ground_house_w"));
+add(S(-9, -1, HZ0, 9 + HX1, 1, 8.75 - HZ0, "floor_concrete", "ground_house_garage"));
+add(S(-9, -1, 8.75, 9 + HX1, 1, HZ1 - 8.75, "floor_wood", "ground_house_e"));
+add(S(AX0, -1, HZ1, HX1 - AX0, 1, AZ1 - HZ1, "floor_wood", "ground_annex"));
+add(S(HX0, -1, HZ1, AX0 - HX0, 1, 27.1 - HZ1, "soil", "ground_lawn_n1"));
+add(S(AX0, -1, AZ1, HX1 - AX0, 1, 27.1 - AZ1, "soil", "ground_lawn_n2"));
+add(S(HX1, -1, HZ0, GX0 - HX1, 1, HZ1 - HZ0, "soil", "ground_lawn_mid"));
+add(S(HX1, -1, HZ1, DECK.x0 - HX1, 1, 27.1 - HZ1, "soil", "ground_lawn_ne1"));
+add(S(DECK.x0, -1, HZ1, DECK.x1 - DECK.x0, 1, DECK.z0 - HZ1, "soil", "ground_lawn_ne2"));
+add(S(GX0, -1, GZ1, 21.1 - GX0, 1, HZ1 - GZ1, "soil", "ground_lawn_e1"));
+add(S(DECK.x1, -1, HZ1, 21.1 - DECK.x1, 1, 27.1 - HZ1, "soil", "ground_lawn_e2"));
+// The pool deck, tiled, four panels around the basin; the basin's walls rise between them.
+add(S(DECK.x0, -1, DECK.z0, DECK.x1 - DECK.x0, 1, POOL.z0 - WT - DECK.z0, "floor_tile", "ground_deck_s"));
+add(S(DECK.x0, -1, POOL.z1 + WT, DECK.x1 - DECK.x0, 1, 27.1 - POOL.z1 - WT, "floor_tile", "ground_deck_n"));
+add(S(DECK.x0, -1, POOL.z0 - WT, POOL.x0 - WT - DECK.x0, 1, POOL.z1 - POOL.z0 + 2 * WT, "floor_tile", "ground_deck_w"));
+add(S(POOL.x1 + WT, -1, POOL.z0 - WT, DECK.x1 - POOL.x1 - WT, 1, POOL.z1 - POOL.z0 + 2 * WT, "floor_tile", "ground_deck_e"));
 
-// ======================= BOUNDARY =======================
-const HEDGE = 3.0;
-add(S(PX0 - 0.6, 0, FRONT, 0.6, HEDGE, PZ1 + 0.6 - FRONT, "foliage", "hedge_w"));
-add(S(PX1, 0, FRONT, 0.6, HEDGE, PZ1 + 0.6 - FRONT, "foliage", "hedge_e"));
-add(S(PX0, 0, PZ1, PX1 - PX0, HEDGE, 0.6, "foliage", "hedge_n"));
-// Front line: thuja hedge left of the house with a 1.5 m gap (DZIURA), then the 1.5 m wooden
-// fence with the 1.5 m wicket (FURTKA) left of centre and the 3.2 m gate (BRAMA) on the right.
-const GAP: Gap = [-11.5, -10.0];            // centred on one walk cell (x -10.25), in line with the west mesh gap
-const WICKET: Gap = [-3.0, -1.5];
-const GATE: Gap = [6.5, 9.7];
-wallX("hedge_front_w", PX0, -6, FRONT, FRONT + 0.6, HEDGE, "foliage", [GAP], HEDGE);
-wallX("fence_front", -6, PX1, FRONT, FRONT + 0.3, 1.5, "wood", [WICKET, GATE], 1.5);
-// The neighbours along the street: thuja 3 m, nobody gets over.
-add(S(SX0, 0, FRONT, PX0 - 0.6 - SX0, HEDGE, 0.6, "foliage", "hedge_nb_w"));
-add(S(PX1 + 0.6, 0, FRONT, SX1 - PX1 - 0.6, HEDGE, 0.6, "foliage", "hedge_nb_e"));
-// Street ends and the far side outside the site: invisible walls to 5 m (butting, never crossing).
-add(S(SX0 - 0.5, 0, VERGE_S - 0.5, 0.5, 5, FRONT + 0.6 - VERGE_S + 0.5, "none", "wall_edge_w", true));
-add(S(SX1, 0, VERGE_S - 0.5, 0.5, 5, FRONT + 0.6 - VERGE_S + 0.5, "none", "wall_edge_e", true));
-add(S(SX0, 0, VERGE_S - 0.5, SITEX0 - SX0, 5, 0.5, "none", "wall_edge_s_w", true));
-add(S(SITEX1, 0, VERGE_S - 0.5, SX1 - SITEX1, 5, 0.5, "none", "wall_edge_s_e", true));
-// The building site: construction mesh 2.0 m with a 3.2 m gate and two 1.5 m gaps where panels
-// are missing; an invisible band above each panel to 5 m so the mesh top is never a step.
-const MESH_GAP_W: Gap = [-11.5, -10.0];     // in line with the plot's hedge gap: the WEST lane is one straight pass
-const MESH_GATE: Gap = [-4.85, -1.65];
-const MESH_GAP_E: Gap = [4.25, 5.75];
-wallX("fence_site", SITEX0, SITEX1, VERGE_S - 0.3, VERGE_S, 2.0, "fence", [MESH_GAP_W, MESH_GATE, MESH_GAP_E], 2.0);
+// ======================= THE POOL: sunk 1.2 m, tiled, 20 cm of water, a two-step ladder out =======================
+// A body in the basin standing has its eye 0.4 m over the deck (head out); crouching is hidden —
+// the same lip GÓRA's perch has, dug down instead of built up. The steps (0.4 m risers) mean it
+// never traps a body; the walk grid climbs them as steps, not jumps.
+add(S(POOL.x0 - WT, -3.0, POOL.z0 - WT, POOL.x1 - POOL.x0 + 2 * WT, 1.0, POOL.z1 - POOL.z0 + 2 * WT, "soil", "ground_pool_bed"));   // the excavation the basin sits in
+add(S(POOL.x0, -2.0, POOL.z0, POOL.x1 - POOL.x0, 0.55, POOL.z1 - POOL.z0, "floor_tile", "pool_floor"));
+add(S(POOL.x0, -1.4, POOL.z0, POOL.x1 - POOL.x0, 0.2, POOL.z1 - POOL.z0, "glass", "ground_pool_water"));
+add(S(POOL.x0 - WT, -2.0, POOL.z0 - WT, WT, 2.0, POOL.z1 - POOL.z0 + 2 * WT, "wall_tile", "pool_wall_w"));
+add(S(POOL.x1, -2.0, POOL.z0 - WT, WT, 2.0, POOL.z1 - POOL.z0 + 2 * WT, "wall_tile", "pool_wall_e"));
+add(S(POOL.x0, -2.0, POOL.z0 - WT, POOL.x1 - POOL.x0, 2.0, WT, "wall_tile", "pool_wall_s"));
+add(S(POOL.x0, -2.0, POOL.z1, POOL.x1 - POOL.x0, 2.0, WT, "wall_tile", "pool_wall_n"));
+add(S(POOL.x0, -1.2, 22, 1.0, 0.4, 2.0, "wall_tile", "pool_step_1"));
+add(S(POOL.x0, -0.8, 22, 0.5, 0.4, 2.0, "wall_tile", "pool_step_2"));
+
+// ======================= BOUNDARY: thuja hedges 3 m, the far side of the road invisible =======================
+add(S(PX0 - HW, 0, PZ0, HW, HEDGE, PZ1 - PZ0, "foliage", "hedge_w"));
+add(S(PX1, 0, PZ0, HW, HEDGE, PZ1 - PZ0, "foliage", "hedge_e"));
+add(S(PX0 - HW, 0, PZ1, PX1 - PX0 + 2 * HW, HEDGE, HW, "foliage", "hedge_n"));
+add(S(-21.7, 0, VERGE0, HW, HEDGE, PZ0 - VERGE0, "foliage", "hedge_road_w"));
+add(S(21.1, 0, VERGE0, HW, HEDGE, PZ0 - VERGE0, "foliage", "hedge_road_e"));
+add(S(-21.7, 0, VERGE0 - 0.5, 43.4, 5, 0.5, "none", "wall_edge_s", true));
+// The front line: the wooden fence, 1.5 m, from the west hedge to the garage; the wicket in front
+// of the front door and the gate in front of the house's own garage. The detailing garage's south
+// wall completes the line to the east hedge.
+const WICKET: Gap = [-10.5, -9];
+const GATE: Gap = [-7.75, -4.55];
+wallX("fence_front", PX0, GX0, PZ0, PZ0 + WT, 1.5, "wood", [WICKET, GATE], 1.5);
+
+// ======================= THE HOUSE: three storeys, one plan per storey =======================
+const FRONT_DOOR: Gap = [-10.5, -9];
+const GARAGE0_GATE: Gap = [-7.5, -4.3];
+const SALON_GDOOR: Gap = [-13.75, -11.75];   // patio doors, 2 m: two walk cells wide, so the mover takes the corner clean
+const KITCHEN_GDOOR: Gap = [-8.5, -6.5];
+const ANNEX_DOOR: Gap = [-5.25, -3.75];
+const BALCONY1_DOOR: Gap = [-9.75, -8.25];
+const GARAGE0_EDOOR: Gap = [6, 7.5];
+const BALCONY2_DOOR: Gap = [8, 9.5];
+for (const s of [0, 1, 2]) {
+  const y0 = Y(s), t = `house${s}`;
+  wallZ(`${t}_wall_w`, HZ0 + WT, HZ1 - WT, HX0, HX0 + WT, WH, EXT, [], 2.2, y0);
+  wallZ(`${t}_wall_e`, HZ0 + WT, HZ1 - WT, HX1 - WT, HX1, WH, EXT, s === 0 ? [GARAGE0_EDOOR] : s === 2 ? [BALCONY2_DOOR] : [], 2.2, y0);
+  wallX(`${t}_wall_s`, HX0, HX1, HZ0, HZ0 + WT, WH, EXT, s === 0 ? [FRONT_DOOR, GARAGE0_GATE] : [], s === 0 ? 2.4 : 2.2, y0);
+  wallX(`${t}_wall_n`, HX0, HX1, HZ1 - WT, HZ1, WH, EXT, s === 0 ? [SALON_GDOOR, KITCHEN_GDOOR, ANNEX_DOOR] : s === 1 ? [BALCONY1_DOOR] : [], 2.2, y0);
+}
+// --- Parter: hall from the front door to the stairs; salon NW, kitchen and bedroom N/E, the
+// small bathroom north of the hall, boiler room SW, the house garage SE, the annex off the bedroom.
 {
-  let x = SITEX0; let i = 0;
-  for (const [a, b] of [MESH_GAP_W, MESH_GATE, MESH_GAP_E, [SITEX1, SITEX1] as Gap]) { if (a > x) add(S(x, 2.0, VERGE_S - 0.3, a - x, 3.0, 0.3, "none", `wall_edge_site_top_${i++}`, true)); x = b; }
+  const y0 = Y(0);
+  wallZ("house0_w1", HZ0 + WT, HZ1 - WT, -9, -8.75, WH, INT, [[5.5, 7], [8.75, 10.25], [14.5, 16]], 2.2, y0);   // hall | garage, hall | kitchen, salon | kitchen
+  wallZ("house0_w2", 8.75, HZ1 - WT, -6, -5.75, WH, INT, [[12, 13.5]], 2.2, y0);                                 // kitchen | bedroom
+  wallX("house0_w3", HX0 + WT, -9, 12.5, 12.75, WH, INT, [], 2.2, y0);                                           // salon | stairs, bathroom
+  wallX("house0_w4w", HX0 + WT, -10.75, 8.5, 8.75, WH, INT, [], 2.2, y0);                                        // boiler room | stairs
+  wallX("house0_w4e", -8.75, HX1 - WT, 8.5, 8.75, WH, INT, [], 2.2, y0);                                         // garage | kitchen, bedroom
+  wallZ("house0_w5", HZ0 + WT, 8.5, -11, -10.75, WH, INT, [[6, 7.5]], 2.2, y0);                                  // boiler room | hall
+  wallX("house0_bath_s", -10.75, -9, 10.5, 10.75, WH, INT, [[-10.5, -9]], 2.2, y0);                             // the bathroom door
+  // The annex: one room off the bedroom with its own door to the garden (a loop, not a pocket).
+  wallZ("annex_wall_w", HZ1, 19.5, AX0, AX0 + WT, WH, EXT, [[17.5, 19]], 2.2, y0);
+  wallX("annex_wall_n", AX0, HX1, 19.5, AZ1, WH, EXT, [], 2.2, y0);
+  wallZ("annex_wall_e", HZ1, 19.5, HX1 - WT, HX1, WH, EXT, [], 2.2, y0);
+  add(S(AX0, WH, HZ1, HX1 - AX0, SLAB, AZ1 - HZ1, "paint_red", "roof_annex_slab"));
+  add(S(AX0 + 0.5, WH + SLAB, HZ1 + 0.5, HX1 - AX0 - 1, 0.35, AZ1 - HZ1 - 1, "paint_red", "roof_annex_cap"));
 }
-add(S(SITEX0 - 0.5, 0, SITEZ0, 0.5, 5, VERGE_S - 0.5 - SITEZ0, "none", "wall_edge_site_w", true));
-add(S(SITEX1, 0, SITEZ0, 0.5, 5, VERGE_S - 0.5 - SITEZ0, "none", "wall_edge_site_e", true));
-add(S(SITEX0 - 0.5, 0, SITEZ0 - 0.5, SITEX1 - SITEX0 + 1, 5, 0.5, "none", "wall_edge_site_s", true));
-
-// ======================= THE HOUSE (closed, except the garage bay) =======================
-add(S(GX1, 0, HZ0, HX1 - GX1, HH, HZ1 - HZ0, "paint_white", "house_main_e"));
-add(S(HX0, 0, GZ1, GX1 - HX0, HH, HZ1 - GZ1, "paint_white", "house_main_n"));
-const GARAGE_FRONT: Gap = [-3.95, -1.55];   // the left (recessed) gate, open, 2.4 m; the right one is closed
-const GARAGE_BACK: Gap = [10.25, 11.75];    // 1.5 m door in the west wall to the west lane
-wallZ("garage_wall_w", HZ0, GZ1, HX0, HX0 + 0.3, HH, "paint_white", [GARAGE_BACK]);
-wallX("garage_wall_s", HX0 + 0.3, GX1, HZ0, HZ0 + 0.3, HH, "paint_white", [GARAGE_FRONT]);
-// The hipped roof as two stepped plates (a pyramid silhouette; AABB has no slopes).
-add(S(HX0 + 0.4, HH, HZ0 + 0.4, HX1 - HX0 - 0.8, 1.0, HZ1 - HZ0 - 0.8, "paint_red", "roof_house_1"));
-add(S(HX0 + 2.0, HH + 1.0, HZ0 + 2.0, HX1 - HX0 - 4.0, 1.0, HZ1 - HZ0 - 4.0, "paint_red", "roof_house_2"));
-// The car in the bay: crouch cover, leaves a 4 m aisle from the front gate to the back door.
-add(O(-0.7, 0, 6.3, 1.8, 1.45, 4.4, "glass_car", "car", "garage_car"));
-
-// ======================= THE SHED — BARBER (T0 start pocket, 2 doors: drive side, garden side) =======================
-const SHED_W_DOOR: Gap = [16.25, 17.75];
-const SHED_E_DOOR: Gap = [16.25, 17.75];
-wallZ("shed_wall_w", SHZ0, SHZ1, SHX0, SHX0 + 0.3, 2.8, "wall_panel", [SHED_W_DOOR]);
-wallZ("shed_wall_e", SHZ0, SHZ1, SHX1 - 0.3, SHX1, 2.8, "wall_panel", [SHED_E_DOOR]);
-wallX("shed_wall_n", SHX0 + 0.3, SHX1 - 0.3, SHZ1 - 0.3, SHZ1, 2.8, "wall_panel");
-add(S(SHX0 + 0.1, 2.5, SHZ0 + 0.1, SHX1 - SHX0 - 0.2, 0.25, SHZ1 - SHZ0 - 0.2, "wall_panel", "roof_shed"));
-// Two chairs (crouch cover, collision the size of the drawn chair) and the counter (low), on the house wall.
-for (const [x, tag] of [[-2.6, "1"], [-0.6, "2"]] as const) {
-  add(S(x, 0.05, 15.5, 0.8, 0.45, 0.9, "none", `shed_chair_${tag}_seat`, true));
-  add(S(x, 0.62, 15.5, 0.8, 0.83, 0.9, "none", `shed_chair_${tag}_back`, true));
-  props.push({ kind: "barber_chair", x: x + 0.4, y: 0.55, z: 15.95, yaw: 0 });
+// --- 1 piętro: the salon across the whole north with the garden balcony; kitchen east, bedroom
+// SW, the bathroom at the south end of the corridor, the stairs west of the corridor.
+{
+  const y0 = Y(1);
+  wallZ("house1_w1", HZ0 + WT, 12.5, -9, -8.75, WH, INT, [[9, 10.5]], 2.2, y0);                                 // corridor | kitchen
+  wallX("house1_w3", HX0 + WT, HX1 - WT, 12.5, 12.75, WH, INT, [[-10.5, -9], [-6.5, -5]], 2.2, y0);            // salon | corridor, kitchen
+  wallX("house1_w4", HX0 + WT, -10.75, 8.5, 8.75, WH, INT, [], 2.2, y0);                                       // bedroom | stairs
+  wallZ("house1_w5", HZ0 + WT, 8.5, -11, -10.75, WH, INT, [[6.75, 8.25]], 2.2, y0);                             // bedroom | corridor
+  wallX("house1_bath_n", -10.75, -9, 6.5, 6.75, WH, INT, [[-10.5, -9]], 2.2, y0);                              // the bathroom door
 }
-add(S(1.5, 0, 15.5, 1.9, 0.8, 0.9, "counter", "shed_counter"));
-
-// ======================= THE HALL — DETAILING (T0's back) =======================
-const ROLLER: Gap = [-8, -4];                       // 4 m roller door, open, towards the house/garden
-const HALL_SIDE_DOOR: Gap = [37.75, 39.25];         // 1.5 m side door in the west wall, towards the thujas
-wallX("hall_wall_s", HALLX0, HALLX1, HALLZ0, HALLZ0 + 0.6, 4.0, "corrugated_blue", [ROLLER], 3.0);
-wallZ("hall_wall_w", HALLZ0 + 0.6, HALLZ1 - 0.6, HALLX0, HALLX0 + 0.3, 4.0, "corrugated_blue", [HALL_SIDE_DOOR]);
-wallZ("hall_wall_e", HALLZ0 + 0.6, HALLZ1 - 0.6, HALLX1 - 0.3, HALLX1, 4.0, "corrugated_blue");
-wallX("hall_wall_n", HALLX0, HALLX1, HALLZ1 - 0.6, HALLZ1, 4.0, "corrugated_blue");
-add(S(HALLX0 + 0.1, 3.7, HALLZ0 + 0.1, HALLX1 - HALLX0 - 0.2, 0.25, HALLZ1 - HALLZ0 - 0.2, "corrugated_blue", "roof_hall"));
-// The car on the two-post lift: walk under it (2.0 m), nobody gets on it (0.25 m to the roof).
-add(S(-7.6, 0, 38.2, 0.4, 2.0, 0.4, "metal", "hall_lift_post_w"));
-add(S(-4.3, 0, 38.2, 0.4, 2.0, 0.4, "metal", "hall_lift_post_e"));
-add(O(-8.0, 2.0, 37.5, 4.4, 1.45, 1.8, "glass_car", "car", "hall_car_raised"));
-add(O(-9.5, 0, 40.8, 3.4, 2.0, 0.6, "metal", "lockers", "hall_cabinets"));
-add(O(-0.4, 0, 40.2, 1.0, 0.8, 1.0, "metal", "drums", "hall_drums_1"));
-add(O(0.7, 0, 40.2, 1.0, 0.8, 1.0, "metal", "drums", "hall_drums_2"));
-add(S(-1.4, 0, 36.2, 1.0, 0.8, 1.0, "rubber", "hall_tyres_1"));
-add(S(0.3, 0, 38.0, 1.0, 0.8, 1.0, "rubber", "hall_tyres_2"));
-
-// ======================= THE GARDEN =======================
-// [graft: fidelity, Z2] the 3–4 tall thujas left of the house as a N–S row from the front hedge to
-// the house corner: the hedge gap opens into a pocket that leads only to the west lane, and the
-// west half of the front yard no longer sees the street east. The thujas and shrubs right of the
-// house (Z2) are a screen beside the house that leaves a 3.2 m passage along the east hedge.
-add(S(-8.6, 0, FRONT + 0.6, 2.2, 6, HZ0 - FRONT - 0.6, "foliage", "thuja_front_w"));
-add(S(5.0, 0, HZ0, 3.6, 6, 4.0, "foliage", "thuja_se"));
-// The garden's few trees (Z3), crowns low enough to break the lanes and the lawn.
-tree("tree_w", -10.1, 16, 3.4);   // crown touches the west hedge: the west lane is never one line from the hall to the site
-tree("tree_e", 9.4, 16, 3.4);
-tree("tree_mid", 0, 27);
-tree("tree_n", 5, 33);
-// [graft: fidelity] a shrub clump mid-garden west: cuts the west lane's 30 m line up to the hall.
-add(S(-8.5, 0, 23, 3.5, 3.0, 3.0, "foliage", "shrub_w"));
-// The thing under the dark tarp behind the house (Z2): a covered trailer, full cover mid-garden east.
-add(O(5.2, 0, 26, 2.0, 2.0, 4.0, "glass_dark", "container", "trailer_tarp"));
-// The green slide: tower 1.3 (cannot be climbed from the ground), ramp 0.8 (a step onto the tower).
-add(S(7.8, 0, 36.0, 1.2, 1.3, 1.2, "paint_green", "slide_tower"));
-add(S(5.4, 0, 36.2, 2.4, 0.8, 0.8, "paint_green", "slide_ramp"));
-
-// ======================= THE STREET =======================
-add(S(-16.2, 0, -1.65, 0.35, 8, 0.35, "concrete_block", "pole_w"));
-add(S(13.85, 0, -1.65, 0.35, 8, 0.35, "concrete_block", "pole_e"));
-for (const x of [-28, -25, -22, -19, -16, -8, -6, 2, 13.5, 16, 18.5, 21, 23.5, 26, 28.5]) {
-  const tag = `${x < 0 ? "w" : "e"}${String(Math.abs(x)).replace(".", "_")}`;
-  add(S(x - 0.3, 0, VERGE_S, 0.6, 6, 0.6, "wood", `pine_${tag}`));
-  // The crown, high on the trunk: a pine reads as a pine from 30 m (the eye review saw a palisade
-  // of bare posts without it). Above any jump, so it shapes no route and shelters nobody.
-  add(S(x - 0.9, 4.6, VERGE_S - 0.6, 1.8, 3.0, 1.8, "foliage", `pine_crown_${tag}`));
+// --- 2 piętro: rooms around the stairs; the SE room is the second spawn, with the east balcony.
+{
+  const y0 = Y(2);
+  wallZ("house2_w1", HZ0 + WT, HZ1 - WT, -9, -8.75, WH, INT, [[6.5, 8], [11, 12.5], [14, 15.5]], 2.2, y0);     // corridor | SE, corridor | NE, NW | NE
+  wallX("house2_w3", HX0 + WT, -9, 12.5, 12.75, WH, INT, [[-10.5, -9]], 2.2, y0);                              // NW room | corridor, stairs
+  wallX("house2_w4", HX0 + WT, -10.75, 8.5, 8.75, WH, INT, [], 2.2, y0);                                       // SW room | stairs
+  wallZ("house2_w5", HZ0 + WT, 8.5, -11, -10.75, WH, INT, [[6, 7.5]], 2.2, y0);                                 // SW room | corridor
+  wallX("house2_ne_se", -8.75, HX1 - WT, 10.5, 10.75, WH, INT, [[-6.5, -5]], 2.2, y0);                          // NE room | SE room
+  // The well's open edge beside the corridor: a 1.3 m rail (crouch cover), nobody mantles it.
+  add(S(-11.5, y0, 8.75, WT, 1.3, 1.75, "metal", "house2_stair_rail"));
 }
-// Off-axis street cover, every ~10 m: the skips, the van and one dark car in the SOUTH lane by the
-// site (Z1), the other dark car in the NORTH lane at the east end (Z3's car by the plot). The van,
-// the east skip and the west car sit at z ≤ -7.5, closing the sliver between them and the pine line
-// so the walk grid never offers it; the crown of the road, z -5.5..-3.5, stays open for the one
-// 60 m line. The first skip stands squarely in front of the west mesh gap with a 1.5 m slot behind
-// it and the car closing that slot's west end: T1 leaves the gap sideways, east, and walks around
-// the skip to reach the west of the street (the fairness knob for *street_w / *pole_w). The toi-toi
-// stands beside the van (both ≥ 2.0 m, neither reachable from the ground; nothing ≤ 1.3 m within
-// 4.42 m of either).
-add(O(-17.6, 0, -7.5, 4.4, 1.45, 1.8, "glass_car", "car", "car_dark_2"));
-add(O(-13.2, 0, -6.8, 2.0, 1.3, 2.0, "metal", "skip", "skip_1"));
-add(O(-2.5, 0, -7.5, 5.0, 2.2, 2.0, "paint_white", "van", "van_white"));
-add(S(3.0, 0, VERGE_S, 1.1, 2.3, 1.1, "paint_blue", "toitoi"));
-add(O(9, 0, -7.5, 3.0, 1.3, 2.0, "metal", "skip", "skip_2"));
-add(O(17, 0, -3.5, 4.4, 1.45, 1.8, "glass_car", "car", "car_dark"));
+// --- Slabs: the storey's floor lies on the walls below in five panels around the stair well;
+// the patch over the first tread carries the next flight's foot (over the second tread it would
+// meet the head of a body stepping down from the landing above — measured on the walk grid). The roof is one slab plus
+// two stepped plates (a hipped silhouette; AABB has no slopes) and a chimney.
+for (const s of [1, 2]) {
+  const y = Y(s) - SLAB;
+  add(S(HX0, y, HZ0, HX1 - HX0, SLAB, 8.75 - HZ0, "floor_wood", `floor_${s}_s`));
+  add(S(HX0, y, 8.75, WT, SLAB, 12.5 - 8.75, "floor_wood", `floor_${s}_w`));
+  add(S(-11.5, y, 8.74, 0.75, SLAB, 10.5 - 8.74, "floor_wood", `floor_${s}_patch`));
+  add(S(-10.75, y, 8.75, 10.75 + HX1, SLAB, 12.5 - 8.75, "floor_wood", `floor_${s}_e`));
+  add(S(HX0, y, 12.5, HX1 - HX0, SLAB, HZ1 - 12.5, "floor_wood", `floor_${s}_n`));
+}
+add(S(HX0, Y(3) - SLAB, HZ0, HX1 - HX0, SLAB, HZ1 - HZ0, "paint_red", "roof_house_slab"));
+add(S(HX0 + 0.5, Y(3), HZ0 + 0.5, HX1 - HX0 - 1, 0.75, HZ1 - HZ0 - 1, "paint_red", "roof_house_1"));
+add(S(HX0 + 2, Y(3) + 0.75, HZ0 + 2, HX1 - HX0 - 4, 0.75, HZ1 - HZ0 - 4, "paint_red", "roof_house_2"));
+add(S(-7, Y(3) + 1.5, 7, 0.6, 1.0, 0.6, "wall_brick", "roof_chimney"));
 
-// ======================= THE SHELL — BUILDING SITE (T1 start pocket) =======================
-const SHELL_DOOR_N: Gap = [-7.7, -6.2];      // west end of the north wall: off the axis of the site gate, so the street never sees the start
-const SHELL_DOOR_E: Gap = [-22.25, -20.75];
-const SHELL_DOOR_W: Gap = [-19.75, -18.25];  // north half of the west wall: its cone from the start lands on the mesh panel, not the west gap
-wallX("shell_wall_n", SHELLX0, SHELLX1, SHELLZ1 - 0.3, SHELLZ1, 2.8, "paint_white", [SHELL_DOOR_N]);
-wallZ("shell_wall_e", SHELLZ0 + 0.3, SHELLZ1 - 0.3, SHELLX1 - 0.3, SHELLX1, 2.8, "paint_white", [SHELL_DOOR_E]);
-wallZ("shell_wall_w", SHELLZ0 + 0.3, SHELLZ1 - 0.3, SHELLX0, SHELLX0 + 0.3, 2.8, "paint_white", [SHELL_DOOR_W]);
-wallX("shell_wall_s", SHELLX0 + 0.3, SHELLX1 - 0.3, SHELLZ0, SHELLZ0 + 0.3, 2.8, "paint_white");
-add(S(-2.3, 0, SHELLZ0 + 0.3, 0.3, 2.8, 4.7, "paint_white", "shell_partition"));
-add(O(1.0, 0, -23.5, 1.2, 0.8, 1.2, "wood", "pallets", "shell_pallets"));
-add(O(2.2, 0, -19.0, 1.2, 1.3, 1.2, "metal", "machine", "shell_mixer"));
-// The yard: a heap of sand (low) and a pallet of bricks (crouch).
-add(S(-13, 0, -14, 2.0, 0.8, 2.0, "soil", "site_sand"));
-add(O(5.5, 0, -13.5, 1.2, 1.3, 1.2, "wood", "pallets", "site_bricks"));
+// --- The stairs: a switchback in the bay x -14.75..-10.75, z 8.75..12.5. Lane A (south) climbs
+// west from the hall, the landing turns, lane B (north) climbs east onto the threshold wall
+// whose top is the next floor. Flight 0→1 is solid from the floor; flight 1→2 hangs above it.
+const STX = -11;            // east end of the treads; the threshold wall is x -11..-10.75
+const LANE_A: Gap = [8.75, 10.5], LANE_B: Gap = [10.5, 12.5];
+for (let i = 1; i <= 4; i++) add(S(STX - TREAD * i, 0, LANE_A[0], TREAD, RISE * i, LANE_A[1] - LANE_A[0], "wood", `stair_a0_step_${i}`));
+add(S(HX0 + WT, 0, LANE_A[0], STX - 4 * TREAD - HX0 - WT, 5 * RISE, LANE_B[1] - LANE_A[0], "wood", "stair_landing_0"));
+for (let j = 1; j <= 4; j++) add(S(STX - 4 * TREAD + TREAD * (j - 1), 0, LANE_B[0], TREAD, 5 * RISE + RISE * j, LANE_B[1] - LANE_B[0], "wood", `stair_b0_step_${j}`));
+add(S(STX, 0, LANE_B[0], WT, Y(1), LANE_B[1] - LANE_B[0], INT, "house0_stair_wall"));
+for (let i = 1; i <= 4; i++) add(S(STX - TREAD * i, Y(1) + RISE * (i - 1), LANE_A[0], TREAD + 0.05, RISE, LANE_A[1] - LANE_A[0], "wood", `stair_a1_step_${i}`));
+add(S(HX0 + WT, Y(1) + 4 * RISE, LANE_A[0], STX - 4 * TREAD - HX0 - WT + 0.05, RISE, LANE_B[1] - LANE_A[0], "wood", "stair_landing_1"));
+for (let j = 1; j <= 4; j++) add(S(STX - 4 * TREAD + TREAD * (j - 1) - 0.05, Y(1) + 5 * RISE + RISE * (j - 1), LANE_B[0], TREAD + 0.05 + (j === 4 ? 0.05 : 0), RISE, LANE_B[1] - LANE_B[0], "wood", `stair_b1_step_${j}`));
+// The 2nd floor's threshold cannot be a wall (lane B arrives at the 1st floor right under it), so it
+// is a floor strip resting on the last hanging tread, which reaches 5 cm under it for that.
+add(S(STX, Y(2) - RISE, LANE_B[0], WT, RISE, LANE_B[1] - LANE_B[0], "floor_wood", "floor_2_threshold"));
+
+// --- Balconies: a slab on two posts, a 1.35 m parapet on the open sides.
+add(S(-11, Y(1) - SLAB, HZ1, 3.75, SLAB, 1.75, "floor_concrete", "balcony1_slab"));
+add(S(-11, 0, 18.25, WT, Y(1) - SLAB, WT, "wood", "balcony1_post_w"));
+add(S(-7.5, 0, 18.25, WT, Y(1) - SLAB, WT, "wood", "balcony1_post_e"));
+add(S(-11, Y(1), 18.25, 3.75, 1.35, WT, EXT, "balcony1_parapet_n"));
+add(S(-11, Y(1), HZ1, WT, 1.35, 1.5, EXT, "balcony1_parapet_w"));
+add(S(-7.5, Y(1), HZ1, WT, 1.35, 1.5, EXT, "balcony1_parapet_e"));
+add(S(HX1, Y(2) - SLAB, 7.5, 1.75, SLAB, 3, "floor_concrete", "balcony2_slab"));
+add(S(-1.25, 0, 7.5, WT, Y(2) - SLAB, WT, "wood", "balcony2_post_s"));
+add(S(-1.25, 0, 10.25, WT, Y(2) - SLAB, WT, "wood", "balcony2_post_n"));
+add(S(-1.25, Y(2), 7.5, WT, 1.35, 3, EXT, "balcony2_parapet_e"));
+add(S(HX1, Y(2), 7.5, 1.5, 1.35, WT, EXT, "balcony2_parapet_s"));
+add(S(HX1, Y(2), 10.25, 1.5, 1.35, WT, EXT, "balcony2_parapet_n"));
+
+// --- Windows: dark panes on every face, one per room.
+for (const s of [0, 1, 2]) {
+  const y = Y(s) + 0.9;
+  pane(`win${s}_s_w`, -14, -12.5, HZ0 - 0.04, HZ0 + 0.01, y);
+  if (s > 0) { pane(`win${s}_s_m`, -8, -6.5, HZ0 - 0.04, HZ0 + 0.01, y); pane(`win${s}_s_e`, -5, -3.5, HZ0 - 0.04, HZ0 + 0.01, y); }
+  pane(`win${s}_w_s`, HX0 - 0.04, HX0 + 0.01, 6, 7.5, y);
+  pane(`win${s}_w_n`, HX0 - 0.04, HX0 + 0.01, 14, 15.5, y);
+  pane(`win${s}_e_n`, HX1 - 0.01, HX1 + 0.04, 13.5, 15, y);
+  if (s < 2) pane(`win${s}_e_s`, HX1 - 0.01, HX1 + 0.04, 10, 11.5, y);
+  pane(`win${s}_n_w`, s === 0 ? -11 : -14, s === 0 ? -9.5 : -12.5, HZ1 - 0.01, HZ1 + 0.04, y);
+  if (s > 0) pane(`win${s}_n_e`, -6, -4.5, HZ1 - 0.01, HZ1 + 0.04, y);
+}
+pane("win_annex_n", -6, -4, AZ1 - 0.01, AZ1 + 0.04, 0.9);
+
+// --- Furniture, in the cover language (0.6/0.8 low, 1.45 crouch, 2.0 full only beside 0.6 beds).
+// A low piece's free edge sits 0.15 m off a walk-cell centre (x.10 / x.40 / x.60 / x.90): a cell
+// whose centre is 0.21–0.35 m outside an edge is dead (the body touches, the foot does not), and
+// a piece ringed by dead cells is "standable, unreachable" to the audit and to a bot.
+add(O(-14.5, 0, 5, 1.0, 1.45, 1.0, "metal", "machine", "boiler"));                       // kotłownia: the boiler
+add(O(-12.5, 0, 5, 1.0, 0.8, 1.0, "metal", "drums", "boiler_drums"));
+add(S(-8.5, 0, 7.9, 2.0, 0.8, 0.6, "counter", "garage0_bench"));                         // the house garage
+add(S(-4, 0, 5, 0.8, 0.8, 0.8, "rubber", "garage0_tyres"));
+add(O(-3.85, 0, 7.6, 0.8, 0.8, 0.8, "wood", "crate", "garage0_crate"));
+add(S(-6.6, 0, 9, 0.6, 0.8, 3, "counter", "kitchen0_counter"));                          // kuchnia
+add(S(-5.6, 0, 9, 1.5, 0.6, 2.0, "paint_white", "bedroom0_bed"));                       // sypialnia (south end: the annex door needs the north clear)
+add(O(-3.6, 0, 9, 0.6, 2.0, 1.5, "wood", "cabinet", "bedroom0_wardrobe", -Math.PI / 2));
+add(S(-13.6, 0, 13, 2.5, 0.8, 0.9, "leather", "salon0_couch"));                          // salon
+add(S(-14.75, 0, 14.25, 0.5, 0.6, 1.5, "wood", "salon0_tv_board"));
+add(S(-10.5, 0, 11.9, 0.6, 0.8, 0.6, "counter", "bath0_stand"));                         // łazienka
+add(S(-4, 0, 18.5, 0.9, 0.8, 0.9, "wood", "annex_table"));                               // dobudówka (clear of both doors)
+add(S(-6.1, Y(1), 15.6, 2.5, 0.8, 0.9, "leather", "salon1_couch"));                        // 1 piętro
+add(S(-13.6, Y(1), 14.5, 1.0, 0.8, 1.0, "wood", "salon1_table"));
+add(S(-8.5, Y(1), 4.75, 5.25, 0.8, 0.6, "counter", "kitchen1_counter"));
+add(S(-6.1, Y(1), 8, 1.0, 0.8, 1.0, "wood", "kitchen1_table"));
+add(S(-14.4, Y(1), 5, 1.5, 0.6, 2.0, "paint_white", "bedroom1_bed"));
+add(O(-11.6, Y(1), 4.75, 0.6, 2.0, 1.5, "wood", "cabinet", "bedroom1_wardrobe", -Math.PI / 2));
+add(S(-10.5, Y(1), 4.75, 0.6, 0.8, 0.6, "counter", "bath1_stand"));
+add(S(-6.25, Y(2), HZ0 + WT, 1.5, 0.6, 2.0, "paint_white", "room_se_bed"));               // 2 piętro
+add(S(-8.75, Y(2), 9.5, 1.0, 0.8, 1.0, "wood", "room_se_desk"));
+add(S(-5.6, Y(2), 14.5, 1.5, 0.6, 2.0, "paint_white", "room_ne_bed"));
+add(O(-3.6, Y(2), 11, 0.6, 2.0, 1.5, "wood", "cabinet", "room_ne_wardrobe", -Math.PI / 2));
+add(S(-13.6, Y(2), 13, 2.5, 0.8, 0.9, "leather", "room_nw_couch"));
+add(S(-14.4, Y(2), 5, 1.5, 0.6, 2.0, "paint_white", "room_sw_bed"));
+
+// ======================= THE SHED — BARBER (the owner's interior; a north door added) =======================
+const SHED_MAT: MaterialTag = "wall_panel";
+wallX("shed_wall_s", SHX0, SHX1, SHZ0, SHZ0 + WT, 2.8, SHED_MAT);
+wallX("shed_wall_n", SHX0, SHX1, SHZ1 - WT, SHZ1, 2.8, SHED_MAT, [[1.5, 3]]);
+wallZ("shed_wall_w", SHZ0 + WT, SHZ1 - WT, SHX0, SHX0 + WT, 2.8, SHED_MAT);
+wallZ("shed_wall_e", SHZ0 + WT, SHZ1 - WT, SHX1 - WT, SHX1, 2.8, SHED_MAT, [[6.75, 8.25]]);
+add(S(SHX0, 2.8, SHZ0, SHX1 - SHX0, SLAB, SHZ1 - SHZ0, SHED_MAT, "roof_shed"));
+// The bathroom cubicle in the SW corner, its door east.
+wallX("shed_bath_n", SHX0 + WT, 3.25, 8.5, 8.75, 2.8, SHED_MAT);
+wallZ("shed_bath_e", SHZ0 + WT, 8.5, 3, 3.25, 2.8, SHED_MAT, [[7, 8.5]]);
+// The mirror wall: the barber table along the west wall, three seats in a row facing it
+// (invisible seat + back proxies the size of the drawn chair — a prop is never cover).
+add(S(SHX0 + WT, 0, 8.75, 0.5, 0.8, 4.75, "counter", "shed_table"));
+for (const [z, tag] of [[8.9, "1"], [10.4, "2"], [11.9, "3"]] as const) {
+  add(S(2.0, 0.05, z, 0.9, 0.45, 0.8, "none", `shed_chair_${tag}_seat`, true));
+  add(S(2.0, 0.6, z, 0.9, 0.85, 0.8, "none", `shed_chair_${tag}_back`, true));
+  props.push({ kind: "barber_chair", x: 2.45, y: 0.55, z: z + 0.4, yaw: -Math.PI / 2 });
+  props.push({ kind: "mirror", x: SHX0 + WT + 0.02, y: 1.5, z: z + 0.4, yaw: Math.PI / 2, w: 1.0, h: 1.1 });
+}
+add(S(3.5, 0, 13.6, 2.5, 0.8, 0.9, "leather", "shed_couch"));                            // the couch along the north wall
+add(S(4, 0, SHZ0 + WT, 0.6, 0.8, 0.6, "counter", "shed_basin_stand"));                    // the wash basin on the south wall
+pane("shed_win_1", SHX1 - 0.01, SHX1 + 0.04, 9.5, 11, 0.9, 1.2);
+pane("shed_win_2", SHX1 - 0.01, SHX1 + 0.04, 12, 13.5, 0.9, 1.2);
+
+// ======================= THE DETAILING GARAGE (T0's home) =======================
+const GMAT: MaterialTag = "concrete_block";
+const BRAMA1: Gap = [12, 15.2], BRAMA2: Gap = [16, 19.2];
+const GARAGE_NDOOR: Gap = [13, 14.5];
+const GARAGE_WDOOR: Gap = [3, 4.5];      // a side door to the front yard: T0's third way out, and the one that reaches the front gate as fast as T1 does
+wallX("garage_wall_s", GX0, GX1, GZ0, GZ0 + WT, GH, GMAT, [BRAMA1, BRAMA2], 3.2);
+wallX("garage_wall_n", GX0, GX1, GZ1 - WT, GZ1, GH, GMAT, [GARAGE_NDOOR]);
+wallZ("garage_wall_w", GZ0 + WT, GZ1 - WT, GX0, GX0 + WT, GH, GMAT, [GARAGE_WDOOR]);
+wallZ("garage_wall_e", GZ0 + WT, GZ1 - WT, GX1 - WT, GX1, GH, GMAT);
+add(S(GX0, GH, GZ0, GX1 - GX0, SLAB, GZ1 - GZ0, "corrugated_blue", "roof_garage"));
+// The spawn pocket, NE corner: a 2.8 m partition (paint booth) closes it from both gates and the
+// north door; its mouth faces west, 1.5 m wide, into a sluice behind a screen — a mover leaving
+// the mouth turns north or south along the screen, never into the partition's end (the corner a
+// waypoint-following body catches on), and no line from the west door or the aisle reaches the
+// mouth.
+add(S(15.5, 0, 10.5, WT, 2.8, 3, "wall_panel", "garage_booth_w"));
+add(S(15.5, 0, 8.75, 4.5, 2.8, WT, "wall_panel", "garage_booth_s"));
+add(S(13.75, 0, 6.5, WT, 2.8, 4.25, "wall_panel", "garage_booth_screen"));
+// The two cars in front of the gates (crouch cover), tyres stacked 1.3 (crouch, not a step), the
+// tool chest 1.45, the compressor 1.3, the lockers on the west wall. NOTHING low (≤ 1.25) in
+// here: a drum beside a car is a step onto the car, and the car a step onto the lockers.
+add(O(12.25, 0, 2.5, 1.8, 1.45, 4.4, "paint_white", "car", "garage_car_1"));
+add(O(16.25, 0, 2.5, 1.8, 1.45, 4.4, "paint_red", "car", "garage_car_2"));
+add(S(11.4, 0, 11.6, 0.9, 1.3, 0.9, "rubber", "garage_tyres"));
+add(O(11.25, 0, 8.5, 0.6, 1.45, 2.0, "metal", "cabinet", "garage_tool_chest", Math.PI / 2));
+add(O(19.4, 0, 9.5, 0.6, 2.0, 3.4, "metal", "lockers", "garage_lockers", -Math.PI / 2));
+
+// ======================= THE ROAD AND THE GARDEN =======================
+// The owner's car: a super-sports BMW, dark grey-blue, parked in front of the house.
+add(O(-10.5, 0, -2.7, 4.4, 1.45, 1.8, "paint_blue", "car", "bmw", Math.PI / 2));
+tree("tree_w1", -17.5, 8.5);
+tree("tree_w2", -17.5, 20);
+tree("tree_n", 1.5, 22, 3.4);
+tree("tree_e", 15.5, 16.75, 3.4);
+// Shrubs (crouch cover) and two thuja blocks (2.8, structures) that cut the garden's long lines;
+// the thujas stand where no balcony and no hedge is within a sprint jump of their tops.
+add(S(-18.5, 0, 13, 2.5, 1.3, 1.5, "foliage", "shrub_w"));
+add(S(-12, 0, 22, 3.0, 1.3, 1.5, "foliage", "shrub_n1"));
+add(S(-4, 0, 23.5, 2.0, 1.3, 1.5, "foliage", "shrub_n2"));
+add(S(8, 0, 16, 1.5, 1.3, 2.0, "foliage", "shrub_e"));
+add(S(-19, 0, 24, 1.5, 1.3, 1.5, "foliage", "shrub_nw"));
+add(S(2.5, 0, 18, 1.2, 2.8, 1.2, "foliage", "thuja_n"));
+add(S(14.5, 0, 20.5, 1.2, 2.8, 1.2, "foliage", "thuja_e"));
+add(O(-16, 0, 25, 1.2, 0.8, 1.2, "wood", "crate", "garden_crate"));
 
 // ======================= PROPS (no collision) AND LIGHTS =======================
-// The barber's shed: mirrors and a shelf on the house wall (its south side), the neon over them,
-// a second neon on the drive-side face so the shop reads from the street's east lane.
-props.push({ kind: "mirror", x: -2.2, y: 1.5, z: HZ1 + 0.02, yaw: 0, w: 1.0, h: 1.1 });
-props.push({ kind: "mirror", x: -0.2, y: 1.5, z: HZ1 + 0.02, yaw: 0, w: 1.0, h: 1.1 });
-props.push({ kind: "neon", x: -1.2, y: 2.35, z: HZ1 + 0.04, yaw: 0, text: "BARBER", w: 2.2, h: 0.42, color: "#fa709a" });
-props.push({ kind: "shelf", x: 2.45, y: 0.95, z: HZ1 + 0.06, yaw: 0, w: 1.6 });
-props.push({ kind: "bottle_row", x: 2.45, y: 0.98, z: HZ1 + 0.06, w: 1.2 });
-props.push({ kind: "clippers", x: 2.9, y: 0.98, z: HZ1 + 0.1, yaw: 0.4 });
-props.push({ kind: "towel_stack", x: 3.4, y: 0.8, z: 18.8 });
-props.push({ kind: "neon", x: SHX1 + 0.02, y: 2.3, z: 18.6, yaw: Math.PI / 2, text: "BARBER SHOP", w: 2.0, h: 0.4, color: "#fa709a" });
-props.push({ kind: "barber_pole", x: SHX1 + 0.05, y: 1.2, z: 15.8, yaw: Math.PI / 2 });
-// A lamp over each shed door (the eye review found the west lawn behind the west door black) and a
-// garden lamp post: the plot's back half was a black patch from above with eight lights on the map.
-props.push({ kind: "lamp", x: SHX0 - 0.02, y: 2.3, z: 18.4, yaw: -Math.PI / 2, variant: "wall" });
-props.push({ kind: "lamp", x: SHX1 + 0.02, y: 2.3, z: 18.4, yaw: Math.PI / 2, variant: "wall" });
-props.push({ kind: "lamp", x: 3.5, y: 0, z: 24, variant: "post", h: 3.8 });
-props.push({ kind: "lamp", x: HX1 + 0.02, y: 3.0, z: 10.5, yaw: Math.PI / 2, variant: "wall" });   // the east lane
-props.push({ kind: "lamp", x: HX0 - 0.02, y: 3.0, z: 13.5, yaw: -Math.PI / 2, variant: "wall" });  // the west lane
-props.push({ kind: "lamp", x: 9.5, y: 0, z: 38, variant: "post", h: 3.8 });                        // the garden's east half
-// Two dark panes on the van's long sides so it reads as a van, not a white block, at 28 m.
-props.push({ kind: "board", x: 0, y: 1.3, z: -7.52, yaw: Math.PI, text: "", w: 2.4, h: 0.6 });
-props.push({ kind: "board", x: 0, y: 1.3, z: -5.48, yaw: 0, text: "", w: 2.4, h: 0.6 });
-// The house: the number plate by the right corner, the wall lamp between the upstairs windows,
-// the windows and blinds as dark panes, the mailbox on the gate pillar.
-props.push({ kind: "sign", x: 4.4, y: 2.5, z: HZ0 - 0.02, yaw: Math.PI, text: "17", w: 0.4, h: 0.3 });
-props.push({ kind: "lamp", x: -0.2, y: 4.0, z: HZ0 - 0.02, yaw: Math.PI, variant: "wall" });
-props.push({ kind: "board", x: -2.6, y: 4.2, z: HZ0 - 0.02, yaw: Math.PI, text: "", w: 1.2, h: 1.4 });
-props.push({ kind: "board", x: 2.4, y: 4.2, z: HZ0 - 0.02, yaw: Math.PI, text: "", w: 1.2, h: 1.4 });
-props.push({ kind: "sign", x: 6.4, y: 1.2, z: FRONT - 0.02, yaw: Math.PI, text: "17", w: 0.3, h: 0.35 });
-props.push({ kind: "vent", x: -1.5, y: 8.52, z: 8.5, yaw: 0, w: 0.6, h: 0.9 });   // chimney stubs on the upper plate
-props.push({ kind: "vent", x: 2.5, y: 8.52, z: 11.5, yaw: 0, w: 0.6, h: 0.9 });
-// The hall: tube lights under the roof, a wall lamp over the roller door, a spare wheel, a hose.
-props.push({ kind: "tube_light", x: -7, y: 3.6, z: 38.5, yaw: Math.PI / 2, w: 1.6 });
-props.push({ kind: "tube_light", x: -1, y: 3.6, z: 38.5, yaw: Math.PI / 2, w: 1.6 });
-props.push({ kind: "lamp", x: -6, y: 3.3, z: HALLZ0 - 0.02, yaw: Math.PI, variant: "wall" });
-props.push({ kind: "wheel", x: 1.3, y: 0, z: 36.6, yaw: 0.3 });
-props.push({ kind: "pipe", x: HALLX1 - 0.35, y: 0, z: 36.0, h: 3.6 });
-props.push({ kind: "graffiti", x: -1.5, y: 1.6, z: HALLZ0 - 0.02, yaw: Math.PI, text: "DETAILING", w: 2.4, h: 0.8 });
-// The street: the overhead line between the poles, a street lamp at the west end (the one in the
-// photo, at the far crossing, brought to the map's edge), the work light on the building site.
-props.push({ kind: "cable", x: -1.2, y: 7.8, z: -1.5, yaw: Math.PI / 2, w: 29.8 });
-props.push({ kind: "lamp", x: -28.4, y: 0, z: -1.2, variant: "post", h: 6 });
-props.push({ kind: "lamp", x: -3, y: 0, z: -12, variant: "post", h: 4.5 });
-props.push({ kind: "graffiti", x: -2, y: 1.4, z: SHELLZ1 + 0.02, yaw: 0, text: "DOLNA", w: 2.2, h: 0.9 });
-props.push({ kind: "poster", x: 2.98, y: 1.2, z: -7.75, yaw: -Math.PI / 2, variant: "1", w: 0.6, h: 0.85 });   // on the toi-toi
-// Lights: amber for the public front (house, shed, street lamp), mercury for work (hall, site),
-// the accent only on the shop's neon. Three hues plus the moon, as the art direction asks.
-// The three hues of `DISTRICT_LIGHTS` (`map.ts`), written out because `map.ts` imports this file
-// to build `MAPS` — a value import back would be a cycle.
 const AMBER = "#ffbf70", MERCURY = "#9adce5", ACCENT = "#fa709a";
-lights.push({ kind: "point", x: -0.2, y: 4.0, z: HZ0 - 0.6, color: AMBER, intensity: 14, range: 12, priority: 7 });   // the house front
-lights.push({ kind: "point", x: 0, y: 2.3, z: 17.5, color: AMBER, intensity: 12, range: 8, priority: 8 });             // inside the shed
-lights.push({ kind: "point", x: SHX0 - 0.6, y: 2.3, z: 18.4, color: AMBER, intensity: 6, range: 7, priority: 6 });    // the shed's west door
-lights.push({ kind: "point", x: SHX1 + 0.6, y: 2.3, z: 18.4, color: AMBER, intensity: 6, range: 7, priority: 6 });    // the shed's east door
-lights.push({ kind: "point", x: 3.5, y: 3.6, z: 24, color: MERCURY, intensity: 10, range: 14, priority: 6 });         // the garden lamp
-lights.push({ kind: "point", x: HX1 + 0.6, y: 3.0, z: 10.5, color: AMBER, intensity: 7, range: 10, priority: 5 });     // the east lane
-lights.push({ kind: "point", x: HX0 - 0.6, y: 3.0, z: 13.5, color: AMBER, intensity: 7, range: 10, priority: 5 });     // the west lane
-lights.push({ kind: "point", x: 9.5, y: 3.6, z: 38, color: MERCURY, intensity: 8, range: 10, priority: 5 });           // the garden's east half
-lights.push({ kind: "point", x: SHX1 + 0.6, y: 2.3, z: 18.6, color: ACCENT, intensity: 8, range: 6, priority: 6 });    // the neon
-lights.push({ kind: "point", x: -4, y: 3.5, z: 38.5, color: MERCURY, intensity: 16, range: 12, priority: 8 });         // the hall
-lights.push({ kind: "point", x: -6, y: 3.2, z: HALLZ0 - 0.8, color: MERCURY, intensity: 8, range: 8, priority: 5 });   // over the roller door
-lights.push({ kind: "point", x: -28.4, y: 5.8, z: -1.2, color: AMBER, intensity: 16, range: 18, priority: 7 });        // the street lamp, west end
-lights.push({ kind: "spot", x: -3, y: 4.4, z: -12, dx: 0.2, dy: -1, dz: 0.5, angle: 1.6, color: MERCURY, intensity: 18, range: 18, priority: 7 }); // the site's work light
-lights.push({ kind: "point", x: 24, y: 4.5, z: -3, color: AMBER, intensity: 6, range: 12, priority: 4 });              // east end: a neighbour's porch glow
+const point = (x: number, y: number, z: number, color: string, intensity: number, range: number, priority = 5) =>
+  lights.push({ kind: "point", x, y, z, color, intensity, range, priority });
+// The house: one pendant per room, hung 0.8 m under the ceiling.
+const rooms: [string, number, number, number][] = [
+  ["salon0", -12, 0, 14.75], ["kitchen0", -7.4, 0, 12.5], ["bedroom0", -4.4, 0, 12.5], ["hall0", -9.9, 0, 7.5], ["bath0", -9.9, 0, 11.6],
+  ["boiler0", -12.9, 0, 6.6], ["garage0", -5.75, 0, 6.6], ["annex", -4.9, 0, 18.25],
+  ["salon1", -8.9, 1, 14.75], ["kitchen1", -5.9, 1, 8.5], ["bedroom1", -12.9, 1, 6.6], ["bath1", -9.9, 1, 5.6], ["corridor1", -9.9, 1, 9.6],
+  ["room_nw", -12, 2, 14.75], ["room_ne", -5.9, 2, 13.6], ["room_se", -5.9, 2, 7.6], ["room_sw", -12.9, 2, 6.6], ["corridor2", -9.9, 2, 9.6],
+];
+for (const [, x, s, z] of rooms) {
+  props.push({ kind: "pendant", x, y: Y(s) + WH - 0.85, z, h: 0.8 });
+  point(x, Y(s) + WH - 1.0, z, AMBER, 9, 7, 6);
+}
+// The stair bay: a wall lamp on the west wall at each storey (a pendant would hang in the flights).
+for (const s of [0, 1, 2]) { props.push({ kind: "lamp", x: HX0 + WT + 0.02, y: Y(s) + 2.6, z: 10.6, yaw: Math.PI / 2, variant: "wall" }); point(HX0 + 1, Y(s) + 2.6, 10.6, AMBER, 9, 7, 6); }
+// Outside the house: the number, a lamp over the front door and over each garden door, the
+// balconies' wall lamps, the gate post's lamp and box.
+props.push({ kind: "sign", x: -8, y: 2.6, z: HZ0 - 0.02, yaw: Math.PI, text: "17", w: 0.4, h: 0.3 });
+props.push({ kind: "lamp", x: -9.75, y: 2.6, z: HZ0 - 0.02, yaw: Math.PI, variant: "wall" });
+point(-9.75, 2.6, HZ0 - 0.7, AMBER, 10, 9, 7);
+props.push({ kind: "lamp", x: -6, y: 3.0, z: HZ0 - 0.02, yaw: Math.PI, variant: "wall" });
+point(-6, 3.0, HZ0 - 0.7, AMBER, 8, 8, 6);
+props.push({ kind: "lamp", x: -12.75, y: 2.6, z: HZ1 + 0.02, yaw: 0, variant: "wall" });
+point(-12.75, 2.6, HZ1 + 0.7, AMBER, 8, 8, 6);
+props.push({ kind: "lamp", x: -9, y: Y(1) + 2.4, z: HZ1 + 0.02, yaw: 0, variant: "wall" });
+point(-9, Y(1) + 2.4, HZ1 + 0.8, AMBER, 8, 7, 6);
+props.push({ kind: "lamp", x: HX1 + 0.02, y: Y(2) + 2.4, z: 9, yaw: Math.PI / 2, variant: "wall" });
+point(HX1 + 0.8, Y(2) + 2.4, 9, AMBER, 8, 7, 6);
+props.push({ kind: "lamp", x: HX1 + 0.02, y: 2.6, z: 6.75, yaw: Math.PI / 2, variant: "wall" });
+point(HX1 + 0.7, 2.6, 6.75, AMBER, 8, 8, 6);
+props.push({ kind: "lamp", x: AX0 - 0.02, y: 2.5, z: 18.25, yaw: -Math.PI / 2, variant: "wall" });
+point(AX0 - 0.7, 2.5, 18.25, AMBER, 7, 7, 5);
+props.push({ kind: "sign", x: -4.6, y: 1.2, z: PZ0 - 0.02, yaw: Math.PI, text: "17", w: 0.3, h: 0.35 });
+// The shed: the neon over the mirrors, the TV in the NW corner, bottles and clippers on the
+// table, the basin, a tube light inside, a lamp over each door, the barber pole by the SE door.
+props.push({ kind: "neon", x: SHX0 + WT + 0.04, y: 2.35, z: 10.8, yaw: Math.PI / 2, text: "BARBER", w: 2.2, h: 0.42, color: ACCENT });
+point(SHX0 + 0.9, 2.3, 10.8, ACCENT, 8, 6, 6);
+props.push({ kind: "board", x: SHX0 + WT + 0.02, y: 1.5, z: 14.0, yaw: Math.PI / 2, text: "", w: 1.0, h: 0.6 });
+props.push({ kind: "bottle_row", x: 1.5, y: 0.82, z: 9.5, w: 1.2 });
+props.push({ kind: "clippers", x: 1.5, y: 0.82, z: 11, yaw: 1.2 });
+props.push({ kind: "towel_stack", x: 1.5, y: 0.8, z: 13 });
+props.push({ kind: "sink", x: 4.3, y: 0.8, z: SHZ0 + WT + 0.3 });
+props.push({ kind: "tube_light", x: 3.75, y: 2.7, z: 10.5, yaw: 0, w: 1.6 });
+point(3.75, 2.5, 10.5, AMBER, 12, 8, 8);
+props.push({ kind: "lamp", x: SHX1 + 0.02, y: 2.5, z: 7.5, yaw: Math.PI / 2, variant: "wall" });
+point(SHX1 + 0.7, 2.5, 7.5, AMBER, 7, 7, 6);
+props.push({ kind: "lamp", x: 2.25, y: 2.5, z: SHZ1 + 0.02, yaw: 0, variant: "wall" });
+point(2.25, 2.5, SHZ1 + 0.7, AMBER, 7, 7, 6);
+props.push({ kind: "barber_pole", x: SHX1 + 0.05, y: 1.2, z: 8.7, yaw: Math.PI / 2 });
+props.push({ kind: "poster", x: 5.2, y: 1.3, z: SHZ0 + WT + 0.02, yaw: 0, variant: "1", w: 0.6, h: 0.85 });
+// The garage: tube lights under the roof, the sign over the gates, a wheel by the tyres, a lamp
+// over the north door, graffiti on the booth.
+props.push({ kind: "tube_light", x: 13.6, y: GH - 0.1, z: 4, yaw: Math.PI / 2, w: 1.6 });
+props.push({ kind: "tube_light", x: 17.6, y: GH - 0.1, z: 4, yaw: Math.PI / 2, w: 1.6 });
+props.push({ kind: "tube_light", x: 13.6, y: GH - 0.1, z: 11, yaw: Math.PI / 2, w: 1.6 });
+props.push({ kind: "tube_light", x: 18, y: GH - 0.1, z: 11.5, yaw: Math.PI / 2, w: 1.6 });
+point(13.6, GH - 0.4, 4, MERCURY, 14, 10, 8);
+point(17.6, GH - 0.4, 4, MERCURY, 14, 10, 8);
+point(13.6, GH - 0.4, 11, MERCURY, 12, 9, 7);
+point(18, GH - 0.4, 11.5, MERCURY, 12, 8, 8);
+props.push({ kind: "sign", x: 15.6, y: 3.6, z: GZ0 - 0.02, yaw: Math.PI, text: "DETAILING", w: 2.4, h: 0.5 });
+point(15.6, 3.6, GZ0 - 0.8, MERCURY, 8, 9, 6);
+props.push({ kind: "wheel", x: 12.4, y: 0, z: 10.6, yaw: 0.4 });
+props.push({ kind: "lamp", x: 13.75, y: 3.0, z: GZ1 + 0.02, yaw: 0, variant: "wall" });
+point(13.75, 3.0, GZ1 + 0.7, MERCURY, 8, 8, 6);
+props.push({ kind: "graffiti", x: 18, y: 1.6, z: 8.73, yaw: Math.PI, text: "DOLNA 17", w: 2.2, h: 0.8 });
+props.push({ kind: "poster", x: 13.73, y: 1.4, z: 8.5, yaw: -Math.PI / 2, variant: "2", w: 0.6, h: 0.85 });
+// The road and the garden: two street lamps, three garden posts, the pool's lamp.
+for (const [x, z] of [[-16, -5.3], [14, -5.3]] as const) { props.push({ kind: "lamp", x, y: 0, z, variant: "post", h: 4.5 }); point(x, 4.3, z, AMBER, 16, 16, 7); }
+for (const [x, z] of [[-17, 16], [-1, 24.5], [4, 19]] as const) { props.push({ kind: "lamp", x, y: 0, z, variant: "post", h: 3.8 }); point(x, 3.6, z, MERCURY, 10, 12, 6); }
+props.push({ kind: "lamp", x: 12.5, y: 0, z: 25.5, variant: "post", h: 3.8 });
+point(12.5, 3.6, 25.5, MERCURY, 10, 11, 6);
+point(9, 0.5, 23, MERCURY, 6, 6, 5);            // under the water
 
 // ======================= SPAWNS =======================
 const spawns: SpawnPoint[] = [
-  // team 0 — THE PLOT. First = the duel start, inside the shed by the west (garden-side) door.
-  { x: -3.4, y: 0, z: 17.0, yaw: -Math.PI / 2, team: 0 },
-  { x: -7, y: 0, z: 28.5, yaw: Math.PI, team: 0 },
-  { x: -2, y: 0, z: 23, yaw: Math.PI, team: 0 },
-  { x: 3.5, y: 0, z: 22, yaw: Math.PI, team: 0 },
-  { x: 9.5, y: 0, z: 31, yaw: Math.PI, team: 0 },
-  { x: -1, y: 0, z: 39.8, yaw: Math.PI, team: 0 },
-  // team 1 — THE BUILDING SITE. First = the duel start, the back corner of the shell's west room.
-  { x: -7.0, y: 0, z: -23.6, yaw: 0, team: 1 },
-  { x: -4, y: 0, z: -20, yaw: 0, team: 1 },
-  { x: 0.5, y: 0, z: -21, yaw: 0, team: 1 },
-  { x: 3.0, y: 0, z: -21.5, yaw: 0, team: 1 },
-  { x: -11, y: 0, z: -19, yaw: 0, team: 1 },
-  { x: 6.5, y: 0, z: -11.5, yaw: 0, team: 1 },
+  // team 0 — THE GARAGE. First = the duel start, inside the booth pocket at its mouth: MEASURED so
+  // that five contested places are within 250 ms of T1's start (a deeper corner adds 3–4 m to
+  // every T0 route and leaves only the front gate contested).
+  { x: 16.25, y: 0, z: 9.75, yaw: -Math.PI / 2, team: 0 },
+  { x: 18.75, y: 0, z: 12.25, yaw: -Math.PI / 2, team: 0 },
+  { x: 18.5, y: 0, z: 10.5, yaw: -Math.PI / 2, team: 0 },
+  { x: 17.5, y: 0, z: 10.25, yaw: -Math.PI / 2, team: 0 },
+  { x: 13.75, y: 0, z: 12.25, yaw: Math.PI, team: 0 },
+  { x: 14.5, y: 0, z: 8.5, yaw: Math.PI, team: 0 },
+  // team 1 — THE HOUSE, 2nd floor. First = the duel start, the SE room beside the bed.
+  { x: -7.75, y: Y(2), z: 7.25, yaw: -Math.PI / 2, team: 1 },
+  { x: -6.75, y: Y(2), z: 9.25, yaw: -Math.PI / 2, team: 1 },
+  { x: -4, y: Y(2), z: 9.5, yaw: -Math.PI / 2, team: 1 },
+  { x: -6, y: Y(2), z: 12.5, yaw: -Math.PI / 2, team: 1 },
+  { x: -9.75, y: Y(2), z: 14, yaw: Math.PI / 2, team: 1 },
+  { x: -9.5, y: Y(1), z: 15.5, yaw: 0, team: 1 },
 ];
 
 export const DOLNA: MapDef = {
   id: "dolna", name: "DOLNA",
   solids, props, lights, spawns,
   arenaSpawns: [
-    { x: -27, y: 0, z: -4, yaw: Math.PI / 2, team: 0 }, { x: 27, y: 0, z: -6, yaw: -Math.PI / 2, team: 1 },
-    { x: 10.5, y: 0, z: 12, yaw: Math.PI, team: 0 }, { x: -10.5, y: 0, z: 3.5, yaw: Math.PI, team: 1 },
-    { x: -1.5, y: 0, z: 40.5, yaw: 0, team: 0 }, { x: 3, y: 0, z: -12.5, yaw: 0, team: 1 },
-    { x: 3, y: 0, z: 30, yaw: Math.PI, team: 0 }, { x: -11, y: 0, z: -22, yaw: 0, team: 1 },
+    { x: -17, y: 0, z: -2.5, yaw: Math.PI / 2, team: 0 }, { x: 17, y: 0, z: -2.5, yaw: -Math.PI / 2, team: 1 },
+    { x: -17, y: 0, z: 23, yaw: Math.PI, team: 0 }, { x: 15, y: 0, z: 23.5, yaw: Math.PI, team: 1 },
+    { x: 3.5, y: 0, z: 10.5, yaw: 0, team: 0 }, { x: -7.5, y: 0, z: 11.5, yaw: Math.PI, team: 1 },
+    { x: -6, y: Y(1), z: 10.5, yaw: 0, team: 0 }, { x: -12, y: Y(2), z: 6.5, yaw: 0, team: 1 },
   ],
-  stations: [{ x: -3, y: 0, z: 38, name: "HALA" }, { x: -25, y: 0, z: -6.5, name: "SOSNY" }, { x: 27, y: 0, z: -5, name: "ULICA" }],
-  flags: [{ id: "A", name: "HALA", x: -6, y: 0, z: 36.5 }, { id: "B", name: "PODJAZD", x: 8.5, y: 0, z: 3 }, { id: "C", name: "BUDOWA", x: -9, y: 0, z: -12.5 }],
-  sites: [{ id: "A", name: "HALA", x: -6, y: 0, z: 36.5 }, { id: "B", name: "BUDOWA", x: -9, y: 0, z: -12.5 }],
+  stations: [{ x: 15.15, y: 0, z: 8, name: "GARAŻ" }, { x: -18, y: 0, z: -2.5, name: "ULICA" }, { x: -7.5, y: 0, z: 14.75, name: "KUCHNIA" }],
+  flags: [{ id: "A", name: "PODJAZD", x: -6, y: 0, z: 2.5 }, { id: "B", name: "SALON", x: -13.5, y: 0, z: 15.75 }, { id: "C", name: "BASEN", x: 9, y: 0, z: 20 }],
+  sites: [{ id: "A", name: "BASEN", x: 12.4, y: 0, z: 23 }, { id: "B", name: "ULICA", x: -15, y: 0, z: -2.5 }],
   huntSpawnMinM: 10,
   killY: -8,
-  bounds: boxFrom(-32, -2, -26, 64, 20, 70),
+  bounds: boxFrom(-23, -3, -8, 46, 23, 36),
 };
+for (const st of DOLNA.stations) props.push({ kind: "neon", x: st.x, y: st.y + 2.2, z: st.z, yaw: 0, text: "$ BUY", w: 1.2, h: 0.4, variant: "station" });
 
 /** Key places, timed from BOTH starts; a leading "*" marks a CONTESTED place (must be within 250 ms). */
 export const DOLNA_PLACES: Readonly<Record<string, { x: number; y: number; z: number }>> = {
-  "*street_w": { x: -20, y: 0, z: -4.5 },
-  "*street_mid": { x: 0, y: 0, z: -4 },
-  "*street_e": { x: 16, y: 0, z: -4.5 },
-  "*pole_w": { x: -16, y: 0, z: -2.6 },
-  "gate": { x: 8.25, y: 0, z: -0.35 },
-  "wicket": { x: -2.25, y: 0, z: -0.35 },
-  "hedge_gap": { x: -10.75, y: 0, z: -0.2 },
-  "garage_door": { x: -2.75, y: 0, z: 5.9 },
-  "shed_w_door": { x: -4.5, y: 0, z: 17.0 },
-  "hall_mouth": { x: -6, y: 0, z: 34.4 },
-  "site_gate": { x: -3.25, y: 0, z: -8.9 },
-  "site_gap_w": { x: -10.75, y: 0, z: -8.9 },
-  "site_gap_e": { x: 5, y: 0, z: -8.9 },
-  "toj": { x: 5.5, y: 0, z: -6.5 },
-  "skips": { x: 10.5, y: 0, z: -4.3 },
-  "car": { x: 19, y: 0, z: -4.5 },
-  "street_w_end": { x: -27, y: 0, z: -4 },
-  "street_e_end": { x: 27, y: 0, z: -6 },
-  "other_start_T1": { x: -7.0, y: 0, z: -23.6 },
-  "other_start_T0": { x: -3.4, y: 0, z: 17.0 },
+  "*front_gate": { x: -6.25, y: 0, z: 1.25 },
+  "*garden_door": { x: -12.25, y: 0, z: 17.75 },
+  "*porch": { x: -9.25, y: 0, z: 17.75 },
+  "*east_passage": { x: -4.25, y: 0, z: 7.25 },
+  "*road_sw": { x: -10.25, y: 0, z: -4.25 },
+  "*lawn_nw": { x: -16.25, y: 0, z: 19.75 },
+  "annex_w_door": { x: -7.75, y: 0, z: 17.75 },
+  "road_gate": { x: -4, y: 0, z: -2.25 },
+  "wicket": { x: -9.75, y: 0, z: 1.25 },
+  "road_w": { x: -18, y: 0, z: -2.25 },
+  "road_ww": { x: -13, y: 0, z: -2.25 },
+  "front_door": { x: -9.75, y: 0, z: 3.75 },
+  "pool_deck": { x: 9, y: 0, z: 20 },
+  "shed_door": { x: 7, y: 0, z: 7.5 },
+  "stair_foot": { x: -10, y: 0, z: 9.5 },
+  "garage_w_door": { x: 10.5, y: 0, z: 3.75 },
+  "garage_gate_1": { x: 14.75, y: 0, z: 1.25 },
+  "garage_gate_2": { x: 18.75, y: 0, z: 1.25 },
+  "garage_north_door": { x: 13.75, y: 0, z: 14.5 },
+  "shed_north_door": { x: 2.25, y: 0, z: 15.5 },
+  "salon_1": { x: -9, y: Y(1), z: 14.75 },
+  "balcony_1": { x: -9, y: Y(1), z: 17.5 },
+  "balcony_2": { x: -2, y: Y(2), z: 9 },
+  "kitchen_0": { x: -7.5, y: 0, z: 12.5 },
+  "annex": { x: -5, y: 0, z: 18.25 },
+  "road_e": { x: 18, y: 0, z: -2 },
+  "garden_nw": { x: -17, y: 0, z: 23 },
+  "other_start_T1": { x: -7.75, y: Y(2), z: 7.25 },
+  "other_start_T0": { x: 16.25, y: 0, z: 9.75 },
 };
 /** Exits counted within 15 / 30 m of each start. */
 export const DOLNA_EXITS: Readonly<Record<string, { x: number; y: number; z: number }>> = {
-  shed_w_door: { x: -4.5, y: 0, z: 17.0 },
-  shed_e_door: { x: 4.5, y: 0, z: 17.0 },
-  garage_back_door: { x: -5.4, y: 0, z: 11.0 },
-  east_lane: { x: 9.5, y: 0, z: 12 },
-  garden_n: { x: 0, y: 0, z: 22 },
-  shell_door_n: { x: -6.95, y: 0, z: -16.9 },
-  shell_door_e: { x: 4.4, y: 0, z: -21.5 },
-  shell_door_w: { x: -8.4, y: 0, z: -19.0 },
-  yard_e: { x: 6, y: 0, z: -15 },
-  site_gate: { x: -3.25, y: 0, z: -8.9 },
+  booth_mouth: { x: 14.75, y: 0, z: 10 },
+  garage_w_door: { x: 10.5, y: 0, z: 3.75 },
+  garage_gate_1: { x: 14.75, y: 0, z: 1.25 },
+  garage_gate_2: { x: 18.75, y: 0, z: 1.25 },
+  garage_north_door: { x: 13.75, y: 0, z: 14.5 },
+  corridor_2: { x: -9.9, y: Y(2), z: 7.25 },
+  room_ne: { x: -5.75, y: Y(2), z: 12 },
+  balcony_2: { x: -2, y: Y(2), z: 9 },
+  stairs_2_head: { x: -11.5, y: Y(2) - RISE, z: 11.5 },
+  corridor_1: { x: -9.9, y: Y(1), z: 9.6 },
+  hall_0: { x: -9.9, y: 0, z: 7.5 },
 };
 /** Names of the ground panels (the climb chain's base) and of what must never be standable. */
 export const DOLNA_GROUND = /^ground_/;
-export const DOLNA_BOUNDARY = /^(hedge_|fence_|wall_edge|roof_)/;
+export const DOLNA_BOUNDARY = /^(hedge_|fence_|wall_edge)/;
 /** Raw extents for the tools and tests that draw or measure the map rather than build it. */
 export const DOLNA_EXTENTS: Readonly<Record<string, Box>> = {
-  street: boxFrom(SX0, 0, ROAD0, SX1 - SX0, 0, ROAD1 - ROAD0),
-  site: boxFrom(SITEX0, 0, SITEZ0, SITEX1 - SITEX0, 0, SITEZ1 - SITEZ0),
-  shell: boxFrom(SHELLX0, 0, SHELLZ0, SHELLX1 - SHELLX0, 2.8, SHELLZ1 - SHELLZ0),
-  front: boxFrom(PX0, 0, FRONT, PX1 - PX0, 0, HZ0 - FRONT),
-  house: boxFrom(HX0, 0, HZ0, HX1 - HX0, HH, HZ1 - HZ0),
+  road: boxFrom(-21.7, 0, ROAD0, 43.4, 0, PZ0 - ROAD0),
+  plot: boxFrom(PX0, 0, PZ0, PX1 - PX0, 0, PZ1 - PZ0),
+  house: boxFrom(HX0, 0, HZ0, HX1 - HX0, Y(3), HZ1 - HZ0),
+  annex: boxFrom(AX0, 0, HZ1, HX1 - AX0, WH, AZ1 - HZ1),
   shed: boxFrom(SHX0, 0, SHZ0, SHX1 - SHX0, 2.8, SHZ1 - SHZ0),
-  garden: boxFrom(PX0, 0, SHZ1, PX1 - PX0, 0, PZ1 - SHZ1),
-  hall: boxFrom(HALLX0, 0, HALLZ0, HALLX1 - HALLX0, 4, HALLZ1 - HALLZ0),
+  garage: boxFrom(GX0, 0, GZ0, GX1 - GX0, GH, GZ1 - GZ0),
+  pool: boxFrom(POOL.x0, -1.2, POOL.z0, POOL.x1 - POOL.x0, 1.2, POOL.z1 - POOL.z0),
+  stairs: boxFrom(HX0 + WT, 0, LANE_A[0], STX - HX0 - WT, Y(2), LANE_B[1] - LANE_A[0]),
 };
+export const DOLNA_STOREY = ST;

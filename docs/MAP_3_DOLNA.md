@@ -1016,6 +1016,120 @@ latarni (0.12 m, bez kolizji — jak na GÓRZE).
 6. **DOLNA w innych trybach** (TDM/DOM/BOMB/Ostrzyżeni): flagi, miejsca bomby i spawny przechodzą testy,
    ale nie były projektowane na serio — poza `MAP_ORDER` do playtestu (P1).
 
+
+---
+
+## DOLNA 17 v2 — plan właściciela (2026-09-27)
+
+Właściciel po pierwszym deployu: *„mapa dolna 17 ma być ogólnodostępna i jest źle zbudowana, przerób
+ją … to, co narysowałem jako plan dolnej 17, to początek, to są ważne elementy, a ty dodaj i ulepsz
+resztę”* — i rysunek: legenda (balkony, dom 3 piętra z dobudówką, droga gruntowa, barak barbera, garaż
+detailingu z dwiema bramami od drogi i drzwiami na ogród i basen, basen, spawn), plan działki, rzuty
+parteru, 1. i 2. piętra, plan garażu (dwa auta, brama1, brama2, spawn) i plan baraku (lustro, stolik,
+trzy siedziska, telewizor, kanapa, łazienka, myjka, dwa okna, drzwi). Układ 1 v 1 z §5 (ulica jako
+środek, budowa naprzeciwko) **został zastąpiony** tym planem; mapa jest w `MAP_ORDER` (każdy tryb) i
+pozostaje domyślną areną duelu.
+
+### Co jest gdzie (`packages/shared/src/dolna.ts`, 271 brył · 65 rekwizytów · 45 świateł, granice 46 × 36 m)
+
+| element z rysunku | w grze |
+|---|---|
+| droga gruntowa | wzdłuż południowej krawędzi działki, 5 m; BMW (`look: "car"`, `paint_blue` — ciemny granat) przed domem |
+| dom 3 kondygnacje | rzuty właściciela: parter (salon, kuchnia, sypialnia, łazienka, schody, kotłownia, garaż z bramą od drogi, dobudówka NE), 1. piętro (salon z balkonem od ogrodu, kuchnia, sypialnia, łazienka), 2. piętro (pokoje wokół schodów, balkon wschodni, pokój spawnu SE); kondygnacja 3.5 m (3.25 ściany + strop 0.25 na ścianach), schody zwrotne 0.35 × 0.5 m z półpiętrem — bot wchodzi krokiem |
+| balkony | 1. piętro od ogrodu, 2. piętro od wschodu; parapet 1.35 m (kucnięcie chowa, stojąc widać głowę, nie da się wejść na dach) |
+| barak barbera | 5 × 8 m na wschód od domu, wnętrze jak na planie + **drugie drzwi od północy** (dodane: jedne drzwi = ślepa kieszeń) |
+| garaż detailingu | SE róg przy drodze, dwie bramy rolowane od drogi, drzwi na ogród/basen, dwa auta, szafki, opony; spawn w NE kącie za przepierzeniem 2.8 m (dodane: kieszeń niewidoczna z bram) |
+| basen | NE część ogrodu, zagłębiony, ze stopniem wyjścia |
+| żywopłoty | północ, zachód, wschód (3 m, granica); od drogi płot sztachetowy 1.5 m z furtką przed drzwiami i bramą przed garażem domu (dodane, ze zdjęć) |
+| spawny | drużyna 0: garaż i podjazd (start duelu w kieszeni garażu); drużyna 1: 2. piętro i strona balkonu (start duelu w pokoju SE); 8 spawnów areny; stacje, flagi A/B/C, 2 miejsca bomby |
+
+Dodane poza rysunkiem, każdorazowo z powodem w docblocku: drzwi (właściciel ich nie rysował) — z salonu i
+kuchni do ogrodu, z dobudówki i z garażu domu na zewnątrz, żeby dom był pętlą, nie drzewem; drzewa i
+krzewy w ogrodzie przerywające długie linie; światła w każdym pomieszczeniu i na zewnątrz.
+
+### Plan (z brył, `map-plan.ts dolna` — parter)
+
+```
+DOLNA (dolna) — 46 × 36 m, ground y = 0.   N ↑ (+Z)   E → (+X)
+# structure (≥ 2.8)   = full cover (2.0–2.8)   + crouch cover (1.2–1.6)   . low, jump on (0.5–1.0)   / stair   ~ boundary   : invisible   o/O duel starts   x spawn   $ buy   F flag   A/B site
+         x=-20     x=-15     x=-10      x=-5      x=0      x=5     x=10     x=15     x=20
+z= 27  |                                                                                            |
+z= 26  |    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~    |
+z= 25  |    ~·········..·······································································~    |
+z= 24  |    ~···+++···························++++·············································~    |
+z= 23  |    ~·································++++·················//··········A···············~    |
+z= 22  |    ~·················++++++·······························//··························~    |
+z= 21  |    ~······································································##··········~    |
+z= 20  |    ~···························································F··········##··········~    |
+z= 19  |    ~···························#########··············································~    |
+z= 18  |    ~·································..#··········##··································~    |
+z= 17  |    ~···································#·····················+++······················~    |
+z= 16  |    ~···········===F···======····===···==·····················+++············#·········~    |
+z= 15  |    ~···········#.·········x···$··=·····=··············································~    |
+z= 14  |    ~···········#.·········x······=·····=·······=···=======····························~    |
+z= 13  |    ~····+++++··#··.....····=·····=·····=·······#·········=·········====···============~    |
+z= 12  |    ~···········############=·····x·····=·······#.::······=·········=·····x··#······x=#~    |
+z= 11  |    ~···········#///////#···=····.=·····=·······#.········=·········=········#·······=#~    |
+z= 10  |    ~···········#///////#···=····.=...··=·······#.::······=·········=········#·o·x·x·=#~    |
+z=  9  |    ~···········#///////·········x=...x==·······#.::······=·········=+···············=#~    |
+z=  8  |    ~······#····#########···=###########=·······#####·····=·········=+·····x$·········#~    |
+z=  7  |    ~···········#·······=···=··O········=·······#···················=·················#~    |
+z=  6  |    ~···········#·······························###########·········=··+++·····+++····#~    |
+z=  5  |    ~···········#++··..·=·············..=···························=··+++·····+++····#~    |
+z=  4  |    ~···········=========···===······====···························=··+++·····+++····#~    |
+z=  3  |    ~··································································+++·····+++····#~    |
+z=  2  |    ~·····························F·································=··+++·····+++····#~    |
+z=  1  |    ~·······························································=·················#~    |
+z=  0  |    ~~~~~~~~~~~~~~~~~~~~~···~~~······~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##······##······###~    |
+z= -1  |   ~····················································································~   |
+z= -2  |   ~·····················+++++++++······················································~   |
+z= -3  |   ~······$·····B········+++++++++······················································~   |
+z= -4  |   ~····················································································~   |
+z= -5  |   ~····················································································~   |
+z= -6  |   ~····················································································~   |
+z= -7  |   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~   |
+z= -8  |                                                                                            |
+```
+
+### Pomiary (narzędzia repo na zbudowanej mapie)
+
+- `map-duel.ts dolna`: starty niewidoczne (6 × 6 par, stojąc i kucając); **6 miejsc spornych** (brama
+  frontowa, drzwi ogrodowe, ganek, przejście wschodnie, droga SW, trawnik NW) z obu startów w
+  **≤ 233 ms**; start–start 58.3 m ścieżki (dom 3-piętrowy: garaż → schody → 2. piętro); T0 5 wyjść
+  w 15 m, T1 2 (korytarz i hol — reszta piętra w 30 m: 9 z 11); linie wzroku: mediana 11.7 m,
+  p90 25.4 m, najdłuższa 41.6 m (droga).
+- `map-audit.ts dolna`: 0 par koplanarnych, sekcja 2a pusta, **0 ze 99 punktów** bez światła
+  (45 świateł w 3 barwach).
+- `dolna.test.ts` (przepisany pod ten układ): starty ukryte i żadna komórka nie widzi obu, Δ na miejscach
+  spornych ≤ 250 ms, łączność każdego pokoju na każdym piętrze i obu balkonów, język osłon, nic nie
+  lata, **łańcuch wspinaczek świadomy ścian**: jedyne osiągalne blaty ≥ 1.9 m to podłogi, schody,
+  półpiętra i balkony — nigdy dach, żywopłot, dach garażu ani baraku.
+- **Zmiana w rdzeniu** (`mapWalk.ts`, `nav.ts`): siatka chodu zna prześwit nad każdą wysokością
+  komórki i nie pozwala „zeskoczyć” przez strop — bez tego bot w domu 3-piętrowym stał zablokowany
+  o podłogę, przez którą kazano mu spaść; suita `shared` 411/411 po zmianie.
+
+### Render i live
+
+- Render (`dolna-shots.mjs`, 34 kadry: oba starty, salony i kuchnie obu pięter, oba balkony, schody,
+  wnętrze baraku, garaż z bramami, basen, droga z BMW, furtka, z góry): obejrzane przez leada — dom z
+  trzema kondygnacjami i schodkowym dachem, dobudówka, barak, hala, basen, żywopłoty i BMW czytają się z
+  góry; wnętrza (barak z trzema fotelami i neonem, garaż z szafkami i oponami, salon na piętrze,
+  schody zwrotne) bez rzeczy latających i przenikających; ujęcia z balkonów były wycelowane w parapet
+  (kamera, nie geometria) — poprawione w narzędziu. Jedyny błąd konsoli: 404 favicon.
+- Live: LIVE_PLACEHOLDER
+
+### Co nie jest udowodnione
+
+- **60 s rundy przy 58 m ścieżki między startami** — dłużej niż w §5 (44 m); z dwojgiem ludzi spotkanie
+  wypada przy bramie frontowej / ganku (~4 s sprintu z każdej strony), ale liczba rund „na zegar” jest
+  pierwszą statystyką playtestu.
+- T1 ma w 15 m tylko dwa wyjścia (korytarz, hol) — reszta piętra jest w 30 m; jeśli playtest pokaże
+  „zamknięty na piętrze”, drugi bieg schodów albo zjazd z balkonu (skrzynia pod nim) jest tanią zmianą.
+- Rzuty pokoi są z rysunku bez skali; wymiary (dom ~12 × 12 m, barak 5 × 8, garaż 9 × 13, basen ~5 m)
+  to odczyt leada — do potwierdzenia.
+- Inne tryby (TDM/DOM/BOMB/Ostrzyżeni) przechodzą testy, ale nie były grane; miejsca bomby (garaż,
+  salon na piętrze) i flagi wymagają playtestu.
+
 ## Załącznik A — skąd są liczby (dla repo; nie wklejać)
 
 Każdy fakt w §1 i §4 ma źródło w kodzie z dnia 2026-09-26 (gałąź `claude/confident-cray-nneqme`,

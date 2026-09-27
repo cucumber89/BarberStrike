@@ -650,9 +650,9 @@ export const DEFAULT_MAP_ID = NIGHT_DISTRICT.id;
 /**
  * The arenas built for a 1 v 1, in the order a picker shows them. Nothing else may host a duel or a
  * tournament pair: the night district is 100 m of streets where two people spend the round looking
- * for each other (Drop G). DOLNA is deliberately NOT in `MAP_ORDER` — the owner's brief of
- * 2026-09-26 (Drop W, P1) opens it for the duel and the tournament only, so the other modes' menus
- * do not offer it yet.
+ * for each other (Drop G). DOLNA was kept OUT of `MAP_ORDER` while it was a 1 v 1 street (the
+ * brief of 2026-09-26, Drop W, P1); the rebuild of 2026-09-27 designed its team spawns, flags and
+ * sites for real, so it now sits in `MAP_ORDER` after GÓRA and every mode's menu offers it.
  */
 export const DUEL_MAP_IDS: readonly string[] = [DOLNA.id, GORA.id];
 /**
@@ -664,7 +664,7 @@ export const DUEL_MAP_IDS: readonly string[] = [DOLNA.id, GORA.id];
  * docs/MAP_3_DOLNA.md §5.8. GÓRA stays selectable — it is the second entry of `DUEL_MAP_IDS`.
  */
 export const DUEL_MAP_ID = DOLNA.id;
-export const MAP_ORDER: readonly string[] = [NIGHT_DISTRICT.id, GORA.id];
+export const MAP_ORDER: readonly string[] = [NIGHT_DISTRICT.id, GORA.id, DOLNA.id];   // DOLNA 17 in every mode: the owner's brief of 2026-09-27 ("ogólnodostępna")
 
 /**
  * The duel arena for what a lobby asked. Server and client both answer the question "which map

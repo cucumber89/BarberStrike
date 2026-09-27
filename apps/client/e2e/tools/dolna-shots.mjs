@@ -70,24 +70,24 @@ const shoot = async (p, views, prefix) => {
 if (process.env.SKIP_REVIEW !== "1") {
 const E = 1.62;
 const views = [
-  ["start_t0", [-3.4, E, 17.0], [-4.0, 1.5, 17.0]],           // T0 start in the shed, at its west door
-  ["shed_interior", [3.9, E, 17.0], [-3.0, 1.2, 16.2]],       // from the east door, west across the chairs
-  ["start_t1", [-7.0, E, -23.6], [-6.95, 1.5, -17.4]],        // T1 start in the shell, at the north door
-  ["site_yard", [-3.25, E, -8.5], [0, 2.5, 10]],              // from the mesh gate, north over the street to the house
-  ["street_w", [-28, E, -4.5], [28, 1.4, -4.5]],              // the long line of the road, west end
-  ["street_e", [28, E, -4.5], [-28, 1.4, -4.5]],              // ... and from the east end
-  ["gate", [8, E, -4], [8.1, 2.5, 10]],                       // through the gate at the house
-  ["wicket", [-2.2, E, -4], [-2.25, 1.5, 10]],                // through the wicket
-  // East across the front from just east of the thuja row (x −8.6..−6.4): from inside the pocket
-  // at x −9 the row's face 0.4 m away is the whole frame, which was a foliage-green blank.
-  ["front_yard", [-6.1, E, 2.4], [11.8, 1.4, 2.4]],
-  ["pocket", [-11.2, E, 4.6], [-2, 1.4, -4]],                 // the pocket behind the hedge gap, looking out at the street
-  ["garage", [-2.7, E, 1], [-2.75, 1.2, 12]],                 // into the open garage door
-  ["hall", [-6, E, 31], [-6, 1.8, 42]],                       // into the roller door
-  ["hall_interior", [-4, E, 40.5], [-7, 2.4, 37.5]],          // south-west at the lifted car
-  ["garden", [0, E, 21], [0, 1.8, 42]],                       // north over the lawn to the hall
-  ["overview", [0, 45, -40], [0, 0, 10]],
-  ["overview_plot", [-30, 30, 20], [0, 0, 20]],
+  ["start_t0", [16.25, E, 9.75], [12.5, 1.4, 9.75]],           // T0 start in the garage pocket, west through the mouth
+  ["start_t1", [-7.75, 7 + E, 7.25], [-3, 8.4, 9]],            // T1 start, the top-floor SE room, towards the balcony door
+  ["salon_0", [-9.5, E, 13.5], [-14.5, 1.4, 16]],              // the ground-floor salon from the kitchen door
+  ["kitchen_0", [-8.25, E, 9.5], [-6.3, 1.0, 15]],             // the kitchen along its counter
+  ["salon_1", [-4, 3.5 + E, 13.5], [-12, 5, 15.5]],            // the first-floor salon, the balcony door at the far end
+  ["kitchen_1", [-8.25, 3.5 + E, 11.5], [-4, 4.5, 5.5]],       // the first-floor kitchen
+  ["stairs", [-9.75, E, 9.75], [-13.5, 2.5, 10.5]],            // the stairs from the hall: lane A up to the landing
+  ["stairs_1", [-9.75, 3.5 + E, 11.5], [-13, 5.5, 10.5]],      // the switchback from the first floor
+  ["balcony_1", [-9, 3.5 + E, 17.5], [-9, 3.5 + E - 0.4, 24]],             // over the garden from the first-floor balcony
+  ["balcony_2", [-2, 7 + E, 9], [8, 7 + E - 0.8, 12]],                   // the top-floor balcony over the shed and the garage
+  ["shed_interior", [5.5, E, 13.5], [1.5, 1.2, 9]],            // the barber shed: mirrors, chairs, the table
+  ["garage", [15.6, E, -3.5], [15.6, 2, 8]],                   // the garage from the road: both gates, the cars
+  ["garage_interior", [12, E, 7.5], [17, 1.4, 11.5]],          // inside: the booth partition and the screen
+  ["pool", [5.5, E, 19.75], [9.5, -0.5, 23.5]],                // the pool from the deck's SW corner
+  ["road", [-19, E, -2.5], [-6, 1.4, -1.5]],                   // the road from the west end: the BMW, the fence, the house
+  ["gate", [-6.25, E, -3.5], [-6.25, 2.5, 6]],                 // the front gate from the road, the house behind
+  ["overview", [-20, 40, -40], [0, 0, 12]],
+  ["overview_plot", [30, 32, 34], [-2, 0, 10]],
 ];
 const p = await openReview("map=dolna&preset=medium", "dolna");
 const metrics = await shoot(p, views, "review_");

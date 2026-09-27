@@ -61,17 +61,19 @@ export const GORA_VIEWPOINTS: readonly ViewpointSpec[] = [
 ];
 
 /**
- * DOLNA: both starts as the duellists see them, the gate from the street, the street from each end,
- * the hall from the garden, and the plot from above (docs/MAP_3_DOLNA.md §5.3, §5.5).
+ * DOLNA 17: both starts as the duellists see them (the garage pocket, the top-floor SE room), the
+ * front gate from the road, the salon, the top-floor balcony, the pool, the garage with its gates,
+ * and the plot from above (docs/MAP_3_DOLNA.md, "DOLNA 17 v2").
  */
 export const DOLNA_VIEWPOINTS: readonly ViewpointSpec[] = [
-  { id: "start_t0", label: "START DZIAŁKA", pos: [-3.4, 1.62, 17.0], look: [-9, 1.6, 17.0] },
-  { id: "start_t1", label: "START BUDOWA", pos: [-7.0, 1.62, -23.6], look: [-7.0, 1.6, -17] },
-  { id: "gate", label: "BRAMA", pos: [8.1, 1.62, -3.5], look: [8.1, 1.6, 6] },
-  { id: "street_w", label: "ULICA W", pos: [-27, 1.62, -4], look: [0, 1.6, -4] },
-  { id: "street_e", label: "ULICA E", pos: [27, 1.62, -6], look: [0, 1.6, -5] },
-  { id: "hall", label: "HALA", pos: [-6, 1.62, 30], look: [-6, 2, 38] },
-  { id: "overview", label: "Z GÓRY", pos: [-30, 50, -60], look: [0, 0, 9] },
+  { id: "start_t0", label: "START GARAŻ", pos: [16.25, 1.62, 9.75], look: [12, 1.4, 9.75] },
+  { id: "start_t1", label: "START 2 PIĘTRO", pos: [-7.75, 8.62, 7.25], look: [-3, 8.4, 9] },
+  { id: "gate", label: "BRAMA", pos: [-6.25, 1.62, -3.5], look: [-6.25, 2.5, 6] },
+  { id: "salon", label: "SALON", pos: [-9.5, 1.62, 13.5], look: [-14.5, 1.4, 16] },
+  { id: "balcony", label: "BALKON", pos: [-2, 8.62, 9], look: [8, 3, 12] },
+  { id: "pool", label: "BASEN", pos: [5.5, 1.62, 19.75], look: [9, 0, 23] },
+  { id: "garage", label: "GARAŻ", pos: [15.6, 1.62, -3.5], look: [15.6, 2, 8] },
+  { id: "overview", label: "Z GÓRY", pos: [-20, 40, -40], look: [0, 0, 12] },
 ];
 
 /** The spots for a map: the district's areas, the roof's, or the plot's. */
