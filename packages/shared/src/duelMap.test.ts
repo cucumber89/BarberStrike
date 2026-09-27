@@ -29,8 +29,10 @@ describe("duelMapOf", () => {
     for (const id of DUEL_MAP_IDS) expect(MAPS[id]?.id, id).toBe(id);
   });
 
-  it("keeps DOLNA out of the shared menu order: duel and tournament only for now", () => {
-    expect(MAP_ORDER).not.toContain("dolna");
-    expect(MAP_ORDER).toContain("gora");
+  it("offers DOLNA in the shared menu order too, after GÓRA (the owner's brief of 2026-09-27: every mode)", () => {
+    // Drop W P1 kept the 1 v 1 street out of the team modes' menus; the rebuilt plot (DOLNA 17 v2)
+    // has team spawns, flags and bomb sites designed and measured for them.
+    expect(MAP_ORDER).toContain("dolna");
+    expect(MAP_ORDER.indexOf("dolna")).toBeGreaterThan(MAP_ORDER.indexOf("gora"));
   });
 });

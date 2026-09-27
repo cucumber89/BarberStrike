@@ -76,7 +76,7 @@ export const PROFILES: Readonly<Record<string, MapProfile>> = {
     ground: DOLNA_GROUND,
     boundary: DOLNA_BOUNDARY,
     backdrop: /^$/,
-    stairs: /^(schody_|stairs?_)/,
+    stairs: /^(stair_|pool_step_)/,
     places: DOLNA_PLACES,
     exits: DOLNA_EXITS,
   },

@@ -134,15 +134,20 @@ const GoraPlan = (): ReactElement => (
   </svg>
 );
 
-/** DOLNA, north up: the hedged plot (house, shed, hall at the back), the street, the fenced site below. */
+/**
+ * DOLNA 17, north up: the hedged plot over the dirt road; the house (left, with its annex at the
+ * back corner), the barber shed beside it, the detailing garage in the road-side corner (right),
+ * the pool at the back right — the owner's plan of 2026-09-27.
+ */
 const DolnaPlan = (): ReactElement => (
   <svg {...plan}>
-    <rect x="9" y="2" width="30" height="13" rx="1" opacity=".55" />
-    <rect x="20" y="10" width="8" height="5" rx=".5" />
-    <rect x="21" y="6.5" width="6" height="2.5" rx=".5" opacity=".8" />
-    <rect x="11" y="3" width="8" height="4.5" rx=".5" opacity=".8" />
-    <path d="M2 18h44" strokeDasharray="3 3" opacity=".9" />
-    <rect x="15" y="20" width="16" height="3" rx=".5" strokeDasharray="1.5 1.5" opacity=".6" />
+    <rect x="3" y="2" width="42" height="17" rx="1" opacity=".55" />
+    <rect x="8" y="8" width="12" height="9" rx=".5" />
+    <rect x="16" y="5.5" width="4" height="2.5" rx=".5" opacity=".8" />
+    <rect x="22" y="9" width="4" height="6" rx=".5" opacity=".8" />
+    <rect x="34" y="9" width="10" height="10" rx=".5" />
+    <circle cx="31" cy="5.5" r="2.2" opacity=".8" />
+    <path d="M2 21.5h44" strokeDasharray="3 3" opacity=".9" />
   </svg>
 );
 

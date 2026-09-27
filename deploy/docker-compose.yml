@@ -18,7 +18,12 @@ services:
     environment:
       PORT: "2567"
       CORS_ORIGIN: "https://${DOMAIN}"
+      # Hasło do panelu admina turnieju (/viewer). Puste = panel otwarty; ustaw w deploy/.env na produkcji.
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
       # FB_DEV_TOOLS zostaje puste. Włączone daje każdemu graczowi teleport.
+    volumes:
+      # Konta (drop V): baza SQLite przeżywa redeploy. Ścieżkę /data ustawia ACCOUNTS_DB w obrazie.
+      - accounts_data:/data
     expose:
       - "2567"
     # Serwer gry nie wystawia portu na świat — ruch wchodzi wyłącznie przez Caddy.
@@ -46,5 +51,6 @@ services:
       - game
 
 volumes:
+  accounts_data:
   caddy_data:
   caddy_config:

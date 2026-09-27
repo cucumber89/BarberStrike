@@ -43,8 +43,14 @@
 /* ----------------------------------------------------------- tutorial, over a live match */
 
 .tut-overlay {
+  /* Over a LIVE match the tutorial shares #root with the Babylon canvas (.game-canvas-host,
+     z-index 0) and the HUD, whose full-screen layers climb to --z-fade: 150 (shop 40, result 50,
+     pause 60, reconnect 70, fade 150 — hud.css §3.9). At the old z-index: 30 the card was buried
+     under any of those; that is why the step card never showed over the training match. Sit above
+     the whole HUD stack so the card is always visible, while pointer-events: none keeps the layer
+     click-through — only the QUIT button (pointer-events: auto below) is clickable. */
   position: fixed; left: 50%; bottom: clamp(80px, 16vh, 150px); transform: translateX(-50%);
-  z-index: 30; pointer-events: none;
+  z-index: 200; pointer-events: none;
   font-family: var(--font-ui); color: var(--tx);
   animation: onb-in .18s ease both;
 }

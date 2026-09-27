@@ -9,6 +9,7 @@ import { TournamentLobbyRoom } from "./rooms/TournamentLobbyRoom";
 import { clientDir, hostBanner, serveClient, spaFallback } from "./hosting";
 import { tickStats } from "./stats";
 import { accountRoutes } from "./accounts/routes";
+import { adminRoutes } from "./admin/routes";
 import { openDb } from "./accounts/db";
 
 const PORT = Number(process.env.PORT ?? 2567);
@@ -58,6 +59,9 @@ app.get("/rooms", async (_req, res) => {
 // the client's index.html. `openDb` migrates the six-table SQLite file on first use.
 openDb();
 app.use("/api", accountRoutes());
+// The /viewer admin console (owner's brief 2026-09-27): verify, list every room with its phase,
+// raise a quick match, end a match. Gated by ADMIN_PASSWORD per request; open when it is unset.
+app.use("/api", adminRoutes());
 
 /**
  * Player-hosted games (2.0): serve the built client from this very process when it is there.

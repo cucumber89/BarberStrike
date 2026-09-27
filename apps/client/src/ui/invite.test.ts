@@ -21,12 +21,12 @@ describe("invite links", () => {
     expect(inviteLink("https://barberstrike.click/", "", "tdm", "banana")).toBe(`https://barberstrike.click/?mode=tdm&map=${DEFAULT_MAP_ID}`);
   });
 
-  it("offers the shared order's maps under the name each calls itself — DOLNA stays duel-only (Drop W P1)", () => {
+  it("offers the shared order's maps under the name each calls itself — DOLNA 17 in every mode (the owner's brief of 2026-09-27)", () => {
     expect(mapChoices()).toEqual(MAP_ORDER.map((id) => ({ id, name: MAPS[id].name })));
-    expect(mapChoices().map((m) => m.id)).toEqual(["night_district", "gora"]);
-    expect(MAPS.dolna, "the build has DOLNA").toBeDefined();
-    expect(mapChoices().map((m) => m.id), "but the other modes' menus do not offer it yet").not.toContain("dolna");
-    expect(mapChoices().map((m) => m.name)).toEqual(["Night District", "GÓRA (DACH)"]);
+    // DOLNA was duel-only while it was a 1 v 1 street (Drop W P1); the rebuilt plot has spawns,
+    // flags and sites designed for the team modes, so every mode's menu offers it, after GÓRA.
+    expect(mapChoices().map((m) => m.id)).toEqual(["night_district", "gora", "dolna"]);
+    expect(mapChoices().map((m) => m.name)).toEqual(["Night District", "GÓRA (DACH)", "DOLNA"]);
   });
 
   it("still reads the older ?room= query, which is not a link join", () => {

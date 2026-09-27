@@ -3,9 +3,10 @@ import { JUMP_UP, cellKey, snapCoord, type Walk } from "./mapWalk";
 
 /**
  * Bot navigation: A* over the map's walk grid (`mapWalk`, 0.5 m cells, each carrying the heights a
- * body can stand at). A move between neighbouring cells allows any drop and a jump-up of JUMP_UP —
- * the same rule `reachable()` uses, so wherever the map validity test says the spawns connect, a
- * bot can get there.
+ * body can stand at). A move between neighbouring cells allows a jump-up of JUMP_UP and any drop
+ * the air allows (a slab over the lower height blocks it — `canDrop` in `mapWalk`) — the same rule
+ * `reachable()` uses, so wherever the map validity test says the spawns connect, a bot can get
+ * there.
  *
  * Rewritten from an exhaustive 4-neighbour BFS over a string-keyed Map, which was wrong on three
  * counts (drop 6d). All three were measured, and all three were felt by the player:
@@ -49,6 +50,8 @@ interface WalkIndex {
   grid: number;
   count: Uint8Array;
   heights: Float32Array;
+  /** Per slot: the underside of the lowest solid over a standing body there (Infinity for open sky). */
+  clear: Float32Array;
   /** Scratch, reused across searches; `stamp` says which search wrote a slot. */
   cost: Float32Array;
   parent: Int32Array;
@@ -107,6 +110,7 @@ function indexOf(walk: Walk): WalkIndex {
     ox: minCx * walk.grid - walk.grid / 2, oz: minCz * walk.grid - walk.grid / 2, grid: walk.grid,
     count: new Uint8Array(w * d),
     heights: new Float32Array(w * d * H),
+    clear: new Float32Array(w * d * H).fill(Infinity),
     cost: new Float32Array(w * d * H),
     parent: new Int32Array(w * d * H),
     stamp: new Int32Array(w * d * H),
@@ -117,7 +121,8 @@ function indexOf(walk: Walk): WalkIndex {
     const c = k.indexOf(",");
     const cell = (Number(k.slice(c + 1)) - minCz) * w + (Number(k.slice(0, c)) - minCx);
     idx.count[cell] = Math.min(255, ys.length);
-    for (let i = 0; i < ys.length && i < H; i++) idx.heights[cell * H + i] = ys[i];
+    const cl = walk.clearance?.get(k);
+    for (let i = 0; i < ys.length && i < H; i++) { idx.heights[cell * H + i] = ys[i]; idx.clear[cell * H + i] = cl?.[i] ?? Infinity; }
   }
   INDEX.set(walk, idx);
   return idx;
@@ -147,12 +152,16 @@ function nearestSlot(idx: WalkIndex, cx: number, cz: number, y: number): number 
   return best === -1 ? -1 : cell * idx.H + best;
 }
 
-/** Can a body at height `y` step into cell (cx, cz) at all? Any drop, or a rise of ≤ JUMP_UP. */
+/** A drop from `y` to slot `s` is legal when no solid over the slot is lower than the falling body's head. */
+const dropOk = (idx: WalkIndex, s: number, y: number): boolean =>
+  idx.heights[s] >= y - 0.01 || y + PLAYER.height <= idx.clear[s] + 1e-3;
+
+/** Can a body at height `y` step into cell (cx, cz) at all? A legal drop, or a rise of ≤ JUMP_UP. */
 function canStep(idx: WalkIndex, cx: number, cz: number, y: number): boolean {
   if (!inGrid(idx, cx, cz)) return false;
   const cell = cz * idx.w + cx;
   const n = idx.count[cell];
-  for (let i = 0; i < n; i++) if (idx.heights[cell * idx.H + i] - y <= JUMP_UP) return true;
+  for (let i = 0; i < n; i++) { const s = cell * idx.H + i; if (idx.heights[s] - y <= JUMP_UP && dropOk(idx, s, y)) return true; }
   return false;
 }
 
@@ -169,7 +178,7 @@ function walkSlot(idx: WalkIndex, cx: number, cz: number, y: number): number {
   let best = -1, bestD = Infinity;
   for (let i = 0; i < n; i++) {
     const h = idx.heights[cell * idx.H + i];
-    if (h - y > PLAYER.stepHeight) continue;
+    if (h - y > PLAYER.stepHeight || !dropOk(idx, cell * idx.H + i, y)) continue;
     const dd = Math.abs(h - y);
     if (dd < bestD) { bestD = dd; best = i; }
   }
@@ -293,7 +302,7 @@ export function findPath(walk: Walk, from: NavPoint, to: NavPoint, maxExpand = 6
       // node — which is how the first attempt lost the mezzanine and a third of the long routes.
       for (let i = 0; i < n; i++) {
         const ns = ncell * H + i;
-        if (heights[ns] - y > JUMP_UP) continue;
+        if (heights[ns] - y > JUMP_UP || !dropOk(idx, ns, y)) continue;
         if (stamp[ns] === gen && cost[ns] <= next) continue;
         stamp[ns] = gen; cost[ns] = next; parent[ns] = slot;
         push(ns, next + h(nx, nz));

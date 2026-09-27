@@ -76,6 +76,9 @@ export function accountRoutes(): Router {
   const router = Router();
   router.use(express.json({ limit: "128kb" }));
 
+  // The admin console's routes (`/api/admin/*`, including the `verify` gate that used to live here)
+  // moved to `../admin/routes.ts` when the console grew actions of its own — one gate, one file.
+
   // POST /api/register {login,password} -> 201 + cookie / 400 / 409
   router.post("/register", (req, res) => {
     const { login, password } = req.body ?? {};

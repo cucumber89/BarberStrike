@@ -3,9 +3,10 @@ import {
   LOBBY_CHAT_MAX_LEN,
   LOBBY_CHAT_MIN_INTERVAL_MS,
   TOURNAMENT_MAX_ENTRANTS,
-  TOURNAMENT_SIZES,
+  bracketCapacity,
   bracketString,
   currentMatch,
+  isLobbySeats,
   mulberry32,
   reportWinner,
   sanitizeChat,
@@ -40,8 +41,13 @@ interface LobbyJoinOptions {
   name?: string;
   size?: number;
   map?: string;
+  /** The name the console gave the tournament (the `/r/<room>?mode=lobby` link carries it). A label. */
+  room?: string;
   mode?: string;
   seed?: number;
+  /** The admin password (from the /viewer console). Required to CREATE a lobby when the server sets
+   * `ADMIN_PASSWORD`; ignored when joining an existing one. */
+  adminKey?: string;
 }
 
 /** The result an arena publishes on `tourn:<lobbyId>:<matchIndex>` when its duel ends. */
@@ -53,15 +59,18 @@ interface ArenaResult {
 
 const isFiniteNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-/** Nearest allowed draw size ≥ the entrant count, capped at the hard maximum (D8). */
+/**
+ * The bracket size for a draw: a power of two big enough for the seats the host ASKED for (the
+ * slider, LOBBY_SEATS — any even count) or the players who actually turned up, whichever is larger,
+ * capped at the hard maximum (D8). Empty seats become byes.
+ */
 function pickSize(asked: unknown, entrants: number): TournamentSize {
-  const want = isFiniteNumber(asked) && TOURNAMENT_SIZES.includes(asked as TournamentSize) ? (asked as TournamentSize) : undefined;
-  if (want && want >= entrants) return want;
-  for (const s of TOURNAMENT_SIZES) if (s >= Math.max(2, entrants) && s <= TOURNAMENT_MAX_ENTRANTS) return s;
-  return TOURNAMENT_MAX_ENTRANTS as TournamentSize;
+  const want = isFiniteNumber(asked) && isLobbySeats(asked) ? asked : 0;
+  const base = Math.min(TOURNAMENT_MAX_ENTRANTS, Math.max(2, entrants, want));
+  return bracketCapacity(base);
 }
 
-export class TournamentLobbyRoom extends Room<{ state: TournamentLobbyState; metadata: { kind: string; map: string } }> {
+export class TournamentLobbyRoom extends Room<{ state: TournamentLobbyState; metadata: { kind: string; map: string; name: string } }> {
   override maxClients = TOURNAMENT_MAX_ENTRANTS;
   override autoDispose = true;
   override state = new TournamentLobbyState();
@@ -88,11 +97,22 @@ export class TournamentLobbyRoom extends Room<{ state: TournamentLobbyState; met
   private finished = false;
 
   override onCreate(options: LobbyJoinOptions): void {
+    // A tournament is raised only from the admin console (/viewer): when the server sets an admin
+    // password, creating a lobby needs it. Joining an existing lobby by id is unaffected. With no
+    // password set (dev) creation is open. Rejecting here fails the client's `create()` outright.
+    const admin = process.env.ADMIN_PASSWORD ?? "";
+    if (admin && options?.adminKey !== admin) {
+      throw new Error("tournament creation requires the admin password");
+    }
     this.map = typeof options?.map === "string" ? options.map : "";
     this.askedSize = isFiniteNumber(options?.size) ? options.size : undefined;
     // A pinned PRNG for the draw makes a tournament reproducible in a test; production seeds on time.
     this.seed = isFiniteNumber(options?.seed) ? options.seed >>> 0 : (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
-    this.setMetadata({ kind: "tournament-lobby", map: this.map });
+    // The name is metadata, not a matchmaking key: `tournament-lobby` is defined without `filterBy`,
+    // so an invite link with any name still lands in the one lobby that is open (one tournament at
+    // a time is the Friday-evening shape). The admin console's MECZE table prints it.
+    const name = typeof options?.room === "string" ? options.room.trim().slice(0, 24) : "";
+    this.setMetadata({ kind: "tournament-lobby", map: this.map, name });
 
     this.onMessage("lobby:ready", (client, msg: LobbyReadyMsg) => this.onReady(client, msg));
     this.onMessage("lobby:chat", (client, msg: LobbyChatMsg) => this.onChat(client, msg));

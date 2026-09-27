@@ -50,11 +50,21 @@
   display: flex; flex-direction: column; justify-content: center; gap: clamp(18px, 3.6vh, 38px);
   padding: clamp(20px, 4vh, 56px) var(--mm-edge);
 }
-/* Hero and nav on the left, what is running on the right. The title screen used to be a column
-   against half a screen of nothing, and the thing the empty half is now spending itself on is the
-   question a player opens the game with. */
-.mm-title-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(268px, 350px); gap: clamp(20px, 4vw, 56px); align-items: center; }
+/* Package U (owner, 2026-09-27): three columns. LEFT the hero and the nav, CENTRE the open matches
+   and the crate, RIGHT two framed cards (PROFIL, TABELA). The title used to be one 49 vw column
+   against the keyart; the owner wanted the profile and the table framed on the right. The rules
+   are written under `.menu` because cinematic.css (loaded after this sheet) pins the old grid and
+   the footer to `min(640px, 49vw)`, and the three columns need the whole width. */
+.menu .mm-title-cols {
+  display: grid; grid-template-columns: minmax(300px, 1fr) minmax(0, 1.25fr) minmax(300px, 340px);
+  gap: clamp(14px, 1.8vw, 26px); align-items: stretch; width: 100%; max-width: 1560px; margin: 0 auto;
+}
 .mm-title-left { display: flex; flex-direction: column; gap: clamp(16px, 3vh, 32px); min-width: 0; }
+.mm-title-mid { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; }
+.mm-title-mid .mm-live { flex: 1 1 auto; min-height: 180px; }
+.mm-title-mid .crate-panel.compact { flex: 0 0 auto; }
+.mm-title-right { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.menu .mm-title-foot { width: 100%; max-width: 1560px; margin: 0 auto; }
 .mm-hero { position: relative; display: flex; align-items: stretch; gap: clamp(16px, 2vw, 26px); }
 /* A quiet backdrop behind the wordmark: a warm brass wash off the top-left, a cool night to the
    right, and the faint diagonal of a shuttered street. It stays behind the text (`z-index: 0` on
@@ -101,12 +111,17 @@
 .mm-nav-btn.primary b, .mm-nav-btn.primary .mm-nav-art, .mm-nav-btn.primary .mm-nav-go { color: var(--brass); }
 .mm-nav-btn.primary:hover { background: linear-gradient(90deg, rgba(217, 164, 65, .28), rgba(217, 164, 65, .07)); }
 
-/* The front page's bottom strip: the matches you can join, and the crate you came back for. */
-.mm-front { display: grid; grid-template-columns: minmax(0, 1fr) minmax(190px, 214px); gap: 10px; align-items: stretch; }
+/* The centre column: the matches you can join, and the crate you came back for under them. */
 .mm-live { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 9px; align-content: start; padding: 14px 15px 13px; background: var(--mm-plate); border: 1px solid var(--line); border-top: 2px solid rgba(217, 164, 65, .55); }
 .mm-live .srv-head { margin-bottom: 1px; }
 .mm-live .srv-refresh { padding: 4px 8px; font-size: 12px; line-height: 1; }
 .mm-live-list { display: grid; gap: 6px; align-content: start; min-height: 0; overflow: auto; }
+/* One column of full rows: the centre column is wide enough for the map line and the WEJDŹ
+   affordance that cinematic.css hid when the list was squeezed beside the crate. */
+.menu .mm-live-list { grid-template-columns: minmax(0, 1fr); }
+.menu .mm-live .srv-meta { display: block; }
+.menu .mm-live .srv-go { display: inline; font-size: 11px; }
+.menu .mm-live .srv-row { grid-template-columns: auto minmax(0, 1fr) auto auto; padding: 7px 10px; }
 /* Nickname, one button, one link — the whole path from "a match is running" to being in it. */
 .mm-live-foot { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
 /* The label is dropped, not shrunk: the placeholder says the same word, and the 22 px it costs is
@@ -187,33 +202,38 @@
 .mm-blurb { margin: 10px 0 0; font-size: 12px; line-height: 1.5; letter-spacing: .03em; color: var(--tx-2); }
 
 /* ------------------------------------------------------------------------------- the lobby */
-
-.mm-content.lobby-grid {
-  display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(330px, .85fr);
-  gap: 20px; overflow: hidden; align-items: stretch;
-  width: 100%; max-width: 1560px; margin: 0 auto;
+/* Package U: ONE flow, top to bottom — 01 TRYB in a row, then 02 MAPA · 03 BOTY · the look side by
+   side, then the open matches, then the launch bar. Nothing but the match list scrolls, and
+   `menu-fit.mjs` measures that every step is on screen at 1280×720 and 1600×900. */
+.mm-content.lobby-flow {
+  display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px;
+  overflow: hidden; width: 100%; max-width: 1560px; margin: 0 auto;
 }
-.lb-setup { min-height: 0; overflow: auto; padding-right: 6px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-content: start; }
+.lb-setup { min-height: 0; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, .9fr); gap: 10px; align-content: start; }
 .lb-block { min-width: 0; padding: 12px 14px 14px; background: var(--mm-plate); border: 1px solid var(--line); }
-.lb-block.wide { grid-column: 1 / -1; }
+.lb-step { padding: 10px 12px 11px; }
+.lb-step-mode { grid-column: 1 / -1; }
+.lb-step-note { display: block; margin-top: 7px; }
 .lb-h { display: flex; align-items: center; gap: 10px; margin: 0 0 9px; font-family: var(--font-display); font-size: 14px; font-weight: normal; letter-spacing: .26em; color: var(--tx-2); }
 .lb-h em { font-style: normal; font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; color: var(--brass); }
 .lb-h>span{font:9px var(--font-mono);letter-spacing:.08em;color:var(--brass)}
 .lb-h::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--line); }
+.lb-step .mm-blurb { margin-top: 7px; }
+.lb-step .mm-blurb b { color: var(--brass); font-weight: normal; letter-spacing: .08em; }
 
-/* Mode: six cards with a picture, not six three-letter boxes. */
-.mode-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+/* Mode: every mode in ONE row, a picture over the name, so the choice is a glance across the top
+   of the lobby and the lit card is the one you are in. */
+.mode-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
 .mode-card {
-  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas: "art name" "art tag"; gap: 1px 10px; align-items: center;
-  padding: 10px 12px; text-align: left; cursor: pointer; color: var(--tx);
+  position: relative; display: grid; justify-items: center; gap: 3px; min-width: 0;
+  padding: 7px 6px 6px; text-align: center; cursor: pointer; color: var(--tx);
   background: var(--bg-2); border: 1px solid var(--line); transition: background 120ms, border-color 120ms;
 }
 .mode-card:hover { background: var(--bg-3); border-color: var(--tx-3); }
-.mode-art { grid-area: art; width: 26px; height: 26px; color: #8e8e99; }
+.mode-art { width: 22px; height: 22px; color: #8e8e99; }
 .mode-art svg { width: 100%; height: 100%; }
-.mode-card b { grid-area: name; font-family: var(--font-display); font-size: 15px; letter-spacing: .1em; font-weight: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mode-tag { grid-area: tag; font-family: var(--font-mono); font-size: 9px; letter-spacing: .14em; color: var(--tx-3); }
+.mode-card b { max-width: 100%; font-family: var(--font-display); font-size: 13px; letter-spacing: .06em; font-weight: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mode-tag { max-width: 100%; font-family: var(--font-mono); font-size: 9px; letter-spacing: .08em; color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mode-card.on { border-color: var(--brass); background: linear-gradient(180deg, rgba(217, 164, 65, .17), rgba(217, 164, 65, .045)); }
 .mode-card.on b, .mode-card.on .mode-art { color: var(--brass); }
 .mode-card.on .mode-tag { color: #d9bd8a; }
@@ -221,10 +241,10 @@
 .mode-card.on::after, .map-card.on::after { content: ""; position: absolute; top: 0; right: 0; width: 13px; height: 13px; background: var(--brass); clip-path: polygon(100% 0, 100% 100%, 0 0); }
 
 /* Map: the footprint, its name, and how big it actually is. */
-.map-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.map-card { position: relative; display: grid; gap: 3px; padding: 9px 11px 10px; text-align: left; cursor: pointer; color: var(--tx); background: var(--bg-2); border: 1px solid var(--line); transition: background 120ms, border-color 120ms; }
+.map-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
+.map-card { position: relative; display: grid; gap: 3px; padding: 8px 10px 9px; text-align: left; cursor: pointer; color: var(--tx); background: var(--bg-2); border: 1px solid var(--line); transition: background 120ms, border-color 120ms; }
 .map-card:hover { background: var(--bg-3); border-color: var(--tx-3); }
-.map-plan { display: block; height: 34px; color: var(--tx-3); }
+.map-plan { display: block; height: 30px; color: var(--tx-3); }
 .map-plan svg { width: 100%; height: 100%; }
 .map-card b { font-family: var(--font-display); font-size: 15px; letter-spacing: .09em; font-weight: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .map-size { font-family: var(--font-mono); font-size: 9px; letter-spacing: .12em; color: var(--tx-3); }
@@ -232,11 +252,11 @@
 .map-card.on b, .map-card.on .map-plan { color: var(--brass); }
 
 /* Bots: how many, then how good — the second question is meaningless at zero, so it is disabled. */
-.bots-row { display: flex; align-items: center; gap: 12px; margin-bottom: 9px; }
+.bots-row { display: flex; align-items: center; gap: 12px; margin-bottom: 7px; }
 .bots-row input[type="range"] { flex: 1 1 auto; min-width: 0; accent-color: var(--brass); }
 .bots-num { font-family: var(--font-display); font-size: 22px; line-height: 1; min-width: 24px; text-align: right; color: var(--brass); font-weight: normal; }
 /* One line under the difficulty segments: does a bot cost a player a seat in this mode? */
-.bots-seats { display: block; margin-top: 8px; color: var(--tx-3); font-size: 11px; line-height: 1.4; }
+.bots-seats { display: block; margin-top: 7px; color: var(--tx-3); font-size: 10px; line-height: 1.4; }
 .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .seg-btn { padding: 7px 4px; background: var(--bg-2); border: 1px solid var(--line); color: var(--tx-2); font-family: var(--font-display); font-size: 13px; letter-spacing: .12em; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .seg-btn:hover:not(:disabled) { border-color: var(--tx-3); color: var(--tx); }
@@ -253,13 +273,19 @@
 .cut:hover:not(:disabled) { border-color: rgba(230, 185, 128, .5); }
 .cut.on { border-color: #e6b980; background: rgba(230, 185, 128, .13); color: #e6b980; }
 .cut.locked { opacity: .42; cursor: default; }
-.lobby-look{display:flex;align-items:center;justify-content:space-between;gap:16px;border-left:3px solid var(--brass)}.lobby-look>div{display:grid;gap:3px}.lobby-look .lb-h{margin:0}.lobby-look>div>b{font:19px var(--font-display);color:#edc266}.lobby-look>div>small{font-size:10px;color:#888}.lobby-look>button{padding:11px 16px;background:#211a0e;border:1px solid var(--brass);color:#edc266;font:12px var(--font-display);letter-spacing:.1em}
+.lobby-look { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; border-left: 3px solid var(--brass); }
+.lobby-look > div { display: grid; gap: 3px; min-width: 0; align-content: start; }
+.lobby-look .lb-h { margin: 0 0 4px; }
+.lobby-look > div > b { font: 15px var(--font-display); letter-spacing: .06em; color: #edc266; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lobby-look > div > small { font-size: 10px; color: var(--tx-3); line-height: 1.4; }
+.lobby-look > button { justify-self: start; padding: 8px 14px; background: #211a0e; border: 1px solid var(--brass); color: #edc266; font: 12px var(--font-display); letter-spacing: .1em; cursor: pointer; }
+.lobby-look > button:hover { background: #2c2210; }
 
 /* The Boys: five roles, each with what it hands you for free. */
-.boys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(172px, 1fr)); gap: 8px; }
-.boys-class { display: grid; gap: 4px; padding: 10px 12px; text-align: left; cursor: pointer; color: var(--tx-2); background: var(--bg-2); border: 1px solid var(--line); }
-.boys-class b { font-family: var(--font-display); font-size: 15px; letter-spacing: .09em; font-weight: normal; color: var(--tx); }
-.boys-class span, .boys-class small { font-size: 11px; line-height: 1.4; }
+.boys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; margin-top: 8px; }
+.boys-class { display: grid; gap: 2px; min-width: 0; padding: 7px 10px; text-align: left; cursor: pointer; color: var(--tx-2); background: var(--bg-2); border: 1px solid var(--line); }
+.boys-class b { font-family: var(--font-display); font-size: 13px; letter-spacing: .07em; font-weight: normal; color: var(--tx); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.boys-class span, .boys-class small { font-size: 10px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .boys-class small { color: var(--tx-3); }
 .boys-class:hover { border-color: var(--tx-3); }
 .boys-class.on { border-color: var(--brass); background: rgba(217, 164, 65, .12); }
@@ -269,16 +295,21 @@
 /* Its own column, its own scroll, its own header. It is the half of the lobby a player who came
    to join a friend actually needs, and it used to be four rows at the bottom of a scroll. */
 
-.lb-servers { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px; }
+.lb-servers { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); gap: 10px; align-items: stretch; }
+.lb-matches { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; }
+/* A row from another mode is still a match you can join — it is dimmed, not hidden. */
+.srv-row.other { opacity: .72; }
+.srv-row.other:hover:not(:disabled) { opacity: 1; }
+.srv-divider { padding: 2px 2px 0; font-family: var(--font-mono); font-size: 9px; letter-spacing: .16em; color: var(--tx-3); text-transform: uppercase; }
 .srv-head { display: flex; align-items: center; gap: 10px; }
 .srv-head .lb-h { flex: 1 1 auto; margin: 0; }
 .srv-refresh { flex: 0 0 auto; padding: 5px 10px; background: none; border: 1px solid var(--line); color: var(--tx-3); font-family: var(--font-mono); font-size: 10px; letter-spacing: .16em; cursor: pointer; }
 .srv-refresh:hover { color: var(--brass); border-color: var(--brass); }
 .srv-refresh.busy { opacity: .5; }
-.srv-list { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 7px; padding-right: 4px; }
+.srv-list { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 5px; padding-right: 4px; }
 .srv-row {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 12px;
-  padding: 9px 12px; text-align: left; cursor: pointer; color: var(--tx);
+  padding: 6px 12px; text-align: left; cursor: pointer; color: var(--tx);
   background: var(--mm-plate); border: 1px solid var(--line); border-left: 3px solid var(--line);
   transition: background 120ms, border-color 120ms;
 }
@@ -409,8 +440,9 @@
 /* A big screen should show the same things BIGGER, not the same things with 400 px of night under
    them. Nothing moves, nothing appears: the cards, the rows and the plans take the room. */
 @media (min-width: 1600px) and (min-height: 900px) {
-  .lb-setup { gap: 18px; }
-  .lb-block { padding: 16px 18px 18px; }
+  .lb-setup { gap: 14px; }
+  .mm-content.lobby-flow { gap: 14px; }
+  .lb-block, .lb-step { padding: 14px 18px 16px; }
   .lb-h { font-size: 15px; margin-bottom: 11px; }
   .mode-card { padding: 14px 15px; }
   .mode-card b { font-size: 17px; }
@@ -442,33 +474,57 @@
 /* --------------------------------------------------------------------------- fitting rules */
 
 /* Interface scaling is what actually squeezes this: browser zoom SHRINKS the CSS viewport, so a
-   1280×720 screen at 125 % reports 1024×576. MEASURED (`menu-fit.mjs`): folding to one column
-   there puts the server rows below the fold, which is the exact fault this redesign is about — so
-   the two columns are held to 900 px and it is the server column's width that gives first. */
-@media (max-width: 1180px) {
-  .mm-content.lobby-grid { grid-template-columns: minmax(0, 1.4fr) minmax(288px, .8fr); gap: 14px; }
-  .mode-card b { font-size: 14px; }
-  .srv-row { gap: 9px; padding: 8px 10px; }
-  .srv-name { font-size: 16px; }
+   1280×720 screen at 125 % reports 1024×576. At that height one flow cannot hold three steps AND
+   three match rows, so the lobby goes back to two columns — the steps on the left (scrolling if
+   they must), the matches full height on the right — which is the layout the 2.6 fit test was
+   written for. MEASURED with `menu-fit.mjs`. */
+@media (max-height: 640px) {
+  /* The title: three match rows, not six, so the crate and the footer stay on a 576 px screen. */
+  .menu .mm-live-list { max-height: 176px; }
+  .mm-title-mid .mm-live { min-height: 0; }
+  .mm-content.lobby-flow { grid-template-columns: minmax(0, 1.3fr) minmax(300px, .8fr); grid-template-rows: minmax(0, 1fr); }
+  .lb-setup { overflow: auto; padding-right: 4px; grid-template-columns: 1fr 1fr; }
+  .lb-step-mode { grid-column: 1 / -1; }
+  .lobby-look { grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto; align-items: center; }
+  .mode-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .lb-servers { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .srv-row { gap: 9px; padding: 6px 10px; }
+  .srv-name { font-size: 15px; }
+}
+/* Narrow but not folded: three columns are held down to 990 px (1280×720 at 125 % zoom reports
+   1024 wide, and folding there sent the nav under the fold — MEASURED). */
+@media (max-width: 1100px) {
+  .menu .mm-title-cols { grid-template-columns: minmax(280px, 1fr) minmax(0, 1.1fr) minmax(280px, 320px); gap: 12px; }
+  /* A nav line that wraps to three rows costs the fold; one line with an ellipsis does not. */
+  .mm-nav-btn em { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mode-card b { font-size: 12px; }
   .armoury { grid-template-columns: 180px minmax(320px, 1fr) 280px; }
 }
-/* One column below this: the browser can no longer hold two comfortable ones, and a squeezed
-   server list is worse than one under the setup. The whole content area scrolls instead. */
+/* The title's right column drops under the centre once three columns would starve the list. */
+@media (max-width: 990px) {
+  .menu .mm-title-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .mm-title-right { grid-column: 2; }
+}
+/* One column below this: the whole content area scrolls instead. */
 @media (max-width: 900px) {
-  .mm-content.lobby-grid { grid-template-columns: minmax(0, 1fr); overflow: auto; }
-  .lb-setup, .srv-list { overflow: visible; min-height: 0; }
-  .lb-servers { grid-template-rows: auto auto auto; }
+  .mm-content.lobby-flow { grid-template-rows: auto auto; overflow: auto; }
+  .lb-setup { grid-template-columns: 1fr 1fr; }
+  .mode-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .lb-servers { grid-template-columns: minmax(0, 1fr); }
+  .srv-list { overflow: visible; }
   .armoury-content { overflow: auto; }
   .armoury { height: auto; grid-template-columns: 150px minmax(300px, 1fr); }
   .armoury-skins { grid-column: 1 / -1; min-height: 310px; }
   .armoury-skin-grid { grid-template-columns: repeat(3, 1fr); }
 }
-@media (max-width: 860px) {
-  .mm-title-grid { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 800px) {
+  .menu .mm-title-cols { grid-template-columns: minmax(0, 1fr); }
+  .mm-title-right { grid-column: auto; }
+  .mm-title-mid .mm-live { min-height: 0; }
 }
 @media (max-width: 780px) {
   .lb-setup { grid-template-columns: 1fr; }
-  .mode-grid { grid-template-columns: 1fr 1fr; }
+  .mode-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lb-launch { grid-template-columns: 1fr; gap: 12px; }
   .lb-launch-btns .mm-btn { flex: 1 1 auto; }
 }
@@ -648,3 +704,12 @@
 .acc-migrate-row { display: flex; gap: 8px; }
 .acc-hof-link { text-align: center; font-size: 12px; color: var(--tx-3); margin: 0; }
 .acc-hof-link a { color: var(--brass); text-decoration: none; }
+
+/* -------------------------------------------------- Drop V follow-up: the account gate on entry */
+.mm-gate { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 24px;
+  background: radial-gradient(120% 100% at 50% 0%, rgba(20,23,28,.86), rgba(8,9,11,.96)); backdrop-filter: blur(6px); }
+.mm-gate-card { width: min(460px, 94vw); display: grid; gap: 14px; padding: 26px; border-radius: 16px;
+  background: #14171c; border: 1px solid #262a31; box-shadow: 0 24px 60px rgba(0,0,0,.5); }
+.mm-gate-title { margin: 0; font: 700 30px/1 var(--font-display, var(--font-mono)); letter-spacing: .06em; color: #e6ebf0; text-align: center; }
+.mm-gate-sub { margin: 0; font-size: 13px; line-height: 1.6; color: var(--tx-3); text-align: center; }
+.mm-gate-guest { width: 100%; margin-top: 2px; }
