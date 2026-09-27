@@ -944,9 +944,11 @@ plikach. Liczby poniżej pochodzą z narzędzi repo uruchomionych na zbudowanej 
 **Geometria** — `packages/shared/src/dolna.ts`: prototyp z §5 przeniesiony 1:1 (te same boxy, nazwy i
 współrzędne) plus to, czego prototyp nie miał: 35 rekwizytów (fotele na niewidzialnych proxy siedzisko +
 oparcie jak w GÓRZE, lustra, neony „BARBER” / „BARBER SHOP”, tabliczka „17”, lampy, jarzeniówki hali,
-przewód między słupami, graffiti „DOLNA” na szkielecie, plakat na toi-toiu), 11 świateł w trzech barwach
-dzielnicy (amber: front domu, barak, drzwi baraku, latarnia na zachodnim końcu, ganek sąsiada; mercury:
-hala, brama hali, latarnia ogrodowa, reflektor budowy; accent: neon), korony sosen 1.8 m na 4.6 m
+przewód między słupami, graffiti „DOLNA” na szkielecie, plakat na toi-toiu; 37 po audycie), 14 świateł w
+trzech barwach dzielnicy (amber: front domu, barak, oba drzwi baraku, boki domu nad oboma przejściami,
+latarnia na zachodnim końcu, ganek sąsiada; mercury: hala, brama hali, dwie latarnie ogrodowe, reflektor
+budowy; accent: neon) — audyt oświetlenia: **0 ze 132 punktów** siatki 4 m bez praktycznego światła
+(przed dołożeniem czterech lamp: 8), korony sosen 1.8 m na 4.6 m
 (recenzja oka: bez nich szpaler czytał się jak palisada), dwie ciemne szyby na vanie. Razem **144 bryły**.
 Zarejestrowana w `MAPS`; **nie** w `MAP_ORDER` (P1: tylko duel/turniej).
 
@@ -983,10 +985,23 @@ baraku, SYLWETKA sosen z obu końców ulicy) naprawione lampami i koronami; **dr
 lata / przenika / osłona**. Draw-calle: kadry uliczne DOLNEJ 106–115, najcięższy (overview) 123 wobec
 **392** dla ulicy NIGHT_DISTRICT w tym samym przebiegu (27–31 %); wierzchołków 22 199 wobec 118 127.
 
-**Live** — patrz niżej, „Nieudowodnione”: wynik pełnego duelu z botem wpisany po biegu narzędzia.
+**Live** (`LIVE=1 SKIP_REVIEW=1 node apps/client/e2e/tools/dolna-shots.mjs` → `out/dolna/live.md`,
+`shots/live_*.png`): pokój utworzony z menu (`mode-duel` → `map-dolna` → 1 bot NORMAL), karta ładowania i
+HUD: **DOLNA**, `mapId = dolna`; mecz **rozegrany do końca**: 8 rund, **6:0** dla bota (klient headless
+stoi w miejscu — to test mapy i trybu, nie celowania), 470 s, ekran wyniku „PORAŻKA · FADE 6 — 0 TAPER”;
+zmiana stron po 3. rundzie (gracz przeniesiony z szkieletu do baraku, portfele zresetowane do $800);
+bot w 87 próbkach odwiedził barak, halę (−4.3, 36.5), ogród, bramę (8, 2.6), środek ulicy (−2.6, 0.2),
+plac i szkielet — wszystkie strefy calloutów; jedyne błędy konsoli to dwa 401 z `/api/me` (konto
+niezalogowane, nie mapa). Rundy 1 i 2 skończyły się **na zegar** (TIME · EVEN, TIME · MORE HEALTH):
+bot NORMAL potrzebował ponad 60 s, żeby znaleźć nieruchomego gracza w tylnym rogu szkieletu — pierwszy
+sygnał dla P7. Audyt „rekwizyt jako osłona”: po usunięciu kosza przy toi-toiu zostały tylko cztery słupy
+latarni (0.12 m, bez kolizji — jak na GÓRZE).
 
 ### Nieudowodnione (obowiązkowa lista z §7)
 
+0. **60 s rundy na 44 m** (P7): w live duelu dwie z ośmiu rund zakończył zegar, bo bot nie doszedł do
+   gracza w tylnym rogu szkieletu w 60 s; z dwojgiem ludzi, którzy idą ku sobie, spotkanie w środku
+   ulicy to ~3 s sprintu z każdej strony — ale liczba rund „na zegar” jest pierwszą statystyką playtestu.
 1. **Prawdziwe GPU i ludzie.** Wszystkie kadry są ze SwiftShadera; czytelność sylwetek w nocy, mgła i
    neon na prawdziwym GPU oraz to, czy 60 s rundy wystarcza na 44 m dystansu startów, rozstrzygnie
    dopiero playtest dwojga ludzi.

@@ -259,6 +259,9 @@ props.push({ kind: "barber_pole", x: SHX1 + 0.05, y: 1.2, z: 15.8, yaw: Math.PI 
 props.push({ kind: "lamp", x: SHX0 - 0.02, y: 2.3, z: 18.4, yaw: -Math.PI / 2, variant: "wall" });
 props.push({ kind: "lamp", x: SHX1 + 0.02, y: 2.3, z: 18.4, yaw: Math.PI / 2, variant: "wall" });
 props.push({ kind: "lamp", x: 3.5, y: 0, z: 24, variant: "post", h: 3.8 });
+props.push({ kind: "lamp", x: HX1 + 0.02, y: 3.0, z: 10.5, yaw: Math.PI / 2, variant: "wall" });   // the east lane
+props.push({ kind: "lamp", x: HX0 - 0.02, y: 3.0, z: 13.5, yaw: -Math.PI / 2, variant: "wall" });  // the west lane
+props.push({ kind: "lamp", x: 9.5, y: 0, z: 38, variant: "post", h: 3.8 });                        // the garden's east half
 // Two dark panes on the van's long sides so it reads as a van, not a white block, at 28 m.
 props.push({ kind: "board", x: 0, y: 1.3, z: -7.52, yaw: Math.PI, text: "", w: 2.4, h: 0.6 });
 props.push({ kind: "board", x: 0, y: 1.3, z: -5.48, yaw: 0, text: "", w: 2.4, h: 0.6 });
@@ -285,7 +288,6 @@ props.push({ kind: "lamp", x: -28.4, y: 0, z: -1.2, variant: "post", h: 6 });
 props.push({ kind: "lamp", x: -3, y: 0, z: -12, variant: "post", h: 4.5 });
 props.push({ kind: "graffiti", x: -2, y: 1.4, z: SHELLZ1 + 0.02, yaw: 0, text: "DOLNA", w: 2.2, h: 0.9 });
 props.push({ kind: "poster", x: 2.98, y: 1.2, z: -7.75, yaw: -Math.PI / 2, variant: "1", w: 0.6, h: 0.85 });   // on the toi-toi
-props.push({ kind: "trash", x: 4.6, y: 0, z: -7.4 });
 // Lights: amber for the public front (house, shed, street lamp), mercury for work (hall, site),
 // the accent only on the shop's neon. Three hues plus the moon, as the art direction asks.
 // The three hues of `DISTRICT_LIGHTS` (`map.ts`), written out because `map.ts` imports this file
@@ -295,13 +297,16 @@ lights.push({ kind: "point", x: -0.2, y: 4.0, z: HZ0 - 0.6, color: AMBER, intens
 lights.push({ kind: "point", x: 0, y: 2.3, z: 17.5, color: AMBER, intensity: 12, range: 8, priority: 8 });             // inside the shed
 lights.push({ kind: "point", x: SHX0 - 0.6, y: 2.3, z: 18.4, color: AMBER, intensity: 6, range: 7, priority: 6 });    // the shed's west door
 lights.push({ kind: "point", x: SHX1 + 0.6, y: 2.3, z: 18.4, color: AMBER, intensity: 6, range: 7, priority: 6 });    // the shed's east door
-lights.push({ kind: "point", x: 3.5, y: 3.6, z: 24, color: MERCURY, intensity: 10, range: 12, priority: 6 });         // the garden lamp
+lights.push({ kind: "point", x: 3.5, y: 3.6, z: 24, color: MERCURY, intensity: 10, range: 14, priority: 6 });         // the garden lamp
+lights.push({ kind: "point", x: HX1 + 0.6, y: 3.0, z: 10.5, color: AMBER, intensity: 7, range: 10, priority: 5 });     // the east lane
+lights.push({ kind: "point", x: HX0 - 0.6, y: 3.0, z: 13.5, color: AMBER, intensity: 7, range: 10, priority: 5 });     // the west lane
+lights.push({ kind: "point", x: 9.5, y: 3.6, z: 38, color: MERCURY, intensity: 8, range: 10, priority: 5 });           // the garden's east half
 lights.push({ kind: "point", x: SHX1 + 0.6, y: 2.3, z: 18.6, color: ACCENT, intensity: 8, range: 6, priority: 6 });    // the neon
 lights.push({ kind: "point", x: -4, y: 3.5, z: 38.5, color: MERCURY, intensity: 16, range: 12, priority: 8 });         // the hall
 lights.push({ kind: "point", x: -6, y: 3.2, z: HALLZ0 - 0.8, color: MERCURY, intensity: 8, range: 8, priority: 5 });   // over the roller door
 lights.push({ kind: "point", x: -28.4, y: 5.8, z: -1.2, color: AMBER, intensity: 16, range: 18, priority: 7 });        // the street lamp, west end
 lights.push({ kind: "spot", x: -3, y: 4.4, z: -12, dx: 0.2, dy: -1, dz: 0.5, angle: 1.6, color: MERCURY, intensity: 18, range: 18, priority: 7 }); // the site's work light
-lights.push({ kind: "point", x: 20, y: 4.5, z: -3, color: AMBER, intensity: 6, range: 10, priority: 4 });              // east end: a neighbour's porch glow
+lights.push({ kind: "point", x: 24, y: 4.5, z: -3, color: AMBER, intensity: 6, range: 12, priority: 4 });              // east end: a neighbour's porch glow
 
 // ======================= SPAWNS =======================
 const spawns: SpawnPoint[] = [
