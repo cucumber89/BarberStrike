@@ -71,6 +71,9 @@ export default defineConfig({
     sourcemap: false,
     chunkSizeWarningLimit: 4000,
     rollupOptions: {
+      // The voxel creator ships with the game (the owner draws furniture on the deployed site);
+      // the other review pages stay dev-only.
+      input: { main: resolve(HERE, "index.html"), lab: resolve(HERE, "voxel-lab.html") },
       output: {
         // No manual chunk for Babylon: forcing the whole package into one chunk defeats
         // tree-shaking of the deep imports (measured 2.9 MB → far less when left to Rollup).
