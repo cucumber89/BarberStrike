@@ -6,7 +6,7 @@ import { BracketPanel } from "../Bracket";
 import { LobbyConnection, type LobbyJoinOptions } from "./lobbyNet";
 import { identifyLobby } from "../../net/tournamentSave";
 import {
-  amReady, canStart, isHost, LOBBY_SIZES, rosterSummary, warmupOptions, watchRows,
+  amReady, canStart, gotoAction, isHost, LOBBY_SIZES, rosterSummary, warmupOptions, watchRows,
 } from "./lobbyLogic";
 import "./lobby.css";
 
@@ -39,9 +39,16 @@ export interface LobbyProps {
   onWarmup: () => void;
   /** Leave the lobby back to the menu. */
   onLeave: () => void;
+  /**
+   * Your arena is up: JOIN it as a player. The lobby is the only thing that knows the room id — an
+   * arena is raised by the matchmaker, so it has no name to type and no listing to find — which is
+   * why a screen without this handler leaves its player staring at a bracket they cannot enter.
+   * Omitted on the admin console (`/viewer`), which has nobody to send anywhere.
+   */
+  onEnterArena?: (roomId: string) => void;
 }
 
-export function Lobby({ name, size, map, room, roomId, adminKey, hideWarmup, onWarmup, onLeave }: LobbyProps) {
+export function Lobby({ name, size, map, room, roomId, adminKey, hideWarmup, onWarmup, onLeave, onEnterArena }: LobbyProps) {
   const state = useLobby();
   const [conn, setConn] = useState<LobbyConnection | null>(null);
   const [error, setError] = useState("");
@@ -62,6 +69,23 @@ export function Lobby({ name, size, map, room, roomId, adminKey, hideWarmup, onW
     return () => { void live?.leave(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * The handoff into a match. `play: true` is the lobby saying "this one is yours" and it is the
+   * only route into a tournament arena; `play: false` is the answer to OGLĄDAJ and opens the
+   * spectator page instead. A `ref` for the handler so re-subscribing never drops a goto that
+   * arrives while React is re-rendering.
+   */
+  const enterRef = useRef(onEnterArena);
+  enterRef.current = onEnterArena;
+  useEffect(() => {
+    if (!conn) return;
+    conn.onGoto((msg) => {
+      const what = gotoAction(msg, !!enterRef.current);
+      if (what === "play") enterRef.current?.(msg.roomId);
+      else if (what === "watch") window.open(`/viewer?room=${encodeURIComponent(msg.roomId)}`, "_blank", "noopener");
+    });
+  }, [conn]);
 
   // Keep the chat pinned to the newest line.
   useEffect(() => { chatEndRef.current?.scrollIntoView({ block: "end" }); }, [state.chat.length]);

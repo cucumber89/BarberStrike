@@ -103,6 +103,10 @@ if (process.env.LOBBY === "1") {
   const others = [];
   for (let i = 1; i < 8; i++) others.push(await client.joinById(roomId, { name: `G${i}` }));
   const all = [host, ...others];
+  // Every „lobby:goto” each entrant is sent. This is the whole route into a tournament match: an
+  // arena is raised by the matchmaker, so it has no name to type and shows up in no listing.
+  const goto = new Map(all.map((c) => [c.sessionId, []]));
+  for (const c of all) c.onMessage("lobby:goto", (m) => goto.get(c.sessionId).push(m));
   await sleep(400);
   const rosterN = host.state.entrants.size;
   console.log(`w poczekalni: ${rosterN} entrants   host = ${host.state.hostId === host.sessionId ? "TY" : "?"}`);
@@ -143,8 +147,49 @@ if (process.env.LOBBY === "1") {
   console.log(`czat: przyjętych linii = ${chat.length} (3. odrzucona przez rate-limit)`);
   if (chat.length !== 2) fail(`oczekiwano 2 przyjętych linii, jest ${chat.length}`);
 
-  console.log("```\nOK: poczekalnia hostuje, startuje 4 areny i sanityzuje czat.");
+  // ------------------------------------------------------------------ THE HANDOFF (hotfix)
+  // What the first live tournament got wrong: the arenas came up and nobody was told where to go, so
+  // the whole room sat looking at a bracket. Here every entrant must be sent to exactly one arena,
+  // must be able to JOIN it over a real socket, and must land on their own side of the bracket.
+  const sent = all.filter((c) => goto.get(c.sessionId).some((m) => m.play === true));
+  console.log(`wysłanych do aren: ${sent.length}/8   różnych pokoi: ${new Set(all.flatMap((c) => goto.get(c.sessionId).map((m) => m.roomId))).size}`);
+  if (sent.length !== 8) fail(`tylko ${sent.length}/8 graczy dowiedziało się, gdzie grać`);
+
+  // The bracket's own names, so we can check WHICH side each player was seated on.
+  const rows = host.state.bracket.split(";").slice(1).map((r) => r.split("|"));
+  const arenas = [];
+  for (const c of all) {
+    const g = goto.get(c.sessionId).find((m) => m.play === true);
+    const name = host.state.entrants.get(c.sessionId).name;
+    const arena = await client.joinById(g.roomId, { name, bots: 0 });
+    arenas.push({ arena, name, matchIndex: g.matchIndex });
+  }
+  await sleep(900);
+  for (const { arena, name, matchIndex } of arenas) {
+    const me = arena.state.players.get(arena.sessionId);
+    if (!me) fail(`${name} wszedł do areny, ale nie dostał gracza`);
+    const side = rows[matchIndex][0] === name ? 0 : 1;
+    if (me.team !== side) fail(`${name} siedzi po stronie ${me.team}, a w drabince jest po ${side}`);
+  }
+  const seats = arenas.map(({ arena }) => arena.state.players.size);
+  console.log(`areny obsadzone: ${seats.join(", ")} graczy   strony zgodne z drabinką: tak`);
+  if (seats.some((n) => n !== 2)) fail(`arena bez pełnej pary: ${seats.join(", ")}`);
+
+  // ...and the waiting room OUTLIVES them all walking out of it. It used to be disposed a second
+  // after the last socket closed, which threw the bracket away and left the arenas' results
+  // publishing to nobody: the semi-finals played and then the tournament simply stopped.
   for (const c of all) await c.leave();
+  await sleep(1600);
+  const back = await client.joinById(roomId, { name: "G1" });
+  await sleep(400);
+  console.log(`po wyjściu wszystkich: poczekalnia żyje, entrants = ${back.state.entrants.size}, faza = ${back.state.phase}`);
+  if (back.state.entrants.size !== 8) fail(`powracający gracz zajął nowe miejsce (entrants = ${back.state.entrants.size})`);
+  const mine = [...back.state.entrants.values()].find((e) => e.name === "G1");
+  if (!mine?.connected) fail("powracający G1 nie wrócił na swoje miejsce");
+  for (const { arena } of arenas) await arena.leave();
+  await back.leave();
+
+  console.log("```\nOK: poczekalnia hostuje, wpuszcza pary do 4 aren po właściwych stronach, żyje po ich wyjściu i sanityzuje czat.");
   process.exit(0);
 }
 

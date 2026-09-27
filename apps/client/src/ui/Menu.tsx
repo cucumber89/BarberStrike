@@ -194,6 +194,26 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
    */
   const startWarmup = () => onPlay(commitName(), "", "create", undefined, "duel", { count: 1, level: botLevel }, DUEL_MAP_ID);
   /**
+   * The nickname the waiting room seats this player under. The arena matches a joiner to their side
+   * of the bracket BY THIS NAME (`TdmRoom.sideOfPair`), so the lobby and the arena must be given the
+   * very same string — hence one value used in both places rather than two lookalike expressions.
+   */
+  const lobbyName = name.trim().slice(0, MAX_NAME_LENGTH) || "GRACZ";
+  /**
+   * HOTFIX: the way into a tournament match. The waiting room raises an arena per pair through the
+   * matchmaker, which means the room has no name to type and appears in no list — the only thing that
+   * knows it is the `lobby:goto` the lobby sends its two players. Before this, nothing listened: the
+   * first live tournament drew its bracket, brought its arenas up, and left every single player
+   * staring at it, unable to get into a match.
+   *
+   * It is an ordinary join by room id — the same `onPlay(… "join" …)` the match list uses — with no
+   * bots, on the duel arena.
+   */
+  const enterArena = (roomId: string) => {
+    commitName();
+    onPlay(lobbyName, "", "join", roomId, "duel", { count: 0, level: botLevel }, duelMapOf(mapId));
+  };
+  /**
    * P8b onboarding: SAMOUCZEK and TRENING both open a duel against one bot through the existing
    * `play("create")` path (D9 — reuse `onPlay` with `bots>0`, no new room, no new schema). The
    * tutorial additionally arms the overlay store, which the app-root `TutorialMount` renders over
@@ -666,11 +686,12 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
           {panel === "tournament" && lobbyInvite && (
             <div className="mm-content">
               <Lobby
-                name={name.trim().slice(0, MAX_NAME_LENGTH) || "GRACZ"}
+                name={lobbyName}
                 map={duelMapOf(mapId)}
                 room={roomName.trim() || invite.room || undefined}
                 onWarmup={startWarmup}
                 onLeave={() => setPanel("main")}
+                onEnterArena={enterArena}
               />
             </div>
           )}

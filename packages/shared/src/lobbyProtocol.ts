@@ -58,8 +58,19 @@ export type LobbyS2CType = "lobby:chat" | "lobby:goto";
 
 /** A chat line as it reaches clients: already truncated, sanitised and stamped. */
 export interface LobbyChatLine { id: string; name: string; text: string; at: number }
-/** "Go watch / play this room" — the client opens `/viewer?room=<roomId>` or joins it. */
-export interface LobbyGotoMsg { roomId: string; matchIndex: number }
+/**
+ * "Go to this room" — and `play` is which of the two things that means.
+ *
+ * `play: true` is the lobby telling the two people in a pair that their arena is up and they are to
+ * JOIN it. It is the only way into a tournament match: the arena is raised by the matchmaker, so
+ * nobody can find it by name, and a client that is not told about it has nowhere to go. Without it
+ * a started tournament is a bracket on the screen, arenas standing empty, and nobody able to get
+ * into a match — which is exactly what the first live tournament was.
+ *
+ * `play: false` (or absent) is the answer to `lobby:spectate`: open `/viewer?room=<roomId>` and
+ * watch. Absent means watch so that a client older than this message still behaves.
+ */
+export interface LobbyGotoMsg { roomId: string; matchIndex: number; play?: boolean }
 
 /** The typed payload for each S2C message name. */
 export interface LobbyS2C {
