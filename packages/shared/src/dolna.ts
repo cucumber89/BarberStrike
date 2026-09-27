@@ -119,10 +119,10 @@ let furnN = 0;
  * front, local +Z, turned about y — a quarter turn swaps the footprint's sides); `wall` places
  * it without a proxy (a thing hung above head height or thin enough to ignore).
  */
-function furn(model: string, x: number, z: number, yaw = 0, y = 0, opts: { wall?: boolean; name?: string; ceil?: number } = {}): void {
+function furn(model: string, x: number, z: number, yaw = 0, y = 0, opts: { wall?: boolean; name?: string; ceil?: number; scale?: number } = {}): void {
   const size = DOLNA_FURNITURE[model];
   if (!size) throw new Error(`dolna: no footprint for "${model}"`);
-  props.push({ kind: "voxel", model, x, y, z, yaw });
+  props.push({ kind: "voxel", model, x, y, z, yaw, scale: opts.scale });
   if (opts.wall) return;
   const quarter = Math.round(yaw / (Math.PI / 2)) % 2 !== 0;
   const w = quarter ? size[2] : size[0], d = quarter ? size[0] : size[2];
@@ -341,7 +341,10 @@ for (const s of [0, 1, 2]) {
 pane("win_annex_n", -2.5, -0.5, AZ1 - 0.01, AZ1 + 0.04, 0.9);
 
 // ======================= THE HOUSE, FURNISHED (from the voxel kit; each room lives) =======================
-const N = 0, E = -Math.PI / 2, W = Math.PI / 2, SO = Math.PI;   // a piece's front faces north / east / west / south
+// A piece's front (local +Z) faces north / east / west / south. Babylon turns about y in a
+// LEFT-handed world: rotation.y = +π/2 takes +z to +x (east) — the owner's screenshots had every
+// sideways piece facing the wrong way while these two were swapped.
+const N = 0, E = Math.PI / 2, W = -Math.PI / 2, SO = Math.PI;
 {
   // PARTER — kotłownia (x -11…-7.25, z 5.75…9.5): the tank, the wall boiler, two racks.
   furn("boiler_tank", -10.4, 8.9, N);
@@ -351,7 +354,7 @@ const N = 0, E = -Math.PI / 2, W = Math.PI / 2, SO = Math.PI;   // a piece's fro
   // the hall (x -7…-4.9, z 5.75…11.5): shoes, hooks, a mirror by the door
   furn("shoe_rack", -6.85, 9, E);
   hang("coat_hooks", -5.0, 9.6, W, 1.5);
-  props.push({ kind: "mirror", x: -4.92, y: 1.5, z: 9, yaw: E, w: 0.6, h: 1.2 });
+  props.push({ kind: "mirror", x: -4.92, y: 1.5, z: 9, yaw: W, w: 0.6, h: 1.2 });
   // the bathroom (x -7…-4.9, z 11.75…13.5)
   furn("toilet", -6.7, 13.15, SO);
   furn("washbasin", -5.3, 13.2, SO);
@@ -370,8 +373,10 @@ const N = 0, E = -Math.PI / 2, W = Math.PI / 2, SO = Math.PI;   // a piece's fro
   furn("fridge", -2.5, 10.1, W);
   hang("kitchen_upper", -2.35, 15.5, W, 1.5);
   hang("microwave", -2.5, 16.3, W, 0.95);
-  furn("kitchen_table", -3.6, 12, N);
-  furn("chair", -4.3, 12, E); furn("chair", -3.6, 11.4, N); furn("chair", -3.6, 12.6, SO);
+  // The galley is 2.45 m wide: the table stands along the west wall between the two doors, one
+  // chair at its north end, and the 0.95 m aisle by the counters stays clear (the owner's screenshot).
+  furn("kitchen_table", -4.25, 12.5, E);
+  furn("chair", -4.25, 13.5, SO);
   // the bedroom (x -1.95…0.75, z 9.75…17.5): the bed against the south wall, the wardrobe east
   furn("bed_double", -0.9, 11, N);
   furn("nightstand", 0.5, 10.05, N);
@@ -480,12 +485,13 @@ furn("washbasin", 4.4, 7.8, N);
 // wall; the wash unit on the south wall; product shelves; the coat rack by the door.
 for (const [z, tag] of [[10.5, "1"], [11.9, "2"], [13.3, "3"]] as const) {
   furn("barber_station", SHX0 + WT + 0.23, z, E, 0, { name: `shed_station_${tag}` });
-  props.push({ kind: "mirror", x: SHX0 + WT + 0.02, y: 1.55, z, yaw: W, w: 1.3, h: 1.1 });
+  props.push({ kind: "mirror", x: SHX0 + WT + 0.02, y: 1.55, z, yaw: E, w: 1.3, h: 1.1 });
+  if (tag === "3") continue;                       // two seats: the owner had the north one taken out
   add(S(3.35, 0.05, z - 0.4, 0.9, 0.45, 0.8, "none", `shed_chair_${tag}_seat`, true));
   add(S(3.35, 0.6, z - 0.4, 0.9, 0.85, 0.8, "none", `shed_chair_${tag}_back`, true));
   props.push({ kind: "barber_chair", x: 3.8, y: 0.55, z, yaw: W });
 }
-hang("tv", SHX0 + WT + 0.1, 14.6, E, 1.55);
+furn("tv", SHX0 + WT + 0.12, 14.4, E, 1.5, { wall: true, scale: 1.6 });   // a 2.2 m screen in the NW corner
 furn("sofa", 5.6, SHZ1 - WT - 0.47, SO);
 furn("wash_unit", 6.4, SHZ0 + WT + 0.72, N);
 hang("shelf_bottles", SHX1 - WT - 0.12, 13.6, W, 1.3);
@@ -523,7 +529,7 @@ furn("workbench", 15.6, 14.2, SO);
 hang("polisher", 15.2, 14.3, N, 0.9);
 furn("tool_chest", 17.45, 13.3, W);
 furn("detail_shelf", 9.55, 13.6, E);
-furn("detail_shelf", 12.0, 14.4, SO);
+furn("detail_shelf", 10.3, 14.4, SO);                                      // west of the north door, not in it
 furn("compressor", 17.4, 5.0, N);
 furn("pressure_washer", 13.4, 1.4, N);
 furn("shop_vac", 13.4, 2.4, N);
@@ -535,8 +541,8 @@ hang("hex_light", 16.0, 5.0, N, GH - 0.08);
 // ======================= THE ROAD AND THE GARDEN =======================
 // His car, 1:1 from the photos: the M240i on the road in front of the house, nose east.
 furn("bmw_m240i", -9.05, -1.8, E);
-props.push({ kind: "board", x: -6.76, y: 0.45, z: -1.8, yaw: E, text: "EL 3E504", w: 0.5, h: 0.11, variant: "plate" });
-props.push({ kind: "board", x: -11.34, y: 0.45, z: -1.8, yaw: W, text: "EL 3E504", w: 0.5, h: 0.11, variant: "plate" });
+props.push({ kind: "board", x: -6.76, y: 0.45, z: -1.8, yaw: W, text: "EL 3E504", w: 0.5, h: 0.11, variant: "plate" });
+props.push({ kind: "board", x: -11.34, y: 0.45, z: -1.8, yaw: E, text: "EL 3E504", w: 0.5, h: 0.11, variant: "plate" });
 tree("tree_w1", -16.5, 8.5);
 tree("tree_w2", -16.5, 20);
 tree("tree_n", 4.5, 22, 3.4);
@@ -576,7 +582,7 @@ for (const [, x, s, z] of rooms) {
   props.push({ kind: "pendant", x, y: Y(s) + WH - 0.85, z, h: 0.8 });
   point(x, Y(s) + WH - 1.0, z, AMBER, 9, 7, 6);
 }
-for (const s of [0, 1, 2]) { props.push({ kind: "lamp", x: HX0 + WT + 0.02, y: Y(s) + 2.6, z: 11.5, yaw: W, variant: "wall" }); point(HX0 + 1, Y(s) + 2.6, 11.5, AMBER, 9, 7, 6); }
+for (const s of [0, 1, 2]) { props.push({ kind: "lamp", x: HX0 + WT + 0.02, y: Y(s) + 2.6, z: 11.5, yaw: E, variant: "wall" }); point(HX0 + 1, Y(s) + 2.6, 11.5, AMBER, 9, 7, 6); }
 props.push({ kind: "sign", x: -4.5, y: 2.7, z: HZ0 - 0.02, yaw: SO, text: "17", w: 0.4, h: 0.3 });
 props.push({ kind: "lamp", x: -5.95, y: 2.7, z: HZ0 - 0.02, yaw: SO, variant: "wall" });
 point(-5.95, 2.7, HZ0 - 0.7, AMBER, 10, 9, 7);
@@ -586,31 +592,31 @@ props.push({ kind: "lamp", x: -8.75, y: 2.6, z: HZ1 + 0.02, yaw: N, variant: "wa
 point(-8.75, 2.6, HZ1 + 0.7, AMBER, 8, 8, 6);
 props.push({ kind: "lamp", x: -5.5, y: Y(1) + 2.4, z: HZ1 + 0.02, yaw: N, variant: "wall" });
 point(-5.5, Y(1) + 2.4, HZ1 + 0.8, AMBER, 8, 7, 6);
-props.push({ kind: "lamp", x: HX1 + 0.02, y: Y(2) + 2.4, z: 10.75, yaw: W, variant: "wall" });
+props.push({ kind: "lamp", x: HX1 + 0.02, y: Y(2) + 2.4, z: 10.75, yaw: E, variant: "wall" });
 point(HX1 + 0.8, Y(2) + 2.4, 10.75, AMBER, 8, 7, 6);
-props.push({ kind: "lamp", x: HX1 + 0.02, y: 2.6, z: 6.75, yaw: W, variant: "wall" });
+props.push({ kind: "lamp", x: HX1 + 0.02, y: 2.6, z: 6.75, yaw: E, variant: "wall" });
 point(HX1 + 0.7, 2.6, 6.75, AMBER, 8, 8, 6);
 props.push({ kind: "lamp", x: -1.25, y: 2.5, z: AZ1 + 0.02, yaw: N, variant: "wall" });
 point(-1.25, 2.5, AZ1 + 0.7, AMBER, 7, 7, 5);
 props.push({ kind: "sign", x: -4.8, y: 1.2, z: PZ0 - 0.02, yaw: SO, text: "17", w: 0.3, h: 0.35 });
 // The shed: the neon over the mirrors, a tube light, a lamp over each door, the pole by the door.
-props.push({ kind: "neon", x: SHX0 + WT + 0.04, y: 2.4, z: 11.9, yaw: W, text: "BARBER", w: 2.2, h: 0.42, color: ACCENT });
+props.push({ kind: "neon", x: SHX0 + WT + 0.04, y: 2.4, z: 11.9, yaw: E, text: "BARBER", w: 2.2, h: 0.42, color: ACCENT });
 point(SHX0 + 0.9, 2.3, 11.9, ACCENT, 8, 6, 6);
 props.push({ kind: "tube_light", x: 5, y: SHH - 0.1, z: 11.5, yaw: 0, w: 1.6 });
 point(5, SHH - 0.3, 11.5, AMBER, 12, 8, 8);
 props.push({ kind: "tube_light", x: 5.8, y: SHH - 0.1, z: 8.5, yaw: 0, w: 1.2 });
 point(5.8, SHH - 0.3, 8.5, AMBER, 8, 6, 6);
-props.push({ kind: "lamp", x: SHX1 + 0.02, y: 2.5, z: 11.25, yaw: W, variant: "wall" });
+props.push({ kind: "lamp", x: SHX1 + 0.02, y: 2.5, z: 11.25, yaw: E, variant: "wall" });
 point(SHX1 + 0.7, 2.5, 11.25, AMBER, 7, 7, 6);
 props.push({ kind: "lamp", x: 3.75, y: 2.5, z: SHZ1 + 0.02, yaw: N, variant: "wall" });
 point(3.75, 2.5, SHZ1 + 0.7, AMBER, 7, 7, 6);
-props.push({ kind: "barber_pole", x: SHX1 + 0.05, y: 1.5, z: 12.4, yaw: W });
+props.push({ kind: "barber_pole", x: SHX1 + 0.05, y: 1.5, z: 12.4, yaw: E });
 props.push({ kind: "poster", x: 5.2, y: 1.6, z: SHZ0 + WT + 0.02, yaw: N, variant: "1", w: 0.6, h: 0.85 });
 // The garage: the hex panels light the bays white, tubes over the north half, the sign over the gates.
 point(10.9, GH - 0.4, 5.0, DAYLIGHT, 16, 10, 8);
 point(16.0, GH - 0.4, 5.0, DAYLIGHT, 16, 10, 8);
-props.push({ kind: "tube_light", x: 11.5, y: GH - 0.1, z: 11.5, yaw: W, w: 1.6 });
-props.push({ kind: "tube_light", x: 16, y: GH - 0.1, z: 12.5, yaw: W, w: 1.6 });
+props.push({ kind: "tube_light", x: 11.5, y: GH - 0.1, z: 11.5, yaw: E, w: 1.6 });
+props.push({ kind: "tube_light", x: 16, y: GH - 0.1, z: 12.5, yaw: E, w: 1.6 });
 point(11.5, GH - 0.4, 11.5, DAYLIGHT, 12, 9, 7);
 point(16, GH - 0.4, 12.5, DAYLIGHT, 12, 8, 8);
 props.push({ kind: "sign", x: 13.5, y: 3.6, z: GZ0 - 0.02, yaw: SO, text: "DETAILING", w: 2.4, h: 0.5 });
@@ -618,7 +624,7 @@ point(13.5, 3.6, GZ0 - 0.8, MERCURY, 8, 9, 6);
 props.push({ kind: "lamp", x: 12.25, y: 3.0, z: GZ1 + 0.02, yaw: N, variant: "wall" });
 point(12.25, 3.0, GZ1 + 0.7, MERCURY, 8, 8, 6);
 props.push({ kind: "graffiti", x: 15.6, y: 1.6, z: 9.88, yaw: SO, text: "DOLNA 17", w: 2.2, h: 0.8 });
-props.push({ kind: "poster", x: 11.58, y: 1.4, z: 9.5, yaw: E, variant: "2", w: 0.6, h: 0.85 });
+props.push({ kind: "poster", x: 11.58, y: 1.4, z: 9.5, yaw: W, variant: "2", w: 0.6, h: 0.85 });
 // The road and the garden: two street lamps, three garden posts, the pool's lamp.
 for (const [x, z] of [[-15, -5.3], [13, -5.3]] as const) { props.push({ kind: "lamp", x, y: 0, z, variant: "post", h: 4.5 }); point(x, 4.3, z, AMBER, 16, 16, 7); }
 for (const [x, z] of [[-16, 16], [-4, 23.5], [3, 20.5]] as const) { props.push({ kind: "lamp", x, y: 0, z, variant: "post", h: 3.8 }); point(x, 3.6, z, MERCURY, 10, 12, 6); }
@@ -648,7 +654,7 @@ export const DOLNA: MapDef = {
   id: "dolna", name: "DOLNA",
   solids, props, lights, spawns,
   arenaSpawns: [
-    { x: -16, y: 0, z: -2.5, yaw: W, team: 0 }, { x: 16, y: 0, z: -2.5, yaw: E, team: 1 },
+    { x: -16, y: 0, z: -2.5, yaw: E, team: 0 }, { x: 16, y: 0, z: -2.5, yaw: W, team: 1 },
     { x: -16, y: 0, z: 22, yaw: SO, team: 0 }, { x: 14, y: 0, z: 24.5, yaw: SO, team: 1 },
     { x: 5, y: 0, z: 10.5, yaw: N, team: 0 }, { x: -0.6, y: 0, z: 13.5, yaw: SO, team: 1 },
     { x: -6, y: Y(1), z: 11.5, yaw: N, team: 0 }, { x: -8.5, y: Y(2), z: 8.5, yaw: N, team: 1 },
@@ -665,15 +671,18 @@ for (const st of DOLNA.stations) props.push({ kind: "neon", x: st.x, y: st.y + 2
 /** Key places, timed from BOTH starts; a leading "*" marks a CONTESTED place (must be within 250 ms). */
 export const DOLNA_PLACES: Readonly<Record<string, { x: number; y: number; z: number }>> = {
   // The equal-cost frontier, measured on the walk grid (2 m cells, ground only): the front of the
-  // house, the passage's mouth, the lawn either side of the shed, the shed itself, the road.
+  // house, its kitchen, the west lawn and the road. (The shed and the lawn beside it are T0's since
+  // the garage's north door is clear — the first build had a shelf standing in it.)
   "*drive": { x: -2.25, y: 0, z: 3.75 },
   "*road_gate": { x: -4.25, y: 0, z: 1.75 },
   "*wicket": { x: -6.25, y: 0, z: 1.75 },
-  "*passage_s": { x: 1.75, y: 0, z: 5.75 },
-  "*shed_lawn_s": { x: 3.75, y: 0, z: 5.75 },
-  "*shed_lawn_n": { x: 5.75, y: 0, z: 17.75 },
-  "*shed": { x: 5.75, y: 0, z: 11.75 },
+  "*kitchen_0w": { x: -4.25, y: 0, z: 15.75 },
+  "*lawn_w": { x: -14.25, y: 0, z: 11.75 },
   "*road_w": { x: -10.25, y: 0, z: -0.25 },
+  passage_s: { x: 1.75, y: 0, z: 5.75 },
+  shed_lawn_s: { x: 3.75, y: 0, z: 5.75 },
+  shed_lawn_n: { x: 5.75, y: 0, z: 17.75 },
+  shed: { x: 5.75, y: 0, z: 11.75 },
   garden_door: { x: -8.75, y: 0, z: 18.25 },
   porch: { x: -3.75, y: 0, z: 18.25 },
   east_passage: { x: 1.75, y: 0, z: 8.25 },

@@ -261,7 +261,7 @@ describe("DOLNA's cover speaks one language", () => {
 
   it("gives every barber chair a collision the size of the drawn chair (a prop is never cover)", () => {
     const chairs = DOLNA.props.filter((p) => p.kind === "barber_chair");
-    expect(chairs.length).toBe(3);
+    expect(chairs.length).toBe(2);
     for (const c of chairs) {
       const seat = DOLNA.solids.find((s) => s.invisible && s.box.minX < c.x && s.box.maxX > c.x && s.box.minZ < c.z && s.box.maxZ > c.z && s.box.minY < 0.1);
       const back = DOLNA.solids.find((s) => s.invisible && s.box.minX < c.x && s.box.maxX > c.x && s.box.minZ < c.z && s.box.maxZ > c.z && s.box.maxY > 1.4);
