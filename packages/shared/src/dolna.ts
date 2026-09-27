@@ -110,6 +110,7 @@ export const DOLNA_FURNITURE: Readonly<Record<string, [number, number, number]>>
   deck_chair: [0.6, 0.8, 1.6], garden_table: [1.2, 0.72, 0.8], garden_bench: [1.5, 0.45, 0.4], grill: [0.6, 0.95, 0.5], pool_ladder: [0.5, 1.0, 0.6],
   mailbox: [0.3, 1.2, 0.25], wheelie_bin: [0.6, 1.1, 0.7], wheelie_bin_black: [0.6, 1.1, 0.7], bike: [1.7, 1.0, 0.4], flower_bed: [1.0, 0.35, 0.5], dog_house: [0.9, 0.85, 1.1],
   hex_light: [2.4, 0.08, 2.0], bmw_m240i: [2.05, 1.5, 4.45],
+  // [kreator] footprints added by the creator go below (keep this line)
 };
 /** The cover language, applied to a piece's real height. */
 export const coverHeight = (h: number): number => (h <= 0.8 ? h : h <= 1.25 ? 0.8 : h < 1.7 ? 1.45 : Math.max(1.9, h));
@@ -566,6 +567,10 @@ furn("wheelie_bin", 1.6, 1.0, SO); furn("wheelie_bin_black", 2.3, 1.0, SO);
 furn("flower_bed", -9.5, 4.95, N); furn("flower_bed", 0.4, 4.95, N); furn("flower_bed", -12, 8, E);   // none in front of the gate
 furn("dog_house", -15.5, 25.3, SO);
 furn("bike", 5.2, 6.5, N);
+
+// ======================= [KREATOR] pieces placed from the creator (keep this line) =======================
+// `/voxel-lab.html` running locally appends `furn(...)` lines here; move one into its room's block
+// when tidying, or leave it — the map does not care where a line stands.
 
 // ======================= PROPS (no collision) AND LIGHTS =======================
 const AMBER = "#ffbf70", MERCURY = "#9adce5", ACCENT = "#fa709a", DAYLIGHT = "#eef3ff";

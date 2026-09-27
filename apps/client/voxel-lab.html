@@ -33,11 +33,25 @@ input[type=number]{width:4.5em}input[type=color]{width:2.2em;height:1.8em;paddin
 </style></head><body><div id="app">
 <div id="top"><b>BARBERSTRIKE · KREATOR MODELI</b>
 <select id="pick" title="wczytaj model z biblioteki"></select>
-<button id="new">NOWY</button><button id="import">TEKST</button><button id="copy" class="primary">KOPIUJ TS</button><button id="download">POBIERZ .TXT</button>
-<a href="voxel-lab.html" style="color:var(--dim)">galeria</a>
+<button id="new">NOWY</button><button id="save" class="primary" title="zapisuje model do biblioteki gry (tylko lokalnie)">ZAPISZ W GRZE</button><button id="placebtn" title="stawia model na mapie DOLNA (tylko lokalnie)">POSTAW NA MAPIE</button><button id="import">TEKST</button><button id="copy">KOPIUJ TS</button><button id="download">POBIERZ .TXT</button><button id="helpbtn">POMOC</button>
+<a href="voxel-lab.html?galeria=1" style="color:var(--dim)">galeria</a>
 <span class="sp"></span><span class="stat" id="stat"></span></div>
 <div id="body">
 <aside id="left">
+<div id="help" style="display:none;background:#161a22;border:1px solid var(--line);border-radius:4px;padding:8px 10px;margin-bottom:8px;line-height:1.5">
+<b style="color:var(--acc)">JAK DODAĆ MEBEL — 5 KROKÓW</b><br>
+1. <b>NOWY</b> u góry. Wpisz <b>id</b> (małe litery, np. <code>lampa_biurko</code>).<br>
+2. Po lewej <b>FARBY</b>: kliknij farbę, żeby nią malować; „+ FARBA” dodaje kolor (próbnik obok litery).<br>
+3. <b>CZĘŚCI</b>: „+ BRYŁA” daje klocek, „+ OBRAZEK” daje obrazek z przodu / plan / z boku. Zaznacz część i <b>maluj myszką</b> na siatce (LPM farba, PPM gumka). Rozmiar obrazka i pozycję części ustawiasz pod listą. Jedna kratka = jedna komórka (0.1 m).<br>
+4. Po prawej rośnie podgląd 3D — obracaj myszką, kółko przybliża. Liczba u góry to koszt: im mniej quadów, tym lżej.<br>
+5. <b>ZAPISZ W GRZE</b> wpisuje model do biblioteki, <b>POSTAW NA MAPIE</b> stawia go na DOLNEJ (x, z, piętro, kierunek). Gra i kreator same się odświeżą. Oba działają tylko lokalnie (<code>pnpm kreator</code>).
+<div class="row" style="margin-top:6px"><button id="helpclose">ROZUMIEM</button></div></div>
+<div id="placebox" style="display:none;background:#161a22;border:1px solid var(--line);border-radius:4px;padding:8px 10px;margin-bottom:8px">
+<b style="color:var(--acc)">POSTAW NA MAPIE DOLNA</b>
+<div class="row">x <input id="plx" type="number" step="0.25" value="-8"> z <input id="plz" type="number" step="0.25" value="15"></div>
+<div class="row">piętro <select id="plf"><option value="0">parter</option><option value="1">1 piętro</option><option value="2">2 piętro</option></select> przód na <select id="pld"><option value="N">północ</option><option value="E">wschód</option><option value="SO">południe</option><option value="W">zachód</option></select></div>
+<div class="row" style="color:var(--dim)">x rośnie na wschód, z na północ; droga jest przy z ≈ −2, dom x −11…1, z 5.5…17.5, barak x 2.5…7.6, hala x 9…18</div>
+<div class="row"><button id="placego" class="primary">POSTAW</button><button id="placeclose">ZAMKNIJ</button></div></div>
 <h3>MODEL</h3>
 <div class="row">id <input id="mid" size="14"> komórka <select id="mcell"><option>0.05</option><option>0.1</option><option>0.2</option><option>0.25</option></select> m</div>
 <h3>FARBY <span id="inkhint" style="font-weight:400;letter-spacing:0"> — klik wybiera, litera na klawiaturze też</span></h3>
@@ -165,7 +179,7 @@ engine.runRenderLoop(() => { if (spinning) camera.alpha += 0.006; scene.render()
 addEventListener('resize', () => engine.resize());
 
 // =============================== the creator ===============================
-const editing = q.get('edit') === '1' || !!q.get('model');
+const editing = q.get('galeria') !== '1';   // the creator is the page; the gallery is a link away
 const FINISHES = ['matte', 'gloss', 'metal', 'glow', 'glass'];
 const FINISH_PL = { matte: 'mat', gloss: 'połysk', metal: 'metal', glow: 'świeci', glass: 'szkło' };
 const AXIS_PL = { z: 'Z · widok z PRZODU (lewo na ekranie = lewo modelu)', y: 'Y · PLAN (góra = północ, przód modelu = dół)', x: 'X · widok z BOKU od wschodu (lewo = tył modelu, prawo = przód)' };
@@ -327,14 +341,43 @@ for (const id of ids) { const o = document.createElement('option'); o.value = id
 $('pick').addEventListener('change', () => { load(parseVoxelText(VOXEL_LIBRARY_TEXT[$('pick').value])); });
 addEventListener('resize', drawGrid);
 
+// --- saving into the game: only when the dev server answers (locally); the deployed page copies text
+let local = false;
+fetch('/__voxel/ping').then((r) => r.ok ? r.json() : null).then((j) => { local = !!j?.ok; if (!local) { $('save').style.display = 'none'; $('placebtn').style.display = 'none'; } }).catch(() => { $('save').style.display = 'none'; $('placebtn').style.display = 'none'; });
+const post = async (url, data) => { const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); const j = await r.json(); if (!r.ok) throw new Error(j.error ?? r.statusText); return j; };
+$('save').addEventListener('click', async () => {
+  try {
+    const m = parseVoxelText(formatVoxelText(model)); const b = voxelBounds(m);
+    if (m.id === 'nowy') { status('nadaj modelowi własne id (pole „id” po lewej)', true); return; }
+    // the dev server reloads the page as soon as the library file changes: remember which model to reopen
+    try { localStorage.setItem('bs_voxel_reopen', m.id); localStorage.setItem('bs_voxel_msg', `${m.id} zapisany w grze (${b.w}×${b.h}×${b.d} m) — teraz możesz POSTAWIĆ NA MAPIE`); } catch {}
+    const j = await post('/__voxel/save', { id: m.id, text: formatVoxelText(m), w: b.w, h: b.h, d: b.d });
+    status(`${m.id} ${j.what} w bibliotece (${j.file}), stopa ${j.footprint.join('×')} m`);
+  } catch (e) { status('nie zapisano: ' + e.message, true); }
+});
+$('placebtn').addEventListener('click', () => { $('placebox').style.display = $('placebox').style.display === 'none' ? 'block' : 'none'; });
+$('placeclose').addEventListener('click', () => { $('placebox').style.display = 'none'; });
+$('placego').addEventListener('click', async () => {
+  try {
+    const j = await post('/__voxel/place', { id: model.id, x: +$('plx').value, z: +$('plz').value, floor: +$('plf').value, yaw: $('pld').value });
+    try { localStorage.setItem('bs_voxel_reopen', model.id); localStorage.setItem('bs_voxel_msg', 'postawione: ' + j.line + ' — otwórz grę (localhost:5174), mapa DOLNA już to ma'); } catch {}
+    status('postawione: ' + j.line);
+  } catch (e) { status('nie postawiono: ' + e.message, true); }
+});
+$('helpbtn').addEventListener('click', () => { $('help').style.display = $('help').style.display === 'none' ? 'block' : 'none'; });
+$('helpclose').addEventListener('click', () => { $('help').style.display = 'none'; try { localStorage.setItem('bs_voxel_help', '1'); } catch {} });
+try { if (!localStorage.getItem('bs_voxel_help')) $('help').style.display = 'block'; } catch { $('help').style.display = 'block'; }
+
 // =============================== start ===============================
 if (editing) {
-  const want = q.get('model');
+  let want = q.get('model'), msg = null;
+  try { const r = localStorage.getItem('bs_voxel_reopen'); if (r) { want = r; localStorage.removeItem('bs_voxel_reopen'); msg = localStorage.getItem('bs_voxel_msg'); localStorage.removeItem('bs_voxel_msg'); } } catch {}
   let draft = null;
   try { const t = localStorage.getItem('bs_voxel_draft'); if (t && !want) draft = parseVoxelText(t); } catch {}
   if (want && VOXEL_LIBRARY[want]) { $('pick').value = want; load(parseVoxelText(VOXEL_LIBRARY_TEXT[want])); }
   else if (draft) { load(draft); status('przywrócony szkic z przeglądarki'); }
   else $('new').click();
+  if (msg) setTimeout(() => status(msg), 200);
   requestAnimationFrame(drawGrid);
 } else {
   // the gallery: every model of the library on one floor; the creator is a click away
@@ -342,8 +385,9 @@ if (editing) {
   document.getElementById('body').style.gridTemplateColumns = '1fr';
   document.getElementById('left').style.display = 'none'; document.getElementById('paint').style.display = 'none';
   showAll();
-  $('hud').textContent = `${ids.length} modeli — kliknij KREATOR, albo ?model=<id>`;
-  const b = document.createElement('button'); b.textContent = 'KREATOR'; b.className = 'primary'; b.style.cssText = 'position:absolute;left:10px;top:44px'; b.addEventListener('click', () => { location.search = '?edit=1'; }); $('view').appendChild(b);
+  $('hud').textContent = `${ids.length} modeli — kliknij KREATOR`;
+  const b = document.createElement('button'); b.textContent = 'KREATOR'; b.className = 'primary'; b.style.cssText = 'position:absolute;left:10px;top:44px'; b.addEventListener('click', () => { location.search = ''; }); $('view').appendChild(b);
+  for (const id of ['save', 'placebtn', 'helpbtn']) $(id).style.display = 'none';
 }
 window.lab = {
   scene, engine, camera, ids,

@@ -53,11 +53,16 @@ export class VoxelMaterials {
   dispose(): void { for (const m of this.mats.values()) m.dispose(true, true); this.mats.clear(); }
 }
 
-const compiled = new Map<string, VoxelCompiled>();
-/** Compiles once per model id (the geometry is the same everywhere it stands). */
+const compiled = new WeakMap<VoxelModel, VoxelCompiled>();
+/**
+ * Compiles once per model OBJECT (the library's objects never change, so a fridge is compiled
+ * once for every fridge on the map). Keyed by the object, not the id: the creator parses a new
+ * object after every stroke, and a cache by id showed the owner a stale model while the cost
+ * line moved.
+ */
 export function compiledVoxel(model: VoxelModel): VoxelCompiled {
-  let c = compiled.get(model.id);
-  if (!c) { c = compileVoxel(model); compiled.set(model.id, c); }
+  let c = compiled.get(model);
+  if (!c) { c = compileVoxel(model); compiled.set(model, c); }
   return c;
 }
 
