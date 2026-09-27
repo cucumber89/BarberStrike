@@ -933,6 +933,89 @@ Długość: tyle, ile trzeba, żeby nic z §2, §3, §5 i §9 nie zginęło; nie
 
 ---
 
+
+---
+
+## Jak zbudowano (Sesja 2, 2026-09-26/27) — as built
+
+Po podpisie geometria powstała w tej samej sesji, wg §6 (Sesja 2), z czterech pakietów na rozłącznych
+plikach. Liczby poniżej pochodzą z narzędzi repo uruchomionych na zbudowanej mapie, nie z harnessu.
+
+**Geometria** — `packages/shared/src/dolna.ts`: prototyp z §5 przeniesiony 1:1 (te same boxy, nazwy i
+współrzędne) plus to, czego prototyp nie miał: 35 rekwizytów (fotele na niewidzialnych proxy siedzisko +
+oparcie jak w GÓRZE, lustra, neony „BARBER” / „BARBER SHOP”, tabliczka „17”, lampy, jarzeniówki hali,
+przewód między słupami, graffiti „DOLNA” na szkielecie, plakat na toi-toiu; 37 po audycie), 14 świateł w
+trzech barwach dzielnicy (amber: front domu, barak, oba drzwi baraku, boki domu nad oboma przejściami,
+latarnia na zachodnim końcu, ganek sąsiada; mercury: hala, brama hali, dwie latarnie ogrodowe, reflektor
+budowy; accent: neon) — audyt oświetlenia: **0 ze 132 punktów** siatki 4 m bez praktycznego światła
+(przed dołożeniem czterech lamp: 8), korony sosen 1.8 m na 4.6 m
+(recenzja oka: bez nich szpaler czytał się jak palisada), dwie ciemne szyby na vanie. Razem **144 bryły**.
+Zarejestrowana w `MAPS`; **nie** w `MAP_ORDER` (P1: tylko duel/turniej).
+
+**Testy** — suita wspólna (`map.test.ts`, `mapFlags`, `floorAudit`) przechodzi na DOLNEJ bez zmian;
+`dolna.test.ts` (11 testów) dowodzi z brył: starty niewidoczne stojąc/kucając, żadna powierzchnia dalej
+niż 16 m nie widzi startu, **0 komórek widzi oba starty**, sporne miejsca ≤ 250 ms sprintu z obu startów,
+start–start 35–46 m ścieżki, ≥ 3 wyjścia na start, każda para nazwanych miejsc połączona, język osłon,
+nic osiągalnego ≥ 1.9 m ani na dachach/tujach/siatce, nic nie lata (dachy baraku i hali są celowo
+osadzone w ścianach, poniżej ich górnej krawędzi). Bramki: `pnpm typecheck` ✓, `pnpm test` ✓ (1364:
+shared 407, skins 11, server 257, client 689), `pnpm build` ✓.
+
+**Narzędzia** (uogólnione, wynik dla GÓRY bit w bit — `apps/client/e2e/out/dolna/tools-diff.md`):
+`map-plan.ts`, `map-duel.ts`, `map-rotation.ts` biorą id mapy z `argv[2]`, a to, co zakładało bliźniaka
+180°, czyta z `apps/client/e2e/tools/map-profiles.ts` (miejsca, wyjścia, nazwy gruntu i granicy per
+mapa); `map-audit.ts` i `map-review.mjs` nie wracają już po cichu do dzielnicy (`map-audit` kończy błędem
+na nieznanym id; `map-review.mjs` przyjmuje `MAP=` i `VIEWS=`). `map-duel.ts dolna`: starty ukryte
+(6 × 6, żadna para), start–start **44.3 m / 5.85 s**, najgorsza Δ na miejscach spornych **150 ms**
+(`*street_mid`), najdłuższa linia **58.6 m**, mediana 11.2 m, p90 28.2 m, najwyższy osiągalny blat
+**1.30 m** (mantle 1.25), żadna nazwa graniczna osiągalna, T0 5 wyjść / T1 3 wyjścia w 15 m.
+`map-audit.ts dolna`: 0 par koplanarnych, sekcja 2a (dekle prawie połączone) **pusta**; nowa sekcja 8
+audytu fair („wczesny kontakt”): z kieszeni T0 widać 3 540 par komórek pierwszych 20 m T1 (najdłuższa
+41.9 m, w linii dziura w tujach ↔ luka siatki), z kieszeni T1 — 469 par 20 m T0; to jest zachodnia
+aleja mapy, świadomie prosta (D-W3), i pierwsza rzecz do obejrzenia na playteście.
+
+**P1** (commit „Let a duel choose its arena”): `DUEL_MAP_IDS = [dolna, gora]`, `DUEL_MAP_ID = dolna`,
+jedna czysta reguła `duelMapOf(asked)` czytana przez `TdmRoom`, `Loading`, picker duelu i turnieju oraz
+link lobby; testy kontraktów przepięte na regułę (`duelMap.test.ts`, `Duel.test.ts`,
+`TournamentLobby.test.ts`, `copy.test.ts`, `errors.test.ts`, `invite.test.ts`, `startup.spec.ts`);
+glif `DolnaPlan` w menu i `DOLNA_VIEWPOINTS` w `/viewer`.
+
+**Render** (`apps/client/e2e/tools/dolna-shots.mjs`, `out/dolna/shots/`, SwiftShader, preset medium,
+recenzent-oko osobnym agentem): pierwsza runda 13/16 OK — trzy zarzuty (CZARNO za zachodnimi drzwiami
+baraku, SYLWETKA sosen z obu końców ulicy) naprawione lampami i koronami; **druga runda 16/16 OK, 0 ×
+lata / przenika / osłona**. Draw-calle: kadry uliczne DOLNEJ 106–115, najcięższy (overview) 123 wobec
+**392** dla ulicy NIGHT_DISTRICT w tym samym przebiegu (27–31 %); wierzchołków 22 199 wobec 118 127.
+
+**Live** (`LIVE=1 SKIP_REVIEW=1 node apps/client/e2e/tools/dolna-shots.mjs` → `out/dolna/live.md`,
+`shots/live_*.png`): pokój utworzony z menu (`mode-duel` → `map-dolna` → 1 bot NORMAL), karta ładowania i
+HUD: **DOLNA**, `mapId = dolna`; mecz **rozegrany do końca**: 8 rund, **6:0** dla bota (klient headless
+stoi w miejscu — to test mapy i trybu, nie celowania), 470 s, ekran wyniku „PORAŻKA · FADE 6 — 0 TAPER”;
+zmiana stron po 3. rundzie (gracz przeniesiony z szkieletu do baraku, portfele zresetowane do $800);
+bot w 87 próbkach odwiedził barak, halę (−4.3, 36.5), ogród, bramę (8, 2.6), środek ulicy (−2.6, 0.2),
+plac i szkielet — wszystkie strefy calloutów; jedyne błędy konsoli to dwa 401 z `/api/me` (konto
+niezalogowane, nie mapa). Rundy 1 i 2 skończyły się **na zegar** (TIME · EVEN, TIME · MORE HEALTH):
+bot NORMAL potrzebował ponad 60 s, żeby znaleźć nieruchomego gracza w tylnym rogu szkieletu — pierwszy
+sygnał dla P7. Audyt „rekwizyt jako osłona”: po usunięciu kosza przy toi-toiu zostały tylko cztery słupy
+latarni (0.12 m, bez kolizji — jak na GÓRZE).
+
+### Nieudowodnione (obowiązkowa lista z §7)
+
+0. **60 s rundy na 44 m** (P7): w live duelu dwie z ośmiu rund zakończył zegar, bo bot nie doszedł do
+   gracza w tylnym rogu szkieletu w 60 s; z dwojgiem ludzi, którzy idą ku sobie, spotkanie w środku
+   ulicy to ~3 s sprintu z każdej strony — ale liczba rund „na zegar” jest pierwszą statystyką playtestu.
+1. **Prawdziwe GPU i ludzie.** Wszystkie kadry są ze SwiftShadera; czytelność sylwetek w nocy, mgła i
+   neon na prawdziwym GPU oraz to, czy 60 s rundy wystarcza na 44 m dystansu startów, rozstrzygnie
+   dopiero playtest dwojga ludzi.
+2. **Asymetria ≤ 250 ms jest mierzona, nie odczuta.** Miejsca jednej strony (garaż, barak, hala; szkielet,
+   plac) różnią się o 0.5–5.5 s z założenia (D-W2); zmiana stron co 3 rundy ma to wyrównać — liczba
+   rund „na zegar” po każdej stronie jest pierwszą statystyką do zebrania.
+3. **p90 28.2 m** (D-W7) zostaje z nazwą, nie z poprawką: jedyne osłony wyższe od oka na ulicy to van i
+   toi-toi.
+4. **Zachodnia aleja** (dziura w tujach ↔ luka siatki, 41.9 m linii między kieszenią T0 a pierwszymi 20 m
+   T1) to świadoma prosta; jeśli playtest pokaże „snajper w tujach”, zamknąć dziurę (alternatywa D-W3).
+5. **Kucnięcie pod koronami drzew** (od 1.4 m) daje wolną drogę, której siatka chodu nie liczy.
+6. **DOLNA w innych trybach** (TDM/DOM/BOMB/Ostrzyżeni): flagi, miejsca bomby i spawny przechodzą testy,
+   ale nie były projektowane na serio — poza `MAP_ORDER` do playtestu (P1).
+
 ## Załącznik A — skąd są liczby (dla repo; nie wklejać)
 
 Każdy fakt w §1 i §4 ma źródło w kodzie z dnia 2026-09-26 (gałąź `claude/confident-cray-nneqme`,
