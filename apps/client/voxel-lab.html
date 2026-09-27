@@ -349,8 +349,10 @@ $('save').addEventListener('click', async () => {
   try {
     const m = parseVoxelText(formatVoxelText(model)); const b = voxelBounds(m);
     if (m.id === 'nowy') { status('nadaj modelowi własne id (pole „id” po lewej)', true); return; }
+    // the dev server reloads the page as soon as the library file changes: remember which model to reopen
+    try { localStorage.setItem('bs_voxel_reopen', m.id); localStorage.setItem('bs_voxel_msg', `${m.id} zapisany w grze (${b.w}×${b.h}×${b.d} m) — teraz możesz POSTAWIĆ NA MAPIE`); } catch {}
     const j = await post('/__voxel/save', { id: m.id, text: formatVoxelText(m), w: b.w, h: b.h, d: b.d });
-    status(`${m.id} ${j.what} w bibliotece (${j.file}), stopa ${j.footprint.join('×')} m — strona zaraz się odświeży, szkic zostaje`);
+    status(`${m.id} ${j.what} w bibliotece (${j.file}), stopa ${j.footprint.join('×')} m`);
   } catch (e) { status('nie zapisano: ' + e.message, true); }
 });
 $('placebtn').addEventListener('click', () => { $('placebox').style.display = $('placebox').style.display === 'none' ? 'block' : 'none'; });
@@ -358,7 +360,8 @@ $('placeclose').addEventListener('click', () => { $('placebox').style.display = 
 $('placego').addEventListener('click', async () => {
   try {
     const j = await post('/__voxel/place', { id: model.id, x: +$('plx').value, z: +$('plz').value, floor: +$('plf').value, yaw: $('pld').value });
-    status('postawione: ' + j.line + ' — otwórz grę (localhost:5174), mapa DOLNA już to ma');
+    try { localStorage.setItem('bs_voxel_reopen', model.id); localStorage.setItem('bs_voxel_msg', 'postawione: ' + j.line + ' — otwórz grę (localhost:5174), mapa DOLNA już to ma'); } catch {}
+    status('postawione: ' + j.line);
   } catch (e) { status('nie postawiono: ' + e.message, true); }
 });
 $('helpbtn').addEventListener('click', () => { $('help').style.display = $('help').style.display === 'none' ? 'block' : 'none'; });
@@ -367,12 +370,14 @@ try { if (!localStorage.getItem('bs_voxel_help')) $('help').style.display = 'blo
 
 // =============================== start ===============================
 if (editing) {
-  const want = q.get('model');
+  let want = q.get('model'), msg = null;
+  try { const r = localStorage.getItem('bs_voxel_reopen'); if (r) { want = r; localStorage.removeItem('bs_voxel_reopen'); msg = localStorage.getItem('bs_voxel_msg'); localStorage.removeItem('bs_voxel_msg'); } } catch {}
   let draft = null;
   try { const t = localStorage.getItem('bs_voxel_draft'); if (t && !want) draft = parseVoxelText(t); } catch {}
   if (want && VOXEL_LIBRARY[want]) { $('pick').value = want; load(parseVoxelText(VOXEL_LIBRARY_TEXT[want])); }
   else if (draft) { load(draft); status('przywrócony szkic z przeglądarki'); }
   else $('new').click();
+  if (msg) setTimeout(() => status(msg), 200);
   requestAnimationFrame(drawGrid);
 } else {
   // the gallery: every model of the library on one floor; the creator is a click away
