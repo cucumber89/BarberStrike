@@ -140,6 +140,40 @@ button:focus-visible { outline:2px solid #f4cf8e; outline-offset:3px; }
 .va-field > span b { color: #f5d6a2; font-size: 15px; }
 .va-field small { color: #8fa0ad; font-size: 12px; }
 .va-field input[type=range] { width: 100%; accent-color: #cfa666; }
+/* The four-card console (owner's brief 2026-09-27). One column on a phone, two from 640px up;
+   the MECZE table spans both, because a row with six columns has no business in half a card. */
+.viewer-pick.viewer-pick { max-width: 960px; }
+.va-console { display: grid; gap: 14px; }
+.va-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.va-head small { color: #8fa0ad; font-size: 12px; }
+.va-link { background: none !important; border: none !important; color: #8fa0ad !important; padding: 0 !important; font-size: 12px !important; letter-spacing: .08em; }
+.va-link:hover { color: #f5d6a2 !important; }
+.va-grid { display: grid; gap: 14px; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .va-grid { grid-template-columns: 1fr 1fr; } .va-wide { grid-column: 1 / -1; } }
+.va-card { background: #0f151b; border: 1px solid #2b3742; border-radius: 10px; padding: 16px; min-width: 0; }
+.va-card h3 { margin: 0 0 4px; font-size: 15px; letter-spacing: .1em; color: #cfa666; }
+.va-card select { background: #0f1216; border: 1px solid #2b3742; border-radius: 8px; color: #e6ebf0; padding: 10px 12px; font: inherit; width: 100%; }
+.va-card select:focus { outline: none; border-color: #cfa666; }
+.va-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.va-seg-btn { display: grid; gap: 2px; text-align: left; padding: 8px 12px !important; font-size: 13px !important; }
+.va-seg-btn small { color: #8fa0ad; font-size: 11px; letter-spacing: 0; }
+.va-seg-btn.on { border-color: #cfa666 !important; color: #f5d6a2 !important; background: #1f2a1a !important; }
+.va-seg-btn:disabled { opacity: .4; cursor: default; }
+.va-made { border-top: 1px dashed #2b3742; padding-top: 12px; }
+.va-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.va-table th { text-align: left; font-weight: normal; color: #8fa0ad; font-size: 11px; letter-spacing: .1em; padding: 6px 8px; border-bottom: 1px solid #2b3742; }
+.va-table td { padding: 8px; border-bottom: 1px solid #1d2731; vertical-align: middle; }
+.va-table td small { color: #8fa0ad; }
+.va-table tr.locked td { color: #8fa0ad; }
+.va-table tr.empty td { color: #8fa0ad; text-align: center; padding: 20px; }
+.va-actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; }
+.va-actions button { padding: 6px 10px !important; font-size: 12px !important; }
+.va-actions button.danger:hover { border-color: #c96a5a; color: #f0b3a5; }
+.va-health { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin: 8px 0; }
+.va-health div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid #1d2731; padding: 4px 0; }
+.va-health dt { color: #8fa0ad; font-size: 12px; }
+.va-health dd { margin: 0; color: #e6ebf0; font-variant-numeric: tabular-nums; }
+.va-card > small { color: #8fa0ad; font-size: 12px; }
 
 .viewer-stage { position: fixed; inset: 0; background: #05070b; }
 .viewer-stage canvas { width: 100%; height: 100%; display: block; outline: none; }

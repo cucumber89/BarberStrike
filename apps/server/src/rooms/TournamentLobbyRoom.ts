@@ -41,6 +41,8 @@ interface LobbyJoinOptions {
   name?: string;
   size?: number;
   map?: string;
+  /** The name the console gave the tournament (the `/r/<room>?mode=lobby` link carries it). A label. */
+  room?: string;
   mode?: string;
   seed?: number;
   /** The admin password (from the /viewer console). Required to CREATE a lobby when the server sets
@@ -68,7 +70,7 @@ function pickSize(asked: unknown, entrants: number): TournamentSize {
   return bracketCapacity(base);
 }
 
-export class TournamentLobbyRoom extends Room<{ state: TournamentLobbyState; metadata: { kind: string; map: string } }> {
+export class TournamentLobbyRoom extends Room<{ state: TournamentLobbyState; metadata: { kind: string; map: string; name: string } }> {
   override maxClients = TOURNAMENT_MAX_ENTRANTS;
   override autoDispose = true;
   override state = new TournamentLobbyState();
@@ -106,7 +108,11 @@ export class TournamentLobbyRoom extends Room<{ state: TournamentLobbyState; met
     this.askedSize = isFiniteNumber(options?.size) ? options.size : undefined;
     // A pinned PRNG for the draw makes a tournament reproducible in a test; production seeds on time.
     this.seed = isFiniteNumber(options?.seed) ? options.seed >>> 0 : (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
-    this.setMetadata({ kind: "tournament-lobby", map: this.map });
+    // The name is metadata, not a matchmaking key: `tournament-lobby` is defined without `filterBy`,
+    // so an invite link with any name still lands in the one lobby that is open (one tournament at
+    // a time is the Friday-evening shape). The admin console's MECZE table prints it.
+    const name = typeof options?.room === "string" ? options.room.trim().slice(0, 24) : "";
+    this.setMetadata({ kind: "tournament-lobby", map: this.map, name });
 
     this.onMessage("lobby:ready", (client, msg: LobbyReadyMsg) => this.onReady(client, msg));
     this.onMessage("lobby:chat", (client, msg: LobbyChatMsg) => this.onChat(client, msg));
