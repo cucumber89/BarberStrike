@@ -144,13 +144,17 @@ describe("DOLNA is fair by measurement, not by symmetry", () => {
     }
   });
 
-  it("connects every named place, every room on every floor, both balconies and the pool for a bot, both ways", () => {
-    const places: NavPoint[] = [start0, start1, ...Object.values(DOLNA_PLACES), ...Object.values(ROOMS), ...DOLNA.flags, ...DOLNA.sites!, ...DOLNA.stations]
+  it("connects every named place, every room on every floor, both balconies and the pool for a bot, both ways", { timeout: 20000 }, () => {
+    // Every place to the T0 start and back: a → T0 → b composes into a → b, so the hub proves every
+    // pair (the walk grid has one-way drops, which is why BOTH directions are walked). All pairs
+    // (~5 500 searches) took 3.4 s here and timed out on the CI runner.
+    const places: NavPoint[] = [start1, ...Object.values(DOLNA_PLACES), ...Object.values(ROOMS), ...DOLNA.flags, ...DOLNA.sites!, ...DOLNA.stations]
       .map((p) => ({ x: p.x, y: p.y, z: p.z }));
+    const hub: NavPoint = { x: start0.x, y: start0.y, z: start0.z };
     const missing: string[] = [];
-    for (const a of places) for (const b of places) {
-      if (a === b) continue;
-      if (!findPath(walk, a, b, 60000)) missing.push(`(${a.x},${a.y},${a.z}) → (${b.x},${b.y},${b.z})`);
+    for (const p of places) {
+      if (!findPath(walk, hub, p, 60000)) missing.push(`T0 → (${p.x},${p.y},${p.z})`);
+      if (!findPath(walk, p, hub, 60000)) missing.push(`(${p.x},${p.y},${p.z}) → T0`);
     }
     expect(missing).toEqual([]);
   });
