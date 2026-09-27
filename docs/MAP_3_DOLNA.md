@@ -1168,7 +1168,7 @@ zachodniego (E) i od linii drogi (N):
 | hala (szary) | 855…965 / 230…407 | 29.6…38.5 E, 0…14.4 N (9 × 14.4), 0.7 m od żywopłotu | x 9.1…18.1, z 0.5…14.9, **1.5 m alejka** (D-W3-v3) |
 | basen (błękit) | okrąg 813…853 / 102…142 | Ø 3.3 m w 27.8 E, 23.3 N | okrągły basen stelażowy Ø 3.6, 1.45 m (D-W4-v3) |
 | droga (brąz) | y 407 → 469 | 5.1 m szeroka | z −4.5…0.5 |
-| BMW (fiolet) | 594…651 / 427…456 | 8.2…12.9 E, 1.6…4 m za linią | x −11.3…−6.8, z −2.8…−0.8, nosem na zachód |
+| BMW (fiolet) | 594…651 / 427…456 | 8.2…12.9 E, 1.6…4 m za linią | x −11.3…−6.8, z −2.8…−0.8, nosem na wschód |
 | spawn hali (czerwony) | 940…959 / 242…281 | 0.6…2.7 m od ściany E, 1.0…4.6 m od N | kieszeń x 13.6…17.85, z 10.15…14.65 |
 | balkon 2 (2 piętro) | 1628…1694 / 1288…1434 | 2 m głęboki, 4.5 m długi, 3.7…9 m od lica N | x 1…2.4, z 8.5…13 (1.4 × 4.5; słupy 10 cm od baraku) |
 

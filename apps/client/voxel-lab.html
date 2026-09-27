@@ -338,7 +338,8 @@ if (editing) {
   requestAnimationFrame(drawGrid);
 } else {
   // the gallery: every model of the library on one floor; the creator is a click away
-  document.getElementById('body').style.gridTemplateColumns = '0 0 1fr';
+  // hidden children take no grid cell, so the gallery's one visible column is the whole grid
+  document.getElementById('body').style.gridTemplateColumns = '1fr';
   document.getElementById('left').style.display = 'none'; document.getElementById('paint').style.display = 'none';
   showAll();
   $('hud').textContent = `${ids.length} modeli — kliknij KREATOR, albo ?model=<id>`;
