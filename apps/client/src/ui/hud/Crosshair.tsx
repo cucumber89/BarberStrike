@@ -57,6 +57,8 @@ export const Crosshair = memo(function Crosshair({ settings }: CrosshairProps) {
   const scoped = useHudSlice((s) => s.scoped);
   const scopeStyle = useHudSlice((s) => s.scopeStyle);
   const breath = useHudSlice((s) => s.breath);
+  /** Dancing (H): the camera is behind the body, and a crosshair would sit on its back. */
+  const dancing = useHudSlice((s) => s.emote !== "");
   /**
    * Rule G9: the cook ring belongs to the ONE grenade that cooks. A smoke, a flash, a molotov or a
    * knife is in the hand for the 180 ms of the wind-up and never cooks, so the ring it used to draw
@@ -82,7 +84,7 @@ export const Crosshair = memo(function Crosshair({ settings }: CrosshairProps) {
       {/* Crosshair (hidden in ADS, and while a frag cooks: there the ring takes its place).
           Shape, size, thickness, gap and colour come from the player's own settings — this is the
           one piece of UI they look at every second of the match. */}
-      {pointerLocked && !aiming && !cookRing && (
+      {pointerLocked && !aiming && !cookRing && !dancing && (
         <div
           className={`crosshair ch-${ch.style} ${ch.outline ? "outlined" : ""} ${hitAge < 180 ? (hitKill ? "kill" : hitHead ? "head" : hitArmor ? "armor" : "hit") : ""} ${protectedNow ? "shield" : ""}`}
           data-zone="crosshair"

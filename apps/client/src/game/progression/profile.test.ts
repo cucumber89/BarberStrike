@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { BADGES, BUILDS, DEFAULT_BUILD, DEFAULT_HAIRCUT, DEFAULT_OUTFIT, DROPPABLE_OUTFITS, HAIRCUTS, XP, decodeBuild, decodeOutfit, decodeSkins, levelFor, xpToNext, type MatchStats } from "@frankibarber/shared";
 import { catalog, skinById } from "@frankibarber/skins";
-import { applyMatch, emptyProfile, loadProfile, ownedCuts, ownedFits, saveProfile, equipBuild, equipHaircut, equipOutfit, equippedBuild, equippedHaircut, equippedOutfit, ensureStarterSkins, equipSkin, equippedSkins, refreshDailyCrates, openCrate } from "./profile";
+import { applyMatch, emptyProfile, loadProfile, ownedCuts, ownedFits, saveProfile, equipBuild, equipHaircut, equipOutfit, equippedBuild, equippedHaircut, equippedOutfit, ensureStarterSkins, equipSkin, equippedSkins, refreshDailyCrates, openCrate, ownedEmotes, equippedEmote, equipEmote, foldServerOwned } from "./profile";
+import { DEFAULT_EMOTE, DROPPABLE_EMOTES } from "@frankibarber/shared";
 
 const match = (over: Partial<MatchStats> = {}): MatchStats => ({
   kills: 0, headshots: 0, assists: 0, deaths: 0, captures: 0, wavesSurvived: 0, result: -1, mode: "tdm", ...over,
@@ -281,7 +282,7 @@ describe("what a crate rolls", () => {
       kinds.add(rolled.prize.kind);
       if (rolled.prize.kind === "outfit") outfits.push(rolled.prize.id);
     }
-    expect([...kinds].sort()).toEqual(["haircut", "outfit", "skin"]);
+    expect([...kinds].sort()).toEqual(["emote", "haircut", "outfit", "skin"]);
     expect(new Set(outfits).size, "a rolled outfit is never rolled again").toBe(outfits.length);
     expect(outfits.length, "every droppable outfit is reachable").toBe(DROPPABLE_OUTFITS.length);
     // Everything it gave out is owned afterwards, and the kit was never handed out as a prize.
@@ -326,5 +327,61 @@ describe("crates draw from the whole finish catalogue", () => {
     }
     expect(seen.size).toBe(catalog.length);
     for (const c of ["barber", "osiedle", "monopol", "zielony", "masa", "pogodzinach", "zlota"]) expect(collections.has(c), c).toBe(true);
+  });
+});
+
+describe("dances (H) in the profile and the crate", () => {
+  memoryStorage();
+
+  it("owns the wave from the first launch and puts it on H", () => {
+    expect(ownedEmotes(emptyProfile()).map((e) => e.id)).toEqual([DEFAULT_EMOTE]);
+    expect(equippedEmote()).toBe(DEFAULT_EMOTE);
+    expect(equipEmote("spucha"), "a dance nobody rolled cannot go on the key").toBe(DEFAULT_EMOTE);
+  });
+
+  it("equips only what it owns, and repairs a blob that says otherwise", () => {
+    saveProfile({ ...emptyProfile(), emotes: ["spucha", "spucha", "moonwalk", 7, DEFAULT_EMOTE] as string[] });
+    expect(loadProfile().emotes).toEqual(["spucha"]);
+    expect(equipEmote("spucha")).toBe("spucha");
+    expect(equippedEmote()).toBe("spucha");
+    saveProfile({ ...emptyProfile(), emote: "nitka", emotes: [] });
+    expect(loadProfile().emote).toBe(DEFAULT_EMOTE);
+    const old = { ...emptyProfile() } as Record<string, unknown>;
+    delete old.emotes; delete old.emote;
+    saveProfile(old as never);
+    expect(loadProfile()).toMatchObject({ emotes: [], emote: DEFAULT_EMOTE });
+  });
+
+  it("hands out every droppable dance once, then stops rolling dances", () => {
+    saveProfile({ ...emptyProfile(), crates: 500, crateDay: "2026-01-01" });
+    const dances: string[] = [];
+    for (let i = 0; i < 500; i++) {
+      const rolled = openCrate(1_750_000_000_000 + i * 211);
+      if (!rolled) break;
+      if (rolled.prize.kind === "emote") dances.push(rolled.prize.id);
+    }
+    expect(new Set(dances).size, "never the same dance twice").toBe(dances.length);
+    expect(dances.sort()).toEqual(DROPPABLE_EMOTES.map((e) => e.id).sort());
+    expect(dances).not.toContain(DEFAULT_EMOTE);
+  });
+});
+
+describe("folding what the server owns into this browser (admin unlock, another machine)", () => {
+  memoryStorage();
+
+  it("adds owned items from the server copy, keeps local progress, and drops ids this build does not know", () => {
+    saveProfile({ ...emptyProfile(), xp: 777, emotes: ["nitka"], skins: [{ skin: "warsztat", wear: 0.2, rolledAt: 1 }] });
+    const next = foldServerOwned({ xp: 5, emotes: ["spucha", "moonwalk"], crateCuts: ["mohawk"], skins: [{ skin: "osy", wear: 0, rolledAt: 2 }, { skin: "not-a-skin", wear: 0, rolledAt: 3 }] });
+    expect(next.xp, "XP is not an ownership list: the local number stands").toBe(777);
+    expect(next.emotes.sort()).toEqual(["nitka", "spucha"]);
+    expect(next.skins.map((i) => i.skin)).toEqual(["warsztat", "osy"]);
+    expect(ownedCuts(next).some((h) => h.id === "mohawk")).toBe(true);
+    expect(loadProfile().emotes, "and it is saved").toContain("spucha");
+  });
+
+  it("changes nothing when the server has nothing new", () => {
+    saveProfile({ ...emptyProfile(), emotes: ["nitka"] });
+    expect(foldServerOwned({ emotes: ["nitka"] }).emotes).toEqual(["nitka"]);
+    expect(foldServerOwned(null).emotes).toEqual(["nitka"]);
   });
 });

@@ -5,6 +5,7 @@ import {
 } from "@frankibarber/shared";
 import { DEFAULT_BUILD, isBuildId } from "@frankibarber/shared";
 import { DEFAULT_OUTFIT, DROPPABLE_OUTFITS, isOutfitId, outfitDef, type OutfitDef, type OutfitRarity } from "@frankibarber/shared";
+import { DEFAULT_EMOTE, DROPPABLE_EMOTES, EMOTES, isEmoteId, type EmoteDef } from "@frankibarber/shared";
 import { WEAPON_ORDER, encodeCosmetics, type WeaponId } from "@frankibarber/shared";
 import type { TournamentRecord } from "@frankibarber/shared";
 import { catalog, fitsWeapon, skinById, type SkinInstance } from "@frankibarber/skins";
@@ -59,9 +60,16 @@ export interface Profile {
    * (L1). Written by P7; older profiles migrate to an empty list. Not a Colyseus schema field.
    */
   tournaments: TournamentRecord[];
+  /**
+   * The dances (H): the ones pulled out of a crate, and the one on the key. Stored like outfits —
+   * a crate drop has no counter to recompute it from. The wave is never in the list; `ownedEmotes`
+   * puts it at the front of every profile, so H always does something.
+   */
+  emotes: string[];
+  emote: string;
 }
 
-export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT, build: DEFAULT_BUILD, outfit: DEFAULT_OUTFIT, fits: [], skins: [], equip: {}, crates: 0, crateDay: "", crateCuts: [], challengeClaims: [], challengeBase: { matches: 0, kills: 0, headshots: 0 }, tournaments: [] });
+export const emptyProfile = (): Profile => ({ xp: 0, life: emptyLifetime(), badges: [], haircut: DEFAULT_HAIRCUT, build: DEFAULT_BUILD, outfit: DEFAULT_OUTFIT, fits: [], skins: [], equip: {}, crates: 0, crateDay: "", crateCuts: [], challengeClaims: [], challengeBase: { matches: 0, kills: 0, headshots: 0 }, tournaments: [], emotes: [], emote: DEFAULT_EMOTE });
 
 /**
  * Reads the profile, repairing anything the shape has outgrown.
@@ -88,6 +96,9 @@ export function loadProfile(): Profile {
       return [{ skin: instance.skin, wear: Number.isFinite(instance.wear) ? Math.max(0, Math.min(1, instance.wear)) : 0,
         rolledAt: Number.isFinite(instance.rolledAt) ? Math.max(0, instance.rolledAt) : 0 }];
     }) : [];
+    const emotes: string[] = Array.isArray(p.emotes)
+      ? [...new Set(p.emotes.filter((id): id is string => isEmoteId(id) && id !== DEFAULT_EMOTE))]
+      : [];
     const equip: Profile["equip"] = {};
     for (const weapon of WEAPON_ORDER) {
       const id = p.equip?.[weapon]; const skin = typeof id === "string" ? skinById(id) : undefined;
@@ -95,6 +106,9 @@ export function loadProfile(): Profile {
     }
     return {
       skins, equip,
+      // A dance on H must be one the profile owns and the catalog still has; anything else is the wave.
+      emotes,
+      emote: isEmoteId(p.emote) && (p.emote === DEFAULT_EMOTE || emotes.includes(p.emote)) ? p.emote : DEFAULT_EMOTE,
       crates: Number.isFinite(p.crates) ? Math.max(0, Math.floor(p.crates as number)) : 0,
       crateDay: typeof p.crateDay === "string" ? p.crateDay : "",
       crateCuts: Array.isArray(p.crateCuts) ? p.crateCuts.filter(id => typeof id === "string" && isHaircutId(id)) : [],
@@ -162,6 +176,33 @@ export function saveProfile(p: Profile): void {
 export function mergeServerProfile(server: Profile): Profile {
   try { localStorage.setItem(KEY, JSON.stringify(server)); } catch { /* private mode: adopt in memory only */ }
   return loadProfile();
+}
+
+/**
+ * Folds what the SERVER copy owns into the local profile, on every boot of a signed-in client.
+ *
+ * Owned cosmetics only ever grow, so a union is always safe: nothing the player rolled locally is
+ * lost, and anything the server gained without this browser (an admin's ODBLOKUJ WSZYSTKO, a crate
+ * opened on another machine) shows up after a page load instead of being overwritten by the next
+ * local save. XP, stats and everything that is not an ownership list stay local — the ordinary
+ * sync already carries those. Returns the merged profile, saved only when something was added.
+ */
+export function foldServerOwned(server: Partial<Profile> | null | undefined): Profile {
+  const local = loadProfile();
+  if (!server || typeof server !== "object") return local;
+  const ids = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+  const add = (mine: string[], theirs: unknown) => [...new Set([...mine, ...ids(theirs)])];
+  const haveSkin = new Set(local.skins.map((i) => i.skin));
+  const skins = [...local.skins];
+  for (const i of Array.isArray(server.skins) ? server.skins : []) {
+    if (i && typeof i.skin === "string" && !haveSkin.has(i.skin) && skinById(i.skin)) { skins.push(i); haveSkin.add(i.skin); }
+  }
+  const merged: Profile = { ...local, skins, fits: add(local.fits, server.fits), crateCuts: add(local.crateCuts, server.crateCuts), emotes: add(local.emotes, server.emotes) };
+  const grew = merged.skins.length !== local.skins.length || merged.fits.length !== local.fits.length
+    || merged.crateCuts.length !== local.crateCuts.length || merged.emotes.length !== local.emotes.length;
+  if (!grew) return local;
+  saveProfile(merged);
+  return loadProfile(); // through the repair path: an id this build does not know is dropped again
 }
 
 /** What the summary screen shows after a match. */
@@ -275,6 +316,23 @@ export function equipBuild(id: string): string {
   return id;
 }
 
+/** The dances this profile can do, catalog order. Always at least the wave. */
+export const ownedEmotes = (p: Profile = loadProfile()): EmoteDef[] =>
+  EMOTES.filter((e) => e.id === DEFAULT_EMOTE || p.emotes.includes(e.id));
+
+/** The dance on H. Defensive like `equippedHaircut`: read on the key press, mid-match. */
+export function equippedEmote(): string {
+  try { return loadProfile().emote; } catch { return DEFAULT_EMOTE; }
+}
+
+/** Puts an owned dance on H. Refused, never thrown, like `equipOutfit`. */
+export function equipEmote(id: string): string {
+  const p = loadProfile();
+  if (!ownedEmotes(p).some((e) => e.id === id)) return p.emote;
+  saveProfile({ ...p, emote: id });
+  return id;
+}
+
 export const CRATE_CHALLENGES = [
   { id: "mecz", label: "Rozegraj 1 mecz", stat: "matches" as const, target: 1 },
   { id: "zabojstwa", label: "Zdobądź 10 zabójstw", stat: "kills" as const, target: 10 },
@@ -300,7 +358,7 @@ export function claimChallengeCrates(profile: Profile): Profile {
   return { ...profile, crates, challengeClaims: claims };
 }
 
-export type CratePrize = { kind: "skin"; id: string } | { kind: "haircut"; id: string } | { kind: "outfit"; id: string };
+export type CratePrize = { kind: "skin"; id: string } | { kind: "haircut"; id: string } | { kind: "outfit"; id: string } | { kind: "emote"; id: string };
 
 /**
  * How often a crate rolls each KIND of prize, before rarity is drawn inside it.
@@ -309,7 +367,7 @@ export type CratePrize = { kind: "skin"; id: string } | { kind: "haircut"; id: s
  * weapon finishes remain the largest pool. A kind whose pool is exhausted hands its share to the
  * others, so a completed collection never turns a crate into a dud.
  */
-export const CRATE_ODDS = { outfit: 0.28, haircut: 0.30, skin: 0.42 } as const;
+export const CRATE_ODDS = { outfit: 0.24, haircut: 0.26, skin: 0.34, emote: 0.16 } as const;
 
 /** Rarity weights, shared by outfits and finishes so one tier means one thing in both. */
 const RARITY_WEIGHTS: Record<OutfitRarity, number> = { pospolity: 70, rzadki: 22, epicki: 6, legendarny: 1.7, zloty: 0.3 };
@@ -329,7 +387,8 @@ function rollByRarity<T extends { rarity: OutfitRarity }>(pool: readonly T[], rn
 
 export function openCrate(now = Date.now()): { profile: Profile; prize: CratePrize } | null {
   const p = refreshDailyCrates(new Date(now)); if (p.crates < 1) return null;
-  const rng = mulberry32(hashString(`${p.crateDay}:${now}:${p.skins.length}:${p.crateCuts.length}:${p.fits.length}`));
+  const rng = mulberry32(hashString(`${p.crateDay}:${now}:${p.skins.length}:${p.crateCuts.length}:${p.fits.length}:${p.emotes.length}`));
+  const lockedEmotes = DROPPABLE_EMOTES.filter((e) => !p.emotes.includes(e.id));
   const lockedFits = DROPPABLE_OUTFITS.filter((o) => !p.fits.includes(o.id));
   const lockedCuts = HAIRCUTS.filter(h => !h.id.startsWith("shave-") && h.id !== DEFAULT_HAIRCUT && !ownedCuts(p).some(o => o.id === h.id));
 
@@ -338,6 +397,7 @@ export function openCrate(now = Date.now()): { profile: Profile; prize: CratePri
   const kinds = ([
     { kind: "outfit", share: CRATE_ODDS.outfit, empty: !lockedFits.length },
     { kind: "haircut", share: CRATE_ODDS.haircut, empty: !lockedCuts.length },
+    { kind: "emote", share: CRATE_ODDS.emote, empty: !lockedEmotes.length },
     { kind: "skin", share: CRATE_ODDS.skin, empty: false },
   ] as const).filter((k) => !k.empty);
   const total = kinds.reduce((sum, k) => sum + k.share, 0);
@@ -349,6 +409,11 @@ export function openCrate(now = Date.now()): { profile: Profile; prize: CratePri
     const profile = { ...p, crates: p.crates - 1, fits: [...p.fits, outfit.id] };
     saveProfile(profile);
     return { profile, prize: { kind: "outfit", id: outfit.id } };
+  }
+  if (chosen === "emote") {
+    const emote = rollByRarity(lockedEmotes, rng)!;
+    const profile = { ...p, crates: p.crates - 1, emotes: [...p.emotes, emote.id] }; saveProfile(profile);
+    return { profile, prize: { kind: "emote", id: emote.id } };
   }
   if (chosen === "haircut") {
     const cut = rollByRarity(lockedCuts, rng)!;

@@ -25,8 +25,10 @@ import { Character } from "../game/view/Character";
  * separate previews would let somebody pick a hood and a mohawk without ever seeing that the hood
  * covers it.
  */
-export function CharacterPreview({ build, haircut, outfit = DEFAULT_OUTFIT, team = 0, rotate = true, turn = 0 }: {
+export function CharacterPreview({ build, haircut, outfit = DEFAULT_OUTFIT, team = 0, rotate = true, turn = 0, emote = "" }: {
   build: string; haircut: string; outfit?: string; team?: Team; rotate?: boolean;
+  /** A dance (H) to play on a loop — the wardrobe's TAŃCE tab. "" stands still with the rifle. */
+  emote?: string;
   /**
    * Yaw applied to the BODY (rad), not to the camera — the evidence tool turns it round to show a
    * cape. Turning the body is unambiguous; an orbit angle depends on which direction the camera
@@ -45,8 +47,10 @@ export function CharacterPreview({ build, haircut, outfit = DEFAULT_OUTFIT, team
    * changed — so the preview came back as an empty box. It showed up as thirteen blank tiles the
    * first time the evidence tool asked for a view from behind.
    */
-  const look = useRef({ build, haircut, outfit, rotate });
-  look.current = { build, haircut, outfit, rotate };
+  const look = useRef({ build, haircut, outfit, rotate, emote, emoteAt: performance.now() });
+  // The dance restarts from its first beat whenever a different one is picked.
+  if (look.current.emote !== emote) look.current.emoteAt = performance.now();
+  look.current = { build, haircut, outfit, rotate, emote, emoteAt: look.current.emoteAt };
 
   useEffect(() => {
     const element = canvas.current!;
@@ -75,6 +79,7 @@ export function CharacterPreview({ build, haircut, outfit = DEFAULT_OUTFIT, team
         s.body.update({
           speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false,
           weapon: "rifle", moveDir: 0, haircut: look.current.haircut,
+          emote: look.current.emote, emoteMs: now - look.current.emoteAt,
         }, dt);
       }
       if (look.current.rotate && !element.matches(":active")) camera.alpha += dt * .00022;
