@@ -1116,7 +1116,19 @@ z= -8  |                                                                        
   góry; wnętrza (barak z trzema fotelami i neonem, garaż z szafkami i oponami, salon na piętrze,
   schody zwrotne) bez rzeczy latających i przenikających; ujęcia z balkonów były wycelowane w parapet
   (kamera, nie geometria) — poprawione w narzędziu. Jedyny błąd konsoli: 404 favicon.
-- Live: LIVE_PLACEHOLDER
+- Live (`LIVE=1 SKIP_REVIEW=1 dolna-shots.mjs`, pokój utworzony z menu: DUEL → DOLNA → 1 bot; karta
+  ładowania i HUD: **DOLNA**, mapId `dolna`): mecz **rozegrany do końca**, 6 rund, 6:0 dla bota,
+  248 s od menu do ekranu wyniku („PORAŻKA — FADE 6 : 0 TAPER — przeciwnik wyeliminowany w ostatniej
+  rundzie”). Gracz headless stoi w miejscu na starcie; bot z garażu (16.3, 9.8) w każdej rundzie
+  dochodził na drugie piętro do (−7.7, 7.3) — przez furtkę, hol, schody zwrotne (próbki: −12.6/10.1 →
+  −11/10.9 → −4.8/11.1) — czyli **bot wchodzi po schodach przez dwie kondygnacje** (pierwszy dowód
+  reguły prześwitu w siatce chodu). Po zmianie stron w rundzie 3 bot ze spawnu na piętrze schodził
+  na drogę (−17.7, −2) i wchodził do garażu przez bramę (14.9, 5.3 → 14.4, 10.8). **Żadna runda na
+  zegar** — sześć eliminacji w 25–40 s od końca zamrożenia (na GÓRZE/DOLNEJ v1 były dwie rundy na
+  zegar). Zakupy: bot shotgun → dmr; `buy rifle` gracza odrzucony (800 $ na start). Jedyny błąd
+  konsoli: 401 z `/api/me` (brak konta, przez bramkę gościa `bs_guest_ok`). Widoki z balkonów po
+  poprawce kamery: parapet na wysokości piersi, nad nim ogród/basen i żywopłot (balkon 1), barak,
+  drzewo i hala (balkon 2) — jak zaprojektowano: stojąc pokazujesz głowę, kucając znikasz.
 
 ### Co nie jest udowodnione
 

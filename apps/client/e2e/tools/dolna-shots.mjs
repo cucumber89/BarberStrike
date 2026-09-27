@@ -118,7 +118,7 @@ if (process.env.LIVE === "1") {
   // Drop V's welcome (`onboarding-welcome`) covers the menu of a fresh browser and swallows the
   // first click; mark the player welcomed the way `tutorial.mjs` proves POMIŃ does, then also skip
   // it if it shows anyway.
-  await p.addInitScript(() => { try { localStorage.setItem("bs_onboard_v1", JSON.stringify({ welcomed: true })); } catch {} });
+  await p.addInitScript(() => { try { sessionStorage.setItem("bs_guest_ok", "1"); localStorage.setItem("bs_onboard_v1", JSON.stringify({ welcomed: true })); } catch {} });
   await p.goto(URL);
   await p.getByTestId("onb-skip").click({ timeout: 3000 }).catch(() => {});
   await p.getByTestId("btn-play").click();
