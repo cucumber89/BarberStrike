@@ -1,64 +1,114 @@
-<!doctype html><html><head><meta charset="UTF-8"><title>BarberStrike — voxel lab</title><style>
-html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#0b0c10;color:#ddd;font:13px/1.4 ui-monospace,Menlo,Consolas,monospace}
-#wrap{display:flex;width:100%;height:100%}
-#side{width:0;display:none;flex-direction:column;background:#111318;border-right:1px solid #262a33}
-#wrap.edit #side{width:34%;display:flex}
-#side textarea{flex:1;background:#0d0f13;color:#e6e6e6;border:0;padding:10px;font:13px/1.35 ui-monospace,Menlo,Consolas,monospace;resize:none;outline:none;white-space:pre;tab-size:2}
-#bar{display:flex;gap:8px;align-items:center;padding:6px 10px;background:#161920;border-bottom:1px solid #262a33;flex-wrap:wrap}
-#bar select,#bar button{background:#22262f;color:#eee;border:1px solid #3a3f4a;padding:3px 8px;font:inherit;cursor:pointer}
-#status{padding:6px 10px;border-top:1px solid #262a33;background:#161920;min-height:2.6em;white-space:pre-wrap}
-#status.err{color:#ff8a80}
-#view{flex:1;display:block;outline:none}
+<!doctype html><html lang="pl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BarberStrike — kreator modeli</title><style>
+:root{--bg:#0b0c10;--panel:#111318;--line:#262a33;--ink:#dfe3ea;--dim:#8f98a8;--acc:#ffbf70;--sel:#2b3a55}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);font:13px/1.4 ui-monospace,Menlo,Consolas,monospace}
+button,select,input{background:#1b1f27;color:var(--ink);border:1px solid #3a3f4a;padding:3px 8px;font:inherit;border-radius:3px}
+button{cursor:pointer}button:hover{border-color:var(--acc)}button.primary{background:var(--acc);color:#1a1207;border-color:var(--acc);font-weight:700}
+input[type=number]{width:4.5em}input[type=color]{width:2.2em;height:1.8em;padding:0;border:0;background:none;cursor:pointer}
+#app{display:grid;grid-template-rows:auto 1fr;height:100%}
+#top{display:flex;gap:8px;align-items:center;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+#top b{color:var(--acc);letter-spacing:.08em}#top .sp{flex:1}#top .stat{color:var(--dim);white-space:pre}
+#body{display:grid;grid-template-columns:300px 1fr minmax(380px,44%);min-height:0}
+#left{overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:8px}
+#left h3{margin:10px 0 4px;font-size:11px;letter-spacing:.12em;color:var(--dim)}
+.row{display:flex;gap:6px;align-items:center;margin:3px 0;flex-wrap:wrap}
+.ink{display:flex;gap:6px;align-items:center;padding:3px 4px;border-radius:3px;cursor:pointer}.ink.sel{background:var(--sel)}
+.ink .sw{width:18px;height:18px;border-radius:3px;border:1px solid #000}.ink .ch{width:1.4em;text-align:center;font-weight:700}
+.part{display:flex;gap:6px;align-items:center;padding:3px 4px;border-radius:3px;cursor:pointer;color:var(--dim)}.part.sel{background:var(--sel);color:var(--ink)}
+.part .ax{width:1.4em;text-align:center;font-weight:700;color:var(--acc)}.part .sp{flex:1}
+.part button{padding:0 5px}
+#paint{display:flex;flex-direction:column;min-width:0;min-height:0}
+#paint .hint{padding:4px 10px;color:var(--dim);border-bottom:1px solid var(--line);background:var(--panel);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#grid{flex:1;min-height:0;display:block;cursor:crosshair;touch-action:none}
+#view{position:relative;border-left:1px solid var(--line);min-width:0}
+#view canvas{width:100%;height:100%;display:block;outline:none}
 #hud{position:absolute;right:10px;top:8px;color:#9aa3b2;text-align:right;pointer-events:none;white-space:pre}
 #hud b{color:#eee}
-</style></head><body><div id="wrap"><div id="side"><div id="bar">
-<select id="pick"></select><button id="new">NOWY</button><button id="copy">KOPIUJ TS</button><button id="fit">DOPASUJ</button></div>
-<textarea id="text" spellcheck="false"></textarea><div id="status"></div></div><canvas id="view"></canvas></div><div id="hud"></div>
+#vtools{position:absolute;left:10px;top:8px;display:flex;gap:6px}
+#textbox{position:absolute;left:0;right:0;bottom:0;background:rgba(17,19,24,.96);border-top:1px solid var(--line);max-height:45%;display:none;flex-direction:column}
+#textbox.open{display:flex}
+#textbox textarea{flex:1;min-height:160px;background:#0d0f13;color:#e6e6e6;border:0;padding:8px;font:12px/1.35 ui-monospace,Menlo,Consolas,monospace;resize:none;outline:none;white-space:pre;tab-size:2}
+#textbox .row{padding:4px 8px}
+#status{padding:4px 10px;color:var(--dim);min-height:1.4em}#status.err{color:#ff8a80}
+#gallery-bar{position:absolute;left:10px;top:8px}
+</style></head><body><div id="app">
+<div id="top"><b>BARBERSTRIKE · KREATOR MODELI</b>
+<select id="pick" title="wczytaj model z biblioteki"></select>
+<button id="new">NOWY</button><button id="import">TEKST</button><button id="copy" class="primary">KOPIUJ TS</button><button id="download">POBIERZ .TXT</button>
+<a href="voxel-lab.html" style="color:var(--dim)">galeria</a>
+<span class="sp"></span><span class="stat" id="stat"></span></div>
+<div id="body">
+<aside id="left">
+<h3>MODEL</h3>
+<div class="row">id <input id="mid" size="14"> komórka <select id="mcell"><option>0.05</option><option>0.1</option><option>0.2</option><option>0.25</option></select> m</div>
+<h3>FARBY <span id="inkhint" style="font-weight:400;letter-spacing:0"> — klik wybiera, litera na klawiaturze też</span></h3>
+<div id="inks"></div>
+<div class="row"><button id="addink">+ FARBA</button></div>
+<h3>CZĘŚCI (warstwy)</h3>
+<div id="parts"></div>
+<div class="row"><button id="addpart">+ OBRAZEK</button><select id="newaxis"><option value="z">z · z przodu</option><option value="y">y · plan</option><option value="x">x · z boku</option></select><button id="addbox">+ BRYŁA</button></div>
+<h3>ZAZNACZONA CZĘŚĆ</h3>
+<div id="partform"></div>
+</aside>
+<main id="paint"><div class="hint" id="hint"></div><canvas id="grid"></canvas><div id="status"></div></main>
+<section id="view"><canvas id="c3d"></canvas><div id="vtools"><button id="light">NOC</button><button id="spin">OBRÓT</button><button id="frame">RAMKA</button></div><div id="hud"></div>
+<div id="textbox"><div class="row"><span style="color:var(--dim)">tekst modelu — edytuj i ZASTOSUJ, albo wklej cudzy</span><span class="sp"></span><button id="apply">ZASTOSUJ</button><button id="closetext">ZAMKNIJ</button></div><textarea id="text" spellcheck="false"></textarea></div>
+</section></div></div>
 <script type="module">
 import { Engine } from '@babylonjs/core/Engines/engine';
 import { Scene } from '@babylonjs/core/scene';
 import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera';
 import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { PointLight } from '@babylonjs/core/Lights/pointLight';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
 import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
-import { VOXEL_LIBRARY as VOXEL_MODELS, VOXEL_LIBRARY_TEXT as VOXEL_TEXT, parseVoxelText, compileVoxel, voxelBounds } from '@frankibarber/shared';
+import { VOXEL_LIBRARY, VOXEL_LIBRARY_TEXT, parseVoxelText, formatVoxelText, compileVoxel, voxelBounds, voxelGrid, partExtent } from '@frankibarber/shared';
 import { VoxelMaterials, buildVoxelModel } from './src/game/world/voxelProps';
 
+// =============================== the 3D preview ===============================
 const q = new URLSearchParams(location.search);
-const canvas = document.getElementById('view');
+const $ = (id) => document.getElementById(id);
+const canvas = $('c3d');
 const engine = new Engine(canvas, true);
 const scene = new Scene(engine);
 scene.clearColor = new Color4(0.043, 0.047, 0.063, 1);
 const ip = scene.imageProcessingConfiguration;
 ip.toneMappingEnabled = true; ip.toneMappingType = 1; ip.exposure = 1.6; ip.contrast = 1.05;
-const camera = new ArcRotateCamera('lab', -Math.PI / 2 + 0.6, 1.05, 4, new Vector3(0, 0.5, 0), scene);
+// The creator looks at the FRONT (+z) — the face being painted; the shots tool sets its own angles.
+const camera = new ArcRotateCamera('lab', Math.PI / 2 - 0.5, 1.05, 4, new Vector3(0, 0.5, 0), scene);
 camera.minZ = 0.02; camera.wheelPrecision = 60; camera.lowerRadiusLimit = 0.3; camera.panningSensibility = 400;
 camera.attachControl(canvas, true);
 const sky = new HemisphericLight('sky', new Vector3(0, 1, 0), scene);
-sky.intensity = 0.9; sky.diffuse = new Color3(0.75, 0.8, 0.95); sky.groundColor = new Color3(0.18, 0.16, 0.14);
 const sun = new DirectionalLight('sun', new Vector3(-0.5, -1, -0.6).normalize(), scene);
-sun.intensity = 1.6; sun.diffuse = new Color3(1, 0.95, 0.85);
 const fill = new DirectionalLight('fill', new Vector3(0.7, -0.4, 0.5).normalize(), scene);
-fill.intensity = 0.5; fill.diffuse = new Color3(0.6, 0.7, 0.9);
-
-// A 10 cm grid on the floor, so a size reads at a glance.
+const lamp = new PointLight('lamp', new Vector3(0.8, 2.2, -0.6), scene);
+let night = false;
+const setLight = (n) => {
+  night = n; $('light').textContent = n ? 'DZIEŃ' : 'NOC';
+  if (n) {   // the game's night: a dim blue sky, a warm pendant over the piece
+    sky.intensity = 0.3; sky.diffuse = new Color3(0.42, 0.5, 0.66); sky.groundColor = new Color3(0.05, 0.045, 0.05);
+    sun.intensity = 0.55; sun.diffuse = new Color3(0.64, 0.7, 0.84); fill.intensity = 0;
+    lamp.intensity = 12; lamp.range = 7; lamp.diffuse = Color3.FromHexString('#ffbf70');
+  } else {
+    sky.intensity = 0.9; sky.diffuse = new Color3(0.75, 0.8, 0.95); sky.groundColor = new Color3(0.18, 0.16, 0.14);
+    sun.intensity = 1.6; sun.diffuse = new Color3(1, 0.95, 0.85); fill.intensity = 0.5; fill.diffuse = new Color3(0.6, 0.7, 0.9);
+    lamp.intensity = 0;
+  }
+};
+setLight(false);
 const gridMat = new StandardMaterial('grid', scene);
 const gt = new DynamicTexture('gridTex', { width: 512, height: 512 }, scene, false);
-const g = gt.getContext(); g.fillStyle = '#15171c'; g.fillRect(0, 0, 512, 512);
-g.strokeStyle = '#242730'; g.lineWidth = 1;
-for (let i = 0; i <= 512; i += 51.2) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 512); g.moveTo(0, i); g.lineTo(512, i); g.stroke(); }
-g.strokeStyle = '#3a3e4a'; g.lineWidth = 2; g.strokeRect(1, 1, 510, 510);
-gt.update(); gt.wrapU = gt.wrapV = 1;
+{ const g = gt.getContext(); g.fillStyle = '#15171c'; g.fillRect(0, 0, 512, 512); g.strokeStyle = '#242730'; g.lineWidth = 1;
+  for (let i = 0; i <= 512; i += 51.2) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 512); g.moveTo(0, i); g.lineTo(512, i); g.stroke(); }
+  g.strokeStyle = '#3a3e4a'; g.lineWidth = 2; g.strokeRect(1, 1, 510, 510); gt.update(); gt.wrapU = gt.wrapV = 1; }
 gridMat.diffuseTexture = gt; gridMat.specularColor = Color3.Black();
+const frameMat = new StandardMaterial('frame', scene); frameMat.wireframe = true; frameMat.emissiveColor = Color3.FromHexString('#ffbf70'); frameMat.disableLighting = true;
 const mats = new VoxelMaterials(scene);
-
-let built = [], labels = [];
-// Meshes go; the shared materials (grid, voxel finishes) stay. Labels own their texture.
+let built = [], labels = [], spinning = false, showFrame = true;
 const clear = () => { for (const n of built) n.dispose(false, false); for (const l of labels) { l.material.diffuseTexture.dispose(); l.material.dispose(); } built = []; labels = []; };
 const label = (text, x, z, w = 1.6) => {
   const dt = new DynamicTexture('lbl_' + text, { width: 512, height: 96 }, scene, false);
@@ -67,97 +117,241 @@ const label = (text, x, z, w = 1.6) => {
   c.fillText(text, 256, 50); dt.update();
   const m = new StandardMaterial('lblm_' + text, scene); m.diffuseTexture = dt; m.emissiveTexture = dt; m.specularColor = Color3.Black(); m.disableLighting = true;
   const p = MeshBuilder.CreatePlane('lbl_' + text, { width: w, height: w * 96 / 512 }, scene);
-  p.material = m; p.rotation.x = Math.PI / 2; p.position.set(x, 0.005, z);
-  labels.push(p);
-  return p;
+  p.material = m; p.rotation.x = Math.PI / 2; p.position.set(x, 0.005, z); labels.push(p); return p;
 };
-
-/** Places one model at x/z; returns its stats. */
 const place = (model, x, z, name) => {
-  const root = new TransformNode('root_' + name, scene);
-  root.position.set(x, 0, z);
-  const b = buildVoxelModel(scene, model, mats, root, name);
-  built.push(root);
-  const c = compileVoxel(model);
-  const bounds = voxelBounds(model);
+  const root = new TransformNode('root_' + name, scene); root.position.set(x, 0, z);
+  const b = buildVoxelModel(scene, model, mats, root, name); built.push(root);
+  const c = compileVoxel(model), bounds = voxelBounds(model);
   return { id: model.id, quads: c.quads, voxels: c.voxels, groups: c.groups.map((gr) => gr.finish + (gr.color ? ':' + gr.color : '')), bounds, meshes: b.meshes.length };
 };
-
-const ids = Object.keys(VOXEL_MODELS);
+const ids = Object.keys(VOXEL_LIBRARY);
 let stats = {};
 const showAll = () => {
   clear(); stats = {};
-  const cols = Math.ceil(Math.sqrt(ids.length)), gap = 2.6;
-  const floor = MeshBuilder.CreateGround('floor', { width: cols * gap + 2, height: Math.ceil(ids.length / cols) * gap + 2 }, scene);
-  floor.material = gridMat; floor.position.set((cols - 1) * gap / 2, 0, -(Math.ceil(ids.length / cols) - 1) * gap / 2);
-  floor.material.diffuseTexture.uScale = (cols * gap + 2); floor.material.diffuseTexture.vScale = (Math.ceil(ids.length / cols) * gap + 2);
-  built.push(floor);
-  ids.forEach((id, i) => {
-    const x = (i % cols) * gap, z = -Math.floor(i / cols) * gap;
-    stats[id] = place(VOXEL_MODELS[id], x, z, id);
-    built.push(label(id, x, z - 1.05));
-  });
-  camera.target.set((cols - 1) * gap / 2, 0.4, -(Math.ceil(ids.length / cols) - 1) * gap / 2);
-  camera.alpha = -Math.PI / 2 + 0.35; camera.beta = 0.95; camera.radius = Math.max(cols, Math.ceil(ids.length / cols)) * gap * 1.15 + 3;
-  camera.upperRadiusLimit = null;
+  const cols = Math.ceil(Math.sqrt(ids.length)), gap = 2.6, rows = Math.ceil(ids.length / cols);
+  const floor = MeshBuilder.CreateGround('floor', { width: cols * gap + 2, height: rows * gap + 2 }, scene);
+  floor.material = gridMat; floor.position.set((cols - 1) * gap / 2, 0, -(rows - 1) * gap / 2);
+  gt.uScale = cols * gap + 2; gt.vScale = rows * gap + 2; built.push(floor);
+  ids.forEach((id, i) => { const x = (i % cols) * gap, z = -Math.floor(i / cols) * gap; stats[id] = place(VOXEL_LIBRARY[id], x, z, id); label(id, x, z - 1.05); });
+  camera.target.set((cols - 1) * gap / 2, 0.4, -(rows - 1) * gap / 2);
+  camera.alpha = -Math.PI / 2 + 0.35; camera.beta = 0.95; camera.radius = Math.max(cols, rows) * gap * 1.15 + 3;
 };
-const showOne = (model) => {
+let fitNext = true;
+const showOne = (model, selectedPart) => {
   clear(); stats = {};
   const floor = MeshBuilder.CreateGround('floor', { width: 4, height: 4 }, scene);
-  floor.material = gridMat; floor.material.diffuseTexture.uScale = 4; floor.material.diffuseTexture.vScale = 4;
-  built.push(floor);
+  floor.material = gridMat; gt.uScale = 4; gt.vScale = 4; built.push(floor);
   stats[model.id] = place(model, 0, 0, model.id);
+  if (showFrame && selectedPart && model.parts.length) {
+    // the selected part's box, in the compiled model's own frame (footprint centred, bottom at 0)
+    const g = voxelGrid(model), e = partExtent(selectedPart), c = model.cell;
+    const ox = -g.size[0] * c / 2, oz = -g.size[2] * c / 2;
+    const w = (e.max[0] - e.min[0]) * c, h = (e.max[1] - e.min[1]) * c, d = (e.max[2] - e.min[2]) * c;
+    const f = MeshBuilder.CreateBox('frame', { width: w + 0.004, height: h + 0.004, depth: d + 0.004 }, scene);
+    f.material = frameMat; f.isPickable = false;
+    f.position.set((e.min[0] - g.origin[0]) * c + ox + w / 2, (e.min[1] - g.origin[1]) * c + h / 2, (e.min[2] - g.origin[2]) * c + oz + d / 2);
+    built.push(f);
+  }
   const b = voxelBounds(model);
-  camera.target.set(0, b.h / 2, 0);
-  camera.radius = Math.max(b.w, b.h, b.d) * 1.5 + 0.5;
+  if (fitNext) { camera.target.set(0, b.h / 2, 0); camera.radius = Math.max(b.w, b.h, b.d) * 1.5 + 0.5; fitNext = false; }
   return stats[model.id];
 };
+const describe = (s) => s ? `${s.id}\n${s.bounds.w} × ${s.bounds.h} × ${s.bounds.d} m\n${s.voxels} voxeli → ${s.quads} quadów\n${s.meshes} siatek: ${s.groups.join(', ')}` : '';
+$('light').addEventListener('click', () => setLight(!night));
+$('spin').addEventListener('click', () => { spinning = !spinning; });
+$('frame').addEventListener('click', () => { showFrame = !showFrame; preview(); });
+engine.runRenderLoop(() => { if (spinning) camera.alpha += 0.006; scene.render(); });
+addEventListener('resize', () => engine.resize());
 
-const hud = document.getElementById('hud');
-const describe = (s) => s ? `${s.id}\n${s.bounds.w} × ${s.bounds.h} × ${s.bounds.d} m\n${s.voxels} voxels → ${s.quads} quads\n${s.meshes} mesh(es): ${s.groups.join(', ')}` : '';
+// =============================== the creator ===============================
+const editing = q.get('edit') === '1' || !!q.get('model');
+const FINISHES = ['matte', 'gloss', 'metal', 'glow', 'glass'];
+const FINISH_PL = { matte: 'mat', gloss: 'połysk', metal: 'metal', glow: 'świeci', glass: 'szkło' };
+const AXIS_PL = { z: 'Z · widok z PRZODU (lewo na ekranie = lewo modelu)', y: 'Y · PLAN (góra = północ, przód modelu = dół)', x: 'X · widok z BOKU od wschodu (lewo = tył modelu, prawo = przód)' };
+let model = { id: 'nowy', cell: 0.1, palette: { W: { color: '#d9d5cc', finish: 'gloss' }, K: { color: '#26241f', finish: 'matte' } }, parts: [] };
+let sel = 0, ink = 'W', mirror = false, dirty = false;
+const status = (msg, err = false) => { const s = $('status'); s.className = err ? 'err' : ''; s.textContent = msg; };
+const save = () => { try { localStorage.setItem('bs_voxel_draft', formatVoxelText(model)); } catch {} };
+const nextChar = () => { for (const ch of 'ABCDEFGHIJLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz0123456789') if (!model.palette[ch]) return ch; return null; };
+const part = () => model.parts[sel];
+const cols = (p) => p.rows.reduce((m, r) => Math.max(m, r.length), 0);
+const normalize = (p) => { const w = Math.max(1, cols(p)); p.rows = p.rows.map((r) => (r + '.'.repeat(w)).slice(0, w)); if (!p.rows.length) p.rows = ['.'.repeat(w)]; };
+const setCell = (p, r, c, ch) => { const row = p.rows[r]; p.rows[r] = row.slice(0, c) + ch + row.slice(c + 1); };
+const resize = (p, w, h) => { w = Math.max(1, w); h = Math.max(1, h); p.rows = p.rows.slice(0, h).map((r) => (r + '.'.repeat(w)).slice(0, w)); while (p.rows.length < h) p.rows.push('.'.repeat(w)); };
 
-// ---- edit mode: the text on the left is the model; every keystroke re-parses and rebuilds.
-const wrap = document.getElementById('wrap'), text = document.getElementById('text'), status = document.getElementById('status'), pick = document.getElementById('pick');
-const editing = q.get('edit') === '1';
-let current = q.get('model') && VOXEL_MODELS[q.get('model')] ? q.get('model') : null;
-if (editing) {
-  wrap.classList.add('edit');
-  for (const id of ids) { const o = document.createElement('option'); o.value = id; o.textContent = id; pick.appendChild(o); }
-  const load = (id) => { text.value = VOXEL_TEXT[id]; pick.value = id; rebuild(); };
-  const rebuild = () => {
-    try {
-      const m = parseVoxelText(text.value);
-      const s = showOne(m);
-      status.className = ''; status.textContent = describe(s);
-      hud.textContent = '';
-    } catch (e) { status.className = 'err'; status.textContent = String(e.message); }
-  };
-  let timer = 0;
-  text.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(rebuild, 150); });
-  text.addEventListener('keydown', (e) => { if (e.key === 'Tab') { e.preventDefault(); const s = text.selectionStart; text.setRangeText('  ', s, text.selectionEnd, 'end'); } });
-  pick.addEventListener('change', () => load(pick.value));
-  document.getElementById('new').addEventListener('click', () => { text.value = '#model nowy\n#cell 0.1\n#ink W #d9d5cc gloss\n#ink K #26241f matte\n#box 0,0,0 6,8,6 W\n\n#part z n=1 at=0,0,6\nWWWWWW\nWWKKWW\nWWWWWW\nWWWWWW\nWWWWWW\nWWWWWW\nWWWWWW\nKKKKKK\n'; rebuild(); });
-  document.getElementById('copy').addEventListener('click', () => {
-    const m = parseVoxelText(text.value);
-    const ts = 'T.' + m.id + ' = `' + text.value.replace(/`/g, '\\`').replace(/\n*$/, '\n') + '`;\n';
-    navigator.clipboard?.writeText(ts).then(() => { status.className = ''; status.textContent = 'Skopiowane: wklej do packages/shared/src/voxelModels.ts'; }).catch(() => { status.textContent = ts; });
+// --- the left panel
+const renderLeft = () => {
+  $('mid').value = model.id; $('mcell').value = String(model.cell);
+  const inks = $('inks'); inks.innerHTML = '';
+  for (const [ch, k] of Object.entries(model.palette)) {
+    const d = document.createElement('div'); d.className = 'ink' + (ch === ink ? ' sel' : '');
+    d.innerHTML = `<span class="sw" style="background:${k.color}"></span><span class="ch">${ch}</span><input type="color" value="${k.color}"><select>${FINISHES.map((f) => `<option value="${f}"${f === k.finish ? ' selected' : ''}>${FINISH_PL[f]}</option>`).join('')}</select><button title="usuń farbę">×</button>`;
+    d.addEventListener('click', (e) => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON') return; ink = ch; renderLeft(); drawGrid(); });
+    d.querySelector('input').addEventListener('input', (e) => { k.color = e.target.value; d.querySelector('.sw').style.background = k.color; changed(false); });
+    d.querySelector('select').addEventListener('change', (e) => { k.finish = e.target.value; changed(false); });
+    d.querySelector('button').addEventListener('click', () => {
+      if (model.parts.some((p) => p.rows.some((r) => r.includes(ch)))) { status(`farba ${ch} jest użyta w częściach — najpierw ją zamaluj`, true); return; }
+      delete model.palette[ch]; if (ink === ch) ink = Object.keys(model.palette)[0] ?? null; changed();
+    });
+    inks.appendChild(d);
+  }
+  const parts = $('parts'); parts.innerHTML = '';
+  model.parts.forEach((p, i) => {
+    const d = document.createElement('div'); d.className = 'part' + (i === sel ? ' sel' : '');
+    const w = cols(p), h = p.rows.length;
+    d.innerHTML = `<span class="ax">${p.axis}</span><span class="sp">${w}×${h} ×${p.n} @ ${p.x},${p.y},${p.z}</span><button title="w górę">▲</button><button title="w dół">▼</button><button title="duplikuj">⧉</button><button title="usuń">×</button>`;
+    d.addEventListener('click', (e) => { if (e.target.tagName === 'BUTTON') return; sel = i; changed(false); });
+    const [up, down, dup, del] = d.querySelectorAll('button');
+    up.addEventListener('click', () => { if (i > 0) { [model.parts[i - 1], model.parts[i]] = [model.parts[i], model.parts[i - 1]]; sel = i - 1; changed(); } });
+    down.addEventListener('click', () => { if (i < model.parts.length - 1) { [model.parts[i + 1], model.parts[i]] = [model.parts[i], model.parts[i + 1]]; sel = i + 1; changed(); } });
+    dup.addEventListener('click', () => { model.parts.splice(i + 1, 0, { ...p, rows: [...p.rows] }); sel = i + 1; changed(); });
+    del.addEventListener('click', () => { model.parts.splice(i, 1); sel = Math.max(0, Math.min(sel, model.parts.length - 1)); changed(); });
+    parts.appendChild(d);
   });
-  document.getElementById('fit').addEventListener('click', rebuild);
-  load(current ?? ids[0]);
-} else if (current) {
-  hud.textContent = describe(showOne(VOXEL_MODELS[current]));
-} else {
-  showAll();
-  hud.textContent = `${ids.length} modeli — ?model=<id> jeden, ?edit=1 edytor`;
-}
+  const f = $('partform'); f.innerHTML = '';
+  const p = part();
+  if (!p) { f.innerHTML = '<div class="row" style="color:var(--dim)">dodaj obrazek albo bryłę</div>'; return; }
+  f.innerHTML = `<div class="row">oś <select id="pax">${['z', 'y', 'x'].map((a) => `<option value="${a}"${a === p.axis ? ' selected' : ''}>${a}</option>`).join('')}</select> głębokość n <input id="pn" type="number" min="1" value="${p.n}"></div>
+  <div class="row">pozycja x <input id="px" type="number" value="${p.x}"> y <input id="py" type="number" value="${p.y}"> z <input id="pz" type="number" value="${p.z}"></div>
+  <div class="row">obrazek kolumny <input id="pw" type="number" min="1" value="${cols(p)}"> wiersze <input id="ph" type="number" min="1" value="${p.rows.length}"></div>
+  <div class="row"><label><input id="pmirror" type="checkbox"${mirror ? ' checked' : ''}> maluj symetrycznie (lustro)</label></div>
+  <div class="row"><button id="pfill">WYPEŁNIJ FARBĄ</button><button id="pclear">WYCZYŚĆ</button><button id="pflip">ODBIJ</button></div>`;
+  $('pax').addEventListener('change', (e) => { p.axis = e.target.value; changed(); });
+  $('pn').addEventListener('change', (e) => { p.n = Math.max(1, Math.round(+e.target.value)); changed(); });
+  for (const k of ['x', 'y', 'z']) $('p' + k).addEventListener('change', (e) => { p[k] = Math.round(+e.target.value); changed(); });
+  $('pw').addEventListener('change', (e) => { resize(p, Math.round(+e.target.value), p.rows.length); changed(); });
+  $('ph').addEventListener('change', (e) => { resize(p, cols(p), Math.round(+e.target.value)); changed(); });
+  $('pmirror').addEventListener('change', (e) => { mirror = e.target.checked; });
+  $('pfill').addEventListener('click', () => { if (!ink) return; p.rows = p.rows.map((r) => ink.repeat(r.length)); changed(); });
+  $('pclear').addEventListener('click', () => { p.rows = p.rows.map((r) => '.'.repeat(r.length)); changed(); });
+  $('pflip').addEventListener('click', () => { p.rows = p.rows.map((r) => [...r].reverse().join('')); changed(); });
+};
 
+// --- the paint grid
+const grid = $('grid'), g2 = grid.getContext('2d');
+let cellPx = 16, gx0 = 0, gy0 = 0;
+const drawGrid = () => {
+  const p = part();
+  const W = grid.clientWidth, H = grid.clientHeight;
+  grid.width = W * devicePixelRatio; grid.height = H * devicePixelRatio; g2.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  g2.fillStyle = '#0b0c10'; g2.fillRect(0, 0, W, H);
+  $('hint').textContent = p ? `${AXIS_PL[p.axis]} · LPM maluje „${ink ?? '?'}” · PPM gumka · Shift = linia pozioma/pionowa` : 'brak części';
+  if (!p) return;
+  const w = cols(p), h = p.rows.length;
+  cellPx = Math.max(4, Math.floor(Math.min((W - 40) / w, (H - 40) / h)));
+  gx0 = Math.floor((W - w * cellPx) / 2); gy0 = Math.floor((H - h * cellPx) / 2);
+  for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) {
+    const ch = p.rows[r][c], x = gx0 + c * cellPx, y = gy0 + r * cellPx;
+    if (ch === '.' || ch === ' ') { g2.fillStyle = ((r + c) & 1) ? '#14161b' : '#1a1d23'; g2.fillRect(x, y, cellPx, cellPx); }
+    else { g2.fillStyle = model.palette[ch]?.color ?? '#ff00ff'; g2.fillRect(x, y, cellPx, cellPx);
+      if (cellPx >= 14) { g2.fillStyle = 'rgba(0,0,0,.45)'; g2.font = `${Math.floor(cellPx * 0.55)}px ui-monospace,monospace`; g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText(ch, x + cellPx / 2, y + cellPx / 2 + 1); } }
+  }
+  g2.strokeStyle = 'rgba(255,255,255,.08)'; g2.lineWidth = 1;
+  for (let c = 0; c <= w; c++) { g2.beginPath(); g2.moveTo(gx0 + c * cellPx + .5, gy0); g2.lineTo(gx0 + c * cellPx + .5, gy0 + h * cellPx); g2.stroke(); }
+  for (let r = 0; r <= h; r++) { g2.beginPath(); g2.moveTo(gx0, gy0 + r * cellPx + .5); g2.lineTo(gx0 + w * cellPx, gy0 + r * cellPx + .5); g2.stroke(); }
+  g2.strokeStyle = '#ffbf70'; g2.lineWidth = 2; g2.strokeRect(gx0 - 1, gy0 - 1, w * cellPx + 2, h * cellPx + 2);
+  // axis notes on the edges
+  g2.fillStyle = '#8f98a8'; g2.font = '11px ui-monospace,monospace'; g2.textAlign = 'center'; g2.textBaseline = 'bottom';
+  const top = p.axis === 'y' ? 'północ (+z)' : 'góra (+y)', bottom = p.axis === 'y' ? 'południe / przód (−z)' : 'dół (y=0)';
+  const left = p.axis === 'z' ? 'lewo widza = +x' : p.axis === 'x' ? 'tył (−z)' : 'zachód (−x)', right = p.axis === 'z' ? 'prawo widza = −x' : p.axis === 'x' ? 'przód (+z)' : 'wschód (+x)';
+  g2.fillText(top, gx0 + w * cellPx / 2, gy0 - 6); g2.textBaseline = 'top'; g2.fillText(bottom, gx0 + w * cellPx / 2, gy0 + h * cellPx + 6);
+  g2.save(); g2.translate(gx0 - 8, gy0 + h * cellPx / 2); g2.rotate(-Math.PI / 2); g2.textBaseline = 'bottom'; g2.fillText(left, 0, 0); g2.restore();
+  g2.save(); g2.translate(gx0 + w * cellPx + 8, gy0 + h * cellPx / 2); g2.rotate(Math.PI / 2); g2.textBaseline = 'bottom'; g2.fillText(right, 0, 0); g2.restore();
+};
+let painting = null, lineLock = null;
+const cellAt = (e) => { const r = grid.getBoundingClientRect(); const c = Math.floor((e.clientX - r.left - gx0) / cellPx), rr = Math.floor((e.clientY - r.top - gy0) / cellPx); return [rr, c]; };
+const paintAt = (e) => {
+  const p = part(); if (!p) return;
+  let [r, c] = cellAt(e);
+  if (lineLock) { if (lineLock.axis === 'r') r = lineLock.v; else c = lineLock.v; }
+  if (r < 0 || c < 0 || r >= p.rows.length || c >= cols(p)) return;
+  const ch = painting === 'erase' ? '.' : (ink ?? '.');
+  if (p.rows[r][c] === ch && !(mirror && p.rows[r][cols(p) - 1 - c] !== ch)) return;
+  setCell(p, r, c, ch);
+  if (mirror) setCell(p, r, cols(p) - 1 - c, ch);
+  changed(false, true);
+};
+grid.addEventListener('contextmenu', (e) => e.preventDefault());
+grid.addEventListener('pointerdown', (e) => { painting = e.button === 2 ? 'erase' : 'paint'; const [r, c] = cellAt(e); lineLock = e.shiftKey ? null : null; if (e.shiftKey) lineLock = { start: [r, c] }; grid.setPointerCapture(e.pointerId); paintAt(e); });
+grid.addEventListener('pointermove', (e) => {
+  if (!painting) return;
+  if (lineLock && lineLock.start && !lineLock.axis) { const [r, c] = cellAt(e); const dr = Math.abs(r - lineLock.start[0]), dc = Math.abs(c - lineLock.start[1]); if (dr || dc) lineLock = dr >= dc ? { axis: 'c', v: lineLock.start[1] } : { axis: 'r', v: lineLock.start[0] }; }
+  paintAt(e);
+});
+const stop = () => { if (painting) { painting = null; lineLock = null; changed(true, false); } };
+grid.addEventListener('pointerup', stop); grid.addEventListener('pointercancel', stop);
+addEventListener('keydown', (e) => {
+  if (!editing || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+  if (e.key.length === 1 && model.palette[e.key]) { ink = e.key; renderLeft(); drawGrid(); }
+  if (e.key === 'Escape') $('textbox').classList.remove('open');
+});
+
+// --- rebuild everything after a change (the 3D debounced; a paint stroke only redraws the grid until it ends)
+let timer = 0;
+const preview = () => {
+  try {
+    const m = parseVoxelText(formatVoxelText(model));   // the same parser the game uses: a mistake shows here, not in the game
+    const s = showOne(m, part());
+    $('hud').textContent = describe(s);
+    $('stat').textContent = `${s.voxels} voxeli → ${s.quads} quadów · ${s.meshes} siatek · ${s.bounds.w}×${s.bounds.h}×${s.bounds.d} m`;
+    status(dirty ? 'zapisane w przeglądarce (szkic)' : '');
+  } catch (e) { status(String(e.message), true); }
+};
+const changed = (full = true, stroke = false) => {
+  dirty = true;
+  if (full) renderLeft();
+  drawGrid();
+  if (!stroke) { clearTimeout(timer); timer = setTimeout(() => { preview(); save(); }, 80); }
+  else { clearTimeout(timer); timer = setTimeout(() => { preview(); save(); }, 120); }
+};
+const load = (m, fit = true) => { model = m; sel = 0; ink = Object.keys(model.palette)[0] ?? null; fitNext = fit; dirty = false; renderLeft(); drawGrid(); preview(); $('text').value = formatVoxelText(model); };
+
+// --- toolbar
+$('mid').addEventListener('change', (e) => { model.id = e.target.value.trim().replace(/[^a-z0-9_]/gi, '_').toLowerCase() || 'nowy'; changed(); });
+$('mcell').addEventListener('change', (e) => { model.cell = +e.target.value; changed(); });
+$('addink').addEventListener('click', () => { const ch = nextChar(); if (!ch) return; model.palette[ch] = { color: '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0'), finish: 'matte' }; ink = ch; changed(); });
+$('addpart').addEventListener('click', () => { const axis = $('newaxis').value; const p = { axis, n: 1, x: 0, y: 0, z: 0, rows: Array.from({ length: axis === 'y' ? 6 : 8 }, () => '.'.repeat(6)) }; model.parts.push(p); sel = model.parts.length - 1; changed(); });
+$('addbox').addEventListener('click', () => { const ch = ink ?? Object.keys(model.palette)[0]; if (!ch) return; model.parts.push({ axis: 'y', n: 6, x: 0, y: 0, z: 0, rows: Array.from({ length: 6 }, () => ch.repeat(6)) }); sel = model.parts.length - 1; changed(); });
+$('new').addEventListener('click', () => load({ id: 'nowy', cell: 0.1, palette: { W: { color: '#d9d5cc', finish: 'gloss' }, K: { color: '#26241f', finish: 'matte' } }, parts: [{ axis: 'y', n: 8, x: 0, y: 0, z: 0, rows: Array.from({ length: 6 }, () => 'WWWWWW') }, { axis: 'z', n: 1, x: 0, y: 0, z: 6, rows: ['WWWWWW', 'WWKKWW', 'WWWWWW', 'WWWWWW', 'WWWWWW', 'WWWWWW', 'WWWWWW', 'KKKKKK'] }] }));
+$('import').addEventListener('click', () => { $('text').value = formatVoxelText(model); $('textbox').classList.toggle('open'); });
+$('closetext').addEventListener('click', () => $('textbox').classList.remove('open'));
+$('apply').addEventListener('click', () => { try { load(parseVoxelText($('text').value), false); status('wczytane z tekstu'); } catch (e) { status(String(e.message), true); } });
+const asTs = () => 'T.' + model.id + ' = `' + formatVoxelText(model).replace(/`/g, '\\`') + '`;\n';
+$('copy').addEventListener('click', () => {
+  const ts = asTs();
+  navigator.clipboard?.writeText(ts).then(() => status('skopiowane — wklej do packages/shared/src/voxelModels.ts, a na mapie: furn("' + model.id + '", x, z, obrót)')).catch(() => { $('text').value = ts; $('textbox').classList.add('open'); status('schowek niedostępny — tekst w oknie poniżej'); });
+});
+$('download').addEventListener('click', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([formatVoxelText(model)], { type: 'text/plain' })); a.download = model.id + '.voxel.txt'; a.click(); });
+for (const id of ids) { const o = document.createElement('option'); o.value = id; o.textContent = id; $('pick').appendChild(o); }
+$('pick').addEventListener('change', () => { load(parseVoxelText(VOXEL_LIBRARY_TEXT[$('pick').value])); });
+addEventListener('resize', drawGrid);
+
+// =============================== start ===============================
+if (editing) {
+  const want = q.get('model');
+  let draft = null;
+  try { const t = localStorage.getItem('bs_voxel_draft'); if (t && !want) draft = parseVoxelText(t); } catch {}
+  if (want && VOXEL_LIBRARY[want]) { $('pick').value = want; load(parseVoxelText(VOXEL_LIBRARY_TEXT[want])); }
+  else if (draft) { load(draft); status('przywrócony szkic z przeglądarki'); }
+  else $('new').click();
+  requestAnimationFrame(drawGrid);
+} else {
+  // the gallery: every model of the library on one floor; the creator is a click away
+  document.getElementById('body').style.gridTemplateColumns = '0 0 1fr';
+  document.getElementById('left').style.display = 'none'; document.getElementById('paint').style.display = 'none';
+  showAll();
+  $('hud').textContent = `${ids.length} modeli — kliknij KREATOR, albo ?model=<id>`;
+  const b = document.createElement('button'); b.textContent = 'KREATOR'; b.className = 'primary'; b.style.cssText = 'position:absolute;left:10px;top:44px'; b.addEventListener('click', () => { location.search = '?edit=1'; }); $('view').appendChild(b);
+}
 window.lab = {
   scene, engine, camera, ids,
   stats: () => stats,
-  show(id) { current = id; hud.textContent = describe(showOne(VOXEL_MODELS[id])); return stats[id]; },
+  show(id) { fitNext = true; const s = showOne(VOXEL_LIBRARY[id], null); $('hud').textContent = describe(s); return s; },
   all() { showAll(); return stats; },
   view(alpha, beta, radius) { camera.alpha = alpha; camera.beta = beta; camera.radius = radius; },
+  model: () => model, load: (text) => load(parseVoxelText(text)),
+  paint(r, c, ch) { const p = part(); setCell(p, r, c, ch); changed(true, false); },
+  text: () => formatVoxelText(model),
 };
-engine.runRenderLoop(() => scene.render());
-addEventListener('resize', () => engine.resize());
 </script></body></html>

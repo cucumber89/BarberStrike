@@ -1193,9 +1193,15 @@ prostokąty (greedy meshing), a kolor jest atrybutem wierzchołka: wszystko mato
 materiał, wszystko błyszczące jeden, metal jeden (glow i glass po jednym na kolor) — `props.ts`
 zlewa to dalej w jedną siatkę na materiał na strefę 24 m. **60 modeli, 97 785 voxeli → 6 274 quady**
 (1.1 % ścian, które miałyby pojedyncze boxy); BMW 43 819 voxeli → 850 quadów, 6 siatek.
-Narzędzie: `/voxel-lab.html` (galeria wszystkich, `?model=<id>` jeden, `?edit=1` edytor — piszesz
-tekst po lewej, po prawej odświeża się model, KOPIUJ TS wkleja do biblioteki) i
-`apps/client/e2e/tools/voxel-shots.mjs` (kadry przód/tył każdego modelu + `voxel.md` z kosztem).
+Narzędzie: **kreator** `/voxel-lab.html?edit=1` (wchodzi w build, więc działa też na serwerze):
+paleta farb z próbnikiem koloru i wykończeniem, lista części (warstw) z osiami, siatka do malowania
+myszką (LPM farba, PPM gumka, Shift linia, lustro), bryły jednym klikiem, podgląd 3D odświeżany po
+każdym ruchu z ramką zaznaczonej części, licznik voxeli → quadów → siatek (to jest „optymalizacja”
+na oczach), światło dzień/noc jak w grze, obrót, wczytanie dowolnego modelu z biblioteki, okno tekstu
+(wklej cudzy / edytuj ręcznie), KOPIUJ TS (do `voxelModels.ts`) i POBIERZ .TXT, autozapis szkicu w
+przeglądarce. `?model=<id>` otwiera jeden, bez parametrów — galeria. Test w przeglądarce:
+`apps/client/e2e/tools/voxel-creator-probe.mjs` (maluje myszką i sprawdza tekst i koszt), kadry:
+`voxel-shots.mjs` (przód/tył każdego modelu + `voxel.md` z kosztem).
 Lekcja zmierzona w labie: świat Babylona jest lewoskrętny — obserwator od +z ma +x po LEWEJ, więc
 pierwsza kolumna widoku z przodu to wschodnia krawędź modelu (napis na skrzynce wyszedł lustrzany,
 zanim `voxelGrid` to odwrócił); test `voxel.test.ts` przypina tę konwencję i nawinięcie trójkątów
