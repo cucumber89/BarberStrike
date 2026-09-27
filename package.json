@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "pnpm -r --parallel --stream run dev",
+    "kreator": "node scripts/kreator.mjs",
     "build": "pnpm -r run build",
     "start": "pnpm --filter @frankibarber/server start",
     "test": "pnpm -r run test",

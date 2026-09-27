@@ -22,7 +22,7 @@ p.on("pageerror", (e) => errors.push("pageerror: " + String(e.message).slice(0, 
 p.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") errors.push(m.type() + ": " + m.text().slice(0, 200)); });
 // Vite reloads the page when a model file is saved mid-run; every step waits for the lab again.
 const ready = async () => { await p.waitForFunction(() => window.lab, null, { timeout: 120000 }); await p.evaluate(() => window.lab.scene.whenReadyAsync()); };
-await p.goto(`${URL}/voxel-lab.html`);
+await p.goto(`${URL}/voxel-lab.html?galeria=1`);
 await ready();
 await p.waitForTimeout(800);
 await p.screenshot({ path: `${OUT}/all.png` });

@@ -11,7 +11,7 @@ const p = await (await b.newContext({ viewport: { width: 1600, height: 900 } }))
 const errors = [];
 p.on("pageerror", (e) => errors.push(e.message.slice(0, 200)));
 p.on("console", (m) => { if (m.type() === "error") errors.push(m.text().slice(0, 200)); });
-await p.goto(`${URL}/voxel-lab.html?edit=1&model=fridge`);
+await p.goto(`${URL}/voxel-lab.html?model=fridge`);
 await p.waitForFunction(() => window.lab, null, { timeout: 120000 });
 await p.evaluate(() => window.lab.scene.whenReadyAsync());
 await p.waitForTimeout(800);

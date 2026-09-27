@@ -1199,7 +1199,11 @@ myszką (LPM farba, PPM gumka, Shift linia, lustro), bryły jednym klikiem, podg
 każdym ruchu z ramką zaznaczonej części, licznik voxeli → quadów → siatek (to jest „optymalizacja”
 na oczach), światło dzień/noc jak w grze, obrót, wczytanie dowolnego modelu z biblioteki, okno tekstu
 (wklej cudzy / edytuj ręcznie), KOPIUJ TS (do `voxelModels.ts`) i POBIERZ .TXT, autozapis szkicu w
-przeglądarce. `?model=<id>` otwiera jeden, bez parametrów — galeria. Test w przeglądarce:
+przeglądarce. `?model=<id>` otwiera jeden, `?galeria=1` — galeria. **Lokalnie** (`pnpm kreator` — uruchamia dev-klienta i
+otwiera stronę) kreator ma dwa przyciski więcej: **ZAPISZ W GRZE** (dev-serwer Vite wpisuje model do
+`voxelModels.ts` i jego stopę do `DOLNA_FURNITURE`) i **POSTAW NA MAPIE** (x, z, piętro, kierunek →
+linia `furn(...)` w bloku `[KREATOR]` w `dolna.ts`); strona i gra same się odświeżają, żadnego kodu.
+Na serwerze te przyciski są ukryte (strona tylko kopiuje tekst). Test w przeglądarce:
 `apps/client/e2e/tools/voxel-creator-probe.mjs` (maluje myszką i sprawdza tekst i koszt), kadry:
 `voxel-shots.mjs` (przód/tył każdego modelu + `voxel.md` z kosztem).
 Lekcja zmierzona w labie: świat Babylona jest lewoskrętny — obserwator od +z ma +x po LEWEJ, więc
