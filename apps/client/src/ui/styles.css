@@ -197,6 +197,23 @@ button:focus-visible { outline:2px solid #f4cf8e; outline-offset:3px; }
 .viewer-stage dl { margin: 0; display: grid; gap: 3px; }
 .viewer-stage dl > div { display: flex; justify-content: space-between; font: 11px ui-monospace, monospace; color: #8ea0ad; }
 .viewer-stage dd { margin: 0; color: #d8c69c; }
+/* /viewer?stream=1 — what the stream PC captures: no controls, no cursor, a score bug and a name. */
+.viewer-stream { cursor: none; }
+.viewer-bug { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 14px;
+  padding: 8px 18px; background: #0d131ad9; border: 1px solid #2b3742; border-top: 2px solid #cfa666; color: #dde5ec;
+  font-size: 14px; letter-spacing: .08em; white-space: nowrap; pointer-events: none; }
+.viewer-bug b { color: #f5d6a2; }
+.viewer-bug span { color: #8fa0ad; font-size: 12px; }
+.viewer-bug strong { font-size: 22px; color: #fff; letter-spacing: .12em; }
+.viewer-oncam { position: absolute; left: 24px; bottom: 24px; padding: 8px 14px; background: #0d131ad9; color: #8fa0ad;
+  border-left: 4px solid #cfa666; font-size: 13px; letter-spacing: .12em; pointer-events: none; }
+.viewer-oncam b { color: #fff; font-size: 18px; letter-spacing: .06em; }
+.viewer-oncam.t0 { border-left-color: #d8734a; } .viewer-oncam.t1 { border-left-color: #4a8fd8; }
+.viewer-stream-wait { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px;
+  background: radial-gradient(circle at 50% 40%, #1a232c, #05070b 70%); color: #e9e2d6; cursor: none; }
+.viewer-stream-wait span { letter-spacing: 6px; font-size: 14px; color: #cfa666; }
+.viewer-stream-wait h1 { font-size: 72px; margin: 0; letter-spacing: .06em; }
+.viewer-stream-wait p { color: #9aa8b4; font-size: 18px; margin: 0; }
 .viewer-help { color: #8fa0ad; font-size: 11px; line-height: 1.7; margin: 18px 0 12px; }
 .viewer-help b { color: #cfd8e0; }
 .viewer-leave { width: 100%; padding: 9px; }
