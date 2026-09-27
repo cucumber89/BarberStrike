@@ -2,7 +2,7 @@ import { Scene } from "@babylonjs/core/scene";
 import { TargetCamera } from "@babylonjs/core/Cameras/targetCamera";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import {
-  Btn, InputDt, LEAN, MatchPhase, PLAYER, TAC, WEAPONS, aimDirection, copyBody, createBody, dequantVel, eyeHeight, frozenAt, leanClearance, leanOf, maskInput, simulateBody, sprintActive, tacActive, wrapAngle,
+  Btn, InputDt, makeRayHit, LEAN, MatchPhase, PLAYER, TAC, WEAPONS, aimDirection, copyBody, createBody, dequantVel, eyeHeight, frozenAt, leanClearance, leanOf, maskInput, simulateBody, sprintActive, tacActive, wrapAngle,
   type BodyState, type CollisionWorld, type PlayerInput, type WeaponId,
 } from "@frankibarber/shared";
 import { BIPOD, bipodDeployed, feelOf, lookScale, type ScopeStyle } from "../combat/weaponFeel";
@@ -35,6 +35,8 @@ export interface LookSettings {
 }
 
 const MAX_PITCH = 1.5;
+/** How far behind the chest the dance camera sits when nothing is in the way (m). */
+const EMOTE_CAM_DIST = 2.8;
 /**
  * How a mispredict reaches the eye.
  *
@@ -131,6 +133,16 @@ export class LocalPlayer {
    * would have had without it.
    */
   deadView: Pose | null = null;
+  /**
+   * A dance (H) is on: the camera swings out behind and above the body so the player can watch
+   * themselves, orbiting with the mouse around the spot where they stand. `Game` sets it; the blend
+   * eases the camera out and back. Presentation only — the eye used for shots never moves.
+   */
+  emoteView = false;
+  private emoteBlend = 0;
+  private emoteHit = makeRayHit();
+  /** 0..1 how far out the dance camera is (the self body is drawn while this is above zero). */
+  get emoteCamera(): number { return this.emoteBlend; }
 
   constructor(scene: Scene, private world: CollisionWorld, private input: InputState, public settings: LookSettings) {
     this.camera = new TargetCamera("fpsCam", new Vector3(0, PLAYER.eyeHeight, 0), scene);
@@ -435,6 +447,26 @@ export class LocalPlayer {
     const side = bobX + LEAN.offset * this.leanBlend;
     cam.position.set(b.x + this.errX + Math.cos(this.yaw) * side, b.y + this.errY + this.eyeBlend + bobY - this.landDip - LEAN.drop * Math.abs(this.leanBlend) - 0.06 * this.slideBlend, b.z + this.errZ - Math.sin(this.yaw) * side);
     cam.rotation.set(this.pitch + this.recoilPitch + this.swayPitch + shakePitch, this.yaw + this.recoilYaw + this.swayYaw, Math.sin(this.bobPhase) * 0.004 * bobAmt + shakeRoll + LEAN.roll * this.leanBlend + 0.025 * this.slideBlend * this.settings.shakeScale);
+    this.applyEmoteView(dt);
+  }
+
+  /**
+   * The dance camera: an orbit around the chest, pulled in wherever a wall is closer than the full
+   * distance so the view never ends up inside the geometry behind the player.
+   */
+  private applyEmoteView(dt: number): void {
+    const want = this.alive && this.emoteView ? 1 : 0;
+    this.emoteBlend += (want - this.emoteBlend) * (1 - Math.exp(-(want ? 7 : 10) * dt));
+    if (this.emoteBlend < 0.002) { this.emoteBlend = 0; return; }
+    const b = this.body, w = this.emoteBlend;
+    const pitch = Math.max(-0.35, Math.min(0.9, this.pitch + 0.25));
+    const cx = b.x, cy = b.y + 1.25, cz = b.z;
+    const dx = -Math.sin(this.yaw) * Math.cos(pitch), dy = Math.sin(pitch), dz = -Math.cos(this.yaw) * Math.cos(pitch);
+    this.world.raycast(cx, cy, cz, dx, dy, dz, EMOTE_CAM_DIST, this.emoteHit);
+    const dist = Math.max(0.6, this.emoteHit.hit ? this.emoteHit.t - 0.25 : EMOTE_CAM_DIST);
+    const cam = this.camera;
+    cam.position.set(cam.position.x + (cx + dx * dist - cam.position.x) * w, cam.position.y + (cy + dy * dist - cam.position.y) * w, cam.position.z + (cz + dz * dist - cam.position.z) * w);
+    cam.rotation.set(cam.rotation.x + (pitch - cam.rotation.x) * w, this.yaw, cam.rotation.z * (1 - w));
   }
 
   /** Dead: the camera shows `deadView` when there is one — level, with no roll (veto). */

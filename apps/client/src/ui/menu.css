@@ -713,3 +713,11 @@
 .mm-gate-title { margin: 0; font: 700 30px/1 var(--font-display, var(--font-mono)); letter-spacing: .06em; color: #e6ebf0; text-align: center; }
 .mm-gate-sub { margin: 0; font-size: 13px; line-height: 1.6; color: var(--tx-3); text-align: center; }
 .mm-gate-guest { width: 100%; margin-top: 2px; }
+/* Dances (H): the crate's odds chip, the reel card's notes, and the wardrobe's TAŃCE list. */
+.crate-odds .odds-emote { background: radial-gradient(circle at 50% 40%, #ffffff40, transparent 60%), #d8407f; border-radius: 50%; }
+.reel-track span.emote-drop { position: relative; }
+.reel-track span.emote-drop::after { content: "♪♫"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 30px; color: #fff; text-shadow: 0 2px 8px #0009; }
+.armoury-build-list .fit-pospolity.emote-card, .armoury-build-list .emote-card { border-left-width: 3px; }
+.armoury-build-list .emote-card em { font: 8px var(--font-mono); letter-spacing: .14em; color: var(--brass); font-style: normal; }
+.armoury-emote-key { display: flex; align-items: center; gap: 8px; margin: 10px 10px 0; padding: 8px 10px; border: 1px solid rgba(217, 164, 65, .35); background: #1a160e; color: var(--tx-2, #ccc); font-size: 11px; }
+.armoury-emote-key kbd { min-width: 22px; padding: 2px 6px; border: 1px solid var(--brass); border-bottom-width: 3px; color: #efbc50; font: 13px var(--font-display); text-align: center; }

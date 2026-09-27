@@ -5,7 +5,10 @@ import { LocalDriver, LocalPresence, matchMaker } from "@colyseus/core";
 import { MATCH, MAX_BOTS, MatchPhase } from "@frankibarber/shared";
 import { TdmRoom } from "../rooms/TdmRoom";
 import { TournamentLobbyRoom } from "../rooms/TournamentLobbyRoom";
-import { ADMIN_KEY_HEADER, ADMIN_ROOM_GRACE_S, adminAllowed, adminKeyOf, adminRoomRow, adminRoutes, endPlan, quickRoomOptions } from "./routes";
+import { ADMIN_KEY_HEADER, ADMIN_ROOM_GRACE_S, adminAllowed, adminKeyOf, adminRoomRow, adminRoutes, endPlan, quickRoomOptions, unlockEverything } from "./routes";
+import { DEFAULT_HAIRCUT, DROPPABLE_EMOTES, HAIRCUTS } from "@frankibarber/shared";
+import { closeDb, useTestDb } from "../accounts/db";
+import { createAccount, getProfile, saveProfile } from "../accounts/store";
 
 /**
  * The admin console's REST (owner's brief 2026-09-27): the gate, the room table, ZAŁÓŻ MECZ and
@@ -170,5 +173,34 @@ describe("rooms", () => {
     expect(rows.find((r) => r.roomId === listing.roomId)).toMatchObject({ kind: "tournament-lobby", name: "Piątkowy Turniej", mode: "turniej", phase: "poczekalnia" });
     expect((await call("POST", `/admin/rooms/${listing.roomId}/end`, {})).status).toBe(200);
     await vi.waitFor(async () => expect((await matchMaker.query({ roomId: listing.roomId })).length).toBe(0));
+  });
+});
+
+describe("ODBLOKUJ WSZYSTKO (owner's account)", () => {
+  it("adds every finish, haircut and dance, and keeps everything the profile already had", () => {
+    const before = { xp: 1234, skins: [{ skin: "warsztat", wear: 0.3, rolledAt: 5 }], crateCuts: ["mohawk"], emotes: ["nitka"], fits: ["kibol"] };
+    const next = unlockEverything(before, ["warsztat", "osy", "osy", "BAD ID!", 7], 1000);
+    expect(next.xp).toBe(1234);
+    expect(next.fits).toEqual(["kibol"]);
+    expect(next.skins).toEqual([{ skin: "warsztat", wear: 0.3, rolledAt: 5 }, { skin: "osy", wear: 0, rolledAt: 1001 }]);
+    expect(new Set(next.crateCuts as string[])).toEqual(new Set(HAIRCUTS.map((h) => h.id).filter((id) => id !== DEFAULT_HAIRCUT)));
+    expect(new Set(next.emotes as string[])).toEqual(new Set(DROPPABLE_EMOTES.map((e) => e.id)));
+    expect(unlockEverything(null, ["osy"]).skins).toHaveLength(1);
+  });
+
+  it("POST /admin/accounts/unlock writes the stored profile of that login, behind the key", async () => {
+    useTestDb();
+    try {
+      const id = createAccount("cucumber89", "x");
+      saveProfile(id, JSON.stringify({ xp: 50, skins: [] }));
+      process.env.ADMIN_PASSWORD = "sekret";
+      expect((await call("POST", "/admin/accounts/unlock", { login: "cucumber89", skins: ["osy"] })).status).toBe(401);
+      expect((await call("POST", "/admin/accounts/unlock", { login: "nikt", skins: [] }, "sekret")).status).toBe(404);
+      const ok = await call("POST", "/admin/accounts/unlock", { login: "Cucumber89", skins: ["osy", "talk"] }, "sekret");
+      expect(ok).toMatchObject({ status: 200, json: { ok: true, login: "cucumber89", skins: 2, emotes: DROPPABLE_EMOTES.length } });
+      const stored = JSON.parse(getProfile(id)!);
+      expect(stored.xp).toBe(50);
+      expect(stored.emotes).toContain("spucha");
+    } finally { closeDb(); }
   });
 });

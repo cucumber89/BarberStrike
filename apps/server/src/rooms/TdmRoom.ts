@@ -144,6 +144,8 @@ class Session {
   // ---- drop 5: chat / mark rate limits; the brain for a bot session.
   lastChatAt = -Infinity;
   lastMarkAt = -Infinity;
+  /** The last dance started (H), for the spam guard. */
+  lastEmoteAt = -Infinity;
   brain: BotBrain | null = null;
   // ---- handoff P1: Fire packets per second, and the view angles of the last accepted inputs by seq
   // (a ring: index = seq & (ANGLE_RING - 1)) so a shot can be checked against the aim it claims.
@@ -422,6 +424,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     this.setTimestep((dt) => this.tick(dt), TICK_MS);
     this.onMessage(C2S.Chat, this.guarded((client, msg) => this.onChat(client, msg)));
     this.onMessage(C2S.Mark, this.guarded((client, msg) => this.onMark(client, msg)));
+    this.onMessage(C2S.Emote, this.guarded((client, msg) => this.onEmote(client, msg)));
     this.onMessage("objective", this.guarded((client, msg) => {
       const s = this.sessions.get(client.sessionId);
       if (!s || this.mode !== "bomb" || typeof msg !== "boolean" || this.rateLimited(s, "other")) return;
@@ -525,6 +528,25 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     s.lastMarkAt = now;
     const ev: MarkEvent = { id: p.id, name: p.name, team: p.team as Team, x: msg.x, y: msg.y, z: msg.z, kind: msg.kind, target: msg.target, at: now };
     this.sendToTeam(ev.team, !this.teams, S2C.Mark, ev);
+  }
+
+  /**
+   * A dance (H). Cosmetic and never in the schema: validated, spam-guarded and relayed to everyone
+   * else, who animate it on the body they already draw. Ownership is the client's, exactly like an
+   * equipped skin — a dance nobody rolled is a dance, not an advantage. A dead player does not
+   * dance; a stop ("") always goes through so a body is never left dancing.
+   */
+  private onEmote(client: Client, msg: unknown): void {
+    const s = this.sessions.get(client.sessionId);
+    const p = this.state.players.get(client.sessionId);
+    if (!s || !p || !isEmoteMessage(msg) || this.rateLimited(s, "other")) return;
+    const now = this.now();
+    if (msg.emote) {
+      if (!p.alive || now - s.lastEmoteAt < EMOTE_MIN_INTERVAL_MS) return;
+      s.lastEmoteAt = now;
+    }
+    const ev: EmoteEvent = { id: p.id, emote: msg.emote, at: now };
+    for (const c of this.clients) if (c.sessionId !== client.sessionId) c.send(S2C.Emote, ev);
   }
 
   /** Sends to everyone (`all`) or to the clients of one team; in FFA "team" means only the sender. */
@@ -2649,3 +2671,4 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   }
 }
 import { BUILDS, OUTFITS, encodeCosmetics, sanitizeSkins } from "@frankibarber/shared";
+import { EMOTE_MIN_INTERVAL_MS, isEmoteMessage, type EmoteEvent } from "@frankibarber/shared";

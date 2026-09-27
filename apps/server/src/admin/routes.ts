@@ -16,7 +16,8 @@
 import { Router, type Request, type RequestHandler } from "express";
 import express from "express";
 import { matchMaker, type IRoomCache } from "@colyseus/core";
-import { MAPS, MATCH, MAX_BOTS, isBotLevel, isGameMode, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { DEFAULT_HAIRCUT, DROPPABLE_EMOTES, HAIRCUTS, MAPS, MATCH, MAX_BOTS, isBotLevel, isGameMode, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { accountByLogin, getProfile, saveProfile } from "../accounts/store";
 
 /**
  * The console sends its key as `Authorization: Bearer <key>` — the one custom-ish header the
@@ -142,6 +143,33 @@ export function endPlan(kind: string, clients: number): { endMatch: boolean; clo
   return { endMatch: isMatch, closeInMs: isMatch && clients > 0 ? MATCH.endedMs : 0 };
 }
 
+/** A skin id as the catalog writes them; anything else in an unlock request is dropped. */
+const SKIN_ID = /^[a-z0-9-]{1,48}$/;
+const UNLOCK_MAX_SKINS = 400;
+
+/**
+ * ODBLOKUJ WSZYSTKO (owner's request 2026-09-27: "na moim koncie odblokuj mi wszystkie skiny,
+ * fryzury i tańce"). Adds every weapon finish in `skinIds`, every haircut and every dance to a stored
+ * profile — ADDS, never removes: whatever the account already had stays, wear and roll dates
+ * included, and nothing else in the blob (XP, stats, trophies) is touched. Pure, so a test pins it.
+ *
+ * The skin ids come from the console, which has the catalog (the server does not bundle the skins
+ * package); they are shape-checked here and the client drops any id its catalog does not know on
+ * read (`loadProfile`), so a stale list costs nothing. Cosmetic only (L1).
+ */
+export function unlockEverything(profile: unknown, skinIds: readonly unknown[], now = Date.now()): Record<string, unknown> {
+  const p = (profile && typeof profile === "object" ? { ...(profile as Record<string, unknown>) } : {}) as Record<string, unknown>;
+  const skins = Array.isArray(p.skins) ? [...(p.skins as { skin?: unknown; wear?: unknown; rolledAt?: unknown }[])] : [];
+  const have = new Set(skins.map((s) => (s && typeof s === "object" ? s.skin : undefined)));
+  const ids = [...new Set(skinIds.filter((id): id is string => typeof id === "string" && SKIN_ID.test(id)))].slice(0, UNLOCK_MAX_SKINS);
+  ids.forEach((id, i) => { if (!have.has(id)) skins.push({ skin: id, wear: 0, rolledAt: now + i }); });
+  const union = (field: string, add: string[]) => [...new Set([...(Array.isArray(p[field]) ? (p[field] as unknown[]).filter((x): x is string => typeof x === "string") : []), ...add])];
+  p.skins = skins;
+  p.crateCuts = union("crateCuts", HAIRCUTS.map((h) => h.id).filter((id) => id !== DEFAULT_HAIRCUT));
+  p.emotes = union("emotes", DROPPABLE_EMOTES.map((e) => e.id));
+  return p;
+}
+
 /** Build the router. Body parsing is scoped here, like the accounts router's, so nothing else changes. */
 export function adminRoutes(): Router {
   const router = Router();
@@ -209,6 +237,26 @@ export function adminRoutes(): Router {
     } catch (err) {
       return res.status(500).json({ error: String(err) });
     }
+  });
+
+  // POST /api/admin/accounts/unlock {login, skins: string[]} -> {ok, login, skins, haircuts, emotes} / 404
+  // Everything cosmetic onto one account (see `unlockEverything`). The player picks it up on their
+  // next page load: the client folds owned items from the server into its local copy on boot.
+  router.post("/admin/accounts/unlock", gate, (req, res) => {
+    const body = (req.body ?? {}) as { login?: unknown; skins?: unknown };
+    const login = typeof body.login === "string" ? body.login.trim() : "";
+    // Logins are stored as typed; a console typed in the wrong case still finds the lower-case one.
+    const acct = login ? accountByLogin(login) ?? accountByLogin(login.toLowerCase()) : null;
+    if (!acct) return res.status(404).json({ error: "no_account" });
+    const stored = getProfile(acct.id);
+    let current: unknown = null;
+    try { current = stored ? JSON.parse(stored) : null; } catch { current = null; }
+    const next = unlockEverything(current, Array.isArray(body.skins) ? body.skins : []);
+    saveProfile(acct.id, JSON.stringify(next));
+    return res.json({
+      ok: true, login: acct.login,
+      skins: (next.skins as unknown[]).length, haircuts: (next.crateCuts as unknown[]).length, emotes: (next.emotes as unknown[]).length,
+    });
   });
 
   return router;

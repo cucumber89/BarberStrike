@@ -135,6 +135,8 @@ export const C2S = {
   Team: "team",
   /** Living arena (2.4): vote for one of the plans on offer this round: { plan }. */
   Vote: "vote",
+  /** A dance on H: EmoteMessage (`emotes.ts`). "" stops it. */
+  Emote: "emote",
 } as const;
 
 /** Drop 5: chat limits (the server enforces them, the client mirrors them in the box). */
@@ -209,6 +211,8 @@ export const S2C = {
   Chat: "chat",
   /** A team mark: MarkEvent (drop 5). */
   Mark: "mark",
+  /** Somebody started or stopped a dance: EmoteEvent (`emotes.ts`). */
+  Emote: "emote",
 } as const;
 
 /** Domination (drop 4): flag `flag` (index into MapDef.flags) is now owned by `team`; `by` names the capturers. */

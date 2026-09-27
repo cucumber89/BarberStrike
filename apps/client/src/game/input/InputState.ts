@@ -25,6 +25,8 @@ export interface KeyBindings {
   /** Lean left / right (drop 4). */
   leanLeft: string[];
   leanRight: string[];
+  /** The dance picked in the wardrobe (TAŃCE): press to start it, press again to stop. */
+  emote: string[];
 }
 
 export const DEFAULT_BINDINGS: KeyBindings = {
@@ -63,6 +65,7 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   inspect: ["KeyF"],
   leanLeft: ["KeyQ"],
   leanRight: ["KeyE"],
+  emote: ["KeyH"],
 };
 
 /** Two sprint presses within this window latch the tactical sprint (drop 4). */
@@ -103,6 +106,8 @@ export class InputState {
   /** Shop key (B) pressed since the last drain — also reported while the pointer is unlocked. */
   shopToggleRequested = false;
   inspectRequested = false;
+  /** The dance key (H) pressed since the last drain. */
+  emoteRequested = false;
   escapeRequested = false;
   pointerLocked = false;
   enabled = true;
@@ -267,6 +272,7 @@ export class InputState {
     this.tacticalRequested = false;
     this.shopToggleRequested = false;
     this.inspectRequested = false;
+    this.emoteRequested = false;
     this.escapeRequested = false;
     this.chatOpenRequested = null;
     this.markRequested = false;
@@ -309,6 +315,7 @@ export class InputState {
     }
     if (b.melee.includes(e.code)) this.slotRequests.push(3);
     if (b.inspect.includes(e.code) && this.pointerLocked) this.inspectRequested = true;
+    if (b.emote.includes(e.code) && this.pointerLocked) this.emoteRequested = true;
     if (b.reload.includes(e.code)) this.reloadRequested = true;
     if (b.lastWeapon.includes(e.code)) this.lastWeaponRequested = true;
     if (b.lethal.includes(e.code) && this.pointerLocked) this.lethalHeld = true;

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { C2S, S2C, CHAT, MARK, MATCH, MatchPhase, PLAYER, type ChatEvent, type MarkEvent } from "@frankibarber/shared";
+import { C2S, S2C, CHAT, EMOTE_MIN_INTERVAL_MS, MARK, MATCH, MatchPhase, PLAYER, type ChatEvent, type EmoteEvent, type MarkEvent } from "@frankibarber/shared";
 import { RoomHarness, type FakeClient } from "./testHarness";
 
 /** Drop 5: bots, chat, marks, assists. */
@@ -151,5 +151,42 @@ describe("chat and marks", () => {
     expect(h.player(b.sessionId).alive).toBe(false);
     expect(h.player(c.sessionId).kills).toBe(1);
     expect(h.player(a.sessionId).assists).toBe(1);
+  });
+});
+
+describe("emotes (H)", () => {
+  const emotes = (c: FakeClient): EmoteEvent[] => h.sentOf(c, S2C.Emote).map((m) => m.payload as EmoteEvent);
+
+  it("relays a dance to everyone else, guards spam and unknown ids, and always lets a stop through", async () => {
+    h = await RoomHarness.create({ room: "emote", mode: "tdm" });
+    const a = await h.join("Alpha");
+    const b = await h.join("Bravo");
+    const c = await h.join("Charlie");
+    await h.advance(100);
+    h.send(a, C2S.Emote, { emote: "nitka" });
+    await h.tick();
+    expect(emotes(b).at(-1)).toMatchObject({ id: a.sessionId, emote: "nitka" });
+    expect(emotes(c).length).toBe(1);
+    expect(emotes(a).length).toBe(0); // the dancer animates their own body already
+    // Too soon: dropped. Unknown id / bad payload: dropped. A stop: always relayed.
+    h.send(a, C2S.Emote, { emote: "spucha" });
+    h.send(a, C2S.Emote, { emote: "moonwalk" });
+    h.send(a, C2S.Emote, { emote: 7 });
+    await h.tick();
+    expect(emotes(b).length).toBe(1);
+    h.send(a, C2S.Emote, { emote: "" });
+    await h.tick();
+    expect(emotes(b).at(-1)).toMatchObject({ id: a.sessionId, emote: "" });
+    await h.advance(EMOTE_MIN_INTERVAL_MS + 50);
+    h.send(a, C2S.Emote, { emote: "spucha" });
+    await h.tick();
+    expect(emotes(b).at(-1)).toMatchObject({ emote: "spucha" });
+    // The dead do not dance.
+    h.player(a.sessionId).alive = false;
+    await h.advance(EMOTE_MIN_INTERVAL_MS + 50);
+    h.send(a, C2S.Emote, { emote: "dab" });
+    await h.tick();
+    expect(emotes(b).at(-1)).toMatchObject({ emote: "spucha" });
+    expect(h.room.handlerErrors).toBe(0);
   });
 });

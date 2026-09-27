@@ -1,6 +1,6 @@
 import { isValidLogin, type AccountDTO, type TournamentRecord, type Trophy } from "@frankibarber/shared";
 import { defaultServerUrl, httpUrl } from "../game/net/Connection";
-import { setProfileSync, type Profile } from "../game/progression/profile";
+import { foldServerOwned, setProfileSync, type Profile } from "../game/progression/profile";
 import { account } from "./account";
 
 /**
@@ -166,6 +166,9 @@ export async function fetchTrophies(login: string): Promise<Trophy[]> {
 export async function refreshMe(): Promise<void> {
   const who = await fetchMe();
   account.setAccount(who?.account ?? null);
+  // What the server owns and this browser does not (an admin unlock, a crate opened elsewhere)
+  // joins the local copy now, before the next local save could push over it.
+  if (who?.account && who.profile) { try { foldServerOwned(who.profile); } catch { /* the local copy stands */ } }
 }
 
 /** How long `saveProfile` coalesces cloud writes before one `PUT /api/profile` goes out. */

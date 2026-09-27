@@ -68,6 +68,8 @@ export interface GameEventMap {
   shopOpen: { open: boolean };
   /** F: inspect the held weapon (presentation only). */
   weaponInspect: Record<string, never>;
+  /** H: the local player started a dance (`id`) or stopped it (""). The viewmodel steps aside. */
+  localEmote: { id: string };
   // ---- drop 4
   /** Server: a Domination flag changed hands. */
   flag: FlagEvent;

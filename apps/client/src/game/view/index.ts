@@ -218,6 +218,8 @@ export const installView: GameModule = (ctx) => {
     ctx.events.on("jump", () => viewmodel.onJump()),
     ctx.events.on("localDeath", () => { ejectAt = 0; viewmodel.cancelGrenade(); viewmodel.setVisible(false); }),
     ctx.events.on("localSpawn", () => { viewmodel.setVisible(true); viewmodel.cancelGrenade(); viewmodel.setWeapon(ctx.weapons.weapon); }),
+    // A dance puts the camera behind the body, where a floating first-person gun has no place.
+    ctx.events.on("localEmote", (e) => { if (ctx.local.alive) viewmodel.setVisible(!e.id); }),
     ctx.events.on("settings", () => { effects.setDensity(density()); grenades.setDensity(density()); viewmodel.bobScale = ctx.settings.gameplay.headBob; }),
     // ---- drop 2: grenades
     ctx.events.on("grenadePrime", (e) => viewmodel.primeGrenade(e.kind)),

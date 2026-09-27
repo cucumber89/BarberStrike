@@ -3,6 +3,7 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { LEAN, PERK_ORDER, PLAYER, dequantAngle, dequantVel, lerp, lerpAngle, slideSeenUntil, type Team, type WeaponId } from "@frankibarber/shared";
 import type { NetPlayer } from "../net/Connection";
 import { Character, type CharacterLike } from "../view/Character";
+import { remoteEmoteOver } from "./emotes";
 
 interface Snapshot {
   t: number;
@@ -88,7 +89,10 @@ export class RemotePlayer {
   /** Drop U (P1): the body is not drawn — the spectator's camera is inside its head. */
   private hidden = false;
   private skinsValue = "";
-  private input = { speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol" as WeaponId, moveDir: 0, vy: 0, perked: false, lean: 0, tac: false, slide: false, shaved: false, haircut: "" };
+  private input = { speed: 0, grounded: true, crouch: false, pitch: 0, alive: true, reloading: false, weapon: "pistol" as WeaponId, moveDir: 0, vy: 0, perked: false, lean: 0, tac: false, slide: false, shaved: false, haircut: "", emote: "", emoteMs: 0 };
+  /** The dance this player is doing (H), from `S2C.Emote`, and when it started (local clock). */
+  emote = "";
+  private emoteAt = 0;
 
   /**
    * `displayTeam` (drop 4) is the side this player is DRAWN as: in FFA everyone is on team 0 for
@@ -147,9 +151,16 @@ export class RemotePlayer {
     this.character.setEnabled(!this.hidden);
     this.alive = true; this.wasAlive = true;
     this.slidingUntil = 0; this.sliding = false;   // a fresh body is not mid-slide
+    this.emote = "";                                // nor mid-dance
   }
 
-  onShot(): void { this.character.onFire(); }
+  onShot(): void { this.emote = ""; this.character.onFire(); }
+
+  /** `S2C.Emote`: start a dance ("" stops it). Presentation only; ends by itself on movement. */
+  setEmote(id: string, now = performance.now()): void {
+    this.emote = id;
+    this.emoteAt = now;
+  }
 
   /** Interpolates presentation to `renderT` (server-clock ms) and animates the character. */
   update(renderT: number, dtMs: number): void {
@@ -211,6 +222,10 @@ export class RemotePlayer {
     inp.lean = this.lean; inp.tac = this.tac; inp.slide = this.sliding; inp.vy = this.vy;
     inp.shaved = b.shaved;
     inp.haircut = b.haircut;
+    // The dance ends on the first sign of movement, even if the "stop" packet never arrives.
+    const now = performance.now();
+    if (this.emote && remoteEmoteOver(this.alive, this.speed, now - this.emoteAt)) this.emote = "";
+    inp.emote = this.emote; inp.emoteMs = now - this.emoteAt;
     // Direction of travel relative to facing (for the strafe lean).
     inp.moveDir = this.speed > 0.3 ? Math.atan2(this.vx, this.vz) - this.yaw : 0;
     c.update(inp, dtMs);

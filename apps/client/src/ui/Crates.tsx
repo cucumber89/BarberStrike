@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type CSSProperties } from "react";
-import { DROPPABLE_OUTFITS, HAIRCUTS, outfitDef, type HaircutDef, type HaircutStyle, type OutfitDef } from "@frankibarber/shared";
+import { DROPPABLE_EMOTES, DROPPABLE_OUTFITS, HAIRCUTS, emoteDef, outfitDef, type EmoteDef, type HaircutDef, type HaircutStyle, type OutfitDef } from "@frankibarber/shared";
 import { catalog, collectionName, skinById, type Rarity, type SkinDef } from "@frankibarber/skins";
 import {
   CRATE_CHALLENGES,
@@ -42,8 +42,13 @@ const rarityLabel: Record<Rarity, string> = {
   zloty: "ZŁOTY",
 };
 
-const kindLabel: Record<PrizeKind, string> = { skin: "SKIN BRONI", haircut: "FRYZURA", outfit: "STRÓJ" };
-const kindHeading: Record<PrizeKind, string> = { skin: "NOWY SKIN BRONI", haircut: "NOWA FRYZURA", outfit: "NOWY STRÓJ" };
+const kindLabel: Record<PrizeKind, string> = { skin: "SKIN BRONI", haircut: "FRYZURA", outfit: "STRÓJ", emote: "TANIEC" };
+const kindHeading: Record<PrizeKind, string> = { skin: "NOWY SKIN BRONI", haircut: "NOWA FRYZURA", outfit: "NOWY STRÓJ", emote: "NOWY TANIEC (H)" };
+
+/** A dance's card: the tier's colour behind a pair of music notes. It is a move, not a thing. */
+const EMOTE_SWATCH: Record<Rarity, string> = {
+  pospolity: "#46505c", rzadki: "#2f6fd0", epicki: "#8a3fe0", legendarny: "#d8407f", zloty: "#d9a441",
+};
 
 /** An outfit's card reads as the outfit: its own shirt over its own vest, with the trim as a band. */
 function outfitSwatch(outfit: OutfitDef): string {
@@ -68,6 +73,10 @@ function outfitItem(outfit: OutfitDef): ReelItem {
   return { id: outfit.id, kind: "outfit", name: outfit.name, rarity: outfit.rarity, swatch: outfitSwatch(outfit) };
 }
 
+function emoteItem(emote: EmoteDef): ReelItem {
+  return { id: emote.id, kind: "emote", name: emote.name, rarity: emote.rarity, swatch: `radial-gradient(circle at 50% 40%, #ffffff30, transparent 60%), ${EMOTE_SWATCH[emote.rarity]}` };
+}
+
 function haircutItem(haircut: HaircutDef): ReelItem {
   return {
     id: haircut.id, kind: "haircut", name: haircut.name, rarity: haircut.rarity,
@@ -78,6 +87,7 @@ function haircutItem(haircut: HaircutDef): ReelItem {
 function prizeItem(prize: CratePrize): ReelItem {
   if (prize.kind === "skin") return skinItem(skinById(prize.id) ?? catalog[0]);
   if (prize.kind === "outfit") return outfitItem(outfitDef(prize.id));
+  if (prize.kind === "emote") return emoteItem(emoteDef(prize.id));
   const haircut = HAIRCUTS.find((item) => item.id === prize.id) ?? HAIRCUTS[0];
   return haircutItem(haircut);
 }
@@ -105,7 +115,7 @@ export function Crates({ onProfile, compact = false }: { onProfile(profile: Prof
    */
   const reel = useMemo(() => {
     const crateCuts = HAIRCUTS.filter((item) => item.requirement === "Ze skrzynki");
-    const pool: ReelItem[] = [...DROPPABLE_OUTFITS.map(outfitItem), ...crateCuts.map(haircutItem), ...catalog.map(skinItem)];
+    const pool: ReelItem[] = [...DROPPABLE_OUTFITS.map(outfitItem), ...crateCuts.map(haircutItem), ...DROPPABLE_EMOTES.map(emoteItem), ...catalog.map(skinItem)];
     const items = Array.from({ length: 31 }, (_, index) => pool[(index * 7 + 3) % pool.length]);
     if (result) items[WIN_INDEX] = prizeItem(result);
     return items;
@@ -114,6 +124,7 @@ export function Crates({ onProfile, compact = false }: { onProfile(profile: Prof
   const collection = [
     { label: "STROJE", have: profile.fits.length + 1, all: DROPPABLE_OUTFITS.length + 1 },
     { label: "SKINY BRONI", have: profile.skins.length, all: catalog.length },
+    { label: "TAŃCE", have: profile.emotes.length + 1, all: DROPPABLE_EMOTES.length + 1 },
     { label: "FRYZURY", have: HAIRCUTS.filter((h) => h.unlockedBy(profile.life) || profile.crateCuts.includes(h.id)).length, all: HAIRCUTS.length },
   ];
 
@@ -215,7 +226,7 @@ export function Crates({ onProfile, compact = false }: { onProfile(profile: Prof
                       ? <HaircutArt style={item.haircut} className="haircut-drop" />
                       : item.skin
                         ? <SkinArt skin={item.skin} width={260} focus="receiver" className="skin-drop" />
-                        : <span style={{ "--swatch": item.swatch } as CSSProperties} />}
+                        : <span className={item.kind === "emote" ? "emote-drop" : undefined} style={{ "--swatch": item.swatch } as CSSProperties} />}
                     <b>{item.name}</b><small>{rarityLabel[item.rarity]}</small>
                   </div>
                 ))}
@@ -227,6 +238,7 @@ export function Crates({ onProfile, compact = false }: { onProfile(profile: Prof
                 <span>{kindLabel[result.kind]} · {rarityLabel[prizeItem(result).rarity]}{result.kind === "skin" && prizeItem(result).skin ? ` · ${collectionName(prizeItem(result).skin!.collection)}` : ""}</span>
                 <b>{prizeItem(result).name}</b>
                 {result.kind === "outfit" && <em data-testid="crate-prize-blurb">{outfitDef(result.id).blurb}</em>}
+                {result.kind === "emote" && <em data-testid="crate-prize-blurb">{emoteDef(result.id).blurb} Załóż go w szafie (TAŃCE) i tańcz pod H.</em>}
                 <button onClick={() => setPhase("closed")}>GOTOWE</button>
               </div>
             )}
