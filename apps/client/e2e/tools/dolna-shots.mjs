@@ -10,7 +10,7 @@
  *
  * Run:  FB_DEV_TOOLS=1 pnpm dev            (client :5174, server :2567)
  *       PW_CHROMIUM=/opt/pw-browsers/chromium-1194/chrome-linux/chrome node apps/client/e2e/tools/dolna-shots.mjs
- *       LIVE=1 SKIP_REVIEW=1 … for the duel alone.
+ *       LIVE=1 SKIP_REVIEW=1 … for the duel alone; VIEWS=bmw,gate … for a few views.
  * Output: apps/client/e2e/out/dolna/shots/review_*.png, ref_night_district_street.png,
  *         metrics.json (per-view metrics + page errors); with LIVE=1 also shots/live_*.png and
  *         apps/client/e2e/out/dolna/live.md; a JSON log on stdout.
@@ -70,27 +70,40 @@ const shoot = async (p, views, prefix) => {
 if (process.env.SKIP_REVIEW !== "1") {
 const E = 1.62;
 const views = [
-  ["start_t0", [16.25, E, 9.75], [12.5, 1.4, 9.75]],           // T0 start in the garage pocket, west through the mouth
-  ["start_t1", [-7.75, 7 + E, 7.25], [-3, 8.4, 9]],            // T1 start, the top-floor SE room, towards the balcony door
-  ["salon_0", [-9.5, E, 13.5], [-14.5, 1.4, 16]],              // the ground-floor salon from the kitchen door
-  ["kitchen_0", [-8.25, E, 9.5], [-6.3, 1.0, 15]],             // the kitchen along its counter
-  ["salon_1", [-4, 3.5 + E, 13.5], [-12, 5, 15.5]],            // the first-floor salon, the balcony door at the far end
-  ["kitchen_1", [-8.25, 3.5 + E, 11.5], [-4, 4.5, 5.5]],       // the first-floor kitchen
-  ["stairs", [-9.75, E, 9.75], [-13.5, 2.5, 10.5]],            // the stairs from the hall: lane A up to the landing
-  ["stairs_1", [-9.75, 3.5 + E, 11.5], [-13, 5.5, 10.5]],      // the switchback from the first floor
-  ["balcony_1", [-9, 3.5 + E, 17.5], [-9, 3.5 + E - 0.4, 24]],             // over the garden from the first-floor balcony
-  ["balcony_2", [-2, 7 + E, 9], [8, 7 + E - 0.8, 12]],                   // the top-floor balcony over the shed and the garage
-  ["shed_interior", [5.5, E, 13.5], [1.5, 1.2, 9]],            // the barber shed: mirrors, chairs, the table
-  ["garage", [15.6, E, -3.5], [15.6, 2, 8]],                   // the garage from the road: both gates, the cars
-  ["garage_interior", [12, E, 7.5], [17, 1.4, 11.5]],          // inside: the booth partition and the screen
-  ["pool", [5.5, E, 19.75], [9.5, -0.5, 23.5]],                // the pool from the deck's SW corner
-  ["road", [-19, E, -2.5], [-6, 1.4, -1.5]],                   // the road from the west end: the BMW, the fence, the house
-  ["gate", [-6.25, E, -3.5], [-6.25, 2.5, 6]],                 // the front gate from the road, the house behind
+  ["start_t0", [16, E, 12.5], [12, 1.4, 11]],                  // T0 start in the garage pocket, west through the mouth
+  ["start_t1", [-2, 7 + E, 7.75], [-1.5, 8.2, 14]],           // T1 start, the big top-floor room, north past the bed
+  ["kitchen_0", [-4.2, E, 10.5], [-2.5, 1.2, 15]],             // the ground-floor kitchen: the run, the table
+  ["salon_0", [-5.5, E, 14], [-10, 1.3, 16.5]],                // the salon from the kitchen door: couch, table, TV
+  ["bedroom_0", [-2, E, 16.8], [-0.5, 0.8, 11]],               // the bedroom from its north end
+  ["bath_0", [-5.9, E, 11.9], [-6.3, 1.0, 13.4]],              // the small bathroom from its door
+  ["boiler", [-7.3, E, 7.2], [-10.5, 1.0, 8.5]],               // kotłownia
+  ["house_garage", [-4.5, E, 7.5], [-1, 0.8, 8.8]],            // the house garage: bench, chest, tyres, bike
+  ["stairs", [-6, E, 10.5], [-9.5, 2.0, 11.5]],                // the stairs from the hall
+  ["bedroom_1", [-7.4, 3.5 + E, 7], [-10.5, 4.2, 7.5]],        // first floor: the bedroom
+  ["bath_1", [-5.3, 3.5 + E, 7.5], [-3.9, 4.2, 7.5]],          // first floor: the bathroom
+  ["kitchen_1", [-3, 3.5 + E, 12.5], [0.5, 4.2, 8]],           // first floor: the big kitchen
+  ["salon_1", [-6.5, 3.5 + E, 13.9], [-3, 4.2, 16.5]],         // first floor: the salon and the balcony door
+  ["balcony_1", [-5.5, 3.5 + E, 18], [-5.5, 3.5 + E - 0.3, 24]],   // over the garden from the first-floor balcony
+  ["room_nw", [-6.8, 7 + E, 14.6], [-9.5, 7.8, 16.5]],         // top floor: the NW room
+  ["room_e", [-4.5, 7 + E, 12.5], [-1.5, 7.8, 16.5]],          // top floor: the big east room, TV end
+  ["balcony_2", [1.9, 7 + E, 10.75], [8, 7 + E - 0.8, 12]],    // the east balcony over the shed and the garage
+  ["shed_mirrors", [6.8, E, 11.25], [3, 1.2, 12.5]],           // the shed: the mirror wall from the door
+  ["shed_couch", [3.5, E, 9.5], [6, 1.2, 15]],                 // the shed: the couch and the TV corner
+  ["garage_bays", [11, E, 13.8], [13.5, 1.4, 3]],              // the garage: both bays under the hex lights, from the NW corner
+  ["garage_bench", [11, E, 8.5], [16, 1.2, 14]],               // the garage: the bench, the chests, the shelves
+  ["gates", [13.5, E, -3.5], [13.5, 2, 8]],                    // the garage from the road: both gates
+  ["bmw", [-13, E, -4.5], [-9, 0.7, -1.8]],                    // the M240i on the road
+  ["bmw_rear", [-4, E, -3.8], [-8, 0.7, -1.8]],
+  ["pool", [5, E, 20], [8.2, 1, 23.8]],                        // the pool from the lawn
+  ["road", [-18, E, -2.5], [-6, 1.4, -1.5]],                   // the road from the west end
+  ["gate", [-2.75, E, -3.5], [-4, 2.5, 6]],                    // the front gate, the house behind
+  ["passage", [1.75, E, 4], [1.75, 1.4, 16]],                  // the passage between the house and the shed
   ["overview", [-20, 40, -40], [0, 0, 12]],
   ["overview_plot", [30, 32, 34], [-2, 0, 10]],
 ];
+const only = process.env.VIEWS ? new Set(process.env.VIEWS.split(",")) : null;
 const p = await openReview("map=dolna&preset=medium", "dolna");
-const metrics = await shoot(p, views, "review_");
+const metrics = await shoot(p, only ? views.filter(([n]) => only.has(n)) : views, "review_");
 log("dolna", metrics.map((m) => `${m.name} ${m.drawCalls} calls/${m.activeMeshes} meshes`).join(" · "));
 log("dolna verts", metrics[0].vertices);
 await p.close();

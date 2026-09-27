@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { DOLNA, DOLNA_BOUNDARY, DOLNA_EXITS, DOLNA_GROUND, DOLNA_PLACES, DOLNA_STOREY } from "./dolna";
+import { DOLNA, DOLNA_BOUNDARY, DOLNA_EXITS, DOLNA_FURNITURE, DOLNA_GROUND, DOLNA_PLACES, DOLNA_STOREY, coverHeight } from "./dolna";
+import { VOXEL_LIBRARY } from "./voxelLibrary";
+import { voxelBounds } from "./voxel";
 import { buildCollisionWorld, type Solid } from "./map";
 import { makeRayHit } from "./collision";
 import { PLAYER } from "./constants";
@@ -57,16 +59,16 @@ const surfaces = (): NavPoint[] => {
 
 /** One point per room on every floor, both balconies, the pool basin, the shed and its cubicle, the garage pocket. */
 const ROOMS: Record<string, NavPoint> = {
-  hall_0: { x: -9.9, y: 0, z: 7.5 }, bath_0: { x: -9.75, y: 0, z: 11.25 }, boiler_room: { x: -12.9, y: 0, z: 6.6 },
-  house_garage: { x: -5.75, y: 0, z: 6.6 }, kitchen_0: { x: -7.5, y: 0, z: 12.5 }, bedroom_0: { x: -4.4, y: 0, z: 13.5 },
-  salon_0: { x: -12, y: 0, z: 14.75 }, annex: { x: -5, y: 0, z: 18.25 }, stair_landing_0: { x: -13.75, y: 5 * 0.35, z: 10.5 },
-  corridor_1: { x: -9.9, y: Y(1), z: 9.6 }, bath_1: { x: -9.9, y: Y(1), z: 5.6 }, bedroom_1: { x: -12.25, y: Y(1), z: 7.5 },
-  kitchen_1: { x: -5.9, y: Y(1), z: 10.5 }, salon_1: { x: -8.9, y: Y(1), z: 14.75 }, stair_landing_1: { x: -13.75, y: Y(1) + 5 * 0.35, z: 10.5 },
-  balcony_1: { x: -9, y: Y(1), z: 17.5 },
-  corridor_2: { x: -9.9, y: Y(2), z: 9.6 }, room_sw: { x: -12, y: Y(2), z: 6.5 }, room_se: { x: -5, y: Y(2), z: 8.5 },
-  room_ne: { x: -5.9, y: Y(2), z: 13.6 }, room_nw: { x: -12, y: Y(2), z: 15 }, balcony_2: { x: -2, y: Y(2), z: 9 },
-  shed: { x: 3.75, y: 0, z: 10.5 }, shed_bathroom: { x: 2.1, y: 0, z: 7.6 }, garage_pocket: { x: 18.75, y: 0, z: 12.25 },
-  garage_west_door: { x: 10.5, y: 0, z: 3.75 }, pool_basin: { x: 9, y: -1.2, z: 23 }, pool_deck: { x: 9, y: 0, z: 20 },
+  hall_0: { x: -5.95, y: 0, z: 8.5 }, bath_0: { x: -5.6, y: 0, z: 12.4 }, boiler_room: { x: -9, y: 0, z: 7.5 },
+  house_garage: { x: -2, y: 0, z: 7.5 }, kitchen_0: { x: -3.5, y: 0, z: 14.5 }, bedroom_0: { x: -0.6, y: 0, z: 15.5 },
+  salon_0: { x: -8.5, y: 0, z: 16.7 }, annex: { x: -1, y: 0, z: 19 }, stair_landing_0: { x: -10, y: 5 * 0.35, z: 11.5 },
+  corridor_1: { x: -6.25, y: Y(1), z: 11 }, bath_1: { x: -4.75, y: Y(1), z: 7.5 }, bedroom_1: { x: -9, y: Y(1), z: 8.3 },
+  kitchen_1: { x: -1.5, y: Y(1), z: 12 }, salon_1: { x: -6.4, y: Y(1), z: 15.8 }, stair_landing_1: { x: -10, y: Y(1) + 5 * 0.35, z: 11.5 },
+  balcony_1: { x: -5.5, y: Y(1), z: 18.25 },
+  hall_2: { x: -8.5, y: Y(2), z: 8.5 }, hall_2n: { x: -6.5, y: Y(2), z: 12.5 }, room_e_s: { x: -2, y: Y(2), z: 9.5 },
+  room_e_n: { x: -1, y: Y(2), z: 12 }, room_nw: { x: -8.5, y: Y(2), z: 15.5 }, balcony_2: { x: 1.9, y: Y(2), z: 10.75 },
+  shed: { x: 5.5, y: 0, z: 11.5 }, shed_bathroom: { x: 4.1, y: 0, z: 8.5 }, garage_pocket: { x: 16, y: 0, z: 12.5 },
+  garage_west_door: { x: 8.5, y: 0, z: 3.75 }, pool_ring: { x: 8.2, y: 0, z: 20.5 }, garage_alley: { x: 18.85, y: 0, z: 7.5 },
 };
 
 describe("DOLNA's starts are hidden", () => {
@@ -101,8 +103,8 @@ describe("DOLNA's starts are hidden", () => {
     const eye = PLAYER.eyeHeight;
     const seen: string[] = [];
     for (let x = -20; x <= 20; x += 1) for (const z of [-4, -2, 0]) if (sees(x, eye, z, start0.x, eye, start0.z)) seen.push(`road (${x}, ${z})`);
-    for (let x = 12.25; x <= 19; x += 0.5) if (sees(x, eye, 1.25, start0.x, eye, start0.z)) seen.push(`gate (${x}, 1.25)`);
-    for (let x = 13.25; x <= 14.25; x += 0.5) if (sees(x, eye, 14.25, start0.x, eye, start0.z)) seen.push(`north door (${x}, 14.25)`);
+    for (let x = 9.75; x <= 17.25; x += 0.5) if (sees(x, eye, 1.25, start0.x, eye, start0.z)) seen.push(`gate (${x}, 1.25)`);
+    for (let x = 11.75; x <= 12.75; x += 0.5) if (sees(x, eye, 15.25, start0.x, eye, start0.z)) seen.push(`north door (${x}, 15.25)`);
     expect(seen).toEqual([]);
   });
 
@@ -240,8 +242,8 @@ describe("DOLNA's cover speaks one language", () => {
     const forbidden = standable.filter((t) => DOLNA_BOUNDARY.test(t.name) || /^roof_/.test(t.name)).map((t) => `${t.name} (from ${t.from})`);
     expect(high, "standable tops at or above 1.9 m that are not floors, stairs or balconies").toEqual([]);
     expect(forbidden, "roofs, hedges or the fence are standable").toEqual([]);
-    // And the proof has teeth: the chain does climb onto the cars, crates and drums it is meant to.
-    expect(gained.map((t) => t.name)).toContain("garage0_crate");
+    // And the proof has teeth: the chain does climb onto the low furniture it is meant to.
+    expect(gained.map((t) => t.name)).toContain("garage0_bench");
   });
 
   it("guards every balcony with a parapet no body mantles, so the roofs beside them stay roofs", () => {
@@ -293,5 +295,29 @@ describe("DOLNA's cover speaks one language", () => {
       for (let i = 1; i < treads.length; i++) expect(treads[i].box.maxY - treads[i - 1].box.maxY).toBeCloseTo(0.35, 5);
       for (const t of treads) expect(Math.abs((t.box.maxX - t.box.minX) - 0.5)).toBeLessThan(0.11);
     }
+  });
+});
+
+describe("DOLNA is furnished from the voxel kit", () => {
+  it("names only models the library has, and the footprint table matches each model within 15 cm", () => {
+    const missing: string[] = [], off: string[] = [];
+    for (const p of DOLNA.props) if (p.kind === "voxel" && !(p.model! in VOXEL_LIBRARY)) missing.push(p.model!);
+    for (const [id, [w, h, d]] of Object.entries(DOLNA_FURNITURE)) {
+      const m = VOXEL_LIBRARY[id];
+      if (!m) { missing.push(id); continue; }
+      const b = voxelBounds(m);
+      // The table's height is the PROXY's: a tap, a lamp or a monitor may stand up to 0.6 m above it.
+      if (Math.abs(b.w - w) > 0.15 || Math.abs(b.d - d) > 0.15 || h > b.h + 0.15 || h < b.h - 0.6) off.push(`${id}: table ${w}×${h}×${d}, model ${b.w}×${b.h}×${b.d}`);
+    }
+    expect([...new Set(missing)], "models the library does not have").toEqual([]);
+    expect(off).toEqual([]);
+  });
+
+  it("gives every standing piece a proxy in the cover language, and hangs the rest above a head or on a wall", () => {
+    expect(coverHeight(0.5)).toBe(0.5); expect(coverHeight(0.9)).toBe(0.8); expect(coverHeight(1.6)).toBe(1.45); expect(coverHeight(1.8)).toBe(1.9); expect(coverHeight(2.1)).toBe(2.1);
+    const proxies = DOLNA.solids.filter((s) => s.invisible && (s.name ?? "").startsWith("furn_"));
+    expect(proxies.length).toBeGreaterThan(60);
+    const rooms = DOLNA.props.filter((p) => p.kind === "voxel");
+    expect(rooms.length).toBeGreaterThan(proxies.length);
   });
 });
