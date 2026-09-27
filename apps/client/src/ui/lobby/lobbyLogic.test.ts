@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { bracketString, mulberry32, reportWinner, currentMatch, seedBracket, TOURNAMENT_SIZES } from "@frankibarber/shared";
 import type { EntrantShape } from "@frankibarber/shared";
 import {
-  amReady, canStart, isHost, isLobbySize, LOBBY_SIZES, matchStage, readyCount,
+  amReady, canStart, gotoAction, isHost, isLobbySize, LOBBY_SIZES, matchStage, readyCount,
   rosterSummary, selfEntrant, warmupOptions, watchRows,
 } from "./lobbyLogic";
 
@@ -97,5 +97,32 @@ describe("warmup and the roster summary", () => {
     expect(rosterSummary([], 4)).toBe("0 / 4 · 0 gotowych");
     // a bad size falls back to the hard cap rather than printing junk
     expect(rosterSummary([ent("a")], 7)).toBe("1 / 32 · 0 gotowych");
+  });
+});
+
+/**
+ * The one rule behind the bug the first live tournament died of: the lobby raised every arena, drew
+ * the bracket, and nobody could get into a match, because nothing on the client did anything with
+ * the message that says which arena is yours.
+ */
+describe("what a lobby:goto tells the screen to do", () => {
+  it("play: true on a screen that can play is ENTER THE ARENA", () => {
+    expect(gotoAction({ roomId: "r7", play: true }, true)).toBe("play");
+  });
+
+  it("the answer to OGLĄDAJ is watched, even on a screen that could play", () => {
+    expect(gotoAction({ roomId: "r7", play: false }, true)).toBe("watch");
+    // An older server does not send `play` at all; watching is the safe reading of a bare goto.
+    expect(gotoAction({ roomId: "r7" }, true)).toBe("watch");
+  });
+
+  it("a screen with no way to play (the /viewer console) watches instead of dropping it", () => {
+    expect(gotoAction({ roomId: "r7", play: true }, false)).toBe("watch");
+  });
+
+  it("nothing to open is nothing to do", () => {
+    expect(gotoAction({ roomId: "", play: true }, true)).toBe("ignore");
+    expect(gotoAction(null, true)).toBe("ignore");
+    expect(gotoAction(undefined, true)).toBe("ignore");
   });
 });

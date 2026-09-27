@@ -89,8 +89,11 @@ export class LobbyConnection {
     // A wildcard keeps the SDK quiet about messages the screen does not consume.
     this.room.onMessage("*", () => {});
     this.room.onMessage<LobbyChatLine>("lobby:chat", (line) => lobby.pushChat(line));
-    // „lobby:goto” is the server telling a client which arena to open; the screen also derives this
-    // from the arena map, so here it is a hook the caller may listen to but the store already has it.
+    // „lobby:goto” is the server telling a client which arena to open — and for a PLAYER it is the only
+    // way in, because an arena is raised by the matchmaker and so has no name to type and no listing
+    // to find. The store cannot stand in for it: the arena map says which rooms exist, never which
+    // one is YOURS to play. A screen that does not subscribe here leaves its player looking at a
+    // bracket they cannot enter, which is exactly what the first live tournament was.
     this.room.onMessage<LobbyGotoMsg>("lobby:goto", (msg) => { for (const cb of this.gotoHandlers) cb(msg); });
     this.room.onStateChange(write);
     // Some SDK builds surface schema children only after the first per-field callback is armed.

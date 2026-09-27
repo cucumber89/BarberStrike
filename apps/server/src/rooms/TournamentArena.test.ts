@@ -126,3 +126,45 @@ it("verifySession sets the account identity on join; a missing or bad token is a
   expect(h.state.players.has(guest.sessionId)).toBe(true);
   expect(h.room.handlerErrors).toBe(0);
 });
+
+/**
+ * THE SIDES ARE NOT INTERCHANGEABLE, and before the hotfix they were handed out by whose socket
+ * landed first. The result says only which TEAM won and the lobby reads team 0 as `pair[0]`, so a
+ * pair that arrived in the other order had its WINNER recorded as the loser — and the bracket sent
+ * the wrong player through. The lobby therefore passes `pairNames` in bracket order.
+ */
+it("seats each player on their own side of the bracket by nickname, whatever order they arrive in", async () => {
+  h = await RoomHarness.create({
+    room: "arena", mode: "duel", tournamentId: "lobbyN", matchIndex: 3,
+    pair: ["ent-a", "ent-b"], pairNames: ["Alpha", "Bravo"],
+  });
+  const got: { winner: string; scoreA: number; scoreB: number }[] = [];
+  await h.room.presence.subscribe("tourn:lobbyN:3", (d: unknown) => got.push(d as { winner: string; scoreA: number; scoreB: number }));
+
+  // Bravo — side B of the bracket — gets there first. The balancer would make them team 0.
+  const b = await h.join("Bravo");
+  const a = await h.join("Alpha");
+  expect(P(b).team, "Bravo is pair[1], so team 1, even though they joined first").toBe(1);
+  expect(P(a).team, "Alpha is pair[0], so team 0").toBe(0);
+
+  // And Alpha winning now publishes Alpha's entrant id, not the other one.
+  await h.until(MatchPhase.Prep);
+  await winMatch(0);
+  await h.tick(1);
+  expect(got.length).toBe(1);
+  expect(got[0].winner, "the winner is the entrant who actually won").toBe("ent-a");
+  expect(h.room.handlerErrors).toBe(0);
+});
+
+it("falls back to the balancer when the names decide nothing — a bot, or two entrants under one nick", async () => {
+  h = await RoomHarness.create({
+    room: "arena", mode: "duel", tournamentId: "lobbyT", matchIndex: 0,
+    pair: ["ent-a", "ent-b"], pairNames: ["Same", "Same"],
+  });
+  const one = await h.join("Same");
+  const two = await h.join("Same");
+  // Nothing to tell them apart, so the two sides are simply filled — which is what a duel has
+  // always done, and never leaves both players on one team.
+  expect(new Set([P(one).team, P(two).team]).size, "still one player a side").toBe(2);
+  expect(h.room.handlerErrors).toBe(0);
+});

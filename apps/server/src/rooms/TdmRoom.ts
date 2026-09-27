@@ -185,6 +185,13 @@ export interface TdmJoinOptions {
   /** The two entrant ids of this arena's pair, in bracket order (a → team 0, b → team 1). */
   pair?: [string, string];
   /**
+   * The same pair's NICKNAMES, in the same order — the only thing that ties a socket arriving at this
+   * arena to the side of the bracket it belongs to. See `sideOfPair`: without it the sides are handed
+   * out by who connected first, and the lobby (which reads the result as "team 0 = pair[0]") records
+   * the loser as the winner whenever the two happened to join the other way round.
+   */
+  pairNames?: [string, string];
+  /**
    * Drop V (P4/D6): a session token, the account's identity. `verifySession` resolves it locally to
    * an account id (a valid session sets the identity; a missing or invalid one is a GUEST, no error —
    * L1). It is a join option, not a replicated field: nothing about the account reaches `TdmState`.
@@ -305,6 +312,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
   private tournamentId = "";
   private tournamentMatchIndex = -1;
   private lobbyPair: [string, string] | null = null;
+  /** The pair's nicknames in the same bracket order, which is how a joiner is matched to its side. */
+  private lobbyPairNames: [string, string] | null = null;
   /** True once the arena has published its result to the lobby, so it publishes exactly once. */
   private resultPublished = false;
   /** True when this duel is a tournament ARENA (drop V), as opposed to a plain duel or a `turniej`. */
@@ -369,6 +378,8 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
       this.tournamentMatchIndex = options.matchIndex >>> 0;
       const pr = options?.pair;
       if (Array.isArray(pr) && typeof pr[0] === "string" && typeof pr[1] === "string") this.lobbyPair = [pr[0], pr[1]];
+      const pn = options?.pairNames;
+      if (Array.isArray(pn) && typeof pn[0] === "string" && typeof pn[1] === "string") this.lobbyPairNames = [pn[0], pn[1]];
     }
     // Drop V (P4/D6): resolve the creator's session to an account, no-throw. There is no player to
     // attach it to at onCreate (the host joins after), so this only proves a bad token cannot crash a
@@ -672,7 +683,7 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
     p.id = client.sessionId;
     p.boysClass = p.nextClass = isBoysClass(options?.boysClass) ? options.boysClass : 1;
     p.name = name;
-    p.team = this.teamForJoiner();
+    p.team = this.teamForJoiner(name);
     // Drop D: joining an infection round in progress means joining the chasers — a late survivor
     // would be a free extra life for the survivor side. `spawn` reads the flag and hands the clippers.
     p.shaved = this.infection && p.team === OSTRZYZENI.shavedTeam;
@@ -730,7 +741,32 @@ export class TdmRoom extends Room<{ state: MatchState; metadata: { room: string;
    * have none. Infection (drop D) never balances: the sides are survivors vs the shaved, so a joiner
    * in the warm-up is a survivor and one arriving while a round runs (Prep or Playing) is shaved.
    */
-  private teamForJoiner(): Team {
+  /**
+   * Which side of the BRACKET this joiner is, by nickname — or null when there is nothing to go on.
+   *
+   * In a tournament arena the two sides are not interchangeable. The result the arena publishes says
+   * only which TEAM won, and the lobby reads team 0 as `pair[0]`; so a side handed out by whose
+   * socket landed first makes the lobby advance the loser every time the pair joined in the other
+   * order. The lobby therefore raises the arena with the pair's nicknames in bracket order.
+   *
+   * Names are compared through `sanitizeName`, because that is what the joiner's own name went
+   * through. Anything that cannot be decided — a bot, a spectator-turned-player, two entrants under
+   * one nickname — returns null and falls through to the balancer, exactly as a plain duel does.
+   */
+  private sideOfPair(name: string): Team | null {
+    const n = this.lobbyPairNames;
+    if (!this.arenaOfTournament || !n) return null;
+    const a = sanitizeName(n[0]) ?? n[0];
+    const b = sanitizeName(n[1]) ?? n[1];
+    if (a === b) return null;
+    if (name === a) return 0;
+    if (name === b) return 1;
+    return null;
+  }
+
+  private teamForJoiner(name = ""): Team {
+    const side = this.sideOfPair(name);
+    if (side !== null) return side;
     if (this.infection) {
       const inRound = this.state.phase === MatchPhase.Prep || this.state.phase === MatchPhase.Playing;
       return inRound ? OSTRZYZENI.shavedTeam : OSTRZYZENI.survivorTeam;
