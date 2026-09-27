@@ -76,6 +76,17 @@ export function accountRoutes(): Router {
   const router = Router();
   router.use(express.json({ limit: "128kb" }));
 
+  // POST /api/admin/verify {password} -> 200 {ok} — the tournament admin console gate (/viewer).
+  // With no ADMIN_PASSWORD set on the server (dev) the console is open. This only gates the UI; the
+  // `tournament-lobby` room checks the same key on create, so a forged UI cannot raise a tournament.
+  router.post("/admin/verify", (req, res) => {
+    const admin = process.env.ADMIN_PASSWORD ?? "";
+    const { password } = req.body ?? {};
+    if (!admin) return res.json({ ok: true, open: true });
+    if (typeof password === "string" && password === admin) return res.json({ ok: true, open: false });
+    return res.status(401).json({ ok: false });
+  });
+
   // POST /api/register {login,password} -> 201 + cookie / 400 / 409
   router.post("/register", (req, res) => {
     const { login, password } = req.body ?? {};

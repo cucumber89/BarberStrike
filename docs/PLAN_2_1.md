@@ -875,6 +875,14 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
 - 2026-09-26 — Drop V (owner, Ultron): **a new Colyseus room `tournament-lobby` and a new replicated schema `TournamentLobbyState` (`hostId`, `phase`, `entrants`, `bracket`, `arenas`) are approved (D1/D2/D3).** L6 keeps the game's tick/snapshot and `MatchState`/`PlayerState` untouched, so the tournament coordinator is a separate, physics-free room; each pair plays as an ordinary `tdm mode=duel` arena, and results flow back to the lobby over Colyseus `presence` (not a new game field). Also decided: **the VPS is 2 vCPU / 4 GB**, which sizes the caps at `TOURNAMENT_MAX_ENTRANTS = 32` / `TOURNAMENT_MAX_SPECTATORS_TOTAL = 96` (≈1.9 Mbit/s at full load; a final-gate load test must confirm `tick.maxMs < 8 ms` at 16 arenas, else drop to 16/48); and **accounts persist in SQLite** (`better-sqlite3`, `data/accounts.db`), passwords scrypt-hashed, sessions stored as SHA-256 hashes. The full rationale is `docs/V_SPEC.md` §2, §6.
 
 ## Deferred (things noticed, deliberately not done)
+- Drop W 2026-09-27: **three owner commits of 2026-09-26 (`claude/practical-bardeen-07gu1m`: tournament
+  hosting moved to the `/viewer` admin console with a seat slider and `ADMIN_PASSWORD`, the tutorial
+  overlay above the HUD, the accounts SQLite dir in the Alpine image) were never merged into `main`**,
+  so the first DOLNA deploy shipped the older menu. Merged into the DOLNA branch here (the lobby now
+  takes `duelMapOf(mapId)`); `apps/client/e2e/tools/v-app-shots.mjs` still expects the removed
+  `tournament-setup` panel and needs its section 3 rewritten against `/viewer`. The `/viewer` admin
+  console creates lobbies without a map, so tournaments land on `DUEL_MAP_ID` (DOLNA) — a map
+  choice there is the next small package.
 - Drop W 2026-09-27: **two of eight live rounds on DOLNA ended on the clock** with a NORMAL bot and a
   stationary player 44 m away — `DUEL.roundMs` 60 s on a 64 × 70 m map is P7's open question; count
   the clock rounds in the first human playtest before touching the constant.

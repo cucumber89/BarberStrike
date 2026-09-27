@@ -126,6 +126,21 @@ button:focus-visible { outline:2px solid #f4cf8e; outline-offset:3px; }
   font: inherit; letter-spacing: .06em; cursor: pointer; }
 .viewer-pick button:hover { border-color: #cfa666; color: #f5d6a2; }
 
+/* Drop V follow-up: the tournament admin console at the top of /viewer. */
+.viewer-admin { margin: 0 0 24px; padding: 20px; background: #12181f; border: 1px solid #2b3742; border-radius: 12px; }
+.viewer-admin h2 { margin: 0 0 6px; font-size: 20px; letter-spacing: .05em; color: #f5d6a2; }
+.viewer-admin p { margin: 0 0 12px; color: #9aa8b4; font-size: 13px; line-height: 1.5; }
+.va-row { display: flex; gap: 8px; }
+.va-row input, .va-field input:not([type=range]) { flex: 1; background: #0f1216; border: 1px solid #2b3742; border-radius: 8px;
+  color: #e6ebf0; padding: 10px 12px; font: inherit; }
+.va-row input:focus, .va-field input:focus { outline: none; border-color: #cfa666; }
+.va-create { display: grid; gap: 16px; }
+.va-field { display: grid; gap: 6px; }
+.va-field > span { font-size: 12px; letter-spacing: .08em; color: #9aa8b4; }
+.va-field > span b { color: #f5d6a2; font-size: 15px; }
+.va-field small { color: #8fa0ad; font-size: 12px; }
+.va-field input[type=range] { width: 100%; accent-color: #cfa666; }
+
 .viewer-stage { position: fixed; inset: 0; background: #05070b; }
 .viewer-stage canvas { width: 100%; height: 100%; display: block; outline: none; }
 .viewer-toggle { position: absolute; top: 12px; right: 12px; z-index: 2; width: 28px; height: 28px;

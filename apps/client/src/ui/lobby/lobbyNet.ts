@@ -40,6 +40,8 @@ export interface LobbyJoinOptions {
   roomId?: string;
   /** Watch only — takes a spectator seat, never an entrant slot. */
   spectator?: boolean;
+  /** Admin password (from the /viewer console): the server requires it to CREATE a lobby. */
+  adminKey?: string;
 }
 
 /**
@@ -131,6 +133,7 @@ function joinPayload(opts: LobbyJoinOptions): Record<string, unknown> {
     map: opts.map ?? "",
     size: opts.size ?? 0,
     spectator: opts.spectator === true,
+    adminKey: opts.adminKey ?? "",
   };
 }
 
