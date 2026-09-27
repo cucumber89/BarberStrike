@@ -12,6 +12,7 @@ import { Crates } from "./Crates";
 import { Account } from "./Account";
 import { useAccount } from "../net/account";
 import { MenuProfile } from "./MenuProfile";
+import { MenuTable } from "./MenuTable";
 import { Welcome } from "./onboarding/Welcome";
 import { loadOnboard } from "./onboarding/tutorialRules";
 import { tutorial } from "./onboarding/tutorialStore";
@@ -162,6 +163,19 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
       return openA - openB || b.clients - a.clients;
     });
   }, [rooms]);
+  /**
+   * Package U: the lobby list is split by the mode being set up — the chosen mode's matches first,
+   * then the rest under an INNE TRYBY divider. Not a hard filter: with six rooms in six modes a
+   * strict one would show a single row, and "nobody plays your mode, but these do" is the more
+   * useful answer than an empty list.
+   */
+  const lobbyListed = useMemo(() => {
+    if (!listed) return null;
+    return {
+      mine: listed.filter((r) => (r.metadata?.mode ?? "tdm") === gameMode),
+      other: listed.filter((r) => (r.metadata?.mode ?? "tdm") !== gameMode),
+    };
+  }, [listed, gameMode]);
   /** Three states, not two: the first request has not come back yet, and that is not "offline". */
   const netState = listError ? "off" : rooms ? "on" : "";
   const playersOnline = rooms?.reduce((n, r) => n + r.clients, 0) ?? 0;
@@ -235,6 +249,22 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
     );
   };
 
+  /** One lobby row: the match, and a DOŁĄCZ button that is the whole row. */
+  const lobbyRow = (r: RoomListing) => {
+    const full = r.clients >= r.maxClients;
+    const mine = (r.metadata?.mode ?? "tdm") === gameMode;
+    return (
+      <button
+        key={r.roomId} className={`srv-row ${full ? "full" : ""} ${mine ? "" : "other"}`} data-testid={`room-${r.roomId}`}
+        disabled={connecting || full} onClick={() => joinRoom(r)}
+        title={full ? "Ten mecz jest pełny" : !nameOk ? "Najpierw wpisz ksywkę" : `Dołącz do ${r.metadata?.name || r.roomId}`}
+      >
+        {roomLine(r)}
+        <span className="srv-go">{full ? "PEŁNY" : "DOŁĄCZ ▸"}</span>
+      </button>
+    );
+  };
+
   /** What the list has to say when it has no rooms to show — looking, empty, or unreachable. */
   const emptyList = (short: boolean) => {
     if (listError) return <div className="srv-empty err">{listError}.{short ? "" : " Lista odświeży się sama, gdy serwer wróci."}</div>;
@@ -291,9 +321,13 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
 
       {panel === "main" && (
         <div className="mm-title">
-          <div className="mm-title-grid">
+          {/* Package U (owner, 2026-09-27): three columns. LEFT the hero and the numbered nav, CENTRE
+              the open matches with the nickname and SZYBKA GRA, RIGHT two framed cards — PROFIL and
+              TABELA. The profile used to sit above the hero on the left and the table inside it, in a
+              column held to 49 vw against the keyart; the owner asked for both framed on the right,
+              where that half of the screen was carrying nothing a player could act on. */}
+          <div className="mm-title-cols">
             <div className="mm-title-left">
-              {!mobile && <MenuProfile nick={name.trim() || settings.nickname || "GRACZ"} />}
               <header className="mm-hero" data-testid="mm-hero">
                 <div className="mm-hero-bg" data-testid="mm-hero-bg" aria-hidden="true" />
                 <div>
@@ -315,7 +349,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                 <nav className="mm-nav">
                   <button className="mm-nav-btn primary" onClick={() => setPanel("lobby")} data-testid="btn-play">
                     <i className="mm-nav-no">01</i><span className="mm-nav-art"><NAV_ART.play /></span>
-                    <b>GRAJ</b><em>Wybierz tryb i mecz</em><span className="mm-nav-go">▸</span>
+                    <b>GRAJ</b><em>Wybierz tryb, mapę i mecz</em><span className="mm-nav-go">▸</span>
                   </button>
                   <button className="mm-nav-btn" onClick={() => setPanel("settings")} data-testid="btn-settings">
                     <i className="mm-nav-no">02</i><span className="mm-nav-art"><NAV_ART.settings /></span>
@@ -330,7 +364,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                     <b>SZAFA</b><em>Strój, sylwetka, skiny i skrzynki</em><span className="mm-nav-go">▸</span>
                   </button>
                   {/* Drop V (P6): KONTO — own block, disjoint from the tournament entry (P5) and the
-                      title block (:219-257). Sign in to carry progress between browsers. */}
+                      title block. Sign in to carry progress between browsers. */}
                   <button className="mm-nav-btn" onClick={() => setPanel("account")} data-testid="btn-account">
                     <i className="mm-nav-no">05</i><span className="mm-nav-art"><NAV_ART.armoury /></span>
                     <b>KONTO</b><em>Zaloguj się i zabierz postępy ze sobą</em><span className="mm-nav-go">▸</span>
@@ -340,51 +374,55 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
             </div>
 
             {/* "Is anyone playing?" is the first question, so it is answered on the front page.
-                It used to be answered and nothing more: the rows were `div.srv-row.static`, so a
-                player who could SEE a match running still had to press GRAJ, scroll a lobby column
-                and find the same row again to get into it. They are buttons now — the one thing
-                between a click and the match is a nickname, so the field for it sits right here
-                rather than two screens away. */}
-            <div className="mm-front">
-            <aside className="mm-live" data-testid="live-matches">
-              <div className="srv-head">
-                <h2 className="lb-h">MECZE NA ŻYWO</h2>
-                <button type="button" className={`srv-refresh ${refreshing ? "busy" : ""}`} onClick={() => void refresh()} data-testid="btn-refresh-main" title="Odśwież listę">⟳</button>
-              </div>
-              <div className="mm-live-list" data-testid="room-list-main">
-                {emptyList(true)}
-                {listed?.slice(0, MAIN_ROWS).map((r) => {
-                  const full = r.clients >= r.maxClients;
-                  return (
-                    <button
-                      type="button" key={r.roomId} className={`srv-row ${full ? "full" : ""}`} data-testid={`room-${r.roomId}`}
-                      disabled={connecting || full || mobile} onClick={() => joinRoom(r)}
-                      title={full ? "Ten mecz jest pełny" : !nameOk ? "Najpierw wpisz ksywkę" : `Dołącz do ${r.metadata?.name || r.roomId}`}
-                    >
-                      {roomLine(r)}
-                      <span className="srv-go">{full ? "PEŁNY" : "WEJDŹ ▸"}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              {!mobile && (
-                <div className="mm-live-foot">
-                  {nickField(false)}
-                  <button type="button" className="mm-btn small primary" disabled={connecting} onClick={() => { if (!nameOk) { nickRef.current?.focus(); nickRef.current?.select(); return; } play("auto"); }} data-testid="btn-quickplay-main">
-                    {listed && listed.length > 0 ? "SZYBKA GRA" : "ZAŁÓŻ MECZ"}
-                  </button>
-                  <button type="button" className="mm-link" onClick={() => setPanel("lobby")}>
-                    {listed && listed.length > MAIN_ROWS ? `WSZYSTKIE (${listed.length}) ▸` : "WIĘCEJ OPCJI ▸"}
-                  </button>
+                The rows are buttons — the one thing between a click and the match is a nickname,
+                so the field for it sits right here rather than two screens away. The crate lives
+                under the list: it is the thing a player comes back the next day for. */}
+            <div className="mm-title-mid">
+              <aside className="mm-live" data-testid="live-matches">
+                <div className="srv-head">
+                  <h2 className="lb-h">MECZE NA ŻYWO</h2>
+                  <button type="button" className={`srv-refresh ${refreshing ? "busy" : ""}`} onClick={() => void refresh()} data-testid="btn-refresh-main" title="Odśwież listę">⟳</button>
                 </div>
-              )}
-            </aside>
+                <div className="mm-live-list" data-testid="room-list-main">
+                  {emptyList(true)}
+                  {listed?.slice(0, MAIN_ROWS).map((r) => {
+                    const full = r.clients >= r.maxClients;
+                    return (
+                      <button
+                        type="button" key={r.roomId} className={`srv-row ${full ? "full" : ""}`} data-testid={`room-${r.roomId}`}
+                        disabled={connecting || full || mobile} onClick={() => joinRoom(r)}
+                        title={full ? "Ten mecz jest pełny" : !nameOk ? "Najpierw wpisz ksywkę" : `Dołącz do ${r.metadata?.name || r.roomId}`}
+                      >
+                        {roomLine(r)}
+                        <span className="srv-go">{full ? "PEŁNY" : "WEJDŹ ▸"}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {!mobile && (
+                  <div className="mm-live-foot">
+                    {nickField(false)}
+                    <button type="button" className="mm-btn small primary" disabled={connecting} onClick={() => { if (!nameOk) { nickRef.current?.focus(); nickRef.current?.select(); return; } play("auto"); }} data-testid="btn-quickplay-main">
+                      {listed && listed.length > 0 ? "SZYBKA GRA" : "ZAŁÓŻ MECZ"}
+                    </button>
+                    <button type="button" className="mm-link" onClick={() => setPanel("lobby")}>
+                      {listed && listed.length > MAIN_ROWS ? `WSZYSTKIE (${listed.length}) ▸` : "TRYB · MAPA · BOTY ▸"}
+                    </button>
+                  </div>
+                )}
+              </aside>
 
-            {/* The crate was four clicks away — SZAFA, then the SKRZYNKI tab — which is a strange
-                place to hide the one thing a player comes back the next day for. The same component
-                as the wardrobe's, in its compact form: one counter, one case, and the same reel. */}
-            {!mobile && <Crates compact onProfile={() => { setHaircut(equippedHaircut()); setBuild(equippedBuild()); setOutfit(equippedOutfit()); }} />}
+              {!mobile && <Crates compact onProfile={() => { setHaircut(equippedHaircut()); setBuild(equippedBuild()); setOutfit(equippedOutfit()); }} />}
             </div>
+
+            {/* The right column: who you are, and who has won. Both are framed like the lobby's
+                blocks. Not on a phone — there is nothing to sign in for on a device that cannot play. */}
+            {!mobile && (
+              <div className="mm-title-right" data-testid="menu-side">
+                <MenuProfile nick={name.trim() || settings.nickname || "GRACZ"} onAccount={() => setPanel("account")} />
+                <MenuTable />
+              </div>
+            )}
           </div>
 
           <footer className="mm-title-foot">
@@ -408,9 +446,9 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
             <section className="mm-content link-join" data-testid="link-join">
               <div className="lj-card">
                 <div className="lj-head">
-                  <span className="lj-eyebrow">YOU WERE INVITED TO</span>
+                  <span className="lj-eyebrow">ZAPROSZENIE DO POKOJU</span>
                   <b data-testid="link-room">{roomName}</b>
-                  <button type="button" className="mm-link" onClick={() => setLinkJoin(false)} data-testid="btn-link-edit">CHANGE</button>
+                  <button type="button" className="mm-link" onClick={() => setLinkJoin(false)} data-testid="btn-link-edit">ZMIEŃ</button>
                 </div>
                 <div className="lj-meta">
                   <span className={`srv-mode m-${gameMode}`} data-testid="link-mode" title={MODES[gameMode].name}>{MODES[gameMode].short}</span>
@@ -419,19 +457,24 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                 <p className="mm-blurb">{MODES[gameMode].blurb}</p>
                 {nickField(true)}
                 <button className="mm-btn primary big" disabled={!nameOk || connecting} onClick={() => play("auto")} data-testid="btn-quickplay">
-                  {connecting ? "CONNECTING…" : "JOIN MATCH"}
+                  {connecting ? "ŁĄCZĘ…" : "DOŁĄCZ DO MECZU"}
                 </button>
-                {!nameOk && <small className="mm-hint">Enter a nickname of at least two characters to join.</small>}
+                {!nameOk && <small className="mm-hint">Wpisz ksywkę (co najmniej dwa znaki), żeby dołączyć.</small>}
               </div>
             </section>
           )}
 
+          {/* Package U (owner, 2026-09-27): the lobby is ONE flow, numbered like the nav — 01 TRYB in
+              a single row, 02 MAPA · 03 BOTY · the look side by side, then the open matches for the
+              chosen mode with a DOŁĄCZ button per row, and the launch bar. Every step is on screen
+              at 1280×720 without scrolling (`menu-fit.mjs` measures it); only the match list
+              scrolls. It replaced a two-column lobby whose setup column scrolled past the servers. */}
           {panel === "lobby" && !linkJoin && (
             <>
-              <section className="mm-content lobby-grid">
-                {/* ---------------------------------------------------------------- match setup */}
+              <section className="mm-content lobby-flow">
                 <div className="lb-setup">
-                  <div className="lb-block wide">
+                  {/* ------------------------------------------------------------------ 01 mode */}
+                  <div className="lb-block lb-step lb-step-mode">
                     <h2 className="lb-h"><em>01</em> TRYB GRY</h2>
                     <div className="mode-grid" role="radiogroup" aria-label="Game mode" data-testid="mode-picker">
                       {MODE_ORDER.map((m) => {
@@ -448,32 +491,28 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                         );
                       })}
                     </div>
-                    <p className="mm-blurb" data-testid="mode-blurb">{MODES[gameMode].blurb}</p>
-                  </div>
-
-                  {gameMode === "boys" && (
-                    <div className="lb-block wide">
-                      <h2 className="lb-h"><em>02</em> KLASA</h2>
-                      <div className="boys-grid">
+                    <p className="mm-blurb" data-testid="mode-blurb"><b>{MODES[gameMode].name}</b> — {MODES[gameMode].blurb}</p>
+                    {/* The Boys' class is part of picking the mode, so it lives inside step 01 and the
+                        numbering below never shifts. */}
+                    {gameMode === "boys" && (
+                      <div className="boys-grid" role="radiogroup" aria-label="Klasa" data-testid="boys-class-picker">
                         {BOYS_CLASSES.map((id) => (
-                          <button key={id} className={`boys-class ${boysClass === id ? "on" : ""}`} aria-pressed={boysClass === id} onClick={() => pickClass(id)}>
+                          <button key={id} className={`boys-class ${boysClass === id ? "on" : ""}`} role="radio" aria-checked={boysClass === id} onClick={() => pickClass(id)} title={BOYS[id].blurb}>
                             <b>{id} · {BOYS[id].name}</b>
-                            <span>{BOYS[id].blurb}</span>
-                            <small>Free: {WEAPONS[BOYS[id].starter].name} + pistol</small>
+                            <small>{WEAPONS[BOYS[id].starter].name} + pistolet</small>
                           </button>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
-                  <div className="lb-block">
-                    <h2 className="lb-h"><em>{gameMode === "boys" ? "03" : "02"}</em> MAPA</h2>
+                  {/* ------------------------------------------------------------------- 02 map */}
+                  <div className="lb-block lb-step lb-step-map">
+                    <h2 className="lb-h"><em>02</em> MAPA</h2>
                     {/* A 1 v 1 is played on one of the arenas built for it, so the picker offers exactly
                         those and says so — a district pick the server would override is not on offer.
-                        The card lit is the one the room will really play (`duelMapOf`). */}
-                    {gameMode === "duel" && (
-                      <p className="mm-hint" data-testid="map-fixed">Pojedynek gra się na arenie 1 v 1: {duelArenasLine}.</p>
-                    )}
+                        The card lit is the one the room will really play (`duelMapOf`). The lists come
+                        from `mapChoices()` / `DUEL_MAP_IDS`, never from ids written here. */}
                     <div className="map-grid" role="radiogroup" aria-label="Map" data-testid="map-picker">
                       {(gameMode === "duel" ? duelMaps : maps).map((m) => {
                         const Plan = mapArt(m.id);
@@ -490,10 +529,14 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                         );
                       })}
                     </div>
+                    {gameMode === "duel" && (
+                      <p className="mm-hint lb-step-note" data-testid="map-fixed">Pojedynek gra się na arenie 1 v 1: {duelArenasLine}.</p>
+                    )}
                   </div>
 
-                  <div className="lb-block">
-                    <h2 className="lb-h"><em>{gameMode === "boys" ? "04" : "03"}</em> BOTY <span data-testid="bots-count">{bots.count === 0 ? "BRAK" : `${bots.count} · ${BOT_PRESETS[botLevel].name}`}</span></h2>
+                  {/* ------------------------------------------------------------------ 03 bots */}
+                  <div className="lb-block lb-step lb-step-bots">
+                    <h2 className="lb-h"><em>03</em> BOTY <span data-testid="bots-count">{bots.count === 0 ? "BRAK" : `${bots.count} · ${BOT_PRESETS[botLevel].name}`}</span></h2>
                     <div className="bots-row">
                       <input type="range" min={0} max={botMax} step={1} value={bots.count} onChange={(e) => pickBots(Number(e.target.value), botLevel)} data-testid="bots-range" aria-label="Bots" />
                       <b className="bots-num">{bots.count}</b>
@@ -507,10 +550,8 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                     </div>
                     {/* The seat rule, where the choice is made. In deathmatch the bots are extra
                         bodies and the room still fills with people; everywhere else each bot is one
-                        of the twelve, and somebody who picks eight should know that before they do.
-                        No number for the open cap: it is the host's (`FB_MAX_PLAYERS`) and the room
-                        browser prints the real one. */}
-                    <small className="bots-seats" data-testid="bots-seats">
+                        of the twelve, and somebody who picks eight should know that before they do. */}
+                    <small className="bots-seats lb-step-note" data-testid="bots-seats">
                       {isOpenMode(gameMode)
                         ? "Boty nie zajmują miejsc — w deathmatchu dołącza do nich cała ekipa."
                         : gameMode === "duel" ? "Pojedynek to dwa miejsca: ty i bot albo ty i rywal."
@@ -518,56 +559,55 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                     </small>
                   </div>
 
-                  <div className="lb-block wide lobby-look" data-testid="haircut-picker">
-                    <div><h2 className="lb-h">WYGLĄD POSTACI</h2><b>{outfitDef(outfit).name} · {buildDef(build).name} · {HAIRCUTS.find(h=>h.id===haircut)?.name}</b><small>{BUILDS.length} sylwetek · {OUTFITS.length} strojów · {owned.size}/{HAIRCUTS.length} fryzur · wybór zapisany dla nowego pokoju</small></div>
+                  {/* The look is not a step — it is set in the wardrobe — but the lobby says what you
+                      will walk in wearing, and the door to change it is here. */}
+                  <div className="lb-block lb-step lobby-look" data-testid="haircut-picker">
+                    <div><h2 className="lb-h">WYGLĄD POSTACI</h2><b>{outfitDef(outfit).name} · {buildDef(build).name} · {HAIRCUTS.find(h=>h.id===haircut)?.name}</b><small>{owned.size}/{HAIRCUTS.length} fryzur · {OUTFITS.length} strojów · {BUILDS.length} sylwetek</small></div>
                     <button type="button" onClick={()=>setPanel("armoury")}>OTWÓRZ SZAFĘ ▸</button>
                   </div>
                 </div>
 
-                {/* ------------------------------------------------------------- server browser */}
+                {/* ------------------------------------------------------------- the open matches */}
                 <div className="lb-servers">
-                  <div className="srv-head">
-                    <h2 className="lb-h">OPEN MATCHES</h2>
-                    <button type="button" className={`srv-refresh ${refreshing ? "busy" : ""}`} onClick={() => void refresh()} data-testid="btn-refresh" title="Refresh the list">
-                      ⟳ REFRESH
-                    </button>
-                  </div>
+                  <div className="lb-matches">
+                    <div className="srv-head">
+                      <h2 className="lb-h">OTWARTE MECZE <span data-testid="lobby-match-count">{lobbyListed ? `${lobbyListed.mine.length} · ${MODES[gameMode].name}` : ""}</span></h2>
+                      <button type="button" className={`srv-refresh ${refreshing ? "busy" : ""}`} onClick={() => void refresh()} data-testid="btn-refresh" title="Odśwież listę">
+                        ⟳ ODŚWIEŻ
+                      </button>
+                    </div>
 
-                  <div className="srv-list" data-testid="room-list">
-                    {emptyList(false)}
-                    {listed?.map((r) => {
-                      const full = r.clients >= r.maxClients;
-                      return (
-                        <button
-                          key={r.roomId} className={`srv-row ${full ? "full" : ""}`} data-testid={`room-${r.roomId}`}
-                          disabled={connecting || full} onClick={() => joinRoom(r)}
-                          title={full ? "This match is full" : !nameOk ? "Enter a nickname first" : `Join ${r.metadata?.name || r.roomId}`}
-                        >
-                          {roomLine(r)}
-                          <span className="srv-go">{full ? "FULL" : "JOIN ▸"}</span>
-                        </button>
-                      );
-                    })}
+                    <div className="srv-list" data-testid="room-list">
+                      {emptyList(false)}
+                      {lobbyListed && lobbyListed.mine.length === 0 && lobbyListed.other.length > 0 && (
+                        <div className="srv-divider" data-testid="lobby-none-in-mode">Nikt nie gra teraz w {MODES[gameMode].name} — załóż mecz albo dołącz do innego trybu:</div>
+                      )}
+                      {lobbyListed?.mine.map(lobbyRow)}
+                      {lobbyListed && lobbyListed.mine.length > 0 && lobbyListed.other.length > 0 && (
+                        <div className="srv-divider">INNE TRYBY</div>
+                      )}
+                      {lobbyListed?.other.map(lobbyRow)}
+                    </div>
                   </div>
 
                   {/* Drop D: the link that opens straight into this room. Joining by one is useless
                       if nobody can make one, so the lobby that creates the room is where it lives. */}
                   <div className="srv-private">
-                    <h2 className="lb-h">PRIVATE ROOM</h2>
+                    <h2 className="lb-h">POKÓJ PRYWATNY</h2>
                     <div className="row tight">
-                      <input value={roomName} maxLength={24} onChange={(e) => setRoomName(e.target.value)} placeholder="room code · e.g. late-shift" data-testid="input-room" aria-label="Room name" />
-                      <button type="button" className={`mm-btn small ${showInvite ? "on" : ""}`} onClick={() => setShowInvite((v) => !v)} data-testid="btn-invite">INVITE</button>
+                      <input value={roomName} maxLength={24} onChange={(e) => setRoomName(e.target.value)} placeholder="kod pokoju · np. nocna-zmiana" data-testid="input-room" aria-label="Room name" />
+                      <button type="button" className={`mm-btn small ${showInvite ? "on" : ""}`} onClick={() => setShowInvite((v) => !v)} data-testid="btn-invite">ZAPROŚ</button>
                     </div>
                     {showInvite ? (
                       <div className="invite-box" data-testid="invite-box">
                         <div className="row tight">
                           <input readOnly value={link} data-testid="invite-link" onFocus={(e) => e.currentTarget.select()} />
-                          <button type="button" className="mm-btn small" onClick={() => { void copyText(link).then((ok) => { setCopied(ok); window.setTimeout(() => setCopied(false), 1500); }); }}>{copied ? "COPIED" : "COPY"}</button>
+                          <button type="button" className="mm-btn small" onClick={() => { void copyText(link).then((ok) => { setCopied(ok); window.setTimeout(() => setCopied(false), 1500); }); }}>{copied ? "SKOPIOWANO" : "KOPIUJ"}</button>
                         </div>
-                        <small className="mm-hint">Whoever opens this lands in your room, and is only asked for a nickname.</small>
+                        <small className="mm-hint">Kto otworzy ten link, trafia do twojego pokoju i podaje tylko ksywkę.</small>
                       </div>
                     ) : (
-                      <small className="mm-hint">Optional. Friends who type the same code land in the same match.</small>
+                      <small className="mm-hint">Opcjonalnie. Znajomi z tym samym kodem trafiają do tego samego meczu.</small>
                     )}
                   </div>
                 </div>
@@ -578,17 +618,17 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
                 {nickField(true)}
                 <div className="lb-launch-read">
                   <span className="lb-launch-mode">{MODES[gameMode].name}</span>
-                  <span className="lb-launch-sub">{MAPS[mapId].name} · {botCount === 0 ? "no bots" : `${botCount} bots · ${BOT_PRESETS[botLevel].name}`}</span>
+                  <span className="lb-launch-sub">{MAPS[gameMode === "duel" ? duelMapOf(mapId) : mapId].name} · {botCount === 0 ? "bez botów" : `${bots.count} ${bots.count === 1 ? "bot" : "boty"} · ${BOT_PRESETS[botLevel].name}`}</span>
                 </div>
                 <div className="lb-launch-btns">
                   <button className="mm-btn primary big" disabled={!nameOk || connecting} onClick={() => play("auto")} data-testid="btn-quickplay">
-                    {connecting ? "CONNECTING…" : "QUICK PLAY ▸"}
+                    {connecting ? "ŁĄCZĘ…" : "SZYBKA GRA ▸"}
                   </button>
                   <button className="mm-btn big" disabled={!nameOk || connecting} onClick={() => play("create")} data-testid="btn-create">
-                    CREATE MATCH
+                    ZAŁÓŻ MECZ
                   </button>
                 </div>
-                {!nameOk && <small className="mm-hint launch-hint">A nickname of at least two characters is all that is missing.</small>}
+                {!nameOk && <small className="mm-hint launch-hint">Brakuje tylko ksywki — co najmniej dwa znaki.</small>}
               </footer>
             </>
           )}

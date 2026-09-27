@@ -54,6 +54,20 @@ mkdirSync(OUT, { recursive: true });
 const EXE = process.env.PW_CHROMIUM ?? "/opt/pw-browsers/chromium";
 const browser = await chromium.launch(existsSync(EXE) ? { executablePath: EXE } : {});
 
+/**
+ * A fresh browser lands on the account gate (Drop V follow-up) under the one-time welcome (P8b),
+ * and both sit over the menu this tool measures. They are dismissed the way the app itself
+ * remembers a dismissal — the guest flag in sessionStorage, the welcome flag in localStorage — so
+ * the page photographed is the menu a returning guest sees, not a modal over it.
+ */
+const fresh = async (viewport) => {
+  const page = await browser.newPage({ viewport });
+  await page.addInitScript(() => {
+    try { sessionStorage.setItem("bs_guest_ok", "1"); localStorage.setItem("bs_onboard_v1", JSON.stringify({ welcomed: true })); } catch { /* private mode */ }
+  });
+  return page;
+};
+
 /** Stub the room list so the browser is photographed in a known state, with no game server up. */
 const stub = async (page, body) => {
   await page.route("**/rooms", (route) => body === null
@@ -106,7 +120,7 @@ const rows = [];
 let bad = 0;
 
 for (const size of SIZES) {
-  const page = await browser.newPage({ viewport: { width: size.width, height: size.height } });
+  const page = await fresh({ width: size.width, height: size.height });
   await stub(page, ROOMS);
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.waitForSelector("[data-testid=menu]");
@@ -139,7 +153,7 @@ const shots = [
   ["link-join", async (page) => { await stub(page, ROOMS); await page.goto(`${BASE}/r/late-shift?mode=gungame`); await page.waitForSelector("[data-testid=link-join]"); }],
 ];
 for (const [name, drive] of shots) {
-  const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+  const page = await fresh({ width: 1366, height: 768 });
   await drive(page);
   await page.waitForTimeout(250);
   await page.screenshot({ path: `${OUT}/${name}.png` });

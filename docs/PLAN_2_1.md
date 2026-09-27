@@ -228,6 +228,16 @@ the map tools generalised to a map id, and renders through `map-review.html?map=
 DOLNA replaces GÓRA as the duel map or joins it (`DUEL_MAP_IDS`) is the owner's call (P1 in the
 document).
 
+### Drop X — The front page's right column and the admin console (owner's brief, 2026-09-27)
+
+The owner, after the first DOLNA deploy: *"źle wygląda menu, powinno być profil konta z ramką po
+prawej stronie, tak samo z tabelą, dostosuj aby prosto się wybierało wszystko mecze itp oraz mapy
+… w panelu admina dużo możliwości daj"*. Two packages on disjoint files: the main menu gets a right
+column of two framed cards (the account profile, the hall-of-fame table) and a one-flow lobby (mode →
+map → bots → open matches → play); the `/viewer` admin console gets the tournament's map and room
+name, a live rooms table with OBSERWUJ / ZAKOŃCZ, an ordinary-match launcher and the server's
+health — every server action behind the same `ADMIN_PASSWORD`, no new schema fields.
+
 ### Drop H — Accounts and leaderboard (after A–E have been played)
 
 Nick + password or Discord OAuth, server-side profile (skins, haircuts, XP), weekly leaderboard
@@ -305,6 +315,13 @@ Status vocabulary reminder: these rows are `review` because the full e2e path wa
 | 2026-09-27 | W (DOLNA — Session 2: the geometry, after the owner's sign-off) | claude/confident-cray-nneqme (harness-assigned) | **"dalej wszystko zatwierdzam" — the paper design became the map in the same session.** `packages/shared/src/dolna.ts`: the measured prototype 1:1 (144 solids after the eye review, 37 props, 14 lights in the three district hues), registered in `MAPS`, not in `MAP_ORDER`; `dolna.test.ts` (11 tests) pins what a real place must prove by MEASUREMENT instead of GÓRA's symmetry — starts hidden standing and crouching and seen by nothing beyond 16 m, **no cell sees both starts**, contested street places within 250 ms of sprint from either start, starts 35–46 m apart, three exits each, every named place reachable, cover on the language, nothing climbable to 1.9 m, nothing floating (the shed and hall roofs sit deliberately inside their wall bands). **P1 as decided**: `DUEL_MAP_IDS = [dolna, gora]`, `DUEL_MAP_ID = dolna`, one pure `duelMapOf()` read by the room, the loading card, both pickers and the lobby link; the tests that pinned "GÓRA (DACH)" now pin the rule; `DolnaPlan` glyph and `DOLNA_VIEWPOINTS`. **Tools unpinned from GÓRA**: `map-plan`, `map-duel`, `map-rotation` take a map id and read places/exits/ground/boundary from `map-profiles.ts`; `map-audit` and `map-review.mjs` no longer fall back silently to the district; GÓRA's four outputs byte-identical (`out/dolna/tools-diff.md`). Repo tools on the built map: start–start 44.3 m / 5.85 s, worst contested Δ 150 ms, longest line 58.6 m, highest standable top 1.30 m, audit 2a empty, 0 coplanar pairs, lighting 0 of 132 grid points dark (8 before four more lamps). **Renders** (`dolna-shots.mjs`, SwiftShader, eye reviewer): 13/16 → after lamps and pine crowns **16/16 OK**, 0 float/intersect; DOLNA's heaviest view 123 draw calls vs 392 for the district's street. **Live**: a duel against one bot created from the menu on DOLNA, played to the end — 8 rounds, 6:0 (the headless client stands still), 470 s, result screen, side swap at round 3, the bot visited every callout zone; two rounds ended on the clock because the bot took over 60 s to find an idle player — the first datum for P7. Only console errors: 401 from `/api/me` (no account). Two subagents died on usage limits mid-flight (the judges of the design table, the live run) and their work was finished by hand. | `docs/MAP_3_DOLNA.md` (§5, „Podpis”, „Jak zbudowano”, „Nieudowodnione”); `packages/shared/src/dolna.ts`, `dolna.test.ts`, `duelMap.test.ts`; `apps/client/e2e/tools/{map-profiles.ts,dolna-shots.mjs,dolna/}`; `apps/client/e2e/out/dolna/{plan.txt,duel.md,rotation.md,audit.md,tools-diff.md,live.md,shots/}` (gitignored; regenerate: `tsx apps/client/e2e/tools/map-duel.ts dolna`, `PW_CHROMIUM=/opt/pw-browsers/chromium-1194/chrome-linux/chrome node apps/client/e2e/tools/dolna-shots.mjs`, `LIVE=1 SKIP_REVIEW=1 …` with `FB_DEV_TOOLS=1 pnpm dev` up) | typecheck ✓ test ✓ (1364: shared 407, skins 11, server 257, client 689) build ✓ live duel ✓ e2e (Playwright suite) — not run | review — needs two humans and a real GPU |
 
 ## Decisions log (append-only)
+- 2026-09-27 — Drop W: **DOLNA 17 is rebuilt to the owner's drawn plan and opened to every mode.**
+  The owner's plan (a three-storey house with rooms, stairs and balconies, the annex, the barber
+  shed's interior, the detailing garage with two gates on the road and a door to the garden, the
+  pool, the dark-blue BMW on the dirt road, spawns in the garage and on the second floor) replaces
+  the 1 v 1 street layout of §5; DOLNA joins `MAP_ORDER` (all modes), stays the default duel arena.
+  The measured fairness rules of `dolna.test.ts` are kept in spirit and re-scoped to the new starts.
+  (owner, 2026-09-27)
 - 2026-09-26 — Drop W: **the paper design is signed** — the owner's "dalej wszystko zatwierdzam"
   covers §5 of `docs/MAP_3_DOLNA.md`, D-W1…D-W14 and the P1–P12 defaults (DOLNA joins GÓRA as a duel
   map and is the tournament default; duel/turniej only in the first cut). Geometry follows in the

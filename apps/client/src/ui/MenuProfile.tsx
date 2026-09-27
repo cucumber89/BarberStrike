@@ -1,43 +1,47 @@
 import { useEffect, useState } from "react";
-import { levelFor, titleFor, type TournamentRecord } from "@frankibarber/shared";
-import { loadProfile } from "../game/progression/profile";
+import { HAIRCUTS, levelFor, titleFor } from "@frankibarber/shared";
+import { equippedHaircut, loadProfile } from "../game/progression/profile";
 import { useAccount } from "../net/account";
-import { fetchTournaments } from "../net/accountApi";
 import "./menuProfile.css";
 
 /**
- * The main-menu profile card and a mini hall of fame (owner's follow-up).
+ * The main menu's PROFIL card (Package U, owner's brief of 2026-09-27): a framed card on the right
+ * of the title screen that says who you are and how far you have come.
  *
- * The card says who you are and how far you have come — nick, barber rank, level and the XP bar into
- * the next one; the top list beside it is the newest tournament champions, a nudge to go win one. All
- * of it reads what already exists: the local profile's lifetime XP (`levelFor`/`titleFor`, shared)
- * and the public hall of fame (`GET /api/tournaments`). No new state on the wire, nothing gated (L1).
+ * Nick, barber rank, level and the XP bar into the next one, the haircut you wear, how many skins
+ * you own, and whether you are signed in — with a KONTO button, because the login state is the one
+ * line here a player can act on. All of it reads what already exists: the local profile's lifetime
+ * XP (`levelFor`/`titleFor`, shared), the wardrobe (`equippedHaircut`, `skins`) and the account
+ * store. No new state on the wire, nothing gated (L1). The hall-of-fame list that used to sit in
+ * this component is `MenuTable` now — the owner asked for two frames, not one.
  */
-export function MenuProfile({ nick }: { nick: string }) {
+export function MenuProfile({ nick, onAccount }: { nick: string; onAccount?: () => void }) {
   const acct = useAccount();
   const [xp, setXp] = useState(0);
-  const [champs, setChamps] = useState<TournamentRecord[] | null>(null);
+  const [skins, setSkins] = useState(0);
 
-  // Re-read the local XP when the signed-in account changes (a migration may have just pulled it in).
-  useEffect(() => { try { setXp(loadProfile().xp); } catch { setXp(0); } }, [acct.account]);
+  // Re-read the local profile when the signed-in account changes (a migration may have just pulled it in).
   useEffect(() => {
-    let on = true;
-    void fetchTournaments(5).then((t) => { if (on) setChamps(t); });
-    return () => { on = false; };
-  }, []);
+    try { const p = loadProfile(); setXp(p.xp); setSkins(p.skins.length); } catch { setXp(0); setSkins(0); }
+  }, [acct.account]);
 
   const lvl = levelFor(xp);
   const title = titleFor(lvl.level);
   const pct = lvl.need > 0 ? Math.min(100, Math.round((lvl.into / lvl.need) * 100)) : 100;
   const who = acct.account?.login || nick || "GOŚĆ";
+  const cut = HAIRCUTS.find((h) => h.id === equippedHaircut())?.name ?? "—";
 
   return (
-    <div className="mp" data-testid="menu-profile">
+    <section className="mp-frame mp" data-testid="menu-profile" aria-label="Profil">
+      <div className="mp-frame-head">
+        <b>PROFIL</b>
+        <span className={`mp-login ${acct.account ? "on" : ""}`} data-testid="mp-login">{acct.account ? "ZALOGOWANY" : "GOŚĆ"}</span>
+      </div>
       <div className="mp-card" data-testid="mp-card">
         <div className="mp-badge" aria-hidden="true">{lvl.level}</div>
         <div className="mp-who">
           <b className="mp-nick" data-testid="mp-nick">{who}</b>
-          <span className="mp-title" data-testid="mp-rank">{title}{acct.account ? "" : " · gość"}</span>
+          <span className="mp-title" data-testid="mp-rank">{title}</span>
         </div>
         <div className="mp-xp">
           <div className="mp-xp-head">
@@ -47,23 +51,15 @@ export function MenuProfile({ nick }: { nick: string }) {
           <div className="mp-bar"><i style={{ width: `${pct}%` }} data-testid="mp-xp-bar" /></div>
         </div>
       </div>
-
-      <div className="mp-top" data-testid="menu-top">
-        <div className="mp-top-head"><b>TABLICA SŁAWY</b><a href="/stats" data-testid="mp-top-more">więcej ▸</a></div>
-        <ol className="mp-top-list">
-          {champs === null && <li className="mp-top-empty">Ładowanie…</li>}
-          {champs !== null && champs.length === 0 && (
-            <li className="mp-top-empty" data-testid="mp-top-empty">Jeszcze nikt nie wygrał turnieju.</li>
-          )}
-          {(champs ?? []).map((t, i) => (
-            <li key={t.id} data-testid="mp-top-row">
-              <span className="mp-top-i">{i + 1}</span>
-              <b className="mp-top-name">{t.winner || "gość"}</b>
-              <span className="mp-top-size">{t.size} os.</span>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </div>
+      <dl className="mp-facts">
+        <div><dt>FRYZURA</dt><dd data-testid="mp-haircut">{cut}</dd></div>
+        <div><dt>SKINY</dt><dd data-testid="mp-skins">{skins}</dd></div>
+      </dl>
+      {onAccount && (
+        <button type="button" className="mm-btn small mp-account" onClick={onAccount} data-testid="mp-account">
+          {acct.account ? "KONTO ▸" : "ZALOGUJ SIĘ ▸"}
+        </button>
+      )}
+    </section>
   );
 }
