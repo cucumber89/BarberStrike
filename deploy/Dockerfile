@@ -64,6 +64,11 @@ COPY --from=prod-deps /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=prod-deps /app/apps/server/package.json ./apps/server/package.json
 COPY --from=build /app/apps/server/dist ./apps/server/dist
 COPY --from=build /app/apps/client/dist ./client
+# Baza kont (drop V, SQLite w `data/accounts.db` pod cwd) — katalog musi istnieć i należeć do `node`,
+# bo poniżej porzucamy roota, a `openDb` robi `mkdir` przy starcie; bez tego kontener pada w pętli
+# restartów z EACCES i Caddy odpowiada 502. Compose montuje tu wolumen, żeby konta przeżyły `--build`.
+ENV ACCOUNTS_DB=/app/data/accounts.db
+RUN mkdir -p /app/data && chown node:node /app/data
 USER node
 EXPOSE 2567
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \

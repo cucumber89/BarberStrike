@@ -39,6 +39,9 @@ const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-119
 
 async function openPage() {
   const ctx = await b.newContext({ viewport: { width: 960, height: 540 } });
+  // Drop V's welcome dialog covers the menu of a fresh browser and swallows the first click; mark
+  // the player welcomed, the way POMIŃ does (`tutorial.mjs` proves the key).
+  await ctx.addInitScript(() => { try { localStorage.setItem("bs_onboard_v1", JSON.stringify({ welcomed: true })); } catch {} });
   const p = await ctx.newPage();
   const errors = [];
   p.on("pageerror", (e) => errors.push(String(e.message).slice(0, 140)));

@@ -21,6 +21,10 @@ services:
       # FB_DEV_TOOLS zostaje puste. Włączone daje każdemu graczowi teleport.
     expose:
       - "2567"
+    volumes:
+      # Konta i sesje (SQLite). Nazwany wolumen: pierwsze utworzenie kopiuje właściciela `node`
+      # z obrazu, więc serwer może pisać; przebudowa obrazu nie kasuje bazy.
+      - game_data:/app/data
     # Serwer gry nie wystawia portu na świat — ruch wchodzi wyłącznie przez Caddy.
     deploy:
       resources:
@@ -48,3 +52,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  game_data:
