@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LOBBY_SEATS, MAPS, MatchPhase, BOT_PRESETS, type BotLevel, type GameMode } from "@frankibarber/shared";
+import { LOBBY_SEATS, MAPS, MODES, MatchPhase, BOT_PRESETS, type BotLevel, type GameMode } from "@frankibarber/shared";
 import { Connection, defaultServerUrl, httpUrl, type RoomListing } from "../game/net/Connection";
 import { viewpointsFor, ViewerScene, type ViewerStats } from "../game/viewer/ViewerScene";
+import { EMPTY_ROOM_MS, POLL_MS, direct, initialDirector, pickStreamRoom, type DirectorState } from "../game/viewer/streamDirector";
 import { Lobby } from "./lobby";
 import { apiUrl } from "../net/accountApi";
 import { copyText, lobbyLink, suggestRoomName } from "./invite";
@@ -29,6 +30,10 @@ import {
  * phase, watch it or end it) and SERWER (`/health`). The cards only arrange what `adminConsole.ts`
  * decides; every action is a request to `/api/admin/*`, which checks the same password again, so
  * the UI gate is a convenience and never the security.
+ *
+ * `/viewer?stream=1` is the same stage with nobody at the controls — the page a stream PC captures
+ * (see `streamDirector.ts`): it finds a match by itself, cuts between players by itself, and goes
+ * back to waiting when the match is over. `&room=<name>` pins it to one room.
  */
 
 const roomsUrl = () => `${httpUrl(defaultServerUrl())}/rooms`;
@@ -38,6 +43,59 @@ const healthUrl = () => `${httpUrl(defaultServerUrl())}/health`;
 interface QuickCreated { roomId: string; room: string; mode: GameMode; map: string }
 
 export function Viewer() {
+  const params = useMemo(() => new URLSearchParams(location.search), []);
+  return params.has("stream") ? <StreamMode wanted={params.get("room") ?? ""} /> : <ViewerPage />;
+}
+
+/**
+ * The unattended broadcast: wait for a room, watch it, and when it goes away wait again. Every
+ * failure is "try again in a few seconds", because there is no one at this machine to click retry.
+ */
+function StreamMode({ wanted }: { wanted: string }) {
+  const [joined, setJoined] = useState<Connection | null>(null);
+  const [status, setStatus] = useState("Szukam meczu…");
+
+  useEffect(() => {
+    if (joined) return;
+    // Both flags belong to this run of the effect: a ref shared across runs let a torn-down run's
+    // search block the next one (StrictMode's double mount showed it — the room got joined, thrown
+    // away, and was empty-disposed before anybody watched it).
+    let live = true;
+    let busy = false;
+    const look = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const rooms = (await (await fetch(roomsUrl())).json()) as RoomListing[];
+        const hit = pickStreamRoom(rooms, wanted);
+        if (!hit) { setStatus(wanted ? `Czekam na pokój „${wanted}"…` : "Czekam na mecz…"); return; }
+        const conn = await Connection.connect({ url: defaultServerUrl(), name: "WIDZ", spectator: true, mode: "join", roomId: hit.roomId });
+        if (!live) { void conn.leave(); return; }
+        setJoined(conn);
+      } catch {
+        setStatus("Nie widać serwera — próbuję dalej…");
+      } finally {
+        busy = false;
+      }
+    };
+    void look();
+    const t = window.setInterval(() => void look(), POLL_MS);
+    return () => { live = false; window.clearInterval(t); };
+  }, [joined, wanted]);
+
+  useEffect(() => () => { void joined?.leave(); }, [joined]);
+
+  if (joined) return <Stage conn={joined} stream={{ pinned: !!wanted }} onLeave={() => { void joined.leave(); setJoined(null); }} />;
+  return (
+    <main className="viewer-stream-wait" data-testid="viewer-stream-wait">
+      <span>BARBERSTRIKE</span>
+      <h1>ZARAZ GRAMY</h1>
+      <p data-testid="viewer-stream-status">{status}</p>
+    </main>
+  );
+}
+
+function ViewerPage() {
   const wanted = useMemo(() => new URLSearchParams(location.search).get("room") ?? "", []);
   const [rooms, setRooms] = useState<RoomListing[] | null>(null);
   const [error, setError] = useState("");
@@ -389,27 +447,69 @@ export function Viewer() {
 }
 
 /** The canvas, the overlay, and everything that only exists once we are in a room. */
-function Stage({ conn, onLeave }: { conn: Connection; onLeave(): void }) {
+function Stage({ conn, onLeave, stream }: { conn: Connection; onLeave(): void; stream?: { pinned: boolean } }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<ViewerScene | null>(null);
   const [stats, setStats] = useState<ViewerStats | null>(null);
   const [names, setNames] = useState<{ id: string; name: string; team: number; alive: boolean }[]>([]);
   const [followed, setFollowed] = useState("");
-  const [panel, setPanel] = useState(true);
+  const [panel, setPanel] = useState(!stream);
+  // Read once per effect run: the stream flags never change while a stage is up.
+  const streaming = !!stream;
+  const pinned = !!stream?.pinned;
+  const leaveRef = useRef(onLeave);
+  leaveRef.current = onLeave;
 
   useEffect(() => {
     if (!canvasRef.current) return;
     const scene = new ViewerScene(canvasRef.current, conn);
     sceneRef.current = scene;
+    // Stream mode: the camera directs itself, and a dead or deserted room hands back to the wait.
+    let director: DirectorState = initialDirector(performance.now());
+    let emptySince = 0;
+    if (streaming) {
+      conn.onLeave(() => leaveRef.current());
+      conn.onError(() => leaveRef.current());
+    }
     const tick = window.setInterval(() => {
       setStats(scene.stats());
       setFollowed(scene.followed);
       setNames([...conn.state.players.entries()].map(([id, p]) => ({ id, name: p.name, team: p.team, alive: p.alive })));
+      if (!streaming) return;
+      const now = performance.now();
+      const players = [...conn.state.players.entries()].map(([id, p]) => ({ id, alive: p.alive, score: p.score }));
+      const next = direct(director, players, viewpointsFor(conn.state.mapId).map((v) => v.id), now);
+      // A cut moves the camera; a follow is re-asserted every tick, because the body it names can
+      // arrive a frame after the player does and `follow` ignores an id it has no body for yet.
+      if (next.shot.kind === "follow" && scene.followed !== next.shot.id) scene.follow(next.shot.id);
+      else if (next.shot.kind === "spot" && (director.shot.kind !== "spot" || director.shot.id !== next.shot.id)) scene.go(next.shot.id);
+      director = next;
+      // A pinned room is waited on however quiet it gets; an auto-picked one is swapped for a livelier one.
+      if (pinned) return;
+      if (players.length > 0) emptySince = 0;
+      else if (!emptySince) emptySince = now;
+      else if (now - emptySince >= EMPTY_ROOM_MS) leaveRef.current();
     }, 250);
     return () => { window.clearInterval(tick); scene.dispose(); sceneRef.current = null; };
-  }, [conn]);
+  }, [conn, streaming, pinned]);
 
   const phase = conn.state.phase;
+  if (stream) {
+    const teams = MODES[conn.state.mode]?.teams ?? true;
+    const onCam = names.find((p) => p.id === followed);
+    return (
+      <div className="viewer-stage viewer-stream" data-testid="viewer-stage">
+        <canvas ref={canvasRef} data-testid="viewer-canvas" />
+        <div className="viewer-bug" data-testid="viewer-stream-bug">
+          <b>{conn.state.roomName || "BARBERSTRIKE"}</b>
+          <span>{MODES[conn.state.mode]?.short ?? ""} · {MAPS[conn.state.mapId]?.name ?? conn.state.mapId}</span>
+          {teams && <strong>{conn.state.scoreA} : {conn.state.scoreB}</strong>}
+          <span>{phaseLabel(phase)}</span>
+        </div>
+        {onCam && <div className={`viewer-oncam t${onCam.team}`} data-testid="viewer-stream-oncam">NA KAMERZE · <b>{onCam.name}</b></div>}
+      </div>
+    );
+  }
   return (
     <div className="viewer-stage" data-testid="viewer-stage">
       <canvas ref={canvasRef} data-testid="viewer-canvas" />
