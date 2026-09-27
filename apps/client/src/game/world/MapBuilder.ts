@@ -95,7 +95,7 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
   const ZONE = 12;
   const TILE = 12;
   const DETAIL_ZONE = 24;
-  const DETAIL = /^(metal|rubber|brass|glass_dark|wood|soil|foliage|paint|corrugated)/;
+  const DETAIL = /^(metal|rubber|brass|glass_dark|wood|soil|foliage|paint|corrugated|grass|gravel|roof_tile|paving)/;
   const byMat = new Map<string, { tag: MaterialTag; meshes: Mesh[] }>();
 
   const dressRoot = new TransformNode("dressing", scene);
@@ -175,7 +175,7 @@ export function buildMap(scene: Scene, map: MapDef, opts: MapBuildOptions): MapI
     merged.freezeWorldMatrix();
     merged.doNotSyncBoundingInfo = true;
     root.push(merged);
-    if (tag !== "glass" && tag !== "mirror" && tag !== "fence" && !tag.startsWith("floor")) casters.push(merged);
+    if (tag !== "glass" && tag !== "water" && tag !== "mirror" && tag !== "fence" && !tag.startsWith("floor")) casters.push(merged);
   }
 
   // Props (visual only).

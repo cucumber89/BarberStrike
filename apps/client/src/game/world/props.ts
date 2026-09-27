@@ -8,7 +8,8 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import type { Material } from "@babylonjs/core/Materials/material";
-import type { PropHint } from "@frankibarber/shared";
+import { VOXEL_LIBRARY, type PropHint } from "@frankibarber/shared";
+import { VoxelMaterials, buildVoxelModel } from "./voxelProps";
 
 /**
  * Procedural props for PropHints. Everything is primitives + generated textures; identical
@@ -109,6 +110,7 @@ class Palette {
 export function buildProps(scene: Scene, hints: PropHint[], imported?: Map<string, Mesh>): PropSet {
   const root = new TransformNode("props", scene);
   const pal = new Palette(scene);
+  const vox = new VoxelMaterials(scene);
   const meshes: Mesh[] = [];
   const emissive: Mesh[] = [];
   const sources = new Map<string, Mesh>();
@@ -265,6 +267,12 @@ export function buildProps(scene: Scene, hints: PropHint[], imported?: Map<strin
         break;
       }
       case "board": {
+        if (h.variant === "plate") {
+          // A registration plate: black letters on white (DOLNA's BMW carries its own number).
+          box("plateBack", w || 0.5, hh || 0.11, 0.01, M.black(), a, 0, 0, 0);
+          plane("plateText", (w || 0.5) - 0.01, (hh || 0.11) - 0.01, pal.text(`plate_${h.text}`, h.text ?? "", { w: w || 0.5, h: hh || 0.11, color: "#111111", bg: "#f4f4f2", size: 40 }), a, 0, 0, 0.008);
+          break;
+        }
         box("boardBack", w || 0.9, hh || 0.6, 0.03, M.black(), a, 0, 0, 0);
         plane("boardText", (w || 0.9) - 0.06, (hh || 0.6) - 0.06, pal.text("board", h.text ?? "TEAM", { w: w || 0.9, h: hh || 0.6, color: "#d9a441", bg: "#141416", size: 56 }), a, 0, 0, 0.02);
         break;
@@ -360,6 +368,15 @@ export function buildProps(scene: Scene, hints: PropHint[], imported?: Map<strin
       case "pipe": { cyl("pipe", 0.12, hh || 3, M.rust(), a, 0, (hh || 3) / 2, 0, 10); break; }
       case "wheel": { cyl("tyre", 0.62, 0.22, pal.pbr("rubber", "#141414", 0.95), a, 0, 0.31, 0, 18).rotation.z = Math.PI / 2; cyl("rim", 0.36, 0.24, M.chrome(), a, 0, 0.31, 0, 12).rotation.z = Math.PI / 2; break; }
       case "cable": { const c = box("cable", 0.02, 0.02, w || 3, M.black(), a, 0, 0, 0); c.rotation.z = 0.06; break; }
+      case "voxel": {
+        // Furniture drawn from pixels (voxel.ts): every group lands in `meshes`, so the merger
+        // below folds all the matte / gloss / metal furniture of a zone into one mesh each.
+        const model = h.model ? VOXEL_LIBRARY[h.model] : undefined;
+        if (!model) { console.warn(`[props] unknown voxel model "${h.model}"`); break; }
+        const built = buildVoxelModel(scene, model, vox, a, `voxel_${h.model}`);
+        meshes.push(...built.meshes); emissive.push(...built.glow);
+        break;
+      }
     }
   }
 
@@ -369,7 +386,7 @@ export function buildProps(scene: Scene, hints: PropHint[], imported?: Map<strin
 
   return {
     root, meshes: merged, emissive,
-    dispose() { for (const m of merged) m.dispose(); root.dispose(false, true); pal.dispose(); },
+    dispose() { for (const m of merged) m.dispose(); root.dispose(false, true); pal.dispose(); vox.dispose(); },
   };
 }
 

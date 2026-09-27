@@ -1,0 +1,163 @@
+<!doctype html><html><head><meta charset="UTF-8"><title>BarberStrike — voxel lab</title><style>
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#0b0c10;color:#ddd;font:13px/1.4 ui-monospace,Menlo,Consolas,monospace}
+#wrap{display:flex;width:100%;height:100%}
+#side{width:0;display:none;flex-direction:column;background:#111318;border-right:1px solid #262a33}
+#wrap.edit #side{width:34%;display:flex}
+#side textarea{flex:1;background:#0d0f13;color:#e6e6e6;border:0;padding:10px;font:13px/1.35 ui-monospace,Menlo,Consolas,monospace;resize:none;outline:none;white-space:pre;tab-size:2}
+#bar{display:flex;gap:8px;align-items:center;padding:6px 10px;background:#161920;border-bottom:1px solid #262a33;flex-wrap:wrap}
+#bar select,#bar button{background:#22262f;color:#eee;border:1px solid #3a3f4a;padding:3px 8px;font:inherit;cursor:pointer}
+#status{padding:6px 10px;border-top:1px solid #262a33;background:#161920;min-height:2.6em;white-space:pre-wrap}
+#status.err{color:#ff8a80}
+#view{flex:1;display:block;outline:none}
+#hud{position:absolute;right:10px;top:8px;color:#9aa3b2;text-align:right;pointer-events:none;white-space:pre}
+#hud b{color:#eee}
+</style></head><body><div id="wrap"><div id="side"><div id="bar">
+<select id="pick"></select><button id="new">NOWY</button><button id="copy">KOPIUJ TS</button><button id="fit">DOPASUJ</button></div>
+<textarea id="text" spellcheck="false"></textarea><div id="status"></div></div><canvas id="view"></canvas></div><div id="hud"></div>
+<script type="module">
+import { Engine } from '@babylonjs/core/Engines/engine';
+import { Scene } from '@babylonjs/core/scene';
+import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera';
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
+import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Color3, Color4 } from '@babylonjs/core/Maths/math.color';
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
+import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
+import { VOXEL_LIBRARY as VOXEL_MODELS, VOXEL_LIBRARY_TEXT as VOXEL_TEXT, parseVoxelText, compileVoxel, voxelBounds } from '@frankibarber/shared';
+import { VoxelMaterials, buildVoxelModel } from './src/game/world/voxelProps';
+
+const q = new URLSearchParams(location.search);
+const canvas = document.getElementById('view');
+const engine = new Engine(canvas, true);
+const scene = new Scene(engine);
+scene.clearColor = new Color4(0.043, 0.047, 0.063, 1);
+const ip = scene.imageProcessingConfiguration;
+ip.toneMappingEnabled = true; ip.toneMappingType = 1; ip.exposure = 1.6; ip.contrast = 1.05;
+const camera = new ArcRotateCamera('lab', -Math.PI / 2 + 0.6, 1.05, 4, new Vector3(0, 0.5, 0), scene);
+camera.minZ = 0.02; camera.wheelPrecision = 60; camera.lowerRadiusLimit = 0.3; camera.panningSensibility = 400;
+camera.attachControl(canvas, true);
+const sky = new HemisphericLight('sky', new Vector3(0, 1, 0), scene);
+sky.intensity = 0.9; sky.diffuse = new Color3(0.75, 0.8, 0.95); sky.groundColor = new Color3(0.18, 0.16, 0.14);
+const sun = new DirectionalLight('sun', new Vector3(-0.5, -1, -0.6).normalize(), scene);
+sun.intensity = 1.6; sun.diffuse = new Color3(1, 0.95, 0.85);
+const fill = new DirectionalLight('fill', new Vector3(0.7, -0.4, 0.5).normalize(), scene);
+fill.intensity = 0.5; fill.diffuse = new Color3(0.6, 0.7, 0.9);
+
+// A 10 cm grid on the floor, so a size reads at a glance.
+const gridMat = new StandardMaterial('grid', scene);
+const gt = new DynamicTexture('gridTex', { width: 512, height: 512 }, scene, false);
+const g = gt.getContext(); g.fillStyle = '#15171c'; g.fillRect(0, 0, 512, 512);
+g.strokeStyle = '#242730'; g.lineWidth = 1;
+for (let i = 0; i <= 512; i += 51.2) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 512); g.moveTo(0, i); g.lineTo(512, i); g.stroke(); }
+g.strokeStyle = '#3a3e4a'; g.lineWidth = 2; g.strokeRect(1, 1, 510, 510);
+gt.update(); gt.wrapU = gt.wrapV = 1;
+gridMat.diffuseTexture = gt; gridMat.specularColor = Color3.Black();
+const mats = new VoxelMaterials(scene);
+
+let built = [], labels = [];
+// Meshes go; the shared materials (grid, voxel finishes) stay. Labels own their texture.
+const clear = () => { for (const n of built) n.dispose(false, false); for (const l of labels) { l.material.diffuseTexture.dispose(); l.material.dispose(); } built = []; labels = []; };
+const label = (text, x, z, w = 1.6) => {
+  const dt = new DynamicTexture('lbl_' + text, { width: 512, height: 96 }, scene, false);
+  const c = dt.getContext(); c.fillStyle = '#0b0c10'; c.fillRect(0, 0, 512, 96);
+  c.font = 'bold 54px ui-monospace, Menlo, Consolas, monospace'; c.fillStyle = '#c9d1dd'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(text, 256, 50); dt.update();
+  const m = new StandardMaterial('lblm_' + text, scene); m.diffuseTexture = dt; m.emissiveTexture = dt; m.specularColor = Color3.Black(); m.disableLighting = true;
+  const p = MeshBuilder.CreatePlane('lbl_' + text, { width: w, height: w * 96 / 512 }, scene);
+  p.material = m; p.rotation.x = Math.PI / 2; p.position.set(x, 0.005, z);
+  labels.push(p);
+  return p;
+};
+
+/** Places one model at x/z; returns its stats. */
+const place = (model, x, z, name) => {
+  const root = new TransformNode('root_' + name, scene);
+  root.position.set(x, 0, z);
+  const b = buildVoxelModel(scene, model, mats, root, name);
+  built.push(root);
+  const c = compileVoxel(model);
+  const bounds = voxelBounds(model);
+  return { id: model.id, quads: c.quads, voxels: c.voxels, groups: c.groups.map((gr) => gr.finish + (gr.color ? ':' + gr.color : '')), bounds, meshes: b.meshes.length };
+};
+
+const ids = Object.keys(VOXEL_MODELS);
+let stats = {};
+const showAll = () => {
+  clear(); stats = {};
+  const cols = Math.ceil(Math.sqrt(ids.length)), gap = 2.6;
+  const floor = MeshBuilder.CreateGround('floor', { width: cols * gap + 2, height: Math.ceil(ids.length / cols) * gap + 2 }, scene);
+  floor.material = gridMat; floor.position.set((cols - 1) * gap / 2, 0, -(Math.ceil(ids.length / cols) - 1) * gap / 2);
+  floor.material.diffuseTexture.uScale = (cols * gap + 2); floor.material.diffuseTexture.vScale = (Math.ceil(ids.length / cols) * gap + 2);
+  built.push(floor);
+  ids.forEach((id, i) => {
+    const x = (i % cols) * gap, z = -Math.floor(i / cols) * gap;
+    stats[id] = place(VOXEL_MODELS[id], x, z, id);
+    built.push(label(id, x, z - 1.05));
+  });
+  camera.target.set((cols - 1) * gap / 2, 0.4, -(Math.ceil(ids.length / cols) - 1) * gap / 2);
+  camera.alpha = -Math.PI / 2 + 0.35; camera.beta = 0.95; camera.radius = Math.max(cols, Math.ceil(ids.length / cols)) * gap * 1.15 + 3;
+  camera.upperRadiusLimit = null;
+};
+const showOne = (model) => {
+  clear(); stats = {};
+  const floor = MeshBuilder.CreateGround('floor', { width: 4, height: 4 }, scene);
+  floor.material = gridMat; floor.material.diffuseTexture.uScale = 4; floor.material.diffuseTexture.vScale = 4;
+  built.push(floor);
+  stats[model.id] = place(model, 0, 0, model.id);
+  const b = voxelBounds(model);
+  camera.target.set(0, b.h / 2, 0);
+  camera.radius = Math.max(b.w, b.h, b.d) * 1.5 + 0.5;
+  return stats[model.id];
+};
+
+const hud = document.getElementById('hud');
+const describe = (s) => s ? `${s.id}\n${s.bounds.w} × ${s.bounds.h} × ${s.bounds.d} m\n${s.voxels} voxels → ${s.quads} quads\n${s.meshes} mesh(es): ${s.groups.join(', ')}` : '';
+
+// ---- edit mode: the text on the left is the model; every keystroke re-parses and rebuilds.
+const wrap = document.getElementById('wrap'), text = document.getElementById('text'), status = document.getElementById('status'), pick = document.getElementById('pick');
+const editing = q.get('edit') === '1';
+let current = q.get('model') && VOXEL_MODELS[q.get('model')] ? q.get('model') : null;
+if (editing) {
+  wrap.classList.add('edit');
+  for (const id of ids) { const o = document.createElement('option'); o.value = id; o.textContent = id; pick.appendChild(o); }
+  const load = (id) => { text.value = VOXEL_TEXT[id]; pick.value = id; rebuild(); };
+  const rebuild = () => {
+    try {
+      const m = parseVoxelText(text.value);
+      const s = showOne(m);
+      status.className = ''; status.textContent = describe(s);
+      hud.textContent = '';
+    } catch (e) { status.className = 'err'; status.textContent = String(e.message); }
+  };
+  let timer = 0;
+  text.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(rebuild, 150); });
+  text.addEventListener('keydown', (e) => { if (e.key === 'Tab') { e.preventDefault(); const s = text.selectionStart; text.setRangeText('  ', s, text.selectionEnd, 'end'); } });
+  pick.addEventListener('change', () => load(pick.value));
+  document.getElementById('new').addEventListener('click', () => { text.value = '#model nowy\n#cell 0.1\n#ink W #d9d5cc gloss\n#ink K #26241f matte\n#box 0,0,0 6,8,6 W\n\n#part z n=1 at=0,0,6\nWWWWWW\nWWKKWW\nWWWWWW\nWWWWWW\nWWWWWW\nWWWWWW\nWWWWWW\nKKKKKK\n'; rebuild(); });
+  document.getElementById('copy').addEventListener('click', () => {
+    const m = parseVoxelText(text.value);
+    const ts = 'T.' + m.id + ' = `' + text.value.replace(/`/g, '\\`').replace(/\n*$/, '\n') + '`;\n';
+    navigator.clipboard?.writeText(ts).then(() => { status.className = ''; status.textContent = 'Skopiowane: wklej do packages/shared/src/voxelModels.ts'; }).catch(() => { status.textContent = ts; });
+  });
+  document.getElementById('fit').addEventListener('click', rebuild);
+  load(current ?? ids[0]);
+} else if (current) {
+  hud.textContent = describe(showOne(VOXEL_MODELS[current]));
+} else {
+  showAll();
+  hud.textContent = `${ids.length} modeli — ?model=<id> jeden, ?edit=1 edytor`;
+}
+
+window.lab = {
+  scene, engine, camera, ids,
+  stats: () => stats,
+  show(id) { current = id; hud.textContent = describe(showOne(VOXEL_MODELS[id])); return stats[id]; },
+  all() { showAll(); return stats; },
+  view(alpha, beta, radius) { camera.alpha = alpha; camera.beta = beta; camera.radius = radius; },
+};
+engine.runRenderLoop(() => scene.render());
+addEventListener('resize', () => engine.resize());
+</script></body></html>

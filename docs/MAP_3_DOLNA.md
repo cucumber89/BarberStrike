@@ -1142,6 +1142,157 @@ z= -8  |                                                                        
 - Inne tryby (TDM/DOM/BOMB/Ostrzyżeni) przechodzą testy, ale nie były grane; miejsca bomby (garaż,
   salon na piętrze) i flagi wymagają playtestu.
 
+## DOLNA 17 v3 — dokładnie z rysunku, umeblowana, BMW 1:1 (2026-09-27, sesja 3)
+
+Brief właściciela po pierwszym deployu v2: *„Mapa ma być dokładnie zrobiona jak na moim projekcie png,
+i miałeś uzupełnić pokoje, stwórz narzędzie do szybkiego i fajnego kreowania modeli rzeczy na mapie
+aby z pixeli zrobić kuchenkę, wszystkie rzeczy do kuchni, do salonu, do łazienki, do barbershopa aby
+cała mapa żyła jak prawdziwa, ale żeby to było dobrze zoptymalizowane i mapa musi mieć sens (…)
+ładna jak na mapach google”* — i po chwili: *„jeszcze BMW musi być 1:1 jak ze zdjęć; ostatnie zdjęcie
+jest nawet w garażu, który odwzorowałeś na mapie”* (trzy zdjęcia: tył M240i z tablicą EL 3E504, przód
+nocą na parkingu, auto w hali detailingowej pod heksagonalnym panelem LED).
+
+### Rysunek zmierzony co do piksela (`plan-owner.png`, 2000 × 1562)
+
+Narzędzie: klasyfikacja kolorów kresek i ich prostokąty otaczające (Playwright + canvas; brak PIL
+w kontenerze). Skala planu działki: dom 150 px = 12.25 m → **12.25 px/m**. Odległości od żywopłotu
+zachodniego (E) i od linii drogi (N):
+
+| element (kolor) | piksele x / y | metry | zbudowane |
+|---|---|---|---|
+| działka między żywopłotami (zielony) | 493…973 / 84…407 | 39.2 × 26.4 | 39.2 × 26.4 (x −19.6…19.6, z 0.5…26.9) |
+| dom (niebieski) | 598…745 / 200…344 | 8.6…20.6 E, 5.1…16.9 N (12 × 11.8) | x −11…1, z 5.5…17.5 (12 × 12) |
+| dobudówka | 696…746 / 161…196 | 16.6…20.6 E, 17.2…20.1 N | x −3…1, z 17.5…20.5 |
+| balkon 1 (granat) | 644…688 / 184…199 | 12.3…15.9 E, 1.2 m głęboki (rzut piętra: 5.1 m szeroki) | x −7.75…−3.25, 1.75 m |
+| barak (czarny) | 754…816 / 223…324 | 21.3…26.4 E, 6.8…15.0 N (5.1 × 8.2), **0.7 m od domu** | x 2.5…7.6, z 7.3…15.5, **1.5 m od domu** (D-W3-v3) |
+| hala (szary) | 855…965 / 230…407 | 29.6…38.5 E, 0…14.4 N (9 × 14.4), 0.7 m od żywopłotu | x 9.1…18.1, z 0.5…14.9, **1.5 m alejka** (D-W3-v3) |
+| basen (błękit) | okrąg 813…853 / 102…142 | Ø 3.3 m w 27.8 E, 23.3 N | okrągły basen stelażowy Ø 3.6, 1.45 m (D-W4-v3) |
+| droga (brąz) | y 407 → 469 | 5.1 m szeroka | z −4.5…0.5 |
+| BMW (fiolet) | 594…651 / 427…456 | 8.2…12.9 E, 1.6…4 m za linią | x −11.3…−6.8, z −2.8…−0.8, nosem na zachód |
+| spawn hali (czerwony) | 940…959 / 242…281 | 0.6…2.7 m od ściany E, 1.0…4.6 m od N | kieszeń x 13.6…17.85, z 10.15…14.65 |
+| balkon 2 (2 piętro) | 1628…1694 / 1288…1434 | 2 m głęboki, 4.5 m długi, 3.7…9 m od lica N | x 1…2.4, z 8.5…13 (1.4 × 4.5; słupy 10 cm od baraku) |
+
+Żywopłot wschodni kończy się na rysunku 3.4 m przed północnym — narożnik zamknięty (dziura w
+granicy to dziura w mapie). Rzuty pięter (skalowane do 12 m): parter — pas holu 4.0…6.1 m od lica
+zachodniego od drzwi frontowych do schodów, salon NW, schody na zachód od holu, łazienka nad holem,
+pas kuchni i sypialnia na wschodzie, kotłownia SW, garaż domowy SE z bramą od drogi, dobudówka od
+sypialni; 1 piętro — salon przez całą północ z balkonem, schody, korytarz, sypialnia SW, łazienka, duża
+kuchnia SE; 2 piętro — pokój NW, schody i otwarty hol na zachodzie, **jeden** duży pokój wschodni
+(6.3 × 12 m, właściciel nie narysował w nim ściany — nie ma jej; linie łamie umeblowanie) z balkonem
+wschodnim i spawnem na południowym końcu. Barak — ściana luster to ściana ZACHODNIA: TV w rogu NW,
+stolik 4.2 m z trzema stanowiskami i trzema fotelami metr od ściany, kanapa na północnej, myjka na
+południowej, łazienka w rogu SW z drzwiami na północ, drzwi w ŚRODKU ściany wschodniej z oknem po
+każdej stronie. Hala — dwa auta nosem na północ w południowej połowie, każde za swoją bramą.
+
+### Zestaw voxel — „z pikseli” (`packages/shared/src/voxel.ts`, `voxelModels.ts`, `voxelHero.ts`)
+
+Mebel to TEKST: paleta (`#ink W #e9eaec gloss`), bryła (`#box x,y,z w,h,d W`) i obrazki z liter —
+widok z przodu, plan, widok z boku — wyciągnięte o kilka komórek (`#part z n=1 at=0,0,5` + wiersze).
+Kompilator (`compileVoxel`) zostawia tylko widoczne ściany i skleja sąsiednie tej samej farby w
+prostokąty (greedy meshing), a kolor jest atrybutem wierzchołka: wszystko matowe na mapie to JEDEN
+materiał, wszystko błyszczące jeden, metal jeden (glow i glass po jednym na kolor) — `props.ts`
+zlewa to dalej w jedną siatkę na materiał na strefę 24 m. **60 modeli, 97 785 voxeli → 6 274 quady**
+(1.1 % ścian, które miałyby pojedyncze boxy); BMW 43 819 voxeli → 850 quadów, 6 siatek.
+Narzędzie: `/voxel-lab.html` (galeria wszystkich, `?model=<id>` jeden, `?edit=1` edytor — piszesz
+tekst po lewej, po prawej odświeża się model, KOPIUJ TS wkleja do biblioteki) i
+`apps/client/e2e/tools/voxel-shots.mjs` (kadry przód/tył każdego modelu + `voxel.md` z kosztem).
+Lekcja zmierzona w labie: świat Babylona jest lewoskrętny — obserwator od +z ma +x po LEWEJ, więc
+pierwsza kolumna widoku z przodu to wschodnia krawędź modelu (napis na skrzynce wyszedł lustrzany,
+zanim `voxelGrid` to odwrócił); test `voxel.test.ts` przypina tę konwencję i nawinięcie trójkątów
+(zgodne z boxami Babylona).
+
+**BMW M240i (F22) 1:1**: 4.43 × 1.77 × 1.42 m, rozstaw osi 2.69, komórka 5 cm; profil boczny
+generowany kolumna po kolumnie z wysokości (maska, próg, dach, klapa, zderzaki, nadkola), kabina w
+środkowym pasie 27 komórek, boki schodkowo węższe (zaokrąglone narożniki w planie), mineralna szarość
+z niebieskim odcieniem `#3b3f47 gloss`, czarne nerki, LED-y z ringami (glow), czerwone LED-y tylne,
+czarny dyfuzor z czterema końcówkami, znaczek M na klapie, przyciemnione szyby, lusterka, płetwa.
+Tablica **EL 3E504** to płaska tabliczka tekstowa (`board` variant `plate`) przed i za autem —
+litery nie mieszczą się w 5 cm. Hala jak na trzecim zdjęciu: białe ściany (`wall_white`), szara
+posadzka epoksydowa (`floor_epoxy`), **dwa heksagonalne panele LED** pod sufitem nad stanowiskami
+(`hex_light`, plaster miodu 3-2-3 z glow), czarne okno na ścianie zachodniej, żółta myjka ciśnieniowa,
+odkurzacz, bęben z wężem, szafki narzędziowe, stojaki z chemią, kompresor, opony, wiadra.
+
+### Umeblowanie (124 bryły z proxy, 21 wiszące; `furn` / `hang` w `dolna.ts`)
+
+Każdy mebel to prop voxel (rysowany, bez kolizji) plus NIEWIDZIALNE proxy o rozmiarze z tabeli
+`DOLNA_FURNITURE` (test pilnuje zgodności z modelem ±15 cm), z wysokością w języku osłon: ≤ 0.8 zostaje
+(skok), 0.81–1.25 → 0.8, 1.26–1.69 → 1.45 (kucnięcie, nie stopień), ≥ 1.7 → **do sufitu** — lodówka
+obok blatu byłaby inaczej grzędą 1.9 m (blat 0.8 + mantle 1.25), a grzęda pod stropem jest niczym.
+Dywany nie mają proxy. Parter: kotłownia (zbiornik, piec na ścianie, dwa regały), hol (szafka na buty,
+wieszaki, lustro), łazienka (WC, umywalka z lustrem, pralka), garaż domowy (stół warsztatowy, szafka,
+opony, rower, regał), kuchnia (ciąg z zlewem i kuchenką, lodówka, szafki górne, mikrofala, stół z
+trzema krzesłami), sypialnia (łóżko, szafka nocna, szafa, roślina), dobudówka (druga lodówka, regał,
+ławka), salon (dywan, kanapa, fotel, stolik, szafka RTV z TV, regał, lampa, roślina). 1 piętro:
+sypialnia (łóżko, szafka, szafa, biurko z krzesłem), łazienka (wanna, WC, umywalka, pralka), korytarz
+(wieszaki, regał), kuchnia (lodówka, dwa ciągi, kuchenka, zlew, dwie szafki górne, mikrofala, stół z
+czterema krzesłami, roślina), salon (dywan, dwie kanapy w L, fotel, stolik, RTV, regał, lampa, dwie
+rośliny). 2 piętro: pokój NW (łóżko pojedyncze, biurko, krzesło, szafa, regał), hol (dwie szafy,
+buty, regał, roślina), duży pokój wschodni (łóżko przy spawnie, szafka, szafa, biurko z PC, krzesło,
+regał, dywan, kanapa, stolik, RTV, fotel, roślina, lampa). Barak: trzy stanowiska z lustrami 1.3 m i
+neonem, trzy fotele, TV, kanapa, myjka, dwie półki z kosmetykami, wieszak, roślina, WC i umywalka w
+łazience. Ogród: dwa leżaki i drabinka przy basenie, stół z dwiema ławkami, grill, skrzynka na listy
+przy furtce, dwa kubły przy bramie, trzy rabaty, buda w rogu NW, rower przy baraku.
+
+### „Jak na mapach Google” — grunt z satelity
+
+Nowe materiały (`map.ts`, `materials.ts`): `grass` (koszony trawnik z pasami co pół metra, kępy,
+łyse plamy), `gravel` (droga gruntowa z dwoma koleinami), `roof_tile` (dachówka rzymska, rzędy
+30 cm, mech), `water`, `paving` (kostka 20 × 10 w wozówce), `wall_white`, `floor_epoxy`. Narzędzie
+`apps/client/e2e/tools/map-top.mjs` robi ortograficzny kadr z góry — nocny (jak w grze) i „dzienny”
+(niebo i księżyc podkręcone, żeby ocenić materiały): `out/dolna/top_{night,day}.png`. Na dziennym
+działka czyta się jak kafelek satelity: trawnik w pasy, czerwony dach domu z dobudówką, czarny dach
+baraku, blaszany dach hali z alejką, żwirowa droga z BMW, basen w pierścieniu kostki, kostka podjazdu,
+korony drzew, kubły, rabaty, buda.
+
+### Pomiary narzędziami repo (po przebudowie)
+
+- **Front równych kosztów** (`_frontier`, siatka 2 m, tylko parter): osiem miejsc spornych —
+  podjazd (−2.25, 3.75) Δ −0.7 m, brama (−4.25, 1.75) Δ −1.2, furtka (−6.25, 1.75) Δ 1.0, wylot
+  przesmyku (1.75, 5.75) Δ 0.2, trawnik na południe od baraku (3.75, 5.75) Δ 0.0, trawnik na północ
+  od baraku (5.75, 17.75) Δ 0.0, wnętrze baraku (5.75, 11.75) Δ 1.0, droga (−10.25, −0.25) Δ −1.5 —
+  **najgorsze 1.7 m = 224 ms** (brief: 250). Start–start 57.6 / 58.1 m ścieżki (7.8 / 8.8 s).
+- `map-duel.ts dolna` §5: 4 540 powierzchni, 22.1 % par z linią, mediana **11.5 m**, p90 25.0,
+  najdłuższa 40.5 (droga wzdłuż). §6/§7: nic ponad 1.9 m poza podłogami, schodami, balkonami; 0 brył
+  latających. `map-audit.ts`: 2a tylko oczekiwane (auta 1.45, krzak, czapa dachu dobudówki za
+  parapetem — łańcuch świadomy ścian w teście ich nie osiąga), **0 z 99 punktów ciemnych**, 47
+  praktycznych świateł.
+- Testy: `dolna.test.ts` (17, w tym nowe: modele z biblioteki i tabela stóp, proxy w języku osłon),
+  `map.test.ts` / `mapFlags` / `floorAudit` / `dom` dla DOLNY zielone; `voxel.test.ts` 17.
+- Render (`dolna-shots.mjs`, 30 kadrów, SwiftShader, medium): najcięższy widok **123 draw calli**
+  (z góry) wobec 392 na ulicy dzielnicy; 71 777 wierzchołków całej mapy. Kuchnia, salon, pokój
+  wschodni, barak (lustra, neon, fotele, stanowiska, TV, kanapa), hala (heksy, „$ BUY”), BMW na
+  drodze z ringami — wszystko czyta się z pierwszej osoby.
+- Live: pojedynek z jednym botem utworzony z menu (DUEL → DOLNA → 1 bot), karta ładowania i HUD **DOLNA**,
+  mecz **rozegrany do końca**: 7 rund, 6:0 dla bota, 405 s do ekranu wyniku. Bot z hali w rundzie 0 obszedł
+  alejkę za halą, basen i drogę, wszedł do domu i **po dwóch kondygnacjach schodów** zabił gracza w dużym
+  pokoju (próbki −4.3/10.1 → −5.4/11.9 → −4.5/14.7); runda 1 skończyła się **na zegar** (bot przez 60 s
+  obszedł drogę, halę i parter — pierwsza runda na zegar v3, patrz Nieudowodnione); po zmianie stron bot z
+  piętra schodził na drogę i wchodził do kieszeni przez halę (12.2, 10) — pięć eliminacji. Jedyny błąd
+  konsoli: 401 z `/api/me` (gość). Pierwsza próba live padła, bo w tle szły testy klienta (SwiftShader
+  nie dowiózł dwóch klatek deployu w limicie) — powtórka na wolnej maszynie przeszła.
+
+### Decyzje tej sesji (D-W-v3)
+
+1. **Przesmyk dom–barak 1.5 m** (rysunek 0.7): ciało 0.7 i siatka 0.5 nie przejdą 0.7 m; 0.7 to ściana.
+2. **Alejka za halą 1.5 m** (rysunek 0.7 martwej szczeliny): czwarta droga T0 z drogi na trawnik NE.
+3. **Basen stelażowy Ø 3.6, obręcz 1.45, woda 1.3**: obie w języku osłon; przez leżak (0.8) da się
+   wejść i stoi się w wodzie po kolana, nie na niej; z ziemi obręczy nie da się przeskoczyć (1.25).
+4. **Drzwi pokoju NW na wschód od klatki** (a nie nad nią — rysunek nie ma drzwi), poręcz 1.3 na
+   północnej krawędzi klatki; drzwi dobudówki na północ (słup balkonu stoi 25 cm od jej ściany W).
+5. **Pełne meble sięgają sufitu** (proxy), dywany bez proxy, blaty 0.8 — patrz wyżej.
+6. Żywopłot NE zamknięty; drzwi hali na północ przesunięte na zachód od ściany kieszeni (drzwi
+   patrzące w kieszeń odsłaniały start z trawnika).
+
+### Nieudowodnione
+
+- **Ludzie na v3**: front równych kosztów i 60 s rundy przy 58 m ścieżki między startami zmierzone
+  narzędziami; liczba rund „na zegar” z dwojgiem ludzi to pierwsza statystyka playtestu.
+- **Wygląd na prawdziwym GPU**: voxel-e mają kolor w wierzchołkach i płaskie cieniowanie; metal bez
+  mapy środowiska jest ciemny (lab i gra) — chrom czyta się jako ciemna stal. Do rozważenia:
+  `environmentTexture` sceny (koszt: jedna tekstura HDR).
+- **Kolizja mebli to prostokąty**: krzesło pod biurkiem, rower — bot wchodzi na nie jak na stopień
+  (0.8); w playteście zobaczymy, czy to przeszkadza.
+
 ## Załącznik A — skąd są liczby (dla repo; nie wklejać)
 
 Każdy fakt w §1 i §4 ma źródło w kodzie z dnia 2026-09-26 (gałąź `claude/confident-cray-nneqme`,

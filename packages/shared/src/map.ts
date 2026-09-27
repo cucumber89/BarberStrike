@@ -22,7 +22,10 @@ export type MaterialTag =
   | "counter" | "wood" | "metal" | "paint" | "glass" | "mirror" | "leather" | "brass" | "rubber" | "none"
   // 1.0 beta: colour and object materials, so cover reads as objects instead of grey boxes.
   | "paint_red" | "paint_blue" | "paint_green" | "paint_white" | "paint_yellow" | "paint_orange"
-  | "corrugated_red" | "corrugated_blue" | "corrugated_green" | "glass_dark" | "glass_car" | "fence" | "concrete_block" | "soil" | "foliage";
+  | "corrugated_red" | "corrugated_blue" | "corrugated_green" | "glass_dark" | "glass_car" | "fence" | "concrete_block" | "soil" | "foliage"
+  // DOLNA 17 (2026-09-27): the ground as a satellite photo reads it — a mown lawn, a gravel
+  // road, a tiled roof, pool water, paving; white render and an epoxy floor for the garage.
+  | "grass" | "gravel" | "roof_tile" | "water" | "paving" | "wall_white" | "floor_epoxy";
 
 /**
  * How the client dresses a solid. The collision box is always the `box`; the look only adds
@@ -47,7 +50,9 @@ export interface Solid {
 export type PropKind =
   | "barber_chair" | "mirror" | "shelf" | "sign" | "lamp" | "trash" | "crate" | "dumpster" | "pole" | "sink"
   | "counter_top" | "neon" | "graffiti" | "vent" | "poster" | "bottle_row" | "towel_stack" | "board"
-  | "clippers" | "terminal" | "receipt" | "sticker" | "tube_light" | "cable" | "pendant" | "wheel" | "ac_unit" | "pipe" | "barber_pole";
+  | "clippers" | "terminal" | "receipt" | "sticker" | "tube_light" | "cable" | "pendant" | "wheel" | "ac_unit" | "pipe" | "barber_pole"
+  /** A voxel model from `voxelModels.ts` (`model` names it): furniture drawn from pixels. */
+  | "voxel";
 
 export interface PropHint {
   kind: PropKind;
@@ -61,6 +66,8 @@ export interface PropHint {
   variant?: string;
   /** Optional size hints (metres) for kinds that stretch (tube_light length, cable length, sign width). */
   w?: number; h?: number;
+  /** kind "voxel": the model id (see `VOXEL_MODELS`). */
+  model?: string;
 }
 
 export interface LightHint {

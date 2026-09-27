@@ -66,13 +66,16 @@ export const GORA_VIEWPOINTS: readonly ViewpointSpec[] = [
  * and the plot from above (docs/MAP_3_DOLNA.md, "DOLNA 17 v2").
  */
 export const DOLNA_VIEWPOINTS: readonly ViewpointSpec[] = [
-  { id: "start_t0", label: "START GARAŻ", pos: [16.25, 1.62, 9.75], look: [12, 1.4, 9.75] },
-  { id: "start_t1", label: "START 2 PIĘTRO", pos: [-7.75, 8.62, 7.25], look: [-3, 8.4, 9] },
-  { id: "gate", label: "BRAMA", pos: [-6.25, 1.62, -3.5], look: [-6.25, 2.5, 6] },
-  { id: "salon", label: "SALON", pos: [-9.5, 1.62, 13.5], look: [-14.5, 1.4, 16] },
-  { id: "balcony", label: "BALKON", pos: [-2, 8.62, 9], look: [8, 3, 12] },
-  { id: "pool", label: "BASEN", pos: [5.5, 1.62, 19.75], look: [9, 0, 23] },
-  { id: "garage", label: "GARAŻ", pos: [15.6, 1.62, -3.5], look: [15.6, 2, 8] },
+  { id: "start_t0", label: "START GARAŻ", pos: [16, 1.62, 12.5], look: [12, 1.4, 11] },
+  { id: "start_t1", label: "START 2 PIĘTRO", pos: [-2, 8.62, 7.75], look: [-2, 8.2, 14] },
+  { id: "gate", label: "BRAMA", pos: [-2.75, 1.62, -3.5], look: [-4, 2.5, 6] },
+  { id: "salon", label: "SALON", pos: [-5.5, 1.62, 14], look: [-10, 1.4, 16.5] },
+  { id: "kitchen", label: "KUCHNIA", pos: [-4.2, 1.62, 10.5], look: [-2.5, 1.2, 15] },
+  { id: "balcony", label: "BALKON", pos: [1.9, 8.62, 10.75], look: [8, 3, 12] },
+  { id: "barak", label: "BARAK", pos: [7, 1.62, 11.25], look: [3, 1.2, 12] },
+  { id: "pool", label: "BASEN", pos: [5, 1.62, 20], look: [8.2, 1, 23.8] },
+  { id: "garage", label: "GARAŻ", pos: [13.5, 1.62, -3.5], look: [13.5, 2, 8] },
+  { id: "bmw", label: "BMW", pos: [-13, 1.62, -4.5], look: [-9, 0.7, -1.8] },
   { id: "overview", label: "Z GÓRY", pos: [-20, 40, -40], look: [0, 0, 12] },
 ];
 

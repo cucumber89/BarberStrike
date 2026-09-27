@@ -88,7 +88,9 @@ for (const map of Object.values(MAPS)) {
       const opaque = buildCollisionWorld({ ...map, solids: map.solids.filter((s) => s.mat !== "glass") });
       // Probe a sliver just above the anchor: props standing ON a solid (chair on its base, clippers
       // on a station) and props hanging FROM a ceiling both pass; an anchor inside a wall fails.
-      const buried = map.props.filter((p) => opaque.overlaps(p.x - 0.01, p.y + 0.01, p.z - 0.01, p.x + 0.01, p.y + 0.04, p.z + 0.01) && !/^(wheel|pipe|cable|lamp)$/.test(p.kind));
+      // A voxel piece stands INSIDE its own invisible proxy by design (`dolna.ts` furn), so it is
+      // judged by the footprint test in dolna.test.ts, not here.
+      const buried = map.props.filter((p) => opaque.overlaps(p.x - 0.01, p.y + 0.01, p.z - 0.01, p.x + 0.01, p.y + 0.04, p.z + 0.01) && !/^(wheel|pipe|cable|lamp|voxel)$/.test(p.kind));
       expect(buried.map((p) => `${p.kind}@${p.x},${p.y},${p.z}`)).toEqual([]);
     });
 

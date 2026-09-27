@@ -142,11 +142,11 @@ const GoraPlan = (): ReactElement => (
 const DolnaPlan = (): ReactElement => (
   <svg {...plan}>
     <rect x="3" y="2" width="42" height="17" rx="1" opacity=".55" />
-    <rect x="8" y="8" width="12" height="9" rx=".5" />
-    <rect x="16" y="5.5" width="4" height="2.5" rx=".5" opacity=".8" />
-    <rect x="22" y="9" width="4" height="6" rx=".5" opacity=".8" />
-    <rect x="34" y="9" width="10" height="10" rx=".5" />
-    <circle cx="31" cy="5.5" r="2.2" opacity=".8" />
+    <rect x="12.2" y="8" width="12.9" height="7.7" rx=".5" />
+    <rect x="20.8" y="6.1" width="4.3" height="1.9" rx=".5" opacity=".8" />
+    <rect x="26.6" y="9.3" width="5.5" height="5.2" rx=".5" opacity=".8" />
+    <rect x="33.7" y="9.7" width="9.6" height="9.2" rx=".5" />
+    <circle cx="32.7" cy="4" r="1.9" opacity=".8" />
     <path d="M2 21.5h44" strokeDasharray="3 3" opacity=".9" />
   </svg>
 );

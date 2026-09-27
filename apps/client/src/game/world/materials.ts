@@ -12,7 +12,7 @@ export interface MaterialLibrary {
 }
 
 /** Procedural surface generator name (one height field + albedo per kind, see `generateSurface`). */
-export type SurfaceKind = "tiles" | "concrete" | "brick" | "wood" | "planks" | "asphalt" | "metal" | "plaster" | "panel" | "checker" | "corrugated" | "fence" | "blocks" | "leather" | "rubber" | "leaves";
+export type SurfaceKind = "tiles" | "concrete" | "brick" | "wood" | "planks" | "asphalt" | "metal" | "plaster" | "panel" | "checker" | "corrugated" | "fence" | "blocks" | "leather" | "rubber" | "leaves" | "grass" | "gravel" | "roof" | "paving";
 
 interface Spec {
   albedo: string;
@@ -71,6 +71,15 @@ const SPECS: Record<MaterialTag, Spec> = {
   concrete_block: { albedo: "#8a8680", roughness: 0.9, metallic: 0.0, tex: "blocks", scale: 1.2 },
   soil: { albedo: "#3a2c20", roughness: 1.0, metallic: 0.0, tex: "concrete", scale: 1 },
   foliage: { albedo: "#64734f", roughness: 0.95, metallic: 0.0, tex: "leaves", scale: 0.7 },
+  // DOLNA 17: the plot from above should read like the satellite view of the street — lawn green
+  // with mowing stripes, a pale gravel road, terracotta roof tiles, blue water, concrete pavers.
+  grass: { albedo: "#5f8a3c", roughness: 0.95, metallic: 0.0, tex: "grass", scale: 3 },
+  gravel: { albedo: "#8f8577", roughness: 0.95, metallic: 0.0, tex: "gravel", scale: 2 },
+  roof_tile: { albedo: "#9a4f3c", roughness: 0.7, metallic: 0.0, tex: "roof", scale: 1.5 },
+  water: { albedo: "#3f8fb8", roughness: 0.05, metallic: 0.1, alpha: 0.55 },
+  paving: { albedo: "#9c9891", roughness: 0.85, metallic: 0.0, tex: "paving", scale: 1 },
+  wall_white: { albedo: "#e3e0d8", roughness: 0.8, metallic: 0.0, tex: "plaster", scale: 3 },
+  floor_epoxy: { albedo: "#7d8188", roughness: 0.25, metallic: 0.05, tex: "concrete", scale: 4 },
   none: { albedo: "#555555", roughness: 0.8, metallic: 0.0 },
 };
 
@@ -285,7 +294,7 @@ interface KindGen {
   cutout?: boolean;
 }
 
-const KIND_SEED: Record<SurfaceKind, number> = { tiles: 11, concrete: 23, brick: 37, wood: 41, planks: 53, asphalt: 67, metal: 71, plaster: 83, panel: 97, checker: 101, corrugated: 113, fence: 127, blocks: 131, leather: 139, rubber: 149, leaves: 157 };
+const KIND_SEED: Record<SurfaceKind, number> = { tiles: 11, concrete: 23, brick: 37, wood: 41, planks: 53, asphalt: 67, metal: 71, plaster: 83, panel: 97, checker: 101, corrugated: 113, fence: 127, blocks: 131, leather: 139, rubber: 149, leaves: 157, grass: 163, gravel: 167, roof: 173, paving: 179 };
 
 // Cell scratch for the masonry-like kinds (module-level so the per-pixel path allocates nothing).
 let cCol = 0, cRow = 0, cFx = 0, cFy = 0, cD = 0, cCw = 0, cCh = 0;
@@ -489,6 +498,68 @@ function kindGen(kind: SurfaceKind, T: Tables): KindGen {
           const v = .48 + .32 * leaf + .18 * cluster;
           o[0] = v * .96; o[1] = v; o[2] = v * .84;
           return .35 + .35 * leaf + .12 * cluster;
+        },
+      };
+    }
+    case "grass": {
+      // A mown lawn: fine blade noise, clover patches, mowing stripes every half metre of the
+      // 3 m tile (alternate bands a touch lighter), a few bare spots.
+      return {
+        relief: 0.6,
+        px(x, y, o) {
+          const blade = wn(x, y), tuft = v128(x, y), patch = v32(x, y), big = v8(x, y);
+          const stripe = Math.floor(y / (S / 6)) % 2 === 0 ? 1.0 : 0.9;
+          const bare = sstep(0.8, 0.9, v8b(x + 40, y + 80));
+          let v = (0.5 + 0.28 * tuft + 0.12 * blade + 0.1 * (patch - 0.5)) * stripe;
+          o[0] = v * (0.72 + 0.35 * bare); o[1] = v * (1 - 0.3 * bare); o[2] = v * (0.55 + 0.1 * big);
+          return 0.4 + 0.35 * tuft + 0.2 * blade - 0.2 * bare;
+        },
+      };
+    }
+    case "gravel": {
+      // A dirt road: compacted fines with pebbles, two darker wheel ruts along the tile.
+      return {
+        relief: 2.0,
+        px(x, y, o) {
+          const peb = hash(x >> 2, y >> 2, seed + 9), pebble = peb > 0.72 ? 1 : 0;
+          const fine = wn(x, y), lf = v32(x, y);
+          const rut = Math.exp(-Math.pow((y - S * 0.28) / (S * 0.07), 2)) + Math.exp(-Math.pow((y - S * 0.72) / (S * 0.07), 2));
+          let v = 0.66 + 0.16 * (lf - 0.5) + 0.06 * (fine - 0.5) + (pebble ? 0.12 * (hash(x >> 2, y >> 2, seed + 10) - 0.3) : 0) - 0.14 * rut;
+          o[0] = v * 1.04; o[1] = v; o[2] = v * 0.9;
+          return 0.45 + 0.12 * lf + 0.05 * fine + (pebble ? 0.25 : 0) - 0.1 * rut;
+        },
+      };
+    }
+    case "roof": {
+      // Roman-profile roof tiles: rows of 30 cm tiles, each a rounded rib, overlapping downhill.
+      const rows = 5, cols = 5;
+      return {
+        relief: 5,
+        px(x, y, o) {
+          cellAt(x, y, cols, rows, true, 0);
+          const rib = Math.sin((cFx / cCw) * Math.PI);
+          const lip = sstep(0.0, 0.12, cFy / cCh);
+          const tileTone = 0.9 + 0.2 * (hash(cCol, cRow, seed) - 0.5);
+          const moss = sstep(0.7, 0.9, v32(x, y)) * 0.5;
+          const h = 0.3 + 0.45 * rib * lip + 0.1 * (cFy / cCh);
+          let v = (0.62 + 0.22 * rib + 0.03 * (wn(x, y) - 0.5)) * tileTone * (0.85 + 0.15 * lip);
+          o[0] = v * (1 - 0.3 * moss); o[1] = v * (0.9 + 0.1 * moss); o[2] = v * (0.8 - 0.2 * moss);
+          return h;
+        },
+      };
+    }
+    case "paving": {
+      // Concrete pavers 20 × 10 cm in a stretcher bond, sand joints, a few darker stones.
+      return {
+        relief: 2.5,
+        px(x, y, o) {
+          cellAt(x, y, 5, 10, true, 3);
+          const e = sstep(-1, 2, cD);
+          const n = wn(x, y), hf = v128(x, y);
+          const v = 0.7 + 0.16 * (hash(cCol, cRow, seed + 2) - 0.5) + 0.05 * (hf - 0.5) + 0.03 * (n - 0.5);
+          tint(o, v, hash(cCol, cRow, seed + 4) * 2 - 1, 0.03);
+          joint(o, 0.55 + 0.1 * n, e);
+          return 0.35 + 0.4 * e + 0.05 * hf;
         },
       };
     }
