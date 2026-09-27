@@ -95,3 +95,20 @@ export function rosterSummary(entrants: readonly EntrantShape[], size: number): 
   const cap = isLobbySize(size) ? size : TOURNAMENT_MAX_ENTRANTS;
   return `${entrants.length} / ${cap} · ${readyCount(entrants)} gotowych`;
 }
+
+/**
+ * What a „lobby:goto” is asking the screen to do.
+ *
+ * The waiting room sends it for two different reasons and they must not be confused. `play: true` is
+ * the lobby telling the two people in a pair that their arena is up and they are to ENTER it — the
+ * only route into a tournament match, since an arena is raised by the matchmaker and so has no name
+ * to type and appears in no list. Anything else is the answer to OGLĄDAJ: open the spectator page.
+ *
+ * A screen with nobody to send anywhere (the /viewer admin console) has no `play` route, so a goto
+ * meant for a player is watched instead of dropped on the floor.
+ */
+export type GotoAction = "play" | "watch" | "ignore";
+export function gotoAction(msg: { roomId?: string; play?: boolean } | null | undefined, canPlay: boolean): GotoAction {
+  if (!msg?.roomId) return "ignore";
+  return msg.play === true && canPlay ? "play" : "watch";
+}

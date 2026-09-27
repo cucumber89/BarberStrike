@@ -27,6 +27,8 @@ interface Harness {
   room: TournamentLobbyRoom;
   broadcasts: { type: string; payload: unknown }[];
   join(name: string): Promise<FakeClient>;
+  /** Close a client's socket the way going off to play a match does — through the real `_onLeave`. */
+  leave(c: FakeClient): Promise<void>;
   send(c: FakeClient, type: string, payload?: unknown): void;
   dispose(): Promise<void>;
 }
@@ -37,6 +39,7 @@ async function createLobby(opts: Record<string, unknown> = {}): Promise<Harness>
   const room = matchMaker.getLocalRoomById(listing.roomId) as TournamentLobbyRoom;
   const internals = room as unknown as {
     _onJoin(c: Client, a: undefined, o?: unknown): Promise<void>;
+    _onLeave(c: Client, code?: number): Promise<void>;
     onMessageEvents: { emit(type: string, ...args: unknown[]): void };
     _listing: Parameters<typeof matchMaker.reserveSeatFor>[0];
   };
@@ -58,6 +61,7 @@ async function createLobby(opts: Record<string, unknown> = {}): Promise<Harness>
       clients.push(c);
       return c;
     },
+    async leave(c) { await internals._onLeave(c, 1000); },
     send(c, type, payload) { internals.onMessageEvents.emit(type, c, payload, undefined); },
     async dispose() {
       const done = room.disconnect();
@@ -94,6 +98,45 @@ it("host START with 8 ready raises 4 parallel arenas and enters phase 'trwa'", a
   const view = parseBracket(h.room.state.bracket)!;
   expect(view.size).toBe(8);
   for (const [, arena] of h.room.state.arenas) { expect(arena.roomId).not.toBe(""); expect(arena.live).toBe(true); }
+});
+
+/**
+ * THE BUG THE FIRST LIVE TOURNAMENT HIT, and the hole the test above left open.
+ *
+ * "Raises 4 parallel arenas" passed, and the tournament was still unplayable: the arenas went up,
+ * the bracket drew, and NOBODY WAS EVER TOLD WHERE TO GO. An arena is created by the matchmaker, so
+ * it has no name to type and no listing to find — a client that is not sent to it cannot reach it
+ * by any means. The whole room sat looking at a bracket.
+ *
+ * So the thing to assert is not that the arenas exist. It is that the two people in each pair were
+ * handed the room id, and that nobody else was.
+ */
+it("sends both players of every pair into their own arena, and nobody else", async () => {
+  h = await createLobby({ size: 4, seed: 11 });
+  const cs: FakeClient[] = [];
+  for (let i = 0; i < 4; i++) { const c = await h.join(`G${i}`); h.send(c, "lobby:ready", { ready: true }); cs.push(c); }
+  h.send(cs[0], "lobby:start", {});
+  await vi.waitFor(() => expect(h.room.state.arenas.size).toBe(2));
+
+  const gotos = (c: FakeClient) => c.sent.filter((m) => m.type === "lobby:goto").map((m) => m.payload as { roomId: string; matchIndex: number; play?: boolean });
+  // Four entrants, two arenas: every one of the four is playing in this round, and each was given
+  // exactly one room — their own.
+  const rooms = new Set<string>();
+  for (const c of cs) {
+    const g = gotos(c);
+    expect(g, `${c.sessionId} was told where to play`).toHaveLength(1);
+    expect(g[0].play, "and told to PLAY it, not to watch it").toBe(true);
+    expect(g[0].roomId).toBeTruthy();
+    rooms.add(g[0].roomId);
+  }
+  expect(rooms.size, "two pairs, two arenas").toBe(2);
+
+  // And the id each pair was sent is the arena the lobby recorded for that match.
+  const byIndex = new Map([...h.room.state.arenas].map(([k, a]) => [Number(k), a.roomId]));
+  for (const c of cs) {
+    const g = gotos(c)[0];
+    expect(byIndex.get(g.matchIndex), `match ${g.matchIndex}`).toBe(g.roomId);
+  }
 });
 
 /**
@@ -179,4 +222,100 @@ it("html in a chat line is escaped, not carried raw", async () => {
   const line = h.broadcasts.filter((b) => b.type === "lobby:chat").pop()!.payload as { text: string };
   expect(line.text).not.toContain("<b>");
   expect(line.text).toContain("&lt;b&gt;");
+});
+
+/**
+ * ROUND TWO, which is where the first fix alone still left the tournament stuck.
+ *
+ * The waiting-room screen lives inside the menu, and the menu is gone while a match is on — so a
+ * player who goes off to play LEAVES this room and comes back with a brand new session id. The
+ * bracket keys on the id they were drawn under, so a fresh seat for a returning player means the
+ * final is offered to a session that no longer exists: the semi-finals get played and then nobody
+ * can get into the final. And the final's arena is raised at the instant the last semi reports,
+ * when both its players are still on the summary screen of the match they have just won.
+ *
+ * So a seat outlives its socket, and the arena is offered again on the way back in.
+ */
+it("a player coming back from their match keeps their seat, and is sent to the next round's arena", async () => {
+  h = await createLobby({ size: 4, seed: 11 });
+  const cs: FakeClient[] = [];
+  for (let i = 0; i < 4; i++) { const c = await h.join(`G${i}`); h.send(c, "lobby:ready", { ready: true }); cs.push(c); }
+  h.send(cs[0], "lobby:start", {});
+  await vi.waitFor(() => expect(h.room.state.arenas.size).toBe(2));
+
+  const view = parseBracket(h.room.state.bracket)!;
+  const idOf = (name: string): string => [...h.room.state.entrants.values()].find((e) => e.name === name)!.id;
+  const finalists = [view.matches[0].a, view.matches[1].a]; // side A takes both semi-finals
+  const seats = finalists.map(idOf);
+
+  // Everybody walks off into their arena — which means everybody leaves THIS room.
+  for (const c of cs) await h.leave(c);
+  expect(h.room.state.entrants.size, "a roster keeps its seats through a match").toBe(4);
+
+  // Both semis report. The final's arena goes up with nobody here to be told about it.
+  await h.room.presence.publish(`tourn:${h.room.roomId}:0`, { winner: seats[0], scoreA: 6, scoreB: 2 });
+  await h.room.presence.publish(`tourn:${h.room.roomId}:1`, { winner: seats[1], scoreA: 6, scoreB: 4 });
+  await vi.waitFor(() => expect(h.room.state.arenas.has("2"), "the final's arena is raised").toBe(true));
+
+  // ...and the finalist is told the moment they walk back in under the same nickname.
+  const back = await h.join(finalists[0]);
+  expect(h.room.state.entrants.size, "a returning player is not a new entrant").toBe(4);
+  expect(h.room.state.entrants.get(seats[0])!.connected, "back in their own seat").toBe(true);
+  expect(parseBracket(h.room.state.bracket)!.matches[2].a, "and still named in the final").toBe(finalists[0]);
+  await vi.waitFor(() => {
+    const g = back.sent.filter((m) => m.type === "lobby:goto").map((m) => m.payload as { roomId: string; matchIndex: number; play?: boolean });
+    expect(g, "sent to the final").toHaveLength(1);
+    expect(g[0].play).toBe(true);
+    expect(g[0].matchIndex).toBe(2);
+    expect(g[0].roomId).toBe(h.room.state.arenas.get("2")!.roomId);
+  });
+});
+
+/** The other half of that: a seat you have already WON from is never offered back to you. */
+it("does not drag a player back into the match they have just finished", async () => {
+  h = await createLobby({ size: 4, seed: 11 });
+  const cs: FakeClient[] = [];
+  for (let i = 0; i < 4; i++) { const c = await h.join(`G${i}`); h.send(c, "lobby:ready", { ready: true }); cs.push(c); }
+  h.send(cs[0], "lobby:start", {});
+  await vi.waitFor(() => expect(h.room.state.arenas.size).toBe(2));
+  const view = parseBracket(h.room.state.bracket)!;
+  const winner = view.matches[0].a;
+  const winnerId = [...h.room.state.entrants.values()].find((e) => e.name === winner)!.id;
+
+  for (const c of cs) await h.leave(c);
+  // Only the first semi is over; the second is still being played, so the final has no arena yet.
+  await h.room.presence.publish(`tourn:${h.room.roomId}:0`, { winner: winnerId, scoreA: 6, scoreB: 0 });
+  await vi.waitFor(() => expect(h.room.state.arenas.get("0")!.live).toBe(false));
+
+  const back = await h.join(winner);
+  await vi.advanceTimersByTimeAsync(50);
+  expect(back.sent.filter((m) => m.type === "lobby:goto"), "nothing to play yet").toHaveLength(0);
+  expect(h.room.state.entrants.size).toBe(4);
+});
+
+/**
+ * WHY THE ROOM IS STILL HERE AT ALL. Colyseus disposes a room a second after its last client goes,
+ * and a tournament being played is a waiting room with nobody in it — so the lobby used to vanish
+ * the moment the last pair walked into their arenas, taking the bracket with it and leaving the
+ * results the arenas publish with nothing subscribed to hear them. START therefore pins the room
+ * open, and an abandonment timer is what makes sure a forgotten one still goes away.
+ */
+it("survives its own room emptying while the matches are played, on a backstop timer", async () => {
+  h = await createLobby({ size: 4, seed: 11 });
+  const cs: FakeClient[] = [];
+  for (let i = 0; i < 4; i++) { const c = await h.join(`G${i}`); h.send(c, "lobby:ready", { ready: true }); cs.push(c); }
+  expect(h.room.autoDispose, "before START it is an ordinary room").toBe(true);
+  h.send(cs[0], "lobby:start", {});
+  await vi.waitFor(() => expect(h.room.state.arenas.size).toBe(2));
+  expect(h.room.autoDispose, "a tournament under way outlives its sockets").toBe(false);
+
+  const timer = (): unknown => (h.room as unknown as { abandonTimer: unknown }).abandonTimer;
+  for (const c of cs) await h.leave(c);
+  expect(h.room.clients.length).toBe(0);
+  expect(h.room.state.phase, "still running with nobody in the room").toBe("trwa");
+  expect(timer(), "and a backstop armed against being forgotten").toBeDefined();
+
+  // Somebody coming back disarms it.
+  await h.join("G0");
+  expect(timer()).toBeUndefined();
 });

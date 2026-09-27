@@ -89,7 +89,14 @@ gameServer.define("tdm", TdmRoom).filterBy(["room", "mode", "map"]);
 
 // The tournament waiting-room (drop V, D1): a light coordinator with no game tick. It raises `tdm`
 // duels as arenas server-side and dirigates the bracket; the arenas above are what actually play.
-gameServer.define("tournament-lobby", TournamentLobbyRoom);
+//
+// It matches on the tournament's NAME, like a match room does. Without that, every lobby link led to
+// whichever lobby the matchmaker happened to pick — so a player following tonight's link could land
+// in a tournament that was already under way (or in yesterday's leftovers), in no pair, with nothing
+// to play. It also matters now that a started tournament outlives its empty room: a lobby standing
+// open while its matches are played must not swallow the next tournament's guests. The name is
+// always sent (`joinPayload`), so an unnamed tournament still matches an unnamed one.
+gameServer.define("tournament-lobby", TournamentLobbyRoom).filterBy(["room"]);
 
 gameServer.listen(PORT).then(() => {
   console.log(`[BARBERSTRIKE ${GAME_VERSION}] listening on :${PORT}`);
