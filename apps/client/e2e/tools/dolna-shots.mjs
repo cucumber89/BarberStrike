@@ -98,6 +98,10 @@ const views = [
   ["road", [-18, E, -2.5], [-6, 1.4, -1.5]],                   // the road from the west end
   ["gate", [-2.75, E, -3.5], [-4, 2.5, 6]],                    // the front gate, the house behind
   ["passage", [1.75, E, 4], [1.75, 1.4, 16]],                  // the passage between the house and the shed
+  // The two ways out of the house that are not the staircase (owner, 2026-09-27).
+  ["escape_window", [-2.85, 7 + E, 9.2], [-2.85, 7.5, 4.5]],       // top floor: the window over the drive, from the room
+  ["escape_facade", [-2.85, E, 0.8], [-2.85, 8.0, 5.6]],           // ...and the same window from the drive, seven metres up
+  ["balcony_gap", [-7.3, 3.5 + E, 18.2], [-3.6, 3.9, 19.8]],       // first floor: the missing railing on the garden side
   ["overview", [-20, 40, -40], [0, 0, 12]],
   ["overview_plot", [30, 32, 34], [-2, 0, 10]],
 ];

@@ -1389,3 +1389,40 @@ północne wyjście i przesunęło front równych kosztów — patrz wyżej); w 
 zachodniej z jednym krzesłem, przejście przy blatach 0.95 m; w baraku dwa fotele (północny usunięty
 na życzenie), TV 2.2 m (`scale` 1.6). Testy: 74/74 dla DOLNY; kadry `kitchen_0`, `shed_mirrors`,
 `garage_bench`, `house_garage`, `bath_0`, `salon_0` odświeżone.
+
+### Dwa wyjścia z domu, które nie są schodami (2026-09-27, właściciel: „musisz dodać więcej wyjść z domku niż schody”)
+
+Parter był pętlą (sześć drzwi), ale **oba piętra obsługiwały jedne schody** — a na drugim piętrze
+stoi start 1 v 1. Piętro było więc kondygnacją z jednymi drzwiami: kto pilnował głowy schodów, miał
+rundę. Dołożone:
+
+- **Okno na drugim piętrze, w ścianie południowej nad podjazdem** (`ESCAPE_WINDOW`, x −3.6…−2.1),
+  parapet **0.8 m** i otwór na **pełną wysokość ściany** nad nim. Wysokość otworu jest wymuszona
+  pomiarem: przy zwykłym nadprożu 2.2 m światło nad parapetem ma 1.4 m, stojące ciało ma 1.8 m, i
+  siatka chodu nie widzi na parapecie żadnej wysokości stania — okno było narysowane i nie dało się
+  przez nie przejść. Łóżko odsunięte metr od ściany: pod oknem nie dało się podejść do parapetu na
+  poziomie podłogi (tylko wskakując na materac), więc jeden spawn T1 przeniesiony na (−4.4, 10.5).
+- **1.2 m brakującej balustrady na ogrodowej stronie balkonu 1** (pierwsze piętro). Musi być
+  **prawdziwą luką**, nie niską barierką: bryła w odległości połowy szerokości ciała od komórki przed
+  nią zabiera tej komórce wysokość stania — zmierzone, balkon tracił komórkę przy własnej krawędzi i
+  otwór nie prowadził nikąd. Strona **wschodnia** balkonu zostaje 1.35 m, bo dach aneksu jest 25 cm
+  od niej, a dach, na który da się wejść, jest w tej grze dachem (`dolna.test.ts`).
+
+Oba są **jednokierunkowe**: 7.0 m i 3.5 m w dół, ciało podciąga się na 1.25 m. Spadanie nie kosztuje
+tu zdrowia, więc ceną jest hałas, sekunda w powietrzu i lądowanie tam, gdzie drugi gracz już patrzy.
+Zmierzone: sprint + skok wychodzi przez okno i ląduje na podjeździe po 1.45 s; **sam sprint bez skoku
+nie wychodzi** (parapet 0.8 > 0.4 kroku) — to nie jest dziura, przez którą się wychodzi przypadkiem.
+
+**Front równych kosztów przesunął się** i musiał zostać wyznaczony na nowo (`DOLNA_PLACES`): z
+balkonu do ogrodu jest 5.3 m ścieżki zamiast 23.1, więc **zachodni trawnik i kuchnia parteru należą
+teraz do strony domu** (T1 bliżej o 3.5 m i 2.1 m) i przestały być miejscami spornymi — zostają w
+tabeli, dalej mierzone. Nowe miejsca sporne to `*garden_n` (−5.5, 23.5) i `*annex_lawn` (−4.5, 20.5);
+razem z `*drive`, `*road_gate`, `*wicket` i `*road_w` najgorsza różnica **1.52 m ścieżki** z 1.90 m
+(250 ms sprintu), które dopuszcza brief. Start do startu 57.1 m (było 58.3; próg 50–65).
+
+W `map-duel` (który mierzy nie długość ścieżki, a czas prawdziwego movera) najgorsza różnica na
+miejscach spornych spadła z **2250 ms do 1033 ms**; resztę robi **czas lotu** — zejście z balkonu to
+~0.8 s w powietrzu, dokładnie tyle, ile oszczędza. Wyjście jest więc wyborem taktycznym, nie darmową
+skrótówką. Dwie trasy T1 dalej raportują `stuck`: to ograniczenie samego narzędzia, nie mapy — jego
+runner idzie polilinią z wciśniętym sprintem i nie skacze na odległym waypoincie, więc opiera się o
+stół w kuchni parteru, po którym siatka chodu prowadzi (stół ma 0.8 m, wskakuje się na niego).

@@ -40,6 +40,15 @@
  * loop; a partition and a screen that hide the garage spawn; trees and thujas that cut the long
  * lines; the alley east of the garage.
  *
+ * AND (owner, 2026-09-27: "musisz dodać więcej wyjść z domku niż schody") TWO WAYS OUT OF THE HOUSE
+ * THAT ARE NOT THE STAIRCASE. The ground floor was a loop; the two floors above it were not — one
+ * switchback stair served both, so the top floor, which is where the 1 v 1 start is, was a storey
+ * with a single door. Now the top floor has a window over the drive a body vaults through (a 0.8 m
+ * sill, the wall's full height above it) and the first floor has 1.2 m of missing railing on
+ * balcony 1's garden side to walk off. Both are one-way: 7.0 m and 3.5 m down, and a body mantles
+ * 1.25. Falling costs no health here, so the price is the noise and the seconds in the open — and
+ * the frontier between the two starts moved for it (see `DOLNA_PLACES`).
+ *
  * CONSTRUCTION (unchanged from v2, proven by `dolna.test.ts`): storeys of 3.5 m on 0.25 m slabs
  * that lie on the walls; a switchback stair of 0.35 × 0.5 treads; doors 1.5 m wide, 2.2 m high;
  * balconies with a 1.35 m parapet; cover in one language — ≤ 0.8 low, 1.3 / 1.45 crouch, ≥ 1.9
@@ -241,11 +250,36 @@ const ANNEX_DOOR: Gap = [-1.5, 0];
 const BALCONY1_DOOR: Gap = [-6.25, -4.75];
 const GARAGE0_EDOOR: Gap = [6, 7.5];
 const BALCONY2_DOOR: Gap = [10, 11.5];
+/**
+ * THE TWO WAYS OUT OF THE HOUSE THAT ARE NOT THE STAIRCASE (owner, 2026-09-27: "musisz dodać więcej
+ * wyjść z domku niż schody").
+ *
+ * The house had exactly one: the switchback stair. Six doors on the ground floor and then a single
+ * flight serving both storeys above it, which makes the top floor — where the 1 v 1 start is — a room
+ * with one door, held by whoever watches the stair head. A player upstairs could not leave and a
+ * player downstairs could not come up, and the round died on that landing.
+ *
+ * So each upper storey gets an opening a body goes OVER, not down: `ESCAPE_WINDOW` in the top floor's
+ * south wall, over the drive, two metres from the start; and a 0.8 m step-over in balcony 1's garden
+ * parapet on the first floor. Both are 0.8 — under the 0.93 m a jump clears, over the 0.4 a step
+ * takes — so they are a deliberate vault and never a doorway you wander through, and both are ONE
+ * WAY: nothing is climbed from the other side (a body mantles 1.25 m, the drops are 3.5 and 7.0).
+ * Falling costs no health in this game, so the price of the shortcut is the noise, the seconds in the
+ * air, and landing in the open where the other player is already looking.
+ */
+const ESCAPE_WINDOW: Gap = [-3.6, -2.1];
+const B1_STEP_OVER: Gap = [-6.1, -4.9];
 for (const s of [0, 1, 2]) {
   const y0 = Y(s), t = `house${s}`;
   wallZ(`${t}_wall_w`, HZ0 + WT, HZ1 - WT, HX0, HX0 + WT, WH, EXT, [], 2.2, y0);
   wallZ(`${t}_wall_e`, HZ0 + WT, HZ1 - WT, HX1 - WT, HX1, WH, EXT, s === 0 ? [GARAGE0_EDOOR] : s === 2 ? [BALCONY2_DOOR] : [], 2.2, y0);
-  wallX(`${t}_wall_s`, HX0, HX1, HZ0, HZ0 + WT, WH, EXT, s === 0 ? [FRONT_DOOR, GARAGE0_GATE] : [], s === 0 ? 2.4 : 2.2, y0);
+  // The top floor's opening takes the wall's FULL height (`lintel = WH`, so no band over it): the
+  // opening has to be tall enough to stand in. Measured — with the usual 2.2 m lintel the clear
+  // height over the 0.8 m sill is 1.4 m, a standing body is 1.8, and the walk grid then lists no
+  // standing height on the sill at all: the window was drawn, and nothing could go through it.
+  wallX(`${t}_wall_s`, HX0, HX1, HZ0, HZ0 + WT, WH, EXT, s === 0 ? [FRONT_DOOR, GARAGE0_GATE] : s === 2 ? [ESCAPE_WINDOW] : [], s === 0 ? 2.4 : s === 2 ? WH : 2.2, y0);
+  // ...and the sill that makes it a WINDOW: 0.8 m, a vault rather than a door you wander through.
+  if (s === 2) add(S(ESCAPE_WINDOW[0], y0, HZ0, ESCAPE_WINDOW[1] - ESCAPE_WINDOW[0], 0.8, WT, EXT, "house2_escape_sill"));
   wallX(`${t}_wall_n`, HX0, HX1, HZ1 - WT, HZ1, WH, EXT, s === 0 ? [SALON_GDOOR, KITCHEN_GDOOR, ANNEX_DOOR] : s === 1 ? [BALCONY1_DOOR] : [], 2.2, y0);
 }
 // The stair bay on every floor: x -11…-7, lanes A (south) and B (north).
@@ -316,7 +350,17 @@ add(S(STX, Y(2) - RISE, LANE_B[0], WT, RISE, LANE_B[1] - LANE_B[0], "floor_wood"
 add(S(B1X0, Y(1) - SLAB, HZ1, B1X1 - B1X0, SLAB, B1Z1 - HZ1, "floor_concrete", "balcony1_slab"));
 add(S(B1X0, 0, B1Z1 - WT, WT, Y(1) - SLAB, WT, "wood", "balcony1_post_w"));
 add(S(B1X1 - WT, 0, B1Z1 - WT, WT, Y(1) - SLAB, WT, "wood", "balcony1_post_e"));
-add(S(B1X0, Y(1), B1Z1 - WT, B1X1 - B1X0, 1.35, WT, EXT, "balcony1_parapet_n"));
+// The garden side of balcony 1 is parapet either side of a step-over: the first floor's way out.
+// Only the GARDEN side opens — the east parapet stays 1.35 m because the annex roof is 25 cm from it
+// and a roof that can be stepped onto is a roof in the game (`dolna.test.ts`).
+add(S(B1X0, Y(1), B1Z1 - WT, B1_STEP_OVER[0] - B1X0, 1.35, WT, EXT, "balcony1_parapet_n_w"));
+add(S(B1_STEP_OVER[1], Y(1), B1Z1 - WT, B1X1 - B1_STEP_OVER[1], 1.35, WT, EXT, "balcony1_parapet_n_e"));
+// ...and between them the parapet simply stops. It has to be a real GAP: a low rail would be a
+// solid within a body's half-width of the cell in front of it, and the walk grid then refuses to
+// stand there — measured, the balcony lost the cell at its own edge and the opening led nowhere.
+// The 1.2 m of missing railing is the first floor's way out: you walk off it into the garden, 3.5 m
+// down, and nothing climbs back up (a body mantles 1.25).
+
 add(S(B1X0, Y(1), HZ1, WT, 1.35, B1Z1 - WT - HZ1, EXT, "balcony1_parapet_w"));
 add(S(B1X1 - WT, Y(1), HZ1, WT, 1.35, B1Z1 - WT - HZ1, EXT, "balcony1_parapet_e"));
 add(S(HX1, Y(2) - SLAB, B2Z0, B2X1 - HX1, SLAB, B2Z1 - B2Z0, "floor_concrete", "balcony2_slab"));
@@ -451,8 +495,11 @@ const N = 0, E = Math.PI / 2, W = -Math.PI / 2, SO = Math.PI;
   furn("plant", -5.6, 13.6, N, y2);
   // the big east room (x -5.05…0.75, z 5.75…17.5): the bed south (the spawn's cover), the desk
   // east under the window, the wardrobe, a couch and the TV north, the balcony door mid-east.
-  furn("bed_double", -3.5, 6.85, N, y2);
-  furn("nightstand", -4.75, 5.98, N, y2);
+  // The bed stands a metre north of the south wall, not against it: the window in that wall is the
+  // top floor's way out and a bed under it means vaulting over the bed first (measured — a body
+  // could not reach the sill at floor level at all, only by jumping onto the mattress).
+  furn("bed_double", -3.5, 8.1, N, y2);
+  furn("nightstand", -4.75, 7.25, N, y2);
   furn("wardrobe", -0.2, 6.1, SO, y2);
   furn("desk", 0.3, 8.6, E, y2);
   furn("office_chair", -0.5, 8.6, E, y2);
@@ -648,7 +695,9 @@ const spawns: SpawnPoint[] = [
   { x: 12.35, y: 0, z: 12.5, yaw: SO, team: 0 },
   // team 1 — THE HOUSE, 2nd floor, the big east room's south end. First = the duel start.
   { x: -2, y: Y(2), z: 7.75, yaw: N, team: 1 },
-  { x: -3.5, y: Y(2), z: 8.5, yaw: N, team: 1 },
+  // ...a metre and a half further into the room than it was drawn: the bed moved off the south wall
+  // so the window in it can be vaulted, and this seat was under the bed's new place.
+  { x: -4.4, y: Y(2), z: 10.5, yaw: N, team: 1 },
   { x: -1.5, y: Y(2), z: 10.5, yaw: N, team: 1 },
   { x: -3, y: Y(2), z: 11.5, yaw: N, team: 1 },
   { x: -8.5, y: Y(2), z: 7.5, yaw: N, team: 1 },
@@ -675,15 +724,22 @@ for (const st of DOLNA.stations) props.push({ kind: "neon", x: st.x, y: st.y + 2
 
 /** Key places, timed from BOTH starts; a leading "*" marks a CONTESTED place (must be within 250 ms). */
 export const DOLNA_PLACES: Readonly<Record<string, { x: number; y: number; z: number }>> = {
-  // The equal-cost frontier, measured on the walk grid (2 m cells, ground only): the front of the
-  // house, its kitchen, the west lawn and the road. (The shed and the lawn beside it are T0's since
-  // the garage's north door is clear — the first build had a shelf standing in it.)
+  // The equal-cost frontier, measured on the walk grid, RE-DERIVED after the two new ways out of the
+  // house (owner, 2026-09-27). It moved, and it had to: the first floor can now step off its balcony
+  // into the garden, so the west lawn and the ground-floor kitchen belong to the house side (T1 is
+  // 3.5 m and 2.1 m closer to them — they stay in the table below, unstarred, still timed). The
+  // frontier now runs along the ROAD and the drive in the south and up the strip between the annex
+  // and the pool in the north. Measured from both starts on the walk grid, in metres of path:
+  //   *drive 29.1 / 29.0 · *road_gate 28.4 / 29.6 · *wicket 30.1 / 29.1 · *road_w 33.6 / 35.1 ·
+  //   *garden_n 25.3 / 26.3 · *annex_lawn 24.1 / 23.6   (worst Δ 1.52 m of the 1.90 m the brief allows)
   "*drive": { x: -2.25, y: 0, z: 3.75 },
   "*road_gate": { x: -4.25, y: 0, z: 1.75 },
   "*wicket": { x: -6.25, y: 0, z: 1.75 },
-  "*kitchen_0w": { x: -4.25, y: 0, z: 15.75 },
-  "*lawn_w": { x: -14.25, y: 0, z: 11.75 },
   "*road_w": { x: -10.25, y: 0, z: -0.25 },
+  "*garden_n": { x: -5.5, y: 0, z: 23.5 },
+  "*annex_lawn": { x: -4.5, y: 0, z: 20.5 },
+  kitchen_0w: { x: -4.25, y: 0, z: 15.75 },
+  lawn_w: { x: -14.25, y: 0, z: 11.75 },
   passage_s: { x: 1.75, y: 0, z: 5.75 },
   shed_lawn_s: { x: 3.75, y: 0, z: 5.75 },
   shed_lawn_n: { x: 5.75, y: 0, z: 17.75 },
@@ -727,6 +783,8 @@ export const DOLNA_EXITS: Readonly<Record<string, { x: number; y: number; z: num
   stairs_2_head: { x: -7.75, y: Y(2) - RISE, z: 12.5 },
   corridor_1: { x: -6.25, y: Y(1), z: 11 },
   hall_0: { x: -5.95, y: 0, z: 8.5 },
+  // The first floor's way out that is not the staircase: the gap in balcony 1's garden parapet.
+  balcony_1_gap: { x: -5.5, y: Y(1), z: 19.1 },
 };
 export const DOLNA_GROUND = /^ground_/;
 export const DOLNA_BOUNDARY = /^(hedge_|fence_|wall_edge)/;
