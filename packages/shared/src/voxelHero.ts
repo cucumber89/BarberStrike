@@ -77,66 +77,43 @@ function roofChar(z: number, y: number): string | undefined {
 }
 
 /** The front face (seen from +z): kidneys, LED lights with rings, the lower intake, the lip. */
+/**
+ * The faces, 35 columns × 28 rows (row 0 = y 27). Nothing above y 14: that is the body's top at
+ * the nose and the tail, so the lights sit IN the face instead of standing on the hood.
+ */
+const FACE_TOP = Array.from({ length: 13 }, () => "...................................");
+const FACE_BOTTOM = Array.from({ length: 4 }, () => "...................................");
+/** The nose (seen from +z): LED rings y 11–14, the kidneys y 9–12, the lower intake y 5–8, the lip y 4. */
 const FRONT = [
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...BBBBBBBBBBBBBBBBBBBBBBBBBBBBB...",
-  "..BWWWWBBBBBBBBBBBBBBBBBBBBWWWWB...",
-  "..BWKKWBBBBBBKKKKBKKKKBBBBBWKKWB..",
-  "..BWKKWBBBBBBKSKKBKKSKBBBBBWKKWB..",
-  "..BWWWWBBBBBBKKKKBKKKKBBBBBWWWWB..",
-  "..BBBBBBBBBBBBKKKKBKKKKBBBBBBBBBB..",
-  "..BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB..",
-  "..BKKKKKBBBBBBBBBBBBBBBBBBBKKKKKB..",
-  "..BKKKKKBBBBKKKKKKKKKKKKKBBKKKKKB..",
-  "..BKKKKKBBBBKKKKKKKKKKKKKBBKKKKKB..",
-  "..BBBBBBBBBBKKKKKKKKKKKKKBBBBBBBB..",
-  "...BBBBBBBBBBBBBBBBBBBBBBBBBBBBB...",
-  "...KKKKKKKKKKKKKKKKKKKKKKKKKKKKK...",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
+  ...FACE_TOP,
+  "..BWWWWBBBBBBBBBBBBBBBBBBBBBWWWWB..",   // y 14
+  "..BWKKWBBBBBBKKKKBKKKKBBBBBBWKKWB..",   // y 13
+  "..BWKKWBBBBBBKSKKBKKSKBBBBBBWKKWB..",   // y 12
+  "..BWWWWBBBBBBKKKKBKKKKBBBBBBWWWWB..",   // y 11
+  "..BBBBBBBBBBBBKKKKBKKKKBBBBBBBBBB..",   // y 10
+  "..BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB..",   // y 9
+  "..BKKKKKBBBBBBBBBBBBBBBBBBBKKKKKB..",   // y 8
+  "..BKKKKKBBBBKKKKKKKKKKKKKBBKKKKKB..",   // y 7
+  "..BKKKKKBBBBKKKKKKKKKKKKKBBKKKKKB..",   // y 6
+  "..BBBBBBBBBBKKKKKKKKKKKKKBBBBBBBB..",   // y 5
+  "...KKKKKKKKKKKKKKKKKKKKKKKKKKKKK...",   // y 4
+  ...FACE_BOTTOM,
 ];
-/** The rear face (seen from −z, so drawn mirrored = as the photo shows it): lights, badge, diffuser, four tips. */
+/** The tail, drawn as the photo shows it (from −z): L-shaped LED lights y 11–14, the roundel, the diffuser with four tips. */
 const REAR = [
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...BBBBBBBBBBBBBBBBBBBBBBBBBBBBB...",
-  "..BBBBBBBBBBBBBBSSBBBBBBBBBBBBBB...",
-  "..BRRRRRRBBBBBBBSSBBBBBBBRRRRRRB..",
-  "..BRRRRRRRBBBBBBBBBBBBBBRRRRRRRB..",
-  "..BRRRRRRRRBBBBBBBBBBBBRRRRRRRRB..",
-  "..BBRRRRRRBBBBBBBBBBBBBBRRRRRRBB..",
-  "..BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB..",
-  "..BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB..",
-  "..BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB..",
-  "..BBKKKKKKKKKKKKKKKKKKKKKKKKKKKBB..",
-  "..BBKSSKSSKKKKKKKKKKKKKKKSSKSSKBB..",
-  "..BBKSSKSSKKKKKKKKKKKKKKKSSKSSKBB..",
-  "...KKKKKKKKKKKKKKKKKKKKKKKKKKKKK...",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
-  "...................................",
+  ...FACE_TOP,
+  "..BRRRRRRBBBBBBBBSSBBBBBBBRRRRRRB..",   // y 14
+  "..BRRRRRRRBBBBBBBSSBBBBBBRRRRRRRB..",   // y 13
+  "..BRRRRRRRRBBBBBBBBBBBBBRRRRRRRRB..",   // y 12
+  "..BBRRRRRRBBBBBBBBBBBBBBBRRRRRRBB..",   // y 11
+  "..BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB..",   // y 10
+  "..BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB..",   // y 9
+  "..BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB..",   // y 8
+  "..BBKKKKKKKKKKKKKKKKKKKKKKKKKKKBB..",   // y 7
+  "..BBKSSKSSKKKKKKKKKKKKKKKSSKSSKBB..",   // y 6
+  "..BBKSSKSSKKKKKKKKKKKKKKKSSKSSKBB..",   // y 5
+  "...KKKKKKKKKKKKKKKKKKKKKKKKKKKKK...",   // y 4
+  ...FACE_BOTTOM,
 ];
 
 function bmwText(): string {

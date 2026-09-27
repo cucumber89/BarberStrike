@@ -364,7 +364,7 @@ const N = 0, E = Math.PI / 2, W = -Math.PI / 2, SO = Math.PI;
   furn("workbench", -2, 9.15, SO, 0, { name: "garage0_bench" });
   furn("tool_chest", -4.3, 8.9, E);
   furn("tyre_stack", 0.4, 9.1, N);
-  furn("bike", -2.5, 6.0, N);
+  furn("bike", 0.5, 6.8, E);                     // along the east wall, clear of the gate
   furn("rack", -4.4, 6.3, E);
   // the kitchen (x -4.65…-2.2, z 9.75…17.5): the run along the east wall, the table by the window
   furn("kitchen_counter", -2.55, 15.5, W);
@@ -384,7 +384,7 @@ const N = 0, E = Math.PI / 2, W = -Math.PI / 2, SO = Math.PI;
   furn("plant", -1.6, 16.9, N);
   // the annex (x -2.75…0.75, z 17.75…20.25): a second fridge, a rack, a bench
   furn("fridge", 0.4, 19.9, W);
-  furn("rack", -1.2, 20.0, N);
+  furn("rack", -2.55, 19.0, E);                  // on the west wall, clear of the garden door
   furn("garden_bench", 0.55, 18.7, W);
   // the salon (x -10.75…-4.9, z 13.75…17.5): the couch faces the TV on the west wall
   hang("rug", -8.5, 15.2, N, 0);
@@ -392,7 +392,7 @@ const N = 0, E = Math.PI / 2, W = -Math.PI / 2, SO = Math.PI;
   furn("armchair", -8.2, 14.4, N);
   furn("coffee_table", -8.1, 15.5, N);
   furn("tv_stand", -10.5, 15.5, E);
-  hang("tv", -10.4, 15.5, E, 0.5);
+  hang("tv", -10.68, 15.5, E, 0.5);
   furn("bookshelf", -5.2, 14.2, W);
   furn("floor_lamp", -10.4, 14.05, N);
   furn("plant", -10.5, 17.1, N);
@@ -409,7 +409,7 @@ const N = 0, E = Math.PI / 2, W = -Math.PI / 2, SO = Math.PI;
   furn("washbasin", -4.0, 7.2, E, y1);
   furn("washing_machine", -4.9, 9.15, SO, y1);
   // the corridor (x -7…-5.5, z 5.75…13.5): hooks and a bookshelf
-  hang("coat_hooks", -5.55, 11, E, y1 + 1.5);
+  hang("coat_hooks", -5.52, 8.6, W, y1 + 1.5);   // on the bathroom's wall — the corridor has no wall at z 11
   furn("bookshelf", -6.8, 9.0, E, y1);
   // the kitchen SE (x -3.45…0.75, z 5.75…13.5): the run along the east wall, the table west
   furn("fridge", 0.4, 6.1, W, y1);
@@ -430,7 +430,7 @@ const N = 0, E = Math.PI / 2, W = -Math.PI / 2, SO = Math.PI;
   furn("armchair", -3.2, 14.3, N, y1);
   furn("coffee_table", -5.2, 15.6, N, y1);
   furn("tv_stand", 0.3, 15.5, W, y1);
-  hang("tv", 0.2, 15.5, W, y1 + 0.5);
+  hang("tv", 0.67, 15.5, W, y1 + 0.5);
   furn("bookshelf", -8.5, 17.05, N, y1);
   furn("floor_lamp", -0.1, 14.1, N, y1);
   furn("plant", -10.5, 17.1, N, y1);
@@ -460,7 +460,7 @@ const N = 0, E = Math.PI / 2, W = -Math.PI / 2, SO = Math.PI;
   furn("sofa", -2.2, 14.7, SO, y2);
   furn("coffee_table", -2.2, 13.3, N, y2);
   furn("tv_stand", -2.2, 16.9, N, y2);
-  hang("tv", -2.2, 17.0, N, y2 + 0.5);
+  hang("tv", -2.2, 17.17, N, y2 + 0.5);
   furn("armchair", -4.4, 15.5, E, y2);
   furn("plant", 0.4, 17.1, N, y2);
   furn("floor_lamp", 0.4, 12.5, N, y2);
@@ -563,7 +563,7 @@ furn("garden_table", -6, 21.5, N); furn("garden_bench", -6, 20.85, N); furn("gar
 furn("grill", -8.5, 21.8, N);
 furn("mailbox", -7.2, 0.9, SO);
 furn("wheelie_bin", 1.6, 1.0, SO); furn("wheelie_bin_black", 2.3, 1.0, SO);
-furn("flower_bed", -9.5, 4.95, N); furn("flower_bed", -2.5, 4.95, N); furn("flower_bed", -12, 8, E);
+furn("flower_bed", -9.5, 4.95, N); furn("flower_bed", 0.4, 4.95, N); furn("flower_bed", -12, 8, E);   // none in front of the gate
 furn("dog_house", -15.5, 25.3, SO);
 furn("bike", 5.2, 6.5, N);
 

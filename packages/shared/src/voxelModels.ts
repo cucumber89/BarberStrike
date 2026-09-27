@@ -252,7 +252,7 @@ T.tv = `#model tv
 #cell 0.05
 #ink K #16171a gloss
 #ink S #2c2e33 matte
-#ink G #1a2c44 glow
+#ink G #0b1016 gloss
 #box 0,2,0 28,16,1 K
 #part z n=1 at=0,2,1
 KKKKKKKKKKKKKKKKKKKKKKKKKKKK
