@@ -52,6 +52,7 @@ export const BINDABLE_ACTIONS: readonly { id: BindableAction; label: string }[] 
   { id: "inspect", label: "Obejrzyj broń" },
   { id: "leanLeft", label: "Wychylenie w lewo" },
   { id: "leanRight", label: "Wychylenie w prawo" },
+  { id: "emote", label: "Taniec (wybierz w szafie → TAŃCE)" },
 ];
 
 /**

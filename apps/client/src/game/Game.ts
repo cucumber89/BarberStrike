@@ -25,7 +25,10 @@ import { WeaponModelLibrary } from "./view/weaponModels";
 import { WeaponController } from "./combat/WeaponController";
 import { Throwing } from "./combat/Throwing";
 import { MatchTracker, matchResult } from "./progression/matchTracker";
-import { applyMatch, loadProfile, saveProfile } from "./progression/profile";
+import { applyMatch, equippedEmote, loadProfile, saveProfile } from "./progression/profile";
+import { canStartEmote, emoteBreak } from "./player/emotes";
+import type { CharacterLike } from "./view/Character";
+import { decodeBuild, decodeOutfit, emoteDef, type EmoteEvent } from "@frankibarber/shared";
 import { GameEvents } from "./events";
 import type { GameContext, GameModule } from "./context";
 import { installView } from "./view";
@@ -96,6 +99,13 @@ export class Game {
   /** Living arena: the plan this client's world is currently shaped by (0 = none). */
   private planId = 0;
   private shopOpen = false;
+  /**
+   * The local dance (H): which one, when it started, the yaw the body faces while it plays (the
+   * camera orbits, the body does not turn with it), and the body drawn for it. The first-person view
+   * has no body of its own, so one is built the first time a player dances and kept for the match.
+   */
+  private emote: { id: string; at: number; yaw: number } | null = null;
+  private selfBody: CharacterLike | null = null;
   private toastKey = 0;
   private lethalWasHeld = false;
   /** Our perk end times, refreshed from every snapshot (drives predicted speed and the HUD). */
@@ -217,16 +227,16 @@ export class Game {
     this.weapons.renderDelay = INTERP_DELAY_MS;
     this.weapons.onShot = (s) => this.events.emit("localShot", { weapon: s.weapon, origin: s.origin, dir: s.dir });
     this.weapons.onDryFire = () => this.events.emit("dryFire", { weapon: this.weapons.weapon });
-    this.weapons.onReload = (weapon, shells, empty) => this.events.emit("reloadStart", { weapon, shells, empty });
+    this.weapons.onReload = (weapon, shells, empty) => { this.stopEmote(); this.events.emit("reloadStart", { weapon, shells, empty }); };
     this.weapons.onReloadEnd = (weapon) => this.events.emit("reloadEnd", { weapon });
-    this.weapons.onEquip = (weapon) => { hud.set({ lastSwitchAt: performance.now() }); this.events.emit("weaponEquip", { weapon }); };
+    this.weapons.onEquip = (weapon) => { this.stopEmote(); hud.set({ lastSwitchAt: performance.now() }); this.events.emit("weaponEquip", { weapon }); };
     this.weapons.beforeFire = () => this.flushInputs(performance.now());
     this.local.speedScale = (sprinting) => perkSpeedScale(this.myPerks, this.conn.serverNow(), sprinting) * (this.conn.state.mode === "boys" ? boysClass(this.conn.me()?.boysClass).speed : 1);
     // Prediction freezes itself on the shared server clock; see `frozenAt`.
     this.local.serverNow = () => this.conn.serverNow();
     this.local.onTac = (on) => this.events.emit("tacSprint", { on });
     this.throwing = new Throwing(this.conn, this.local);
-    this.throwing.onPrime = (kind, cookable) => this.events.emit("grenadePrime", { kind, cookable });
+    this.throwing.onPrime = (kind, cookable) => { this.stopEmote(); this.events.emit("grenadePrime", { kind, cookable }); };
     this.throwing.onThrow = (kind) => this.events.emit("grenadeThrow", { kind });
     this.throwing.onCancel = () => this.events.emit("grenadeCancel", {});
 
@@ -326,6 +336,7 @@ export class Game {
     this.unsubs.push(c.onMessage<SpawnEvent>(S2C.Spawn, (e) => {
       if (e.id === c.sessionId) {
         this.local.spawnAt(e.x, e.y, e.z, e.yaw);
+        this.stopEmote();
         const me = c.me();
         if (me) { this.weapons.syncFrom(me); this.throwing.syncFrom(me); }
         this.throwing.cancel();
@@ -367,6 +378,7 @@ export class Game {
         this.throwing.cancel();
         this.weapons.cancel(); // a reload the corpse was halfway through is not the next life's problem
         if (this.shopOpen) this.setShopOpen(false, false);
+        this.stopEmote();
         Object.assign(patch, this.beginDeath(e));
         this.events.emit("localDeath", e);
       }
@@ -412,6 +424,9 @@ export class Game {
       const line: ChatLine = { key: ++this.chatKey, id: e.id, name: e.name, team: e.team as Team, text: e.text, all: e.all, seen: performance.now() };
       hud.set({ chat: [...hud.get().chat, line].slice(-CHAT.history) });
       this.events.emit("chat", e);
+    }));
+    this.unsubs.push(c.onMessage<EmoteEvent>(S2C.Emote, (e) => {
+      this.remotes.get(e.id)?.setEmote(e.emote);
     }));
     this.unsubs.push(c.onMessage<MarkEvent>(S2C.Mark, (e) => {
       this.stats.marks++;
@@ -614,6 +629,7 @@ export class Game {
     if (this.input.chatOpenRequested) { const kind = this.input.chatOpenRequested; this.input.chatOpenRequested = null; if (!this.shopOpen) this.openChat(kind); }
     if (this.input.markRequested) { this.input.markRequested = false; if (this.local.alive) this.sendMark(); }
     if (this.input.inspectRequested) { this.input.inspectRequested = false; if (this.local.alive && !this.weapons.busy(now)) this.events.emit("weaponInspect", {}); }
+    if (this.input.emoteRequested) { this.input.emoteRequested = false; this.toggleEmote(now); }
     if (this.input.lethalHeld && !this.lethalWasHeld && !this.weapons.busy(now)) this.throwing.pressLethal(now);
     this.lethalWasHeld = this.input.lethalHeld;
     if (this.input.lethalReleased) { this.input.lethalReleased = false; this.throwing.releaseLethal(now); }
@@ -628,6 +644,7 @@ export class Game {
     const vyBefore = this.local.body.vy;
     this.local.update(dtMs);
     if (now - this.lastSend >= 1000 / 60 - 0.5) this.flushInputs(now);
+    this.updateEmote(now, dtMs);
     this.weapons.update(now, dtMs, (this.local.lastButtons & Btn.Fire) !== 0 && this.input.pointerLocked);
     this.emitMovementFeel(dtMs, groundedBefore, vyBefore);
 
@@ -804,6 +821,7 @@ export class Game {
    */
   private silentDeath(): void {
     this.local.alive = false;
+    this.stopEmote();
     this.input.clearAll();
     this.throwing.cancel();
     this.weapons.cancel();
@@ -999,6 +1017,60 @@ export class Game {
   }
 
   /**
+   * H: start the dance picked in the wardrobe, or stop the one playing. It starts only standing
+   * still on the ground with nothing held (`canStartEmote`), and everybody else is told so they can
+   * draw it on the body they already see.
+   */
+  private toggleEmote(now: number): void {
+    if (this.emote) { this.stopEmote(); return; }
+    const blocked = this.shopOpen || this.weapons.busy(now) || this.throwing.state.kind !== null;
+    if (!canStartEmote(this.local.alive, this.local.body, this.local.lastButtons, blocked)) return;
+    const id = equippedEmote();
+    this.emote = { id, at: now, yaw: this.local.yaw };
+    this.conn.send(C2S.Emote, { emote: id });
+    this.local.emoteView = true;
+    hud.set({ emote: emoteDef(id).name });
+    this.events.emit("localEmote", { id });
+  }
+
+  private stopEmote(): void {
+    if (!this.emote) return;
+    this.emote = null;
+    this.conn.send(C2S.Emote, { emote: "" });
+    this.local.emoteView = false;
+    hud.set({ emote: "" });
+    this.events.emit("localEmote", { id: "" });
+  }
+
+  /**
+   * Per frame: end the dance on the first sign of intent (`emoteBreak`), and pose the self body
+   * while the camera is out behind it — including the blend back, so the dance eases out on screen.
+   */
+  private updateEmote(now: number, dtMs: number): void {
+    if (this.emote) {
+      const blocked = this.shopOpen || this.throwing.state.kind !== null;
+      if (emoteBreak(this.local.alive, this.local.body, this.local.lastButtons, now - this.emote.at, blocked)) this.stopEmote();
+    }
+    const out = this.local.emoteCamera;
+    if (out <= 0) { if (this.selfBody?.root.isEnabled()) this.selfBody.setEnabled(false); return; }
+    const me = this.conn.me();
+    if (!this.selfBody) {
+      const team = (this.conn.state.mode === "ffa" ? 0 : (me?.team ?? 0)) as Team;
+      this.selfBody = (this.makeCharacter ?? ((s, t, i, build, outfit) => new Character(s, t, i, build, outfit)))(this.scene, team, `${this.conn.sessionId}_self`, decodeBuild(me?.skins), decodeOutfit(me?.skins));
+      void this.selfBody.applySkins?.(loadProfile().equip);
+    }
+    const body = this.selfBody, b = this.local.body;
+    if (!body.root.isEnabled()) body.setEnabled(true);
+    body.root.position.set(b.x, b.y, b.z);
+    body.root.rotation.y = this.emote?.yaw ?? body.root.rotation.y;
+    body.update({
+      speed: Math.hypot(b.vx, b.vz), grounded: b.grounded, crouch: b.crouching, pitch: 0, alive: this.local.alive,
+      reloading: false, weapon: this.weapons.weapon, moveDir: 0, haircut: me?.haircut ?? "", shaved: !!me?.shaved,
+      emote: this.emote?.id ?? "", emoteMs: this.emote ? now - this.emote.at : 0,
+    }, dtMs);
+  }
+
+  /**
    * Middle mouse: an enemy within a narrow cone and in sight becomes a "spot" (tracks them for a few
    * seconds); otherwise the point the view ray hits (or its far end) becomes a "go" mark.
    */
@@ -1101,6 +1173,7 @@ export class Game {
     this.events.clear();
     for (const r of this.remotes.values()) r.dispose();
     this.remotes.clear();
+    this.selfBody?.dispose(); this.selfBody = null;
     // Start may have failed part-way (e.g. engine creation): dispose only what exists.
     this.weaponModels?.dispose();
     this.vault?.dispose();

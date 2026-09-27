@@ -5,6 +5,7 @@ import { viewpointsFor, ViewerScene, type ViewerStats } from "../game/viewer/Vie
 import { EMPTY_ROOM_MS, POLL_MS, direct, initialDirector, pickStreamRoom, type DirectorState } from "../game/viewer/streamDirector";
 import { Lobby } from "./lobby";
 import { apiUrl } from "../net/accountApi";
+import { catalog as skinCatalog } from "@frankibarber/skins";
 import { copyText, lobbyLink, suggestRoomName } from "./invite";
 import {
   ADMIN_REFRESH_MS, adminHeaders, botLevelChoices, botMaxFor, defaultQuickMap, duelMapChoices, healthRows, mapLabel,
@@ -128,6 +129,10 @@ function ViewerPage() {
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [ending, setEnding] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState("");
+  // KONTA: ODBLOKUJ WSZYSTKO for one login (skins, haircuts, dances).
+  const [unlockLogin, setUnlockLogin] = useState("");
+  const [unlockMsg, setUnlockMsg] = useState("");
+  const [unlockBusy, setUnlockBusy] = useState(false);
 
   const lockAdmin = useCallback((why: string) => {
     setAdminAuthed(false); setAdminErr(why);
@@ -215,6 +220,21 @@ function ViewerPage() {
     } catch { setError("Nie udało się zakończyć meczu."); }
     finally { setEnding((e) => { const n = { ...e }; delete n[roomId]; return n; }); }
   }, [adminKey, lockAdmin, refreshAdmin, qCreated]);
+
+  const unlockAll = useCallback(async () => {
+    const login = unlockLogin.trim();
+    if (!login) { setUnlockMsg("Wpisz login konta."); return; }
+    setUnlockBusy(true); setUnlockMsg("");
+    try {
+      const res = await fetch(apiUrl("admin/accounts/unlock"), { method: "POST", headers: adminHeaders(adminKey), body: JSON.stringify({ login, skins: skinCatalog.map((s) => s.id) }) });
+      if (res.status === 401) { lockAdmin("Klucz admina przestał działać — wpisz hasło jeszcze raz."); return; }
+      if (res.status === 404) { setUnlockMsg(`Nie ma konta „${login}".`); return; }
+      if (!res.ok) { setUnlockMsg("Serwer odmówił — spróbuj jeszcze raz."); return; }
+      const b = (await res.json()) as { login: string; skins: number; haircuts: number; emotes: number };
+      setUnlockMsg(`Gotowe: ${b.login} ma ${b.skins} skinów, ${b.haircuts} fryzur ze skrzynek i ${b.emotes} tańców. Niech odświeży stronę gry.`);
+    } catch { setUnlockMsg("Serwer nieosiągalny — sprawdź, czy gra działa."); }
+    finally { setUnlockBusy(false); }
+  }, [unlockLogin, adminKey, lockAdmin]);
 
   const copy = useCallback((text: string, tag: string) => {
     void copyText(text).then((ok) => { if (ok) { setCopied(tag); window.setTimeout(() => setCopied(""), 1500); } });
@@ -411,6 +431,14 @@ function ViewerPage() {
                     {adminRooms === null && <tr className="empty"><td colSpan={6}>Szukam pokoi…</td></tr>}
                   </tbody>
                 </table>
+              </div>
+
+              {/* ------------------------------------------------------------- KONTA */}
+              <div className="va-card" data-testid="admin-accounts">
+                <h3>KONTA</h3>
+                <label>Login<input value={unlockLogin} onChange={(e) => setUnlockLogin(e.target.value)} placeholder="np. cucumber89" data-testid="admin-unlock-login" /></label>
+                <button type="button" disabled={unlockBusy} onClick={() => void unlockAll()} data-testid="admin-unlock">{unlockBusy ? "…" : "ODBLOKUJ WSZYSTKO"}</button>
+                <small data-testid="admin-unlock-msg">{unlockMsg || "Wszystkie skiny broni, fryzury i tańce na to konto. Niczego nie zabiera."}</small>
               </div>
 
               {/* ------------------------------------------------------------- SERWER */}

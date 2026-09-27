@@ -5,6 +5,7 @@ import { copyText, inviteLink, isLobbyInvite, isMapId, mapChoices, parseInvite }
 import { Lobby } from "./lobby";
 import { Connection, defaultServerUrl, type RoomListing } from "../game/net/Connection";
 import type { Settings } from "../settings";
+import { resolveBindings } from "../settings";
 import { SettingsPanel } from "./SettingsPanel";
 import { MODE_ART, NAV_ART, mapArt } from "./menuArt";
 import { Armoury } from "./Armoury";
@@ -34,6 +35,7 @@ const CONTROLS: [string, string, string][] = [
   ["LMB", "Fire", "fight"], ["RMB", "Aim down sights", "fight"], ["R", "Reload", "fight"],
   ["1 / 2 / Wheel", "Primary / sidearm", "fight"], ["3 / V", "Clippers", "fight"], ["X", "Last weapon", "fight"],
   ["G", "Lethal (hold to cook a frag)", "fight"], ["4", "Tactical grenade", "fight"], ["F", "Inspect weapon", "fight"],
+  ["H", "Dance (pick it in the wardrobe · TAŃCE)", "team"],
   ["B", "Buy menu", "team"], ["T (hold)", "Plant / defuse bomb · stand still", "team"], ["Tab", "Scoreboard", "team"],
   ["Enter / Y", "Chat (all / team)", "team"], ["MMB", "Mark a spot · spot an enemy", "team"], ["Esc", "Release mouse / pause", "team"],
 ];
@@ -677,7 +679,7 @@ export function Menu({ settings, onSettings, connecting, error, onPlay }: Props)
           )}
 
           {panel === "armoury" && (
-            <div className="mm-content armoury-content"><Armoury onHaircut={setHaircut} onBuild={setBuild} onOutfit={setOutfit} /></div>
+            <div className="mm-content armoury-content"><Armoury onHaircut={setHaircut} onBuild={setBuild} onOutfit={setOutfit} emoteKey={resolveBindings(settings.keys).emote[0]} /></div>
           )}
 
           {/* Drop V: the tournament waiting-room, reached only by a `mode=lobby` invite link now —

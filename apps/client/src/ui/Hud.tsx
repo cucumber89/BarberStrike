@@ -10,6 +10,7 @@ import { TopStrip } from "./hud/TopStrip";
 import { FlagRow } from "./hud/FlagRow";
 import { FlagNotice, Moments } from "./hud/Moments";
 import { ActionPrompt } from "./hud/ActionPrompt";
+import { EmoteTag } from "./hud/EmoteTag";
 import { HintLine, LeftColumn, PlanCard } from "./hud/LeftColumn";
 import { KillFeed } from "./hud/KillFeed";
 import { Vitals } from "./hud/Vitals";
@@ -23,6 +24,7 @@ import { ScoreboardOverlay } from "./hud/ScoreboardOverlay";
 import { ShopLayer } from "./hud/ShopLayer";
 import { PauseMenu } from "./hud/PauseMenu";
 import { PerfBadge } from "./hud/PerfBadge";
+import { keyLabel, resolveBindings } from "../settings";
 
 /**
  * The in-match HUD: the zone components of `ui/hud/` (drop U, docs/UI_U_SPEC.md §7 P0 0d), each
@@ -51,6 +53,7 @@ export function Hud({ settings, onSettings, onLeave, onResume, onPause, onFullsc
       <FlagRow model={model} />
       <FlagNotice model={model} now={now} />
       <ActionPrompt model={model} />
+      <EmoteTag keyName={keyLabel(resolveBindings(settings.keys).emote[0] ?? "KeyH")} />
       <LeftColumn model={model} radar={radar} chat={chat} />
       <KillFeed model={model} />
       <Vitals model={model} now={now} />

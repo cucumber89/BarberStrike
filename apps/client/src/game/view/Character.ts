@@ -14,6 +14,7 @@ import { TEAM_KITS } from "./teamKit";
 import { buildWeaponModel, createWeaponMaterials, forEachMesh, type WeaponMaterials, type WeaponModel } from "./weaponMeshes";
 import { beveledBox } from "./geometry";
 import { nightEnvironment } from "./nightEnv";
+import { emotePose, emptyEmotePose } from "./emotePose";
 
 /**
  * Procedural articulated third-person character. No external assets: a jointed figure with a
@@ -87,6 +88,12 @@ export interface CharacterInput {
    * because a bare scalp has no hair on it.
    */
   haircut?: string;
+  /**
+   * A dance (H): the emote id, "" when not dancing, and how long it has been going (ms). The body
+   * blends into the dance's pose and back out; the gun is put away while it plays. Presentation only.
+   */
+  emote?: string;
+  emoteMs?: number;
 }
 
 /** Joint angles exposed for tests/tools (radians). */
@@ -768,6 +775,14 @@ export class Character {
   /** Overhand throw: the right arm winds back, swings over and the gun dips (drop 2). */
   throw(): void { this.throwT = 1; }
   private throwT = 0;         // 1 → 0 over ~0.6 s
+  /** The dance being played (or blending out), its clock and how far into its pose the body is. */
+  private emoteId = "";
+  private emoteT = 0;
+  private emoteBlend = 0;
+  private emoteBuf = emptyEmotePose();
+  private emoteQ = new Quaternion();
+  /** 0..1: how far into the current dance's pose the body is (tools, tests). */
+  get dancing(): number { return this.emoteBlend; }
 
   /**
    * Hit reaction. `fromX/fromZ`: world-space direction from this character towards the shooter
@@ -859,6 +874,7 @@ export class Character {
 
     // ---- Death: buckle (0–0.25) → fall away from the killer with a tumble (0.25–0.8) → settle.
     if (this.deathT >= 0) {
+      this.emoteBlend = 0; this.emoteId = "";
       this.deathT = Math.min(1, this.deathT + dtMs / DEATH_MS);
       const t = this.deathT;
       const buckle = Math.min(1, t / 0.25);
@@ -1059,6 +1075,46 @@ export class Character {
     const sz = model.support[2] * lo;
     weaponToTorso(this.gunHand, sx + (rl > 0 ? (-0.01 - sx) * rl : 0), sy + (magY - sy) * rl, sz + ((model.magazine?.position.z ?? sz) - sz) * rl, ikTarget);
     this.ikL.solve(this.armL, this.forearmL, R, ikTarget, POLE_L, aLx, aLy, fLx, ikWeightL);
+    this.applyEmote(inp, dt);
+  }
+
+  /**
+   * The dance, laid over whatever the body was doing. The pose above is computed every frame as
+   * usual and this pulls every joint toward the dance by `emoteBlend`, so starting and stopping is a
+   * blend and never a snap — and a dance cut short by a sprint hands straight back to the run.
+   */
+  private applyEmote(inp: CharacterInput, dt: number): void {
+    const want = inp.alive && !!inp.emote;
+    if (want && inp.emote !== this.emoteId) { this.emoteId = inp.emote!; }
+    if (want) this.emoteT = (inp.emoteMs ?? this.emoteT * 1000 + dt * 1000) / 1000;
+    else this.emoteT += dt;
+    this.emoteBlend += ((want ? 1 : 0) - this.emoteBlend) * damp(want ? 12 : 9, dt);
+    if (!want && this.emoteBlend < 0.01) { this.emoteBlend = 0; this.emoteId = ""; }
+    const gun = this.weapons.get(this.currentWeapon)?.root;
+    const gunOn = this.emoteBlend < 0.4;
+    if (gun && gun.isEnabled() !== gunOn) gun.setEnabled(gunOn);
+    this.hips.rotation.x = 0;
+    if (this.emoteBlend === 0 || !this.emoteId) return;
+    const w = this.emoteBlend, e = emotePose(this.emoteId, this.emoteT, this.emoteBuf), R = this.rig;
+    const mix = (a: number, b: number) => a + (b - a) * w;
+    this.hips.position.y = mix(this.hips.position.y, R.hipY + e.hipsY);
+    this.hips.position.x = mix(this.hips.position.x, e.hipsX);
+    this.hips.rotation.x = mix(0, e.hipsRotX);
+    this.hips.rotation.y = mix(this.hips.rotation.y, wrap(e.spin));
+    this.hips.rotation.z = mix(this.hips.rotation.z, e.hipsRotZ);
+    this.torso.rotation.set(mix(this.torso.rotation.x, e.torsoX), mix(this.torso.rotation.y, e.torsoY), mix(this.torso.rotation.z, e.torsoZ));
+    this.head.rotation.set(mix(this.head.rotation.x, e.headX), mix(this.head.rotation.y, e.headY), mix(this.head.rotation.z, e.headZ));
+    this.root.rotation.z = mix(this.root.rotation.z, 0);
+    this.legR.rotation.x = mix(this.legR.rotation.x, e.legR[0]); this.legR.rotation.z = mix(this.legR.rotation.z, e.legR[1]);
+    this.legL.rotation.x = mix(this.legL.rotation.x, e.legL[0]); this.legL.rotation.z = mix(this.legL.rotation.z, e.legL[1]);
+    this.shinR.rotation.x = mix(this.shinR.rotation.x, e.shinR); this.shinL.rotation.x = mix(this.shinL.rotation.x, e.shinL);
+    const slerpTo = (node: TransformNode, v: [number, number, number]) => {
+      node.rotationQuaternion ??= Quaternion.FromEulerVector(node.rotation);
+      Quaternion.FromEulerAnglesToRef(v[0], v[1], v[2], this.emoteQ);
+      Quaternion.SlerpToRef(node.rotationQuaternion, this.emoteQ, w, node.rotationQuaternion);
+    };
+    slerpTo(this.armR, e.armR); slerpTo(this.forearmR, e.foreR);
+    slerpTo(this.armL, e.armL); slerpTo(this.forearmL, e.foreL);
   }
 
   setEnabled(v: boolean): void { this.root.setEnabled(v); }

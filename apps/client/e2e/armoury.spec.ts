@@ -111,3 +111,29 @@ test("the main menu exposes the six launch skins and remembers an equipped finis
 
   expect(errors).toEqual([]);
 });
+
+test("TAŃCE: the wave is on H from the start, a crate dance can be watched locked and put on H once owned", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.addInitScript(() => {
+    try { sessionStorage.setItem("bs_guest_ok", "1"); localStorage.setItem("bs_onboard_v1", JSON.stringify({ welcomed: true })); } catch { /* private mode */ }
+    if (!localStorage.getItem("bs_profile_v1")) localStorage.setItem("bs_profile_v1", JSON.stringify({ emotes: ["spucha"] }));
+  });
+  await page.goto("/");
+  await page.getByTestId("btn-armoury").click();
+  await page.getByTestId("armoury-emotes").click();
+  await expect(page.getByTestId("armoury-emote-machanie")).toHaveClass(/\bon\b/);
+  await expect(page.getByTestId("armoury-emote-key")).toContainText("H");
+  // Locked: a preview, not a dead control.
+  await expect(page.getByTestId("armoury-emote-kozak")).toHaveClass(/\blocked\b/);
+  await page.getByTestId("armoury-emote-kozak").click();
+  await expect(page.getByTestId("armoury-emote-machanie")).toHaveClass(/\bon\b/);
+  // Owned: goes on the key and is remembered.
+  await page.getByTestId("armoury-emote-spucha").click();
+  await expect(page.getByTestId("armoury-emote-spucha")).toHaveClass(/\bon\b/);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("bs_profile_v1") ?? "{}").emote)).toBe("spucha");
+  await expect(page.getByTestId("character-preview")).toHaveAttribute("data-ready", "true", { timeout: 30_000 });
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: "e2e/out/emotes/armoury-tance.png" });
+  expect(errors).toEqual([]);
+});

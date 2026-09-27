@@ -231,6 +231,8 @@ export interface HudState {
   roundHistory: HudRoundRecord[];
   /** `performance.now()` of the last weapon switch, for the weapon-name moment; 0 = none. */
   lastSwitchAt: number;
+  /** The name of the dance I am doing (H), "" when not dancing. */
+  emote: string;
 }
 
 export const initialHud: HudState = {
@@ -250,7 +252,7 @@ export const initialHud: HudState = {
   boysClass: 1, nextClass: 1, mode: "tdm", smokeOpacity: 0, bomb: null, round: 0, roundResult: "", bracket: "", flags: [], inFlag: -1, winnerId: "", winnerName: "", flagNotice: null, tac: 1, tacOn: false,
   chat: [], chatOpen: null, marks: [],
   mapId: "", diedAt: 0, killer: null, spectating: null, lateJoin: false, siteHere: "", nearBomb: false,
-  roundMvp: null, roundHistory: [], lastSwitchAt: 0,
+  roundMvp: null, roundHistory: [], lastSwitchAt: 0, emote: "",
 };
 
 type Listener = () => void;
