@@ -5,7 +5,8 @@ import { voxelBounds } from "./voxel";
 import { buildCollisionWorld, type Solid } from "./map";
 import { makeRayHit } from "./collision";
 import { PLAYER } from "./constants";
-import { MOVE } from "./movement";
+import { MOVE, createBody, simulateBody } from "./movement";
+import { Btn } from "./types";
 import { walkable, reachable } from "./mapWalk";
 import { findPath, prepareNav, type NavPoint } from "./nav";
 
@@ -254,9 +255,95 @@ describe("DOLNA's cover speaks one language", () => {
     for (const b of [1, 2]) {
       const slab = DOLNA.solids.find((s) => name(s) === `balcony${b}_slab`)!;
       const parapets = DOLNA.solids.filter((s) => name(s).startsWith(`balcony${b}_parapet`));
-      expect(parapets.length).toBe(3);
+      // Balcony 1's garden side is two pieces with the opening between them (the first floor's way
+      // out); every piece that IS there is still a piece nobody climbs.
+      expect(parapets.length).toBeGreaterThanOrEqual(3);
       for (const p of parapets) expect(p.box.maxY - slab.box.maxY, `${name(p)} is a step`).toBeGreaterThan(MANTLE);
     }
+    // The opening is on the GARDEN side only. The annex roof is 25 cm from balcony 1's east parapet,
+    // so that side staying shut is what keeps a roof a roof — the climb-chain test above proves it.
+    const gard = DOLNA.solids.filter((s) => /^balcony1_parapet_n/.test(name(s))).sort((a, b) => a.box.minX - b.box.minX);
+    expect(gard.length, "the garden parapet is two pieces").toBe(2);
+    expect(gard[1].box.minX - gard[0].box.maxX, "with a body-wide opening between them").toBeGreaterThan(2 * HW);
+    expect(DOLNA.solids.some((s) => name(s) === "balcony1_parapet_e"), "the annex side stays shut").toBe(true);
+  });
+
+  /**
+   * THE TWO WAYS OUT THE OWNER ASKED FOR (2026-09-27: "musisz dodać więcej wyjść z domku niż
+   * schody"). The house had one staircase serving both upper storeys, which made the top floor — the
+   * 1 v 1 start — a storey with a single door; whoever watched the stair head owned the round.
+   *
+   * These are geometry claims, measured the way a player uses them: the opening is wide enough for a
+   * body, high enough to stand in, low enough to vault, and high enough off the ground that nothing
+   * comes back up it.
+   */
+  it("gives the top floor a window it can leave through: body-wide, standable, a vault, and one-way", () => {
+    const sill = DOLNA.solids.find((s) => name(s) === "house2_escape_sill")!;
+    expect(sill, "the top floor has a sill to go over").toBeDefined();
+    const y2 = Y(2);
+    expect(sill.box.maxY - y2, "0.8 m: over a step, under a jump").toBeCloseTo(0.8, 5);
+    expect(sill.box.maxY - y2).toBeLessThan(APEX);            // a body can get onto it
+    expect(sill.box.maxY - y2).toBeGreaterThan(MOVE.airStepCrouch); // ...and it is never a walk-through
+    expect(sill.box.maxX - sill.box.minX, "wider than a body").toBeGreaterThan(2 * HW);
+    // The opening over the sill takes the wall's full height: with the house's usual 2.2 m lintel the
+    // clear height is 1.4 m, a standing body is 1.8, and the grid lists no standing height at all.
+    const ceiling = DOLNA.solids.find((s) => name(s) === "roof_house_slab")!.box.minY;
+    const inOpening = DOLNA.solids.filter((s) => !s.invisible &&
+      s.box.minX < sill.box.maxX - 0.01 && s.box.maxX > sill.box.minX + 0.01 &&
+      s.box.minZ < sill.box.maxZ - 0.01 && s.box.maxZ > sill.box.minZ + 0.01 &&
+      s.box.minY >= sill.box.maxY - 0.01 && s.box.minY < ceiling - 0.01);
+    expect(inOpening.map(name), "no lintel band inside the opening, up to the ceiling").toEqual([]);
+    expect(world.overlaps(-2.85 - HW, sill.box.maxY + 0.02, sill.box.minZ - 0.1, -2.85 + HW, sill.box.maxY + H, sill.box.maxZ + 0.1),
+      "a standing body fits in the opening").toBe(false);
+    // Under it: the drive, 7 m down, and nothing to climb back up on.
+    expect(sill.box.maxY - 0).toBeGreaterThan(4 * MANTLE);
+  });
+
+  it("keeps both new exits one-way: the garden and the drive cannot be climbed into the house", () => {
+    // The walk grid is the bots' truth and the map tests': it may fall off the balcony into the
+    // garden, and it may never climb back in. (The window is a player's vault, not a grid route — it
+    // drops straight onto the house wall's own footing, so no cell below it is a legal landing.)
+    const gap: NavPoint = { x: -5.5, y: Y(1), z: 19.1 };
+    const garden: NavPoint = { x: -5.5, y: 0, z: 20.5 };
+    const out = findPath(walk, gap, garden), back = findPath(walk, garden, gap);
+    expect(out, "off the balcony into the garden").not.toBeNull();
+    expect(len(out!), "and it is a step, not a walk round the house").toBeLessThan(3);
+    expect(back, "and back up it the long way, through the house").not.toBeNull();
+    expect(len(back!), "never over the parapet").toBeGreaterThan(15);
+  });
+
+  it("lets a real body vault the top floor's window — and never walk through it by accident", () => {
+    /** Run south from `(x, z)` on the top floor, jumping when the sill is `jumpAt` metres away. */
+    const runAtWindow = (x: number, z: number, jumpAt: number): { out: boolean; x: number; y: number; z: number } => {
+      const b = createBody(x, Y(2), z);
+      b.grounded = true;
+      let prev = 0;
+      for (let seq = 0; seq < 240; seq++) {
+        const jump = jumpAt > 0 && b.grounded && b.z - 5.6 < jumpAt && b.z - 5.6 > -0.2;
+        const btn = Btn.Forward | Btn.Sprint | (jump ? Btn.Jump : 0);
+        simulateBody(world, b, { seq, dt: 1000 / 60, buttons: btn, yaw: Math.PI, pitch: 0 }, 1, prev);
+        prev = btn;
+        if (b.z < 5.4 && b.y < 0.3) return { out: true, x: b.x, y: b.y, z: b.z };
+      }
+      return { out: false, x: b.x, y: b.y, z: b.z };
+    };
+    // The whole claim, driven the way a player drives it: run at the window, jump, land outside.
+    const vault = runAtWindow(-2.85, 6.6, 0.9);
+    expect(vault.out, `sprint + jump goes through (ended at ${vault.x.toFixed(1)}, ${vault.y.toFixed(1)}, ${vault.z.toFixed(1)})`).toBe(true);
+    expect(vault.y, "and lands on the ground, seven metres down").toBeLessThan(0.3);
+    // ...and the 0.8 m sill is the reason it takes a jump: walking into it keeps you upstairs.
+    const walk_ = runAtWindow(-2.85, 6.6, -1);
+    expect(walk_.out, "no jump, no exit").toBe(false);
+    expect(walk_.y).toBeCloseTo(Y(2), 1);
+  });
+
+  it("makes the top floor reachable OUT of as well as into: the balcony route beats the stair for the garden", () => {
+    // What the owner felt: from the first floor the garden used to be the whole staircase away.
+    const salon1: NavPoint = { x: -6.4, y: Y(1), z: 15.8 };
+    const garden: NavPoint = { x: -5.5, y: 0, z: 20.5 };
+    const p = findPath(walk, salon1, garden);
+    expect(p).not.toBeNull();
+    expect(len(p!), "the balcony makes it a few metres, not twenty-three").toBeLessThan(10);
   });
 
   it("gives every barber chair a collision the size of the drawn chair (a prop is never cover)", () => {
