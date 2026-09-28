@@ -2,6 +2,10 @@
  * Audio module: gunshots, reloads, footsteps, impacts, UI, ambience with positional audio.
  * All sounds are procedurally synthesised at runtime (no audio assets — see ASSET_LICENSES.md).
  *
+ * The sound mechanic (2026-09-28): steps, jumps, landings and spent cases are voiced by the surface
+ * they touch (`surfaces.ts`, `foley.ts`); world sounds pass through `acoustics.ts` on the way to the
+ * ear (walls muffle, distance dulls and delays), and the reverb follows the room the ear is in.
+ *
  * Exports for the UI layer:
  *   uiSound(kind)          — menu hover/click/back/open/close/error
  *   setMusic(on)           — sparse menu/result music (off during gameplay)
@@ -25,6 +29,9 @@ import { hud, type HudState } from "../store";
 import { roundTakerOf, turniejPair } from "../../ui/hud/roundText";
 import * as sfx from "./sfx";
 import type { UiSoundKind } from "./sfx";
+import * as foley from "./foley";
+import { Acoustics } from "./acoustics";
+import { SurfaceProbe } from "./surfaces";
 
 export type { UiSoundKind } from "./sfx";
 
@@ -99,7 +106,18 @@ export const installAudio: GameModule = (ctx) => {
   eng.setSettings(ctx.settings.audio);
   liveCtx = ctx;
   const ambience = new Ambience(eng);
-  const remotes = new RemoteAudio(ctx, eng);
+  // The sound mechanic (2026-09-28): what is underfoot, and what lies between a sound and the ear.
+  const surfaces = new SurfaceProbe(ctx.mapDef.solids);
+  const acoustics = new Acoustics(ctx.world);
+  const remotes = new RemoteAudio(ctx, eng, acoustics, surfaces);
+  /** The surface under the local player's feet right now. */
+  const underfoot = () => { const b = ctx.local.body; return surfaces.under(b.x, b.y, b.z); };
+  const gear = () => foley.gearOf(ctx.weapons.weapon);
+  /** A world sound at (x, y, z) heard through the room between it and the ear. */
+  const heardAt = (x: number, y: number, z: number, travel = true) => {
+    const h = acoustics.hear(x, y, z);
+    return { gain: h.gain, lowpass: h.lowpass, delay: travel ? h.delay : 0 };
+  };
   const ev = ctx.events;
   const unsubs: (() => void)[] = [];
   const on = <K extends keyof import("../events").GameEventMap>(k: K, h: (p: import("../events").GameEventMap[K]) => void) => unsubs.push(ev.on(k, h));
@@ -145,12 +163,41 @@ export const installAudio: GameModule = (ctx) => {
   let countdownTimers: number[] = [];
   const clearCountdown = () => { for (const t of countdownTimers) window.clearTimeout(t); countdownTimers = []; };
 
+  /** When the last case was voiced: a 1000 rpm burst is a brass fountain, not seventeen voices a second. */
+  let lastCaseAt = -Infinity;
+  const CASE_GAP_MS = 110;
+  /**
+   * A spent case hitting the floor next to the shooter, `after` seconds from now: out of the
+   * ejection port to the right, a fall of about 1.4 m (~0.4 s) and a bounce on whatever is there.
+   */
+  const dropCase = (kind: foley.CaseKind, after: number): void => {
+    const now = performance.now();
+    if (now - lastCaseAt < CASE_GAP_MS) return;
+    lastCaseAt = now;
+    const b = ctx.local.body, yaw = ctx.local.yaw;
+    const x = b.x + Math.cos(yaw) * 0.7 + Math.sin(yaw) * 0.3, z = b.z - Math.sin(yaw) * 0.7 + Math.cos(yaw) * 0.3;
+    eng.play(foley.casing(surfaces.under(x, b.y, z), kind), { priority: Priority.movement, gain: 0.5, position: at(x, b.y + 0.05, z), rolloff: 1.4, delay: after + Math.random() * 0.12 });
+  };
+
   on("localShot", (e) => {
     play(WEAPONS[e.weapon].kind === "melee" ? sfx.meleeSwing(false) : sfx.gunshot(e.weapon), Priority.gunshot, 0.9);
     // Drop B, axis 2: the machine the shooter works between shots. Quieter than the report and
     // priced as a reload, so a burst never spends gunshot voices on lockwork.
-    const action = feelOf(e.weapon).actionMs;
+    const feel = feelOf(e.weapon);
+    const action = feel.actionMs;
     if (action > 0) play(sfx.weaponAction(e.weapon, action), Priority.reload, 0.5);
+    const w = WEAPONS[e.weapon];
+    if (w.kind === "melee" || w.kind === "launcher") return;
+    // A self-loader's carrier cycles by the ear; the last quarter of the magazine rings hollow.
+    if (feel.casings > 0 && action === 0) {
+      const left = ctx.weapons.ammo / Math.max(1, w.magazine);
+      play(foley.mechanism(e.weapon, left <= 0.25 ? 1 - left * 4 : 0), Priority.reload, 0.55);
+    }
+    // The brass: per shot for the self-loaders, at the action for the pump and the bolt (the
+    // revolver keeps its six for the reload).
+    if (feel.casings > 0) dropCase(feel.casingScale >= 1.4 ? "hull" : "brass", 0.38);
+    else if (e.weapon === "shotgun") dropCase("hull", action * 0.8 / 1000 + 0.38);
+    else if (e.weapon === "sniper") dropCase("big", action * 0.5 / 1000 + 0.38);
   });
   on("remoteShot", (e) => {
     if (WEAPONS[e.event.weapon].kind === "melee") eng.play(sfx.meleeSwing(e.event.k.length > 0), { priority: Priority.movement, gain: 0.7, position: at(e.event.o[0], e.event.o[1], e.event.o[2]), maxDistance: 18 });
@@ -162,10 +209,11 @@ export const installAudio: GameModule = (ctx) => {
   on("reloadStart", (e) => { reloadVoice?.stop(); reloadVoice = play(sfx.reload(e.weapon, WEAPONS[e.weapon].reloadMs, reloadCues(e.weapon, e.shells, e.empty)), Priority.reload, 0.85); });
   on("reloadEnd", () => { reloadVoice = null; });
   on("weaponEquip", (e) => { reloadVoice?.stop(); reloadVoice = null; play(sfx.equip(WEAPONS[e.weapon].equipMs), Priority.reload, 0.7); setHum(e.weapon); });
-  on("footstep", (e) => play(sfx.footstep(e.sprint, e.crouch), Priority.movement, 0.55));
-  on("jump", () => play(sfx.jump, Priority.movement, 0.7));
+  // Movement, on whatever is underfoot (`surfaces.ts`): tile rings, boards knock, gravel crunches.
+  on("footstep", (e) => play(foley.step(underfoot(), e.crouch ? "crouch" : e.sprint ? "sprint" : "walk", gear()), Priority.movement, 0.6));
+  on("jump", () => play(foley.jumpOff(underfoot(), gear()), Priority.movement, 0.7));
   on("slide", () => play(sfx.slide(), Priority.movement, 0.7));
-  on("landed", (e) => { if (e.impactSpeed > 1.5) play(sfx.landing(e.impactSpeed), Priority.movement, 0.8); });
+  on("landed", (e) => { if (e.impactSpeed > 1.5) play(foley.land(underfoot(), e.impactSpeed, gear()), Priority.movement, 0.8); });
   on("localHit", (e) => { play(sfx.hitConfirm(e.kill ? "kill" : e.headshot ? "head" : "body"), Priority.hit, 0.9); if (e.armor && !e.kill) play(sfx.plate(false), Priority.hit, 0.35); });
   on("localDamaged", (e) => {
     play(sfx.damageTaken, Priority.hit, 0.9); eng.duck(Math.min(1, 0.5 + e.amount / 60), 150);
@@ -181,7 +229,7 @@ export const installAudio: GameModule = (ctx) => {
   const dist = (x: number, y: number, z: number) => { const p = cam.globalPosition; return Math.hypot(p.x - x, p.y - y, p.z - z); };
   on("grenadePrime", () => play(sfx.pinPull, Priority.reload, 0.8));
   on("grenadeThrow", () => play(sfx.throwSwish, Priority.reload, 0.8));
-  on("throw", (e) => { if (e.owner !== ctx.connection.sessionId) eng.play(sfx.throwSwish, { priority: Priority.movement, gain: 0.6, position: at(e.o[0], e.o[1], e.o[2]), maxDistance: 14 }); });
+  on("throw", (e) => { if (e.owner !== ctx.connection.sessionId && eng.distanceToListener(e.o[0], e.o[1], e.o[2]) <= 14) { const h = heardAt(e.o[0], e.o[1], e.o[2], false); eng.play(sfx.throwSwish, { priority: Priority.movement, gain: 0.6 * h.gain, lowpass: h.lowpass, position: at(e.o[0], e.o[1], e.o[2]) }); } });
   /**
    * Rule G1: a grenade knocking off the world. `sfx.bounce` has been written since drop 2 and had
    * no caller — a frag skittering past your feet or off the wall behind you made no sound at all,
@@ -199,18 +247,23 @@ export const installAudio: GameModule = (ctx) => {
   on("grenadeBounce", (e) => {
     if (bouncesThisFrame >= BOUNCES_PER_FRAME) return;
     bouncesThisFrame++;
-    eng.play(sfx.bounce(e.kind, e.speed), { priority: Priority.movement, gain: Math.min(0.9, 0.3 + e.speed / 20), position: at(e.x, e.y, e.z), maxDistance: 24 });
+    if (eng.distanceToListener(e.x, e.y, e.z) > 24) return;
+    const h = heardAt(e.x, e.y, e.z, false);
+    eng.play(sfx.bounce(e.kind, e.speed), { priority: Priority.movement, gain: Math.min(0.9, 0.3 + e.speed / 20) * h.gain, lowpass: h.lowpass, position: at(e.x, e.y, e.z) });
   });
   on("boom", (e) => {
     const d = dist(e.x, e.y, e.z);
+    // A blast is heard through the world like a shot: late across the map, muffled behind walls.
+    // Only the ear-ringing duck stays tied to the flash — the pressure wave is felt, not heard.
+    const h = heardAt(e.x, e.y, e.z);
     switch (e.kind) {
       case "frag":
       case "shell":
         // Non-positional so a close blast is full and centred; the distance shapes the sound instead.
-        play(sfx.explosion(d), Priority.gunshot, Math.max(0.25, 1 - d / 60) * (e.kind === "shell" ? 0.8 : 1));
+        eng.play(sfx.explosion(d), { priority: Priority.gunshot, gain: Math.max(0.25, 1 - d / 60) * (e.kind === "shell" ? 0.8 : 1) * Math.max(0.5, h.gain), lowpass: h.lowpass, delay: h.delay });
         if (d < 12) eng.duck(Math.min(1, 1 - d / 14), 350);
         break;
-      case "flash": eng.play(sfx.flashBang(0), { priority: Priority.gunshot, gain: 0.9, position: at(e.x, e.y, e.z), rolloff: 0.6, maxDistance: 70 }); break;
+      case "flash": if (d <= 70) eng.play(sfx.flashBang(0), { priority: Priority.gunshot, gain: 0.9 * h.gain, lowpass: h.lowpass, delay: h.delay, position: at(e.x, e.y, e.z), rolloff: 0.6 }); break;
       // The hiss runs for as long as the cloud stands. It used to be capped at six seconds against
       // a twelve-second cloud, so a smoke went quiet half way through and the second half looked
       // like a cloud nobody had thrown. Four clouds is the hard maximum (`MAX_SMOKE_CLOUDS`) and
@@ -324,6 +377,9 @@ export const installAudio: GameModule = (ctx) => {
   unsubs.push(stopBomb);
 
   const cam = ctx.camera;
+  /** Edges the foley listens for: the sights coming up, the body going down. */
+  let wasAiming = false, wasCrouching = false, lastFoleyAt = -Infinity;
+  let roomWet = -1, roomTone = -1;
   unsubs.push(ctx.onFrame((dtMs) => {
     bouncesThisFrame = 0;
     // Listener = camera. TargetCamera direction helpers are allocation-free with *ToRef.
@@ -331,6 +387,27 @@ export const installAudio: GameModule = (ctx) => {
     cam.getDirectionToRef(Vector3.Up(), up);
     const p = cam.globalPosition;
     eng.updateListener(p.x, p.y, p.z, fwd.x, fwd.y, fwd.z, up.x, up.y, up.z);
+    // The room the ear is in, re-measured four times a second and pushed only when it moved.
+    acoustics.setListener(p.x, p.y, p.z);
+    const now = performance.now();
+    acoustics.probe(now, dtMs);
+    if (Math.abs(acoustics.wet - roomWet) > 0.02 || Math.abs(acoustics.tone - roomTone) > 40) {
+      roomWet = acoustics.wet; roomTone = acoustics.tone;
+      eng.setRoom(roomWet, roomTone);
+    }
+    // Foley: aiming in / out and crouching down / up, with a little gap so spamming is not a drumroll.
+    const me = ctx.local;
+    // The sights, not the button: a reload owns the hands and the aim does not come up through it.
+    const aiming = me.alive && me.isAiming() && !me.reloading && WEAPONS[ctx.weapons.weapon].kind !== "melee";
+    const crouching = me.alive && me.body.crouching && me.body.grounded && !me.sliding;
+    if (aiming !== wasAiming || crouching !== wasCrouching) {
+      if (me.alive && now - lastFoleyAt > 140) {
+        lastFoleyAt = now;
+        const kind: foley.FoleyKind = aiming !== wasAiming ? (aiming ? "aimIn" : "aimOut") : crouching ? "crouch" : "stand";
+        play(foley.foley(kind, gear()), Priority.movement, 0.6);
+      }
+      wasAiming = aiming; wasCrouching = crouching;
+    }
     const b = ctx.local.body;
     ambience.update(b.x, b.y, b.z);
     remotes.update(dtMs);

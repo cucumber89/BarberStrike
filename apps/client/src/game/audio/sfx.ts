@@ -398,34 +398,7 @@ export function equip(equipMs: number): SoundFn {
 }
 
 // ---------------------------------------------------------------- movement
-
-let stepSide = 1;
-
-export function footstep(sprint: boolean, crouch: boolean, remote = false): SoundFn {
-  const side = (stepSide = -stepSide);
-  return (g) => {
-    const t = g.t;
-    const len = crouch ? 0.05 : sprint ? 0.075 : 0.06;
-    const level = crouch ? 0.22 : sprint ? 0.62 : 0.42;
-    const centre = vary(g, crouch ? 380 : sprint ? 900 : 640, 0.25);
-    const out: AudioNode = remote ? g.out : pan(g, side * 0.14);
-    if (out !== g.out) out.connect(g.out);
-    const nG = gain(g, 0);
-    const f = filter(g, "bandpass", centre, 0.8);
-    noise(g, "pink", len + 0.05).connect(f);
-    f.connect(nG);
-    nG.connect(out);
-    env(nG.gain, t, level, 0.003, len);
-    // Heel contact: tiny low thump, bigger when sprinting.
-    const hG = gain(g, 0);
-    const h = osc(g, "sine", sprint ? 95 : 80, 0.08);
-    h.frequency.exponentialRampToValueAtTime(45, t + 0.05);
-    h.connect(hG);
-    hG.connect(out);
-    env(hG.gain, t, crouch ? 0.10 : sprint ? 0.32 : 0.20, 0.002, 0.035);
-    return len + 0.15;
-  };
-}
+// Steps, jumps and landings are voiced per surface in `foley.ts`; the slide stays here.
 
 /** Slide: cloth and grit dragged over concrete — a long falling swish with a low scrape under it. */
 export function slide(): SoundFn {
@@ -444,26 +417,6 @@ export function slide(): SoundFn {
     return 0.7;
   };
 }
-
-export const jump: SoundFn = (g) => {
-  swish(g, g.t, 350, 1600, 0.14, 0.17);
-  return 0.3;
-};
-
-export function landing(impactSpeed: number): SoundFn {
-  const k = Math.max(0.2, Math.min(1, impactSpeed / 9));
-  return (g) => {
-    const sat = saturator(g);
-    const m = gain(g, 0.9);
-    sat.connect(m);
-    m.connect(g.out);
-    const sub: Graph = { ...g, out: sat };
-    thud(sub, g.t, 55 + 30 * k, 0.5 + 0.6 * k, 0.09 + 0.06 * k);
-    swish(sub, g.t, 900, 300, 0.08, 0.12 * k);
-    send(g, m, 0.25 * k);
-    return 0.45;
-  };
-};
 
 // ---------------------------------------------------------------- combat feedback
 
