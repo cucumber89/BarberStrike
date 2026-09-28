@@ -13,6 +13,8 @@ import { WEAPON_ORDER, WEAPONS, MatchPhase } from "@frankibarber/shared";
 import type { GameContext } from "../context";
 import type { AudioEngine } from "./engine";
 import * as sfx from "./sfx";
+import * as foley from "./foley";
+import { SURFACES } from "./surfaces";
 import { sharedBuffers, type Graph } from "./synth";
 import { WEAPON_FEEL } from "../combat/weaponFeel";
 
@@ -53,14 +55,18 @@ function catalogue(): [string, sfx.SoundFn][] {
     list.push([`equip:${w}`, sfx.equip(WEAPONS[w].equipMs)]);
   }
   list.push(["dryFire", sfx.dryFire]);
-  list.push(["footstep:walk", sfx.footstep(false, false)]);
-  list.push(["footstep:sprint", sfx.footstep(true, false)]);
-  list.push(["footstep:crouch", sfx.footstep(false, true)]);
-  list.push(["footstep:remote", sfx.footstep(true, false, true)]);
-  list.push(["jump", sfx.jump]);
+  // The sound mechanic (2026-09-28): every surface, every gait, every case, the heaviest kit.
+  for (const s of SURFACES) {
+    for (const gait of ["crouch", "walk", "sprint"] as const) list.push([`step:${s}:${gait}`, foley.step(s, gait, 1)]);
+    list.push([`step:${s}:remote`, foley.step(s, "sprint", 1, true)]);
+    list.push([`jump:${s}`, foley.jumpOff(s, 1)]);
+    list.push([`land:${s}:soft`, foley.land(s, 2, 1)]);
+    list.push([`land:${s}:hard`, foley.land(s, 12, 1)]);
+    for (const kind of ["brass", "hull", "big"] as const) list.push([`casing:${s}:${kind}`, foley.casing(s, kind)]);
+  }
+  for (const kind of ["aimIn", "aimOut", "crouch", "stand"] as const) list.push([`foley:${kind}`, foley.foley(kind, 1)]);
+  for (const w of WEAPON_ORDER) list.push([`mechanism:${w}`, foley.mechanism(w, 1)]);
   list.push(["slide", sfx.slide()]);
-  list.push(["landing:soft", sfx.landing(2)]);
-  list.push(["landing:hard", sfx.landing(12)]);
   list.push(["hit:body", sfx.hitConfirm("body")]);
   list.push(["hit:head", sfx.hitConfirm("head")]);
   list.push(["hit:kill", sfx.hitConfirm("kill")]);

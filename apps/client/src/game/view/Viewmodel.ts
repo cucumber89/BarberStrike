@@ -14,6 +14,7 @@ import { beveledBox } from "./geometry";
 import { centre, sizeOf } from "./weaponFit";
 import { handParts, type HandSide } from "./handSpec";
 import { feelOf, swayScaleOf } from "../combat/weaponFeel";
+import { Spring } from "../combat/recoilModel";
 import { bump, reloadFrame, smooth, type ReloadFrame } from "../combat/reloadTimeline";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { nightEnvironment } from "./nightEnv";
@@ -101,8 +102,16 @@ export class Viewmodel {
   private lastYaw = 0;
   private lastPitch = 0;
   private bobPhase = 0;
-  private kickBack = 0;
-  private kickUp = 0;
+  /**
+   * The gun's kick into the hand: springs, not decays (owner, 2026-09-28, realistic recoil). An
+   * impulse drives the gun back and up over a few frames, the arms catch it and it settles through
+   * a small forward overshoot, the way a real rifle rides the shoulder. Heavier kicks get softer,
+   * slower springs (`onFire`), so an SR-50 rolls back where a P9 snaps.
+   */
+  private readonly kickBackS = new Spring(40, 0.42);
+  private readonly kickUpS = new Spring(28, 0.5);
+  private get kickBack(): number { return Math.max(-0.03, Math.min(0.1, this.kickBackS.x)); }
+  private get kickUp(): number { return Math.max(-0.03, Math.min(0.13, this.kickUpS.x)); }
   private kickRoll = 0;
   private equipT = 1;
   private equipMs = 300;
@@ -418,8 +427,11 @@ export class Viewmodel {
     // 35 mm lift as the P9's. The VZ-9 keeps its shipped constants: its row is out of scope.
     const kick = w.id === "smg2" ? { back: 0.02, up: 0.035, snap: 0.02 } : kickFor(w.recoilUp, w.id === "pistol");
     this.kickZ += (Math.random() - 0.5) * kick.snap;
-    this.kickBack = Math.min(0.09, this.kickBack + kick.back);
-    this.kickUp = Math.min(0.12, this.kickUp + kick.up);
+    const heavy = Math.max(0, Math.min(1, (w.recoilUp - 0.006) / (0.09 - 0.006)));
+    this.kickBackS.omega = 44 - 18 * heavy; this.kickUpS.omega = 30 - 12 * heavy;
+    // Stacking a burst still tops out where the old clamps did (90 mm back, 0.12 rad up).
+    this.kickBackS.impulse(Math.min(kick.back, Math.max(0, 0.09 - this.kickBackS.x)));
+    this.kickUpS.impulse(Math.min(kick.up, Math.max(0, 0.12 - this.kickUpS.x)));
     this.kickRoll = Math.min(0.08, this.kickRoll + (Math.random() - 0.5) * 0.04);
     this.actionCycle = 1;
   }
@@ -550,7 +562,7 @@ export class Viewmodel {
 
     // ---- kicks / dips decay
     const dec = Math.exp(-dt * 14);
-    this.kickBack *= dec; this.kickUp *= Math.exp(-dt * 11); this.kickRoll *= dec; this.kickZ *= Math.exp(-dt * 12);
+    this.kickBackS.step(dt); this.kickUpS.step(dt); this.kickRoll *= dec; this.kickZ *= Math.exp(-dt * 12);
     this.landDip *= Math.exp(-dt * 7);
     this.jumpLift *= Math.exp(-dt * 6);
 

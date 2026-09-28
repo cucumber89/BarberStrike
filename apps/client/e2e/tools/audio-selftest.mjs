@@ -12,8 +12,12 @@ const browser = await chromium.launch({
 const room = "audio-" + Date.now();
 const errors = [];
 async function mk(name) {
-  const ctx = await browser.newContext({ viewport: { width: 640, height: 360 } });
-  await ctx.addInitScript((v) => localStorage.setItem("fb_settings_v1", v), LOW);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await ctx.addInitScript((v) => {
+    localStorage.setItem("fb_settings_v1", v);
+    // Past the account gate and the first-run welcome, the way armoury.spec does it.
+    try { sessionStorage.setItem("bs_guest_ok", "1"); localStorage.setItem("bs_onboard_v1", JSON.stringify({ welcomed: true })); } catch { /* private mode */ }
+  }, LOW);
   const page = await ctx.newPage();
   page.on("pageerror", (e) => { errors.push(`[${name}] ${e.message}`); console.log(`[${name} pageerror]`, e.message); });
   page.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") console.log(`[${name} console.${m.type()}]`, m.text()); });
@@ -22,13 +26,14 @@ async function mk(name) {
   await page.getByTestId("input-name").fill(name);
   await page.getByTestId("input-room").fill(room);
   await page.getByTestId("btn-quickplay").click();
+  await page.getByTestId("enter-game").click({ timeout: 60000 }).catch(() => { /* older flow: straight in */ });
   await page.waitForFunction(() => window.__fb?.game && window.__fb.hud.get().myId !== "", null, { timeout: 30000 });
   return page;
 }
 const a = await mk("ALPHA");
 const b = await mk("BRAVO"); // gives ALPHA a remote player for positional paths
 await a.waitForFunction(() => window.__fbAudio && window.__fb.game.frameCount > 5, null, { timeout: 60000 });
-await a.mouse.click(300, 200); // user gesture → resume()
+await a.mouse.click(640, 360); // user gesture → resume()
 await a.keyboard.press("Shift");
 const report = await a.evaluate(() => window.__fbAudio.selfTest());
 console.log("contextState:", report.contextState, "| voices after:", report.voicesAfter);

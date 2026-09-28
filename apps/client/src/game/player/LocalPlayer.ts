@@ -6,6 +6,7 @@ import {
   type BodyState, type CollisionWorld, type PlayerInput, type WeaponId,
 } from "@frankibarber/shared";
 import { BIPOD, bipodDeployed, feelOf, lookScale, type ScopeStyle } from "../combat/weaponFeel";
+import { AimRecoil, DEFAULT_SHAPE, ViewPunch, stanceScale, type RecoilShape } from "../combat/recoilModel";
 import type { InputState } from "../input/InputState";
 import type { NetPlayer } from "../net/Connection";
 import type { Pose } from "./deathCam";
@@ -92,11 +93,16 @@ export class LocalPlayer {
   private errZ = 0;
   private bobPhase = 0;
   private eyeBlend = PLAYER.eyeHeight;
-  /** Recoil offsets applied to the view (pitch up is negative). */
-  private recoilPitch = 0;
-  private recoilYaw = 0;
-  private recoilRecover = 8;
-  private recoilHoldUntil = 0;
+  /**
+   * Recoil the bullets follow (pitch up is negative): rises over the weapon's `kickMs`, holds, then
+   * springs back (`recoilModel.ts`). Stepped BEFORE the input is built, so the angles an input
+   * carries are the angles a shot fired in the same frame leaves along (handoff P1).
+   */
+  private readonly aimRecoil = new AimRecoil();
+  /** The blow the head takes on top of the aim: camera only, never in an input. */
+  private readonly punch = new ViewPunch();
+  private get recoilPitch(): number { return this.aimRecoil.pitch; }
+  private get recoilYaw(): number { return this.aimRecoil.yaw; }
   /** ADS zoom blend 0..1. */
   private adsBlend = 0;
   /** Camera feel offsets (landing dip etc). */
@@ -159,7 +165,8 @@ export class LocalPlayer {
     b.slide = 0; b.slideCd = 0;
     this.yaw = yaw; this.pitch = 0;
     this.pending.length = 0;
-    this.recoilPitch = this.recoilYaw = 0;
+    this.aimRecoil.reset();
+    this.punch.reset();
     // A new body starts square with the server: no correction to walk off, no dt owed either way.
     this.errX = this.errY = this.errZ = 0;
     this.dtq.reset();
@@ -185,7 +192,7 @@ export class LocalPlayer {
    * instant of a shot: sampling the camera a frame later measures the renderer, not the weapon —
    * a pistol's kick is most of the way home before the next frame is drawn under SwiftShader.
    */
-  get recoilOffset(): { pitch: number; yaw: number } { return { pitch: this.recoilPitch, yaw: this.recoilYaw }; }
+  get recoilOffset(): { pitch: number; yaw: number } { return { pitch: this.aimRecoil.totalPitch, yaw: this.aimRecoil.totalYaw }; }
 
   /** Applies mouse look. Called once per frame before simulation. */
   private applyLook(): void {
@@ -200,10 +207,7 @@ export class LocalPlayer {
     const dy = this.settings.invertY ? -m.dy : m.dy;
     this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch + dy * s));
     // Mouse movement against recoil "spends" the pending recovery (so the view doesn't spring back over the player's correction).
-    if (m.dy !== 0 && this.recoilPitch !== 0) {
-      const spend = Math.min(Math.abs(this.recoilPitch), Math.abs(dy * s));
-      if (Math.sign(dy) !== Math.sign(this.recoilPitch)) this.recoilPitch -= Math.sign(this.recoilPitch) * spend;
-    }
+    if (m.dy !== 0) this.aimRecoil.spendPitch(dy * s);
   }
 
   /**
@@ -211,6 +215,7 @@ export class LocalPlayer {
    */
   update(dtMs: number): PlayerInput | null {
     this.applyLook();
+    this.aimRecoil.step(dtMs / 1000, performance.now());
     if (!this.alive) { this.updateCamera(dtMs); this.applyDeadView(); return null; }
     // Tactical latch hygiene (drop 4): never start on a nearly empty budget, and drop the latch the
     // moment the budget is dry so the Tac bit clears and the refill can begin.
@@ -312,14 +317,18 @@ export class LocalPlayer {
   get viewError(): number { return Math.hypot(this.errX, this.errY, this.errZ); }
 
   /**
-   * Kicks the view. Recovery is exponential at `recoverPerSec` and starts only after `delayMs`,
-   * so a burst stacks its pattern instead of springing back between rounds.
+   * Kicks the view. The muzzle rises over `shape.kickMs`, the return starts only after `delayMs`
+   * (so a burst stacks its pattern instead of springing back between rounds) and is a critically
+   * damped spring settling at the old `recoverPerSec` pace. The stance the shot is fired from
+   * scales it — braced on a crouch less, on the move more, in the air much more — and the head
+   * takes a camera-only punch and roll on top (`recoilModel.ts`).
    */
-  addRecoil(up: number, side: number, recoverPerSec: number, delayMs = 60): void {
-    this.recoilPitch -= up;
-    this.recoilYaw += side;
-    this.recoilRecover = recoverPerSec;
-    this.recoilHoldUntil = performance.now() + delayMs;
+  addRecoil(up: number, side: number, recoverPerSec: number, delayMs = 60, shape: RecoilShape = DEFAULT_SHAPE): void {
+    const b = this.body;
+    // Aiming is already applied by the caller (with the bipod), so it is left out here.
+    const k = stanceScale({ crouching: b.crouching, moving: Math.hypot(b.vx, b.vz) > 0.5, airborne: !b.grounded, aiming: false });
+    this.aimRecoil.kick(up * k, side * k, shape.kickMs, recoverPerSec, delayMs, performance.now());
+    this.punch.hit(up * k, shape, this.isAiming(), Math.random);
   }
 
   /**
@@ -359,13 +368,8 @@ export class LocalPlayer {
     // Bipod dwell (matrix B1): crouched and barely moving, the LMG settles. Any real movement
     // resets it, so the weapon is heavy again the moment its owner does.
     this.stillMs = this.alive && b.grounded && b.crouching && Math.hypot(b.vx, b.vz) < BIPOD.speed ? this.stillMs + dtMs : 0;
-    // Recoil recovery (exponential, after the per-weapon hold).
-    if (performance.now() >= this.recoilHoldUntil) {
-      const k = Math.exp(-this.recoilRecover * dt);
-      this.recoilPitch *= k; this.recoilYaw *= k;
-      if (Math.abs(this.recoilPitch) < 1e-4) this.recoilPitch = 0;
-      if (Math.abs(this.recoilYaw) < 1e-4) this.recoilYaw = 0;
-    }
+    // The aim recoil was stepped in `update` (before the input); the camera's own punch here.
+    this.punch.step(dt);
     // ADS: FOV zoom towards the weapon's adsZoom over adsMs.
     const wdef = WEAPONS[this.weapon];
     const feel = feelOf(this.weapon);
@@ -446,7 +450,7 @@ export class LocalPlayer {
     const cam = this.camera;
     const side = bobX + LEAN.offset * this.leanBlend;
     cam.position.set(b.x + this.errX + Math.cos(this.yaw) * side, b.y + this.errY + this.eyeBlend + bobY - this.landDip - LEAN.drop * Math.abs(this.leanBlend) - 0.06 * this.slideBlend, b.z + this.errZ - Math.sin(this.yaw) * side);
-    cam.rotation.set(this.pitch + this.recoilPitch + this.swayPitch + shakePitch, this.yaw + this.recoilYaw + this.swayYaw, Math.sin(this.bobPhase) * 0.004 * bobAmt + shakeRoll + LEAN.roll * this.leanBlend + 0.025 * this.slideBlend * this.settings.shakeScale);
+    cam.rotation.set(this.pitch + this.recoilPitch + this.punch.pitch.x + this.swayPitch + shakePitch, this.yaw + this.recoilYaw + this.swayYaw, Math.sin(this.bobPhase) * 0.004 * bobAmt + shakeRoll + LEAN.roll * this.leanBlend + 0.025 * this.slideBlend * this.settings.shakeScale + this.punch.roll.x * this.settings.shakeScale);
     this.applyEmoteView(dt);
   }
 

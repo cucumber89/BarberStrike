@@ -192,3 +192,42 @@ Still open:
   overlay geometry (screenshots under `e2e/out/weapons/dropb/`), not how it feels to look through.
 - **Prediction corrections per minute** (F3 telemetry) have not been compared before and after on a
   real client. Recoil is client-side and the server cone is untouched, so they should not move.
+
+## Realistic recoil and the sound mechanic (owner, 2026-09-28)
+
+Owner: *„realistyczny odrzut broni podczas strzelania, i nowa mechanika dźwięku wszystkiego skakania
+chodzenia strzelania itp itd”*. Axis 1 and axis 5 changed in **shape**, not in size — no `WeaponDef`
+number moved, the server's cone and every damage number are untouched (L6).
+
+**Recoil** (`combat/recoilModel.ts`, one new `recoil` row per weapon in `weaponFeel.ts`):
+- The muzzle **rises** over `kickMs` (20 ms VZ-9 … 70 ms launcher) instead of teleporting; the
+  total per shot is still exactly the pattern step (`recoilModel.test.ts`).
+- The return is a **critically damped spring**, settled to 5 % when the old exponential was — it
+  starts slowly instead of at full speed. Side effect, measured: bursts now reach the six-shot
+  climb the matrix declares (AR-31 95 of 98 mrad; it was 84), because the exponential leaked
+  recovery wherever the hold is shorter than the interval (`e2e/out/recoil/trace.md`).
+- A camera-only **view punch** (pitch, springing back through a small overshoot) and a shoulder
+  **roll** per shot; neither enters the input, so no bullet moves. ADS takes 35 % of the punch;
+  the roll follows the camera-shake slider.
+- **Stance**: crouched ×0.82, moving ×1.12, airborne ×1.45 on the camera kick (ADS ×0.7 and the
+  bipod as before). Server spread is its own rule and did not move.
+- The aim recoil is stepped **before** the input is built, so a shot fired in a frame leaves along
+  exactly the angles its input carried (handoff P1) — it used to be integrated after.
+- The viewmodel's kick is a pair of springs (back, up) with a small forward overshoot; heavier
+  kicks get softer, slower springs.
+
+**Sound** (`audio/surfaces.ts`, `audio/foley.ts`, `audio/acoustics.ts`):
+- Every step, jump, landing and spent case asks the map what it touches (the solids' `MaterialTag`
+  → concrete / tile / wood / metal / gravel / grass / water / soft) and is voiced by it: heel and
+  toe, grit, ring, grains, splash; the loadout rattles by weapon weight. Remote players get the
+  same, plus audible jumps and landings sized by the height fallen.
+- World sounds go through the room: **occlusion** (a ray from the ear; one wall muffles, two
+  leave the low end), **air absorption** (a low-pass falling with distance), **travel time**
+  (343 m/s, capped at 250 ms) for gunshots and blasts, and a **room probe** (nine rays, 4 Hz) that
+  sets the reverb's level and tone — the shop rings, the yard barely answers.
+- Shooting adds the carrier's clack by the ear for self-loaders (lighter and pingier in the last
+  quarter of the magazine), and brass / hulls bouncing on the floor ~0.4 s later (the S12's hull at
+  the pump, the SR-50's case at the bolt; rate-limited to one voice per 110 ms).
+- Foley: sights up / down, crouch / stand.
+- Evidence: `e2e/out/sound/audio-selftest.txt` (178 one-shots in the -40..-1 dBFS window, 111/111
+  live events). Whether it *sounds* right is the owner's call on real speakers.

@@ -13,6 +13,8 @@ import { sharedBuffers, type Graph } from "./synth";
 import type { SoundFn as Sfx } from "./sfx";
 
 export const MAX_VOICES = 24;
+/** The reverb return's level in an average room; `setRoom` scales it for the place the ear is in. */
+const VERB_BASE = 0.35;
 
 export const Priority = { ambience: 0, movement: 1, reload: 2, hit: 3, ui: 3, gunshot: 4 } as const;
 export type PriorityLevel = (typeof Priority)[keyof typeof Priority];
@@ -28,11 +30,17 @@ export interface PlayOptions {
   gain?: number;
   /** Skip entirely when the listener is farther than this (metres). */
   maxDistance?: number;
+  /** Low-pass on the dry path (Hz): air absorption and walls (`acoustics.ts`). Omitted = none. */
+  lowpass?: number;
+  /** Start this many seconds late: the sound's travel time (`acoustics.ts`). */
+  delay?: number;
 }
 
 interface Voice {
   gain: GainNode;
-  tail: AudioNode; // last node before the bus (gain or panner)
+  tail: AudioNode; // last node before the bus (gain, filter or panner)
+  /** Every node between `gain` and `tail`, so a stolen voice disconnects all of them. */
+  chain: AudioNode[];
   /**
    * This voice's own send into the shared reverb, pre-scaled by the voice's gain.
    *
@@ -62,6 +70,10 @@ export class AudioEngine {
   private music!: GainNode;
   private ui!: GainNode;
   private reverbIn!: GainNode;
+  private verbOut!: GainNode;
+  private verbLp!: BiquadFilterNode;
+  /** The last room `setRoom` was told about, kept so a context created later starts in it. */
+  private room = { wet: 1, tone: 2600 };
   private voices: Voice[] = [];
   private settings: AudioSettings;
   private gestureBound = false;
@@ -124,9 +136,10 @@ export class AudioEngine {
     conv.buffer = sharedBuffers(ctx).impulse;
     conv.normalize = true;
     const verbLp = ctx.createBiquadFilter();
-    verbLp.type = "lowpass"; verbLp.frequency.value = 2600;
+    verbLp.type = "lowpass"; verbLp.frequency.value = this.room.tone;
     const verbOut = ctx.createGain();
-    verbOut.gain.value = 0.35;
+    verbOut.gain.value = VERB_BASE * this.room.wet;
+    this.verbOut = verbOut; this.verbLp = verbLp;
     this.reverbIn = ctx.createGain();
     this.reverbIn.connect(conv);
     conv.connect(verbLp);
@@ -189,6 +202,19 @@ export class AudioEngine {
     }
   }
 
+  /**
+   * The room the listener is in (`Acoustics.probe`): `wet` scales the reverb return (1 = the
+   * neutral mix), `tone` is its low-pass. Glided, so a doorway blends rather than switches.
+   */
+  setRoom(wet: number, tone: number): void {
+    this.room = { wet: Math.max(0, Math.min(2, wet)), tone: Math.max(500, Math.min(8000, tone)) };
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    this.verbOut.gain.setTargetAtTime(VERB_BASE * this.room.wet, t, 0.15);
+    this.verbLp.frequency.setTargetAtTime(this.room.tone, t, 0.15);
+  }
+
   distanceToListener(x: number, y: number, z: number): number {
     return Math.hypot(x - this.lx, y - this.ly, z - this.lz);
   }
@@ -205,10 +231,20 @@ export class AudioEngine {
     }
     const priority = opts.priority ?? Priority.hit;
     const bus = opts.bus === "ui" ? this.ui : this.effects;
-    const t = ctx.currentTime + 0.005;
+    const t = ctx.currentTime + 0.005 + Math.max(0, opts.delay ?? 0);
     const vg = ctx.createGain();
     vg.gain.value = opts.gain ?? 1;
     let tail: AudioNode = vg;
+    const chain: AudioNode[] = [];
+    if (opts.lowpass !== undefined && opts.lowpass < 18000) {
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = Math.max(200, opts.lowpass);
+      lp.Q.value = 0.5;
+      tail.connect(lp);
+      tail = lp;
+      chain.push(lp);
+    }
     if (opts.position) {
       const p = ctx.createPanner();
       p.panningModel = "equalpower";
@@ -220,8 +256,9 @@ export class AudioEngine {
       const pp = p as PannerNode & { positionX?: AudioParam; setPosition?: (x: number, y: number, z: number) => void };
       if (pp.positionX) { pp.positionX.value = opts.position.x; pp.positionY.value = opts.position.y; pp.positionZ.value = opts.position.z; }
       else pp.setPosition?.(opts.position.x, opts.position.y, opts.position.z);
-      vg.connect(p);
+      tail.connect(p);
       tail = p;
+      chain.push(p);
     }
     // The wet path is attenuated like the dry one and dies with the voice (see `Voice.verb`). It is
     // deliberately NOT panned: a reverb return is the room answering, which has no bearing.
@@ -231,14 +268,14 @@ export class AudioEngine {
       verb.gain.value = opts.gain ?? 1;
       verb.connect(this.reverbIn);
     }
-    const voice: Voice = { gain: vg, tail, verb, priority, startedAt: t, endsAt: t, timer: 0 };
-    if (!this.admit(voice)) { vg.disconnect(); verb?.disconnect(); return null; }
+    const voice: Voice = { gain: vg, tail, chain, verb, priority, startedAt: t, endsAt: t, timer: 0 };
+    if (!this.admit(voice)) { this.disconnect(voice); return null; }
     tail.connect(bus);
     const g: Graph = { ctx, out: vg, verb, t, buf: sharedBuffers(ctx), rnd: Math.random };
     let dur = 0.5;
     try { dur = fn(g); } catch (err) { console.warn("[audio] sound failed", err); }
     voice.endsAt = t + dur + 0.6; // reverb send / setTargetAtTime tails
-    voice.timer = window.setTimeout(() => this.release(voice), (dur + 0.7) * 1000);
+    voice.timer = window.setTimeout(() => this.release(voice), (t - ctx.currentTime + dur + 0.7) * 1000);
     this.voices.push(voice);
     return { stop: () => this.steal(voice) };
   }
@@ -285,7 +322,7 @@ export class AudioEngine {
   }
 
   private disconnect(v: Voice): void {
-    try { v.tail.disconnect(); if (v.tail !== v.gain) v.gain.disconnect(); v.verb?.disconnect(); } catch { /* already gone */ }
+    try { for (const n of v.chain) n.disconnect(); v.gain.disconnect(); v.verb?.disconnect(); } catch { /* already gone */ }
   }
 
   /** Brief low-pass + dip on the effects bus (taking damage). */

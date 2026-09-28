@@ -231,7 +231,7 @@ export class WeaponController {
     // cannot turn into a hidden accuracy buff.
     const feel = feelOf(this.weapon);
     const steady = (this.player.isAiming() ? 0.7 : 1) * (this.player.bipod ? BIPOD.recoil : 1);
-    this.player.addRecoil(up * steady, side * steady, w.recoilRecoverPerSec, w.recoilRecoverDelayMs);
+    this.player.addRecoil(up * steady, side * steady, w.recoilRecoverPerSec, w.recoilRecoverDelayMs, feel.recoil);
     // The action worked after the shot: the sniper's bolt takes the scope away with it (S1).
     if (feel.actionMs > 0) this.player.workAction(feel.actionMs, feel.scope !== null);
     this.onShot?.({ weapon: this.weapon, origin, dir });
